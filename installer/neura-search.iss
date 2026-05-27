@@ -1,11 +1,11 @@
 #ifndef MyAppVersion
-  #define MyAppVersion "1.0.1"
+  #define MyAppVersion "1.0.2"
 #endif
 
-#define MyAppName      "Neura Search"
+#define MyAppName      "Ventus"
 #define MyAppPublisher "Neura Spheres"
 #define MyAppURL       "https://github.com/neura-spheres/NeuraSearch"
-#define MyAppExeName   "neura-search.exe"
+#define MyAppExeName   "ventus.exe"
 #define MyAppID        "NeuraSearch"
 
 [Setup]
@@ -21,7 +21,7 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 OutputDir=..\dist
-OutputBaseFilename=NeuraSearch-Setup-{#MyAppVersion}
+OutputBaseFilename=Ventus-Setup-{#MyAppVersion}
 SetupIconFile=..\assets\logo.ico
 Compression=lzma2/ultra64
 SolidCompression=yes

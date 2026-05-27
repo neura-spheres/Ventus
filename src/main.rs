@@ -2950,13 +2950,17 @@ impl AppLayout {
             state.settings.appearance.sidebar_mode,
             crate::config::SidebarMode::AutoHide
         );
+        let is_compact = matches!(
+            state.settings.appearance.sidebar_mode,
+            crate::config::SidebarMode::Compact
+        );
         let min_content_w = config.min_content_w as f64;
         let sidebar_css_w = if is_auto_hide && state.sidebar_pinned {
             // Pinned: sidebar is solid — push content to the right
             (config.sidebar_expanded_w as f64).min((logical_w - min_content_w).max(0.0))
         } else if is_auto_hide {
             0.0 // hover-only overlay — content stays full width
-        } else if state.sidebar_collapsed {
+        } else if is_compact || state.sidebar_collapsed {
             config.sidebar_collapsed_w as f64
         } else {
             (config.sidebar_expanded_w as f64).min((logical_w - min_content_w).max(0.0))

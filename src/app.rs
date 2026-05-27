@@ -59,6 +59,10 @@ impl AppState {
         let ai_provider = settings.ai.default_provider.clone();
         let ad_block_enabled = settings.privacy.ad_blocker_enabled;
         let ad_block_exceptions = settings.privacy.ad_blocker_exceptions.clone();
+        let sidebar_collapsed = matches!(
+            settings.appearance.sidebar_mode,
+            crate::config::SidebarMode::Compact
+        );
         let mut downloads = repositories::list_downloads(&conn, 100).unwrap_or_default();
         downloads.reverse();
         let cached_search_engines = repositories::list_search_engines(&conn).unwrap_or_default();
@@ -71,7 +75,7 @@ impl AppState {
             conn,
             ai_messages: Vec::new(),
             current_ai_provider: ai_provider,
-            sidebar_collapsed: false,
+            sidebar_collapsed,
             ai_sidebar_open: false,
             chrome_overlay_open: false,
             sidebar_auto_hide_open: false,
@@ -500,7 +504,24 @@ pub fn handle_chrome_command(
             Some(TabAction::SyncViews)
         }
         ChromeCommand::SidebarToggle => {
-            state.sidebar_collapsed = !state.sidebar_collapsed;
+            let is_compact = matches!(
+                state.settings.appearance.sidebar_mode,
+                crate::config::SidebarMode::Compact
+            ) || state.sidebar_collapsed;
+            let next = if is_compact {
+                state.settings.appearance.sidebar_mode = crate::config::SidebarMode::Expanded;
+                state.sidebar_collapsed = false;
+                "expanded"
+            } else {
+                state.settings.appearance.sidebar_mode = crate::config::SidebarMode::Compact;
+                state.sidebar_collapsed = true;
+                "compact"
+            };
+            state.sidebar_auto_hide_open = false;
+            state.sidebar_pinned = false;
+            let _ = settings_store::set(&state.conn, "sidebar_mode", &next);
+            let _ = settings_store::set(&state.conn, "app_settings", &state.settings);
+            state.push_state_to_chrome(chrome);
             Some(TabAction::SyncViews)
         }
         ChromeCommand::ReopenTab => {

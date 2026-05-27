@@ -9,19 +9,19 @@ Set-Location $PSScriptRoot\..
 $versionLine = Get-Content config.yaml | Where-Object { $_ -match '^\s*version:' } | Select-Object -First 1
 if (-not $versionLine) { Write-Error "version: not found in config.yaml"; exit 1 }
 $version = $versionLine -replace '^\s*version:\s*', '' -replace '[''"]', '' -replace '\s', ''
-Write-Host "Building Neura Search v$version"
+Write-Host "Building Ventus v$version"
 
 # Build
 if ($Debug) {
     Write-Host "Mode: debug"
     cargo build
     if ($LASTEXITCODE -ne 0) { Write-Error "cargo build failed"; exit 1 }
-    $exeSource = "target\debug\neura-search.exe"
+    $exeSource = "target\debug\ventus.exe"
 } else {
     Write-Host "Mode: release"
     cargo build --release
     if ($LASTEXITCODE -ne 0) { Write-Error "cargo build failed"; exit 1 }
-    $exeSource = "target\release\neura-search.exe"
+    $exeSource = "target\release\ventus.exe"
 }
 
 if (-not (Test-Path $exeSource)) { Write-Error "$exeSource not found"; exit 1 }
@@ -45,10 +45,10 @@ New-Item -ItemType Directory -Force -Path dist | Out-Null
 
 # Compile installer
 Write-Host "Compiling installer..."
-& $iscc "/DMyAppVersion=$version" "installer\neura-search.iss"
+& $iscc "/DMyAppVersion=$version" "installer\ventus.iss"
 if ($LASTEXITCODE -ne 0) { Write-Error "Inno Setup compile failed"; exit 1 }
 
-$out = "dist\NeuraSearch-Setup-$version.exe"
+$out = "dist\Ventus-Setup-$version.exe"
 if (Test-Path $out) {
     Write-Host "`nDone: $out ($([Math]::Round((Get-Item $out).Length / 1MB, 1)) MB)"
 } else {

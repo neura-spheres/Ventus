@@ -1485,28 +1485,25 @@ body{font-family:var(--font);background:transparent;color:var(--text);font-size:
 [data-theme="light"] .toast.error{background:#b42318}
 [data-theme="light"] .toast.info{background:#315ab8}
 
-/* new tab placeholder */
 #newtab-placeholder{
   position:absolute;top:0;right:0;bottom:0;
   left:calc(var(--sidebar-w) + var(--frame-side-w,5px));
   display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;
   color:var(--nt-white);
-  background:var(--nt-vignette),var(--nt-scrim),linear-gradient(135deg,var(--bg),var(--bg-elevated));
+  background:var(--nt-vignette),var(--nt-scrim),var(--nt-bg-image,linear-gradient(transparent,transparent)),linear-gradient(135deg,var(--bg),var(--bg-elevated));
+  background-position:center;
+  background-repeat:no-repeat;
+  background-size:auto,auto,cover,auto;
   padding:32px clamp(18px,4.4vw,56px) 36px;
   text-align:left;
+  overflow-x:hidden;
   overflow-y:auto;
   isolation:isolate;
 }
-/* dedicated background layer — image applied here via JS so it can be preloaded */
 #newtab-bg{
-  position:absolute;inset:0;z-index:0;
-  background-size:cover;background-position:center;background-repeat:no-repeat;
-  transition:opacity 0.4s ease;
-  filter:saturate(1.04) contrast(1.03);
-  transform:scale(1.012);
+  display:none;
 }
-.newtab-shell{position:relative;z-index:1;}
-.newtab-shell{width:min(1280px,100%);margin:0 auto;display:flex;flex-direction:column;gap:24px;min-height:100%}
+.newtab-shell{position:relative;z-index:1;width:min(1280px,100%);max-width:100%;min-width:0;margin:0 auto;display:flex;flex-direction:column;gap:24px;min-height:100%}
 .newtab-top{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:36px}
 .newtab-brand{display:flex;align-items:center;gap:10px;color:var(--nt-soft);font-size:12px;font-weight:700}
 .newtab-logo{width:28px;height:28px;object-fit:contain;filter:drop-shadow(0 8px 18px rgba(0,0,0,0.28))}
@@ -1568,12 +1565,12 @@ body{font-family:var(--font);background:transparent;color:var(--text);font-size:
 }
 .newtab-shortcut-icon img{width:21px;height:21px;object-fit:contain;display:block}
 .newtab-shortcut-label{font-size:10px;font-weight:700;color:var(--nt-soft);text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:100%}
-.newtab-feed{display:flex;flex-direction:column;gap:14px;margin-top:auto;padding-top:clamp(12px,4vh,42px)}
+.newtab-feed{display:flex;flex-direction:column;gap:14px;margin-top:auto;padding-top:clamp(12px,4vh,42px);min-width:0}
 .newtab-feed-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .newtab-feed-title{font-size:15px;font-weight:800;color:var(--nt-white)}
 .newtab-feed-actions{display:flex;align-items:center;gap:8px}
 .newtab-feed-btn{border:1px solid var(--nt-glass-border);background:var(--nt-glass);color:var(--nt-soft);height:32px;padding:0 12px;border-radius:999px;font-family:var(--font);font-size:11px;font-weight:800;cursor:pointer}
-.newtab-feed-main{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-auto-rows:168px;gap:18px;align-items:stretch}
+.newtab-feed-main{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-auto-rows:168px;gap:18px;align-items:stretch;min-width:0}
 .news-card{position:relative;overflow:hidden;border:1px solid var(--nt-glass-border);border-radius:24px;background:var(--nt-panel);box-shadow:var(--nt-shadow);backdrop-filter:blur(24px);cursor:pointer;transition:transform var(--transition),border-color var(--transition),background var(--transition),box-shadow var(--transition);font-family:var(--font);text-align:left;color:inherit;padding:0}
 .news-card:hover{transform:translateY(-4px);border-color:var(--nt-glass-strong);background:var(--nt-panel-strong);box-shadow:var(--nt-shadow)}
 .news-card img{width:100%;height:100%;object-fit:cover;display:block}
@@ -3637,6 +3634,7 @@ let neuraFeedLoading = false;
 let neuraFeedLoaded = false;
 let neuraFeedError = '';
 let newtabBgSeed = '';
+let newtabBgCss = '';
 let settingDrafts = {};
 const trendingSearches = ['AI news', 'technology', 'Indonesia news', 'startup funding', 'web design'];
 
@@ -4493,18 +4491,23 @@ function deleteWorkspaceByActive(ev) {
 }
 function closeTab(ev, id) { ev.stopPropagation(); send('CloseTab', {id}); }
 function toggleSidebar() {
-  const isAutoHide = document.getElementById('app').classList.contains('sidebar-auto-hide');
+  const app = document.getElementById('app');
+  const isAutoHide = app.classList.contains('sidebar-auto-hide');
   if (isAutoHide) {
-    // Auto-hide mode: button toggles pin-open / close. No compact intermediate state.
     if (sidebarPeeking) {
-      hideFloatingSidebar(true); // close (even if already pinned)
+      hideFloatingSidebar(true);
     } else {
-      showFloatingSidebar(true); // open and pin
+      showFloatingSidebar(true);
     }
   } else {
-    // Expanded / compact modes: toggle between 240px and 52px overlay
-    state.sidebar_collapsed = !state.sidebar_collapsed;
-    document.getElementById('app').classList.toggle('sidebar-collapsed', state.sidebar_collapsed);
+    const next = app.classList.contains('sidebar-collapsed') ? 'expanded' : 'compact';
+    if (!state.settings) state.settings = {};
+    if (!state.settings.appearance) state.settings.appearance = {};
+    state.settings.appearance.sidebar_mode = next;
+    state.sidebar_collapsed = next === 'compact';
+    app.classList.toggle('sidebar-collapsed', state.sidebar_collapsed);
+    const sel = document.getElementById('set-sidebar-mode');
+    if (sel) sel.value = next;
     send('SidebarToggle');
   }
 }
@@ -4841,6 +4844,19 @@ function saveSetting(key, value) {
       const lbl = document.getElementById('nt-wp-color-label');
       if (lbl) lbl.textContent = value;
     }
+  }
+  if (key === 'sidebar_mode') {
+    if (!state.settings) state.settings = {};
+    if (!state.settings.appearance) state.settings.appearance = {};
+    state.settings.appearance.sidebar_mode = value;
+    state.sidebar_collapsed = value === 'compact';
+    cancelSidebarHide();
+    clearSidebarClipTimer();
+    clearSidebarPinTimer();
+    sidebarPeeking = false;
+    sidebarPinned = false;
+    document.getElementById('app').classList.remove('sidebar-floating-open');
+    applySidebarMode();
   }
   updateGeneralSettingsReadout();
 }
@@ -5260,7 +5276,20 @@ function updateNewtabDate() {
   el.textContent = new Date().toLocaleDateString([], {weekday: 'long', month: 'long', day: 'numeric'});
 }
 
-/* ── Newtab wallpaper & theme ── */
+function cssBgUrl(url) {
+  const safe = String(url || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  return `url("${safe}")`;
+}
+
+function setNewtabBg(css) {
+  const root = document.getElementById('newtab-placeholder');
+  if (!root) return;
+  const next = css || 'linear-gradient(transparent,transparent)';
+  if (newtabBgCss === next) return;
+  newtabBgCss = next;
+  root.style.setProperty('--nt-bg-image', next);
+}
+
 const NT_NATURE_PHOTOS = [
   'https://picsum.photos/seed/mount1/1920/1080',
   'https://picsum.photos/seed/lake2/1920/1080',
@@ -5286,28 +5315,28 @@ const NT_NATURE_PHOTOS = [
 
 function initWallpaper(nt) {
   const src = (nt && nt.wallpaper_source) || 'nature';
-  const bg = document.getElementById('newtab-bg');
-  if (!bg) return;
-  // helper: apply a direct image URL with preload so the swap is atomic
+  const root = document.getElementById('newtab-placeholder');
+  if (!root) return;
+  if (src !== 'daily') newtabBgSeed = '';
   function applyBgUrl(url) {
-    if (!url) { bg.style.backgroundImage = 'none'; bg.style.backgroundColor = ''; return; }
+    if (!url) {
+      setNewtabBg('');
+      return;
+    }
+    const css = cssBgUrl(url);
+    if (newtabBgCss === css) return;
     const img = new Image();
-    img.onload = () => {
-      bg.style.backgroundColor = '';
-      bg.style.backgroundImage = `url("${url}")`;
-    };
-    img.onerror = () => { /* leave existing bg or dark base */ };
+    img.onload = () => setNewtabBg(css);
+    img.onerror = () => {};
     img.src = url;
   }
   if (src === 'none') {
-    bg.style.backgroundImage = 'none';
-    bg.style.backgroundColor = '';
+    setNewtabBg('');
     return;
   }
   if (src === 'color') {
     const col = (nt && nt.wallpaper_color) || '#141414';
-    bg.style.backgroundImage = 'none';
-    bg.style.backgroundColor = col;
+    setNewtabBg(`linear-gradient(${col},${col})`);
     return;
   }
   if (src === 'url') {
@@ -5317,12 +5346,11 @@ function initWallpaper(nt) {
   if (src === 'upload') {
     ntLoadUploadedWallpaper(dataUrl => {
       if (dataUrl) {
-        bg.style.backgroundColor = '';
-        bg.style.backgroundImage = `url("${dataUrl}")`;
+        setNewtabBg(cssBgUrl(dataUrl));
         const prev = document.getElementById('nt-wp-upload-preview');
         if (prev) { prev.src = dataUrl; prev.style.display = 'block'; }
       } else {
-        bg.style.backgroundImage = 'none';
+        setNewtabBg('');
       }
     });
     return;
@@ -5332,9 +5360,8 @@ function initWallpaper(nt) {
     applyBgUrl(NT_NATURE_PHOTOS[idx]);
     return;
   }
-  // daily (default): deterministic picsum seed by date
   const day = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-  if (newtabBgSeed === day && bg.style.backgroundImage && bg.style.backgroundImage !== 'none') return;
+  if (newtabBgSeed === day && newtabBgCss) return;
   newtabBgSeed = day;
   applyBgUrl(`https://picsum.photos/seed/${day}/1920/1080`);
 }
@@ -5405,27 +5432,55 @@ function ntPickWallpaperFile() {
     const reader = new FileReader();
     reader.onload = function(e) {
       const dataUrl = e.target.result;
-      ntSaveUploadedWallpaper(dataUrl);
-      document.documentElement.style.setProperty('--nt-bg-image', `url("${dataUrl}")`);
-      document.documentElement.style.setProperty('--nt-bg-color', 'transparent');
-      const prev = document.getElementById('nt-wp-upload-preview');
-      if (prev) { prev.src = dataUrl; prev.style.display = 'block'; }
+      ntSaveUploadedWallpaper(dataUrl, ok => {
+        if (!ok) {
+          toast('Could not save wallpaper', 'error');
+          return;
+        }
+        if (!state.settings) state.settings = {};
+        if (!state.settings.new_tab) state.settings.new_tab = {};
+        state.settings.new_tab.wallpaper_source = 'upload';
+        saveSetting('new_tab_wallpaper_source', 'upload');
+        setNewtabBg(cssBgUrl(dataUrl));
+        const nt = newtabSettings();
+        window.__ntState = nt;
+        syncWallpaperSourceUI('upload', nt);
+        const prev = document.getElementById('nt-wp-upload-preview');
+        if (prev) { prev.src = dataUrl; prev.style.display = 'block'; }
+        toast('Wallpaper saved', 'success');
+      });
     };
+    reader.onerror = () => toast('Could not read image', 'error');
     reader.readAsDataURL(file);
   };
   inp.click();
 }
 
-function ntSaveUploadedWallpaper(dataUrl) {
+function ntSaveUploadedWallpaper(dataUrl, cb) {
   try {
+    let done = false;
+    const finish = ok => {
+      if (done) return;
+      done = true;
+      cb(ok);
+    };
     const req = indexedDB.open('ventus_nt', 1);
-    req.onupgradeneeded = e => e.target.result.createObjectStore('kv');
+    req.onupgradeneeded = e => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv');
+    };
     req.onsuccess = e => {
       const db = e.target.result;
       const tx = db.transaction('kv', 'readwrite');
-      tx.objectStore('kv').put(dataUrl, 'wallpaper');
+      tx.oncomplete = () => { db.close(); finish(true); };
+      tx.onerror = () => { db.close(); finish(false); };
+      tx.onabort = () => { db.close(); finish(false); };
+      const put = tx.objectStore('kv').put(dataUrl, 'wallpaper');
+      put.onerror = () => finish(false);
     };
-  } catch(err) { /* IndexedDB unavailable */ }
+    req.onerror = () => finish(false);
+    req.onblocked = () => finish(false);
+  } catch(err) { cb(false); }
 }
 
 function ntLoadUploadedWallpaper(cb) {
