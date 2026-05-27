@@ -1,8 +1,5 @@
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
-// Alias the adblock crate to avoid name collision with our local `mod adblock`.
-extern crate adblock as adblock_crate;
-
 mod adblock;
 mod ai;
 mod app;
@@ -437,12 +434,9 @@ fn main() {
     let mut inactive_tabs: HashMap<String, Instant> = HashMap::new();
     let mut keepalive_at = Instant::now() + TAB_KEEPALIVE_EVERY;
     let mut keepalive_pos = 0usize;
-    // Shared slot for the pre-built adblock Engine.
-    // The filter-loader task builds the Engine on a spawn_blocking thread (500 ms–2 s of CPU
-    // work) so it never blocks the TAO event loop.  When done it stores the Engine here and
-    // fires FilterListsReady; the event loop reads it with a fast .take() — no blocking.
-    let pending_engine: Arc<std::sync::Mutex<Option<(adblock_crate::Engine, Vec<String>)>>> =
-        Arc::new(std::sync::Mutex::new(None));
+    let ubol_dir = ubol_dir();
+    let mut ubol_done = false;
+    let mut ubol_enabled: Option<bool> = None;
 
     if !first_url.starts_with("neura://") {
         let first_is_incognito = state.tab_manager.tab_is_incognito(&first_tab_id);
@@ -497,6 +491,13 @@ fn main() {
         );
         #[cfg(windows)]
         track_content_hwnd(first_hwnd, &first_tab_id, &mut content_hwnds);
+        sync_active_ubol(
+            &content_views,
+            &state,
+            ubol_dir.as_deref(),
+            &mut ubol_done,
+            &mut ubol_enabled,
+        );
     }
     apply_layout(
         &chrome,
@@ -544,45 +545,6 @@ fn main() {
                     keep_frameless(&window);
                     window.set_visible(true);
                 }
-                // Spawn filter list downloader — runs once after launch, updates weekly.
-                {
-                    let proxy_fl = proxy_main.clone();
-                    let fl_data_dir = data_dir.clone();
-                    let pending_fl = Arc::clone(&pending_engine);
-                    rt.spawn(async move {
-                        // Small delay so startup I/O doesn't compete with WebView init.
-                        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-                        let lists = crate::adblock::filter_loader::load(&fl_data_dir).await;
-                        let domains =
-                            crate::adblock::filter_loader::extract_domains(&lists.combined);
-                        let filter_text = lists.combined;
-
-                        // Build the adblock Engine on a blocking thread.
-                        // Engine::from_filter_set over 300k+ rules takes 500 ms–2 s.
-                        // Running this on the TAO event loop would freeze all WebViews
-                        // (progress bars, navigations) for that entire window.
-                        let result = tokio::task::spawn_blocking(move || {
-                            let mut fs = adblock_crate::lists::FilterSet::new(false);
-                            fs.add_filter_list(
-                                &filter_text,
-                                adblock_crate::lists::ParseOptions::default(),
-                            );
-                            let engine = adblock_crate::Engine::from_filter_set(fs, true);
-                            (engine, domains)
-                        })
-                        .await;
-                        if let Ok((engine, domains)) = result {
-                            *pending_fl.lock().unwrap_or_else(|e| e.into_inner()) =
-                                Some((engine, domains));
-                            // Signal the event loop; actual domains carried via Arc.
-                            let _ = proxy_fl.send_event(AppEvent::FilterListsReady {
-                                domains: vec![],
-                                filter_text: String::new(),
-                            });
-                        }
-                    });
-                }
-
                 let proxy_upd = proxy_main.clone();
                 let dismissed_ver = dismissed_update_version.clone();
                 rt.spawn(async move {
@@ -943,30 +905,6 @@ fn main() {
                         );
                     }
                 }
-                // FilterListsReady: Engine was built on a background thread and stored in
-                // pending_engine.  Just take it — no CPU work on the event loop thread.
-                if matches!(&app_event, AppEvent::FilterListsReady { .. }) {
-                    if let Ok(mut lock) = pending_engine.lock() {
-                        if let Some((engine, domains)) = lock.take() {
-                            let domain_count = domains.len();
-                            let domains_json = serde_json::to_string(&domains)
-                                .unwrap_or_else(|_| "[]".to_string());
-                            state.ad_block_engine.rebuild(engine, domains);
-                            tracing::info!(
-                                "adblock: filter lists ready — {} JS domains",
-                                domain_count
-                            );
-                            for wv in content_views.values() {
-                                let _ = wv.evaluate_script(&format!(
-                                    "window.__nabUpdateDomains&&window.__nabUpdateDomains({})",
-                                    domains_json
-                                ));
-                            }
-                        }
-                    }
-                    return;
-                }
-
                 let persist_session = should_save_session(&app_event);
                 let is_save_settings = matches!(
                     &app_event,
@@ -982,6 +920,13 @@ fn main() {
                     }
                 }
                 if let Some(action) = action_opt {
+                    sync_active_ubol(
+                        &content_views,
+                        &state,
+                        ubol_dir.as_deref(),
+                        &mut ubol_done,
+                        &mut ubol_enabled,
+                    );
                     if persist_session {
                         save_session(&state);
                     }
@@ -1244,11 +1189,6 @@ fn main() {
                         TabAction::SetZoomAll(level) => {
                             for wv in content_views.values() {
                                 let _ = wv.zoom(level);
-                            }
-                        }
-                        TabAction::AllContentScript(js) => {
-                            for wv in content_views.values() {
-                                let _ = wv.evaluate_script(&js);
                             }
                         }
                         TabAction::ContentNavigate(url) => {
@@ -1709,6 +1649,13 @@ fn main() {
                 } else if persist_session {
                     save_session(&state);
                 }
+                sync_active_ubol(
+                    &content_views,
+                    &state,
+                    ubol_dir.as_deref(),
+                    &mut ubol_done,
+                    &mut ubol_enabled,
+                );
             }
 
             Event::MainEventsCleared => {
@@ -3159,6 +3106,71 @@ fn should_restore_startup_cookies(
     cookies: &[cookie_store::CookieRecord],
 ) -> bool {
     !incognito && !restored && !cookies.is_empty()
+}
+
+fn ubol_dir() -> Option<std::path::PathBuf> {
+    let mut dirs = Vec::new();
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(base) = exe.parent() {
+            dirs.push(base.join("assets").join("extensions").join("ubol"));
+            dirs.push(base.join("extensions").join("ubol"));
+        }
+    }
+    if let Ok(cwd) = std::env::current_dir() {
+        dirs.push(cwd.join("assets").join("extensions").join("ubol"));
+    }
+    dirs.push(
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("assets")
+            .join("extensions")
+            .join("ubol"),
+    );
+    dirs.into_iter()
+        .find(|dir| dir.join("manifest.json").exists())
+}
+
+fn active_ubol_enabled(state: &AppState) -> bool {
+    if !state.settings.privacy.ad_blocker_enabled {
+        return false;
+    }
+    let Some(id) = state.tab_manager.active_tab_id.as_ref() else {
+        return false;
+    };
+    if state.tab_manager.tab_is_incognito(id) {
+        return false;
+    }
+    let Some(tab) = state.tab_manager.get_tab(id) else {
+        return false;
+    };
+    !state.ad_block_engine.is_site_excepted(&tab.url)
+}
+
+fn sync_active_ubol(
+    views: &HashMap<String, WebView>,
+    state: &AppState,
+    dir: Option<&std::path::Path>,
+    done: &mut bool,
+    last: &mut Option<bool>,
+) {
+    let Some(dir) = dir else {
+        return;
+    };
+    let Some(id) = state.tab_manager.active_tab_id.as_ref() else {
+        return;
+    };
+    if state.tab_manager.tab_is_incognito(id) {
+        return;
+    }
+    let Some(wv) = views.get(id) else {
+        return;
+    };
+    let enabled = active_ubol_enabled(state);
+    if *done && *last == Some(enabled) {
+        return;
+    }
+    browser::extensions::sync_ubol(wv, dir, enabled);
+    *done = true;
+    *last = Some(enabled);
 }
 
 fn restore_startup_cookies(

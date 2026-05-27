@@ -1,5 +1,6 @@
 pub mod cookie_manager;
 pub mod downloads;
+pub mod extensions;
 pub mod navigation;
 pub mod search_engine;
 pub mod split_view;

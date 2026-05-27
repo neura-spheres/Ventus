@@ -310,13 +310,6 @@ pub enum AppEvent {
     SpotlightAiError {
         message: String,
     },
-    /// Background filter-loader task finished downloading and parsing EasyList/EasyPrivacy/uBlock.
-    /// The main thread rebuilds the AdBlockEngine and pushes the new domain list to open tabs.
-    FilterListsReady {
-        domains: Vec<String>,
-        /// Combined filter list text — Engine is built on the main thread to avoid Send issues.
-        filter_text: String,
-    },
     /// WebView2 renderer process for a specific tab crashed or became unresponsive.
     /// The main thread auto-reloads the tab so the user doesn't see a permanent blank page.
     ContentProcessFailed {

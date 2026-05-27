@@ -7,7 +7,6 @@ use tokio::sync::oneshot;
 use wry::WebView;
 
 use crate::adblock::AdBlockEngine;
-extern crate adblock as adblock_crate;
 use crate::browser::downloads::DownloadManager;
 use crate::browser::tab_manager::TabManager;
 use crate::config::AppSettings;
@@ -164,8 +163,6 @@ pub enum TabAction {
         level: f64,
     },
     SetZoomAll(f64),
-    /// Run JS on ALL content WebViews (e.g. apply global zoom to every open tab).
-    AllContentScript(String),
     ContentNavigate(String),
     ReloadContent {
         tab_id: String,
@@ -429,17 +426,8 @@ pub fn handle_chrome_command(
             if needs_layout {
                 return Some(TabAction::SyncViews);
             }
-            // Live-toggle ad blocker on all open content WebViews without reload.
             if ad_blocker_toggled {
-                let flag = if state.settings.privacy.ad_blocker_enabled {
-                    1
-                } else {
-                    0
-                };
-                return Some(TabAction::AllContentScript(format!(
-                    "window.__nabSet&&window.__nabSet({})",
-                    flag
-                )));
+                return None;
             }
             None
         }
@@ -487,8 +475,6 @@ pub fn handle_chrome_command(
                 state.ad_block_engine.exceptions().to_vec();
             let _ = settings_store::set(&state.conn, "app_settings", &state.settings);
             state.push_state_to_chrome(chrome);
-            // Rebuild the WebView so the new init script (with updated exceptions) takes effect.
-            // ContentNavigate alone won't help — init scripts are baked at WebView creation time.
             Some(TabAction::RebuildContent { tab_id, url })
         }
         ChromeCommand::AdBlockStats { killed } => {
@@ -1253,32 +1239,6 @@ pub fn handle_app_event_inner(
                 ));
             }
             state.push_state_to_chrome(chrome);
-            let in_incognito = state.tab_manager.tab_is_incognito(&tab_id);
-            if state.settings.privacy.ad_blocker_enabled && !in_incognito {
-                let (hide_sels, scriptlet) = state.ad_block_engine.cosmetic_for_url(&clean_url);
-                let mut js = String::new();
-                if !hide_sels.is_empty() {
-                    if let Ok(sels_json) = serde_json::to_string(&hide_sels) {
-                        js.push_str(
-                            &(String::from("(function(){var sl=")
-                            + &sels_json
-                            + ";var st=document.createElement('style');"
-                            + "st.textContent=sl.map(function(s){return s+'{display:none!important}'}).join('');"
-                            + "(document.head||document.documentElement).appendChild(st);"
-                            + "var k=0;"
-                            + "sl.forEach(function(sel){try{document.querySelectorAll(sel).forEach(function(el){if(!el.__nk){el.__nk=1;el.remove();k++}})}catch(e){}});"
-                            + "if(k&&window.__nabAddCount)window.__nabAddCount(k);"
-                            + "})();"),
-                        );
-                    }
-                }
-                if !scriptlet.is_empty() {
-                    js.push_str(&scriptlet);
-                }
-                if !js.is_empty() {
-                    return Some(TabAction::ContentScript(js));
-                }
-            }
             None
         }
         AppEvent::AiChunk { text, done } => {
@@ -1510,27 +1470,6 @@ pub fn handle_app_event_inner(
                 state.push_state_to_chrome(chrome);
             }
             None
-        }
-        AppEvent::FilterListsReady { filter_text, .. } => {
-            // Handled in main.rs: the Engine is pre-built on a spawn_blocking thread and
-            // installed via the pending_engine Arc before this event fires.
-            // filter_text is empty here (normal path).  Keep a synchronous fallback only
-            // in case spawn_blocking somehow failed and the Arc slot was never filled.
-            if filter_text.is_empty() {
-                return None;
-            }
-            // Fallback path (should never happen in normal operation).
-            let mut fs = adblock_crate::lists::FilterSet::new(false);
-            fs.add_filter_list(
-                filter_text.as_str(),
-                adblock_crate::lists::ParseOptions::default(),
-            );
-            let engine = adblock_crate::Engine::from_filter_set(fs, true);
-            state.ad_block_engine.rebuild(engine, vec![]);
-            tracing::warn!("adblock: fallback sync build (spawn_blocking must have failed)");
-            Some(TabAction::AllContentScript(
-                "window.__nabUpdateDomains&&window.__nabUpdateDomains([])".to_string(),
-            ))
         }
         _ => None,
     }

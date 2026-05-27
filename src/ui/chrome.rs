@@ -1874,15 +1874,7 @@ body{font-family:var(--font);background:transparent;color:var(--text);font-size:
 }
 .abm-status-label.muted{color:var(--text-dim)}
 .abm-status-label.warn{color:#f59e0b}
-.abm-count-card{
-  background:var(--modal-bg-2);
-  border:1px solid var(--modal-border);
-  border-radius:14px;padding:16px 18px;
-  display:flex;flex-direction:column;gap:4px;
-}
-.abm-count-label{font-size:10px;color:var(--text-dim);font-weight:600;text-transform:uppercase;letter-spacing:0.08em}
-.abm-count-num{font-size:36px;font-weight:800;color:var(--text);letter-spacing:-2px;line-height:1;font-variant-numeric:tabular-nums}
-.abm-count-sub{font-size:11px;color:var(--text-dim);margin-top:2px}
+.abm-action-btn,
 .abm-settings-btn{
   display:flex;align-items:center;justify-content:space-between;
   width:100%;padding:10px 12px;border-radius:10px;
@@ -1891,10 +1883,21 @@ body{font-family:var(--font);background:transparent;color:var(--text);font-size:
   cursor:pointer;text-align:left;
   transition:all var(--transition);
 }
+.abm-action-btn{
+  background:rgba(52,211,153,0.1);border-color:rgba(52,211,153,0.16);color:#34d399;
+}
+.abm-action-btn.warn{
+  background:rgba(245,158,11,0.1);border-color:rgba(245,158,11,0.18);color:#f59e0b;
+}
+.abm-action-btn.off{
+  background:var(--bg-hover);border-color:var(--border-subtle);color:var(--text-dim);cursor:not-allowed;opacity:.65;
+}
+.abm-action-btn:not(.off):hover,
 .abm-settings-btn:hover{
   background:var(--bg-active);border-color:var(--border);color:var(--text);
 }
-.abm-settings-btn-right{display:flex;align-items:center;gap:4px;color:var(--accent)}
+.abm-btn-right,.abm-settings-btn-right{display:flex;align-items:center;gap:4px;color:var(--accent)}
+.abm-action-btn .abm-btn-right{color:currentColor}
 .dl-spin{
   width:12px;height:12px;border:2px solid var(--border);
   border-top-color:var(--accent);border-radius:50%;
@@ -2583,11 +2586,12 @@ svg{display:block;flex-shrink:0}
       <div id="abm-dot" class="abm-status-dot"></div>
       <span id="abm-status-text" class="abm-status-label">Active on this page</span>
     </div>
-    <div class="abm-count-card">
-      <div class="abm-count-label">Blocked this page</div>
-      <div id="abm-kills" class="abm-count-num">0</div>
-      <div class="abm-count-sub">elements removed</div>
-    </div>
+    <button class="abm-action-btn" id="abm-site-toggle" onclick="send('AdBlockToggleSite')">
+      <span id="abm-site-toggle-text">Pause for this site</span>
+      <span class="abm-btn-right">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 9v6m4-6v6M5 5h14v14H5z"/></svg>
+      </span>
+    </button>
     <button class="abm-settings-btn" onclick="closeAdBlockModal();openSettings('privacy')">
       <span>Manage settings</span>
       <span class="abm-settings-btn-right">
@@ -3958,24 +3962,29 @@ function _syncAdBlockModal() {
   if (!modal || !modal.classList.contains('open')) return;
   const active = !!state.ad_blocker_active;
   const excepted = !!state.ad_blocker_site_excepted;
-  const kills = state.ad_blocker_kills || 0;
-  const killsEl = document.getElementById('abm-kills');
   const dot = document.getElementById('abm-dot');
   const statusText = document.getElementById('abm-status-text');
   const statusRow = document.getElementById('abm-status');
-  if (killsEl) killsEl.textContent = kills;
+  const toggle = document.getElementById('abm-site-toggle');
+  const toggleText = document.getElementById('abm-site-toggle-text');
   if (!active) {
     if (statusRow) statusRow.className = 'abm-status-row off';
     if (dot) dot.className = 'abm-status-dot off';
     if (statusText) { statusText.className = 'abm-status-label muted'; statusText.textContent = 'Ad blocker is disabled globally'; }
+    if (toggle) { toggle.className = 'abm-action-btn off'; toggle.disabled = true; }
+    if (toggleText) toggleText.textContent = 'Pause for this site';
   } else if (excepted) {
     if (statusRow) statusRow.className = 'abm-status-row warn';
     if (dot) dot.className = 'abm-status-dot warn';
     if (statusText) { statusText.className = 'abm-status-label warn'; statusText.textContent = 'Paused for this site'; }
+    if (toggle) { toggle.className = 'abm-action-btn warn'; toggle.disabled = false; }
+    if (toggleText) toggleText.textContent = 'Resume for this site';
   } else {
     if (statusRow) statusRow.className = 'abm-status-row';
     if (dot) dot.className = 'abm-status-dot';
     if (statusText) { statusText.className = 'abm-status-label'; statusText.textContent = 'Active on this page'; }
+    if (toggle) { toggle.className = 'abm-action-btn'; toggle.disabled = false; }
+    if (toggleText) toggleText.textContent = 'Pause for this site';
   }
 }
 
