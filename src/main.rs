@@ -1,0 +1,5119 @@
+#![cfg_attr(windows, windows_subsystem = "windows")]
+
+// Alias the adblock crate to avoid name collision with our local `mod adblock`.
+extern crate adblock as adblock_crate;
+
+mod adblock;
+mod ai;
+mod app;
+mod browser;
+mod config;
+mod storage;
+mod ui;
+mod updater;
+mod utils;
+mod version;
+
+use std::{
+    collections::HashMap,
+    sync::{
+        atomic::{AtomicBool, AtomicIsize, AtomicUsize, Ordering},
+        Arc,
+    },
+    time::{Duration, Instant},
+};
+use tao::{
+    dpi::{LogicalSize, PhysicalSize},
+    event::{ElementState, Event, KeyEvent, WindowEvent},
+    event_loop::{ControlFlow, EventLoop, EventLoopBuilder},
+    keyboard::KeyCode,
+    window::{Fullscreen, WindowBuilder},
+};
+use wry::{Rect, WebView, WebViewBuilder};
+
+#[cfg(windows)]
+use tao::platform::windows::{EventLoopBuilderExtWindows, WindowExtWindows};
+#[cfg(windows)]
+use wry::{WebViewBuilderExtWindows, WebViewExtWindows};
+
+use app::{handle_app_event_inner, tab_zoom, AppState, TabAction};
+use image::GenericImageView;
+use storage::{cookie_store, database, migrations, repositories, settings_store};
+use ui::chrome::chrome_html;
+use ui::events::{AppEvent, ChromeCommand};
+
+const MOD_CTRL: usize = 1;
+const MOD_SHIFT: usize = 2;
+const MOD_ALT: usize = 4;
+const SC_NONE: usize = 0;
+const SC_SPOTLIGHT: usize = 1;
+const SC_REOPEN_TAB: usize = 2;
+const SC_NEW_WINDOW: usize = 3;
+const SC_CLOSE_TAB: usize = 4;
+const SC_FOCUS_URL: usize = 5;
+const SC_TAB_SEARCH: usize = 6;
+const SC_HISTORY: usize = 7;
+const SC_DOWNLOADS: usize = 8;
+const SC_BOOKMARK: usize = 9;
+const SC_AI: usize = 10;
+const SC_SIDEBAR: usize = 11;
+const SC_SETTINGS: usize = 12;
+const SC_RELOAD: usize = 13;
+const SC_ZOOM_IN: usize = 14;
+const SC_ZOOM_OUT: usize = 15;
+const SC_ZOOM_RESET: usize = 16;
+const SC_BACK: usize = 17;
+const SC_FORWARD: usize = 18;
+const SC_FULLSCREEN: usize = 19;
+const SC_DEVTOOLS: usize = 20;
+const LOAD_STALL_AFTER: u64 = 30;
+const TAB_SLEEP_REFRESH_AFTER: Duration = Duration::from_secs(20 * 60);
+const TAB_KEEPALIVE_EVERY: Duration = Duration::from_secs(45);
+/// How often to take a proactive cookie snapshot (in addition to the
+/// per-navigation save triggered by ContentLoadEnd events).
+const COOKIE_SAVE_EVERY: Duration = Duration::from_secs(5 * 60);
+
+fn main() {
+    utils::logging::init();
+    tracing::info!("Ventus starting");
+
+    let mut cli_url: Option<String> = None;
+    let mut new_window = false;
+    {
+        let mut args = std::env::args().skip(1);
+        while let Some(arg) = args.next() {
+            match arg.as_str() {
+                "--new-window" => new_window = true,
+                "--url" => cli_url = args.next(),
+                _ => {}
+            }
+        }
+    }
+
+    let _instance = claim_instance(new_window);
+
+    let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+    let _guard = rt.enter();
+
+    let data_dir = utils::platform::data_dir();
+    std::fs::create_dir_all(&data_dir).expect("create data dir");
+
+    let conn = database::open(&data_dir.join("neura.db")).expect("open db");
+    migrations::run(&conn).expect("migrations");
+    repositories::seed_search_engines(&conn).expect("seed engines");
+
+    let profile_cookie_db_found = webview_cookie_db_exists(&data_dir);
+    let startup_cookies: Vec<cookie_store::CookieRecord> = if profile_cookie_db_found {
+        tracing::info!("cookie_store: WebView2 profile found, skipping startup restore");
+        Vec::new()
+    } else {
+        match cookie_store::open(&data_dir) {
+            Ok(cs_conn) => {
+                let cookies = cookie_store::load_all(&cs_conn).unwrap_or_default();
+                tracing::info!(
+                    "cookie_store: loaded {} cookies for restoration",
+                    cookies.len()
+                );
+                cookies
+            }
+            Err(e) => {
+                tracing::warn!("cookie_store: failed to open for startup read: {}", e);
+                vec![]
+            }
+        }
+    };
+
+    let (cookie_tx, cookie_rx) =
+        tokio::sync::mpsc::unbounded_channel::<Vec<cookie_store::CookieRecord>>();
+    {
+        let cs_data_dir = data_dir.clone();
+        rt.spawn(async move {
+            run_cookie_save_task(cookie_rx, cs_data_dir).await;
+        });
+    }
+    let mut cookies_restored = startup_cookies.is_empty();
+
+    let settings = load_settings(&conn);
+
+    let shared_dl_dir = std::sync::Arc::new(std::sync::Mutex::new(download_prefs_from_settings(
+        &settings,
+    )));
+
+    let onboarding_done: bool = settings_store::get::<bool>(&conn, "onboarding_done")
+        .unwrap_or(None)
+        .unwrap_or(false);
+
+    let dismissed_update_version: Option<String> =
+        settings_store::get::<String>(&conn, "dismissed_update_version").unwrap_or(None);
+
+    let f11_msg = Arc::new(AtomicBool::new(false));
+    let f11_msg_hook = f11_msg.clone();
+    let shortcut_msg = Arc::new(AtomicUsize::new(SC_NONE));
+    let shortcut_msg_hook = shortcut_msg.clone();
+    let msg_mods = Arc::new(AtomicUsize::new(0));
+    let msg_mods_hook = msg_mods.clone();
+    let fullscreen_msg = Arc::new(AtomicBool::new(false));
+    let fullscreen_msg_hook = fullscreen_msg.clone();
+    let main_hwnd = Arc::new(AtomicIsize::new(0));
+    let main_hwnd_hook = main_hwnd.clone();
+    let mut event_loop_builder = EventLoopBuilder::<AppEvent>::with_user_event();
+    #[cfg(windows)]
+    event_loop_builder.with_msg_hook(move |msg| {
+        use windows::Win32::{
+            Foundation::HWND,
+            Graphics::Gdi::{
+                GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+            },
+            UI::WindowsAndMessaging::{
+                IsChild, MINMAXINFO, MSG, WM_GETMINMAXINFO, WM_KEYDOWN, WM_KEYUP, WM_NCCALCSIZE,
+                WM_SYSKEYDOWN, WM_SYSKEYUP,
+            },
+        };
+        let msg = msg as *const MSG;
+        if msg.is_null() {
+            return false;
+        }
+        unsafe {
+            let hwnd = main_hwnd_hook.load(Ordering::SeqCst);
+            let msg_hwnd = (*msg).hwnd.0 as isize;
+            let app_msg = hwnd != 0
+                && msg_hwnd != 0
+                && (msg_hwnd == hwnd || IsChild(HWND(hwnd), (*msg).hwnd).as_bool());
+            if hwnd != 0 && msg_hwnd == hwnd && (*msg).message == WM_NCCALCSIZE {
+                return true;
+            }
+            if hwnd != 0 && msg_hwnd == hwnd && (*msg).message == WM_GETMINMAXINFO {
+                let info = (*msg).lParam;
+                if info.0 != 0 {
+                    let monitor = MonitorFromWindow(HWND(hwnd), MONITOR_DEFAULTTONEAREST);
+                    let mut monitor_info = MONITORINFO {
+                        cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+                        ..Default::default()
+                    };
+                    if GetMonitorInfoW(monitor, &mut monitor_info).as_bool() {
+                        let monitor = monitor_info.rcMonitor;
+                        let work = monitor_info.rcWork;
+                        let fullscreen = fullscreen_msg_hook.load(Ordering::SeqCst);
+                        let target = if fullscreen { monitor } else { work };
+                        let mmi = &mut *(info.0 as *mut MINMAXINFO);
+                        mmi.ptMaxPosition.x = target.left - monitor.left;
+                        mmi.ptMaxPosition.y = target.top - monitor.top;
+                        mmi.ptMaxSize.x = target.right - target.left;
+                        mmi.ptMaxSize.y = target.bottom - target.top;
+                        mmi.ptMaxTrackSize.x = target.right - target.left;
+                        mmi.ptMaxTrackSize.y = target.bottom - target.top;
+                        return true;
+                    }
+                }
+            }
+            if !app_msg {
+                return false;
+            }
+            let is_down = (*msg).message == WM_KEYDOWN || (*msg).message == WM_SYSKEYDOWN;
+            let is_up = (*msg).message == WM_KEYUP || (*msg).message == WM_SYSKEYUP;
+            let vk = (*msg).wParam.0 as u32;
+            if is_down || is_up {
+                update_msg_mods(&msg_mods_hook, vk, is_down);
+            }
+            if is_down {
+                let repeat = ((*msg).lParam.0 as u64 & (1 << 30)) != 0;
+                let code = msg_shortcut(vk, msg_mods_hook.load(Ordering::SeqCst), repeat);
+                if code != SC_NONE {
+                    shortcut_msg_hook.store(code, Ordering::SeqCst);
+                    return true;
+                }
+            }
+            let is_f11 = vk == 0x7a;
+            if is_down && is_f11 {
+                f11_msg_hook.store(true, Ordering::SeqCst);
+            }
+        }
+        false
+    });
+    let event_loop: EventLoop<AppEvent> = event_loop_builder.build();
+    let proxy = event_loop.create_proxy();
+
+    let win_w = settings.window_width;
+    let win_h = settings.window_height;
+
+    static LOGO_PNG: &[u8] = include_bytes!("../public/ventus.png");
+    let window_icon = image::load_from_memory(LOGO_PNG).ok().and_then(|img| {
+        let img = img.resize(32, 32, image::imageops::FilterType::Lanczos3);
+        let (w, h) = img.dimensions();
+        tao::window::Icon::from_rgba(img.to_rgba8().into_raw(), w, h).ok()
+    });
+
+    let window = WindowBuilder::new()
+        .with_title("Ventus")
+        .with_inner_size(LogicalSize::new(win_w, win_h))
+        .with_min_inner_size(LogicalSize::new(800u32, 500u32))
+        .with_window_icon(window_icon)
+        .with_decorations(false)
+        .with_visible(false)
+        .build(&event_loop)
+        .expect("build window");
+    #[cfg(windows)]
+    main_hwnd.store(window.hwnd() as isize, Ordering::SeqCst);
+    keep_frameless(&window);
+    set_square_corners(&window);
+    set_window_background_dark(&window);
+    clamp_window_to_work_area(&window);
+
+    let layout_config = LayoutConfig {
+        sidebar_expanded_w: settings.sidebar_width,
+        sidebar_collapsed_w: 52,
+        toolbar_h: 44,
+        ai_sidebar_w: 340,
+        min_content_w: 320,
+        min_ai_sidebar_w: 280,
+    };
+
+    let mut state = AppState::new(conn, settings);
+    state.chrome_overlay_open = !onboarding_done;
+
+    if let Some(ref url) = cli_url {
+        let ws_id = state.tab_manager.active_workspace_id.clone();
+        let tab = browser::tab::Tab::new(ws_id, url.clone());
+        let tab_id = tab.id.clone();
+        state.tab_manager.tabs.clear();
+        state.tab_manager.tabs.push(tab);
+        state.tab_manager.active_tab_id = Some(tab_id);
+    }
+
+    if matches!(
+        state.settings.startup_behavior,
+        config::StartupBehavior::LastSession
+    ) && cli_url.is_none()
+    {
+        if let Ok(Some(saved)) = repositories::load_session(&state.conn) {
+            state.tab_manager.workspaces = saved.workspaces;
+            state.tab_manager.active_workspace_id = saved.active_workspace_id;
+            state.tab_manager.tabs.clear();
+            state.tab_manager.active_tab_id = saved.active_tab_id;
+            for saved_tab in saved.tabs {
+                let mut tab = browser::tab::Tab::new(saved_tab.workspace_id, saved_tab.url);
+                tab.id = saved_tab.id;
+                tab.title = saved_tab.title;
+                tab.favicon = saved_tab.favicon;
+                tab.pinned = saved_tab.pinned;
+                tab.is_essential = saved_tab.is_essential;
+                tab.created_at = saved_tab.created_at;
+                tab.last_active_at = saved_tab.last_active_at;
+                tab.back_stack = saved_tab.back_stack;
+                tab.forward_stack = saved_tab.forward_stack;
+                tab.status = browser::tab::TabStatus::Complete;
+                tab.sync_nav_flags();
+                state.tab_manager.tabs.push(tab);
+            }
+            if state.tab_manager.active_tab_id.is_none() {
+                state.tab_manager.active_tab_id =
+                    state.tab_manager.tabs.first().map(|tab| tab.id.clone());
+            }
+        }
+    }
+
+    if matches!(
+        state.settings.startup_behavior,
+        config::StartupBehavior::HomePage
+    ) && cli_url.is_none()
+    {
+        let homepage = app::normalize_homepage(&state.settings.homepage);
+        if !homepage.is_empty() {
+            if let Some(tab) = state
+                .tab_manager
+                .tabs
+                .iter_mut()
+                .find(|t| state.tab_manager.active_tab_id.as_deref() == Some(t.id.as_str()))
+            {
+                tab.url = homepage;
+            }
+        }
+    }
+
+    let first_tab_id = state
+        .tab_manager
+        .active_tab_id
+        .clone()
+        .expect("TabManager always has an active tab");
+    let first_url = state
+        .tab_manager
+        .active_tab()
+        .map(|t| t.url.clone())
+        .unwrap_or_else(|| browser::tab::Tab::new_tab_url().to_string());
+    let win_size = window.inner_size();
+
+    let proxy_chrome = proxy.clone();
+    let proxy_chrome_load = proxy.clone();
+    let chrome_builder = WebViewBuilder::new_as_child(&window)
+        .with_bounds(Rect {
+            x: 0,
+            y: 0,
+            width: win_size.width,
+            height: win_size.height,
+        })
+        .with_transparent(true);
+    #[cfg(windows)]
+    let chrome_builder = chrome_builder.with_browser_accelerator_keys(false);
+    let chrome = chrome_builder
+        .with_html(chrome_html())
+        .with_ipc_handler(move |req: wry::http::Request<String>| {
+            let body = req.body();
+            match serde_json::from_str::<ChromeCommand>(body) {
+                Ok(cmd) => {
+                    let _ = proxy_chrome.send_event(AppEvent::Chrome(cmd));
+                }
+                Err(e) => tracing::warn!("IPC parse: {} | body: {}", e, body),
+            }
+        })
+        .with_on_page_load_handler(move |event, _url: String| {
+            if let wry::PageLoadEvent::Finished = event {
+                let _ = proxy_chrome_load.send_event(AppEvent::ChromeReady);
+            }
+        })
+        .build()
+        .expect("build chrome webview");
+    #[cfg(windows)]
+    let chrome_hwnd = webview_hwnd(&chrome);
+    #[cfg(not(windows))]
+    let chrome_hwnd = None;
+
+    let initial_layout =
+        AppLayout::calculate(win_size, window.scale_factor(), &state, &layout_config);
+
+    // Crash sentinel: if this file exists at startup, the previous run ended abnormally
+    // (crash, kill, power-loss) without cleanly releasing WebView2 resources.  The WebView2
+    // browser process (msedgewebview2.exe) may still be running and holding the profile lock.
+    // When WebView2 can't acquire the lock it silently falls back to ephemeral temp storage —
+    // every cookie and localStorage entry is lost for that session.
+    //
+    // We read the old PID from the sentinel file and wait for that process to actually exit
+    // (up to 3 s) rather than using a blind fixed sleep.  After the process is gone we add
+    // an extra 500 ms so WebView2's own post-exit cleanup (SQLite flush) can complete.
+    //
+    // Secondary (new window) instances skip the sentinel — the primary window owns it.
+    let crash_sentinel: Option<std::path::PathBuf> = if !new_window {
+        let p = data_dir.join("running.lock");
+        if p.exists() {
+            tracing::warn!("previous session ended without clean shutdown — waiting for WebView2 to release profile lock");
+            wait_for_previous_instance(&p);
+        }
+        let _ = std::fs::write(&p, std::process::id().to_string().as_bytes());
+        Some(p)
+    } else {
+        None
+    };
+
+    // Shared WebContext: all content WebViews use the same data folder so
+    // cookies, localStorage, and HTTP cache persist across restarts and are
+    // shared between tabs (same as how a real browser works).
+    // Ensure webview_data dir exists before handing it to WebView2.
+    // WebView2 will fail silently and use a temp folder (losing cookies) if the path
+    // doesn't exist or is locked by a stale process, so we pre-create it here.
+    let webview_data_dir = data_dir.join("webview_data");
+    std::fs::create_dir_all(&webview_data_dir).expect("create WebView2 profile");
+    // Wrapped in Option so we can explicitly drop it before TAO calls process::exit().
+    // Without this, Rust's Drop never runs for these contexts, so msedgewebview2.exe outlives
+    // the Ventus process and holds the profile lock — causing the next launch to silently use
+    // temp storage and lose all cookies.
+    let mut content_web_context = Some(wry::WebContext::new(Some(webview_data_dir)));
+
+    // Incognito tabs get their own ephemeral data directory that is wiped on every startup,
+    // so cookies, cache, and localStorage never persist across sessions.
+    // New windows use a per-process incognito dir so concurrent windows don't wipe each other.
+    let incognito_data_dir = if new_window {
+        data_dir.join(format!("incognito_session_{}", std::process::id()))
+    } else {
+        data_dir.join("incognito_session")
+    };
+    std::fs::remove_dir_all(&incognito_data_dir).ok();
+    std::fs::create_dir_all(&incognito_data_dir).ok();
+    let mut incognito_web_context = Some(wry::WebContext::new(Some(incognito_data_dir)));
+
+    let mut content_views: HashMap<String, WebView> = HashMap::new();
+    let mut content_hwnds: HashMap<String, isize> = HashMap::new();
+    let mut load_watches: HashMap<String, u64> = HashMap::new();
+    let mut load_watch_next = 0u64;
+    let mut last_active_tab_id: Option<String> = state.tab_manager.active_tab_id.clone();
+    let mut inactive_tabs: HashMap<String, Instant> = HashMap::new();
+    let mut keepalive_at = Instant::now() + TAB_KEEPALIVE_EVERY;
+    let mut keepalive_pos = 0usize;
+    // Shared slot for the pre-built adblock Engine.
+    // The filter-loader task builds the Engine on a spawn_blocking thread (500 ms–2 s of CPU
+    // work) so it never blocks the TAO event loop.  When done it stores the Engine here and
+    // fires FilterListsReady; the event loop reads it with a fast .take() — no blocking.
+    let pending_engine: Arc<std::sync::Mutex<Option<(adblock_crate::Engine, Vec<String>)>>> =
+        Arc::new(std::sync::Mutex::new(None));
+
+    if !first_url.starts_with("neura://") {
+        let first_is_incognito = state.tab_manager.tab_is_incognito(&first_tab_id);
+        state.tab_manager.set_tab_loading(&first_tab_id, true);
+        let ctx = if first_is_incognito {
+            incognito_web_context.as_mut().unwrap()
+        } else {
+            content_web_context.as_mut().unwrap()
+        };
+        let defer_first_load =
+            should_restore_startup_cookies(first_is_incognito, cookies_restored, &startup_cookies);
+        let first_ad_script = if first_is_incognito {
+            String::new()
+        } else {
+            state.ad_block_engine.init_script().to_string()
+        };
+        let first_wv = build_content_webview(
+            &window,
+            &first_tab_id,
+            &first_url,
+            initial_layout.content,
+            proxy.clone(),
+            ctx,
+            first_is_incognito,
+            std::sync::Arc::clone(&shared_dl_dir),
+            tab_zoom(&state, &first_tab_id),
+            first_ad_script,
+            !defer_first_load,
+        )
+        .expect("build first content webview");
+        #[cfg(windows)]
+        let first_hwnd = webview_hwnd(&first_wv);
+        content_views.insert(first_tab_id.clone(), first_wv);
+        if let Some(wv) = content_views.get(&first_tab_id) {
+            restore_startup_cookies(
+                wv,
+                first_is_incognito,
+                &startup_cookies,
+                &mut cookies_restored,
+            );
+            if defer_first_load {
+                let _ = wv.load_url(&first_url);
+            }
+        }
+        watch_load(
+            &rt,
+            &proxy,
+            &mut load_watches,
+            &mut load_watch_next,
+            first_tab_id.clone(),
+            first_url.clone(),
+        );
+        #[cfg(windows)]
+        track_content_hwnd(first_hwnd, &first_tab_id, &mut content_hwnds);
+    }
+    apply_layout(
+        &chrome,
+        chrome_hwnd,
+        &content_views,
+        &state,
+        &layout_config,
+        &window,
+    );
+    // Apply screenshot protection immediately if the initial workspace is incognito.
+    #[cfg(windows)]
+    {
+        let is_incog = state
+            .tab_manager
+            .active_workspace()
+            .map(|w| w.is_incognito)
+            .unwrap_or(false);
+        set_screenshot_protection(window.hwnd() as isize, is_incog);
+    }
+
+    let proxy_main = proxy.clone();
+    let mut chrome_shown = false;
+    let mut last_fullscreen_toggle: Option<Instant> = None;
+    let mut sync_fullscreen_layout = false;
+    let mut fullscreen_restore_maximized: Option<bool> = None;
+    let mut restore_maximized_after_fullscreen = false;
+    let mut custom_maximized = false;
+    // Periodic proactive cookie snapshot (backs up cookies even between navigations).
+    let mut cookie_save_at = Instant::now() + COOKIE_SAVE_EVERY;
+    event_loop.run(move |event, _, control_flow| {
+        *control_flow = ControlFlow::Wait;
+
+        match event {
+            Event::UserEvent(AppEvent::ChromeReady) => {
+                let js = state.chrome_state_json();
+                let _ = chrome
+                    .evaluate_script(&format!("window.__neura&&window.__neura.setState({})", js));
+                if !onboarding_done {
+                    let _ = chrome.evaluate_script(
+                        "setTimeout(()=>window.__neura&&window.__neura.showOnboarding(),100)",
+                    );
+                }
+                if !chrome_shown {
+                    chrome_shown = true;
+                    keep_frameless(&window);
+                    window.set_visible(true);
+                }
+                // Spawn filter list downloader — runs once after launch, updates weekly.
+                {
+                    let proxy_fl = proxy_main.clone();
+                    let fl_data_dir = data_dir.clone();
+                    let pending_fl = Arc::clone(&pending_engine);
+                    rt.spawn(async move {
+                        // Small delay so startup I/O doesn't compete with WebView init.
+                        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+                        let lists = crate::adblock::filter_loader::load(&fl_data_dir).await;
+                        let domains =
+                            crate::adblock::filter_loader::extract_domains(&lists.combined);
+                        let filter_text = lists.combined;
+
+                        // Build the adblock Engine on a blocking thread.
+                        // Engine::from_filter_set over 300k+ rules takes 500 ms–2 s.
+                        // Running this on the TAO event loop would freeze all WebViews
+                        // (progress bars, navigations) for that entire window.
+                        let result = tokio::task::spawn_blocking(move || {
+                            let mut fs = adblock_crate::lists::FilterSet::new(false);
+                            fs.add_filter_list(
+                                &filter_text,
+                                adblock_crate::lists::ParseOptions::default(),
+                            );
+                            let engine = adblock_crate::Engine::from_filter_set(fs, true);
+                            (engine, domains)
+                        })
+                        .await;
+                        if let Ok((engine, domains)) = result {
+                            *pending_fl.lock().unwrap_or_else(|e| e.into_inner()) =
+                                Some((engine, domains));
+                            // Signal the event loop; actual domains carried via Arc.
+                            let _ = proxy_fl.send_event(AppEvent::FilterListsReady {
+                                domains: vec![],
+                                filter_text: String::new(),
+                            });
+                        }
+                    });
+                }
+
+                let proxy_upd = proxy_main.clone();
+                let dismissed_ver = dismissed_update_version.clone();
+                rt.spawn(async move {
+                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                    if let Ok(Some(info)) = updater::check_latest().await {
+                        if dismissed_ver.as_deref() != Some(info.version.as_str()) {
+                            let _ = proxy_upd.send_event(AppEvent::UpdateCheckResult {
+                                available: true,
+                                version: info.version,
+                                notes: info.notes,
+                                download_url: info.download_url,
+                            });
+                        }
+                    }
+                });
+            }
+
+            Event::UserEvent(AppEvent::Chrome(ChromeCommand::CheckForUpdate)) => {
+                let proxy_upd = proxy_main.clone();
+                rt.spawn(async move {
+                    match updater::check_latest().await {
+                        Ok(Some(info)) => {
+                            let _ = proxy_upd.send_event(AppEvent::UpdateCheckResult {
+                                available: true,
+                                version: info.version,
+                                notes: info.notes,
+                                download_url: info.download_url,
+                            });
+                        }
+                        Ok(None) => {
+                            let _ = proxy_upd.send_event(AppEvent::UpdateCheckResult {
+                                available: false,
+                                version: String::new(),
+                                notes: String::new(),
+                                download_url: String::new(),
+                            });
+                        }
+                        Err(e) => {
+                            let _ = proxy_upd.send_event(AppEvent::UpdateCheckFailed {
+                                message: e.to_string(),
+                            });
+                        }
+                    }
+                });
+            }
+
+            Event::UserEvent(AppEvent::Chrome(ChromeCommand::LoadNeuraFeed)) => {
+                let proxy_feed = proxy_main.clone();
+                rt.spawn(async move {
+                    let client = reqwest::Client::builder()
+                        .user_agent(crate::version::USER_AGENT)
+                        .build();
+                    let res = match client {
+                        Ok(client) => {
+                            client
+                                .get("https://feed.neuraspheres.com/api/recent-news?limit=15")
+                                .send()
+                                .await
+                        }
+                        Err(e) => Err(e),
+                    };
+                    match res {
+                        Ok(resp) => match resp.json::<serde_json::Value>().await {
+                            Ok(json) => {
+                                let articles = slim_feed_articles(&json);
+                                let _ =
+                                    proxy_feed.send_event(AppEvent::NeuraFeedLoaded { articles });
+                            }
+                            Err(e) => {
+                                let _ = proxy_feed.send_event(AppEvent::NeuraFeedFailed {
+                                    message: e.to_string(),
+                                });
+                            }
+                        },
+                        Err(e) => {
+                            let _ = proxy_feed.send_event(AppEvent::NeuraFeedFailed {
+                                message: e.to_string(),
+                            });
+                        }
+                    }
+                });
+            }
+
+            Event::UserEvent(AppEvent::Chrome(ChromeCommand::AiMessage { text })) => {
+                handle_ai_message(text, &state, &chrome, &proxy_main, &rt);
+            }
+
+            Event::UserEvent(AppEvent::Chrome(ChromeCommand::SpotlightAiQuery { text })) => {
+                handle_spotlight_ai_query(text, &state, &proxy_main, &rt);
+            }
+
+            Event::UserEvent(AppEvent::Chrome(ChromeCommand::AiQuickAction { action })) => {
+                handle_ai_quick_action(action, &state, &chrome, &proxy_main, &rt);
+            }
+
+            // JS resize-handle mousedown → initiate native Win32 resize via ReleaseCapture
+            // + SendMessage(WM_NCLBUTTONDOWN, hit_code).  This is the standard way to
+            // trigger a system resize loop from a frameless window without NC hit testing.
+            Event::UserEvent(AppEvent::Chrome(ChromeCommand::BeginResize { edge })) => {
+                #[cfg(windows)]
+                begin_window_resize(window.hwnd() as isize, &edge);
+            }
+
+            // Execute JS in the active content WebView on behalf of the AI agent loop
+            Event::UserEvent(AppEvent::AiExecutePageJs {
+                ref call_id,
+                ref tab_id,
+                ref js,
+            }) => {
+                if let Some(wv) = content_views.get(tab_id) {
+                    let _ = wv.evaluate_script(js);
+                } else if let Ok(mut map) = state.ai_pending_tools.lock() {
+                    if let Some(tx) = map.remove(call_id) {
+                        let _ = tx.send(r#"{"error":"tab is not available"}"#.to_string());
+                    }
+                }
+            }
+
+            // F12 / OpenDevtools — open Chrome DevTools for the active content WebView.
+            // `open_devtools()` may create a new child HWND inside the main window that
+            // initially appears black while loading.  Re-applying the layout immediately
+            // after restores the Chrome WebView Z-order so the browser UI stays visible.
+            Event::UserEvent(AppEvent::Chrome(ChromeCommand::OpenDevtools)) => {
+                if let Some(ref id) = state.tab_manager.active_tab_id.clone() {
+                    if let Some(wv) = content_views.get(id) {
+                        wv.open_devtools();
+                    }
+                }
+                apply_layout(
+                    &chrome,
+                    chrome_hwnd,
+                    &content_views,
+                    &state,
+                    &layout_config,
+                    &window,
+                );
+            }
+
+            Event::UserEvent(AppEvent::Chrome(ChromeCommand::WindowDragStart)) => {
+                let _ = window.drag_window();
+            }
+
+            Event::UserEvent(AppEvent::Chrome(ChromeCommand::WindowMinimize)) => {
+                window.set_minimized(true);
+            }
+
+            Event::UserEvent(AppEvent::Chrome(ChromeCommand::WindowMaximize)) => {
+                if state.content_fullscreen {
+                    return;
+                }
+                custom_maximized = window.is_maximized();
+                toggle_window_maximized(&window, &mut custom_maximized);
+                apply_layout(
+                    &chrome,
+                    chrome_hwnd,
+                    &content_views,
+                    &state,
+                    &layout_config,
+                    &window,
+                );
+            }
+
+            Event::UserEvent(AppEvent::Chrome(ChromeCommand::WindowClose)) => {
+                if !new_window {
+                    save_window_size(&window, &mut state, custom_maximized);
+                    save_session(&state);
+                }
+                save_open_cookies(&content_views, &state, &data_dir);
+                shutdown_webview2(
+                    crash_sentinel.as_deref(),
+                    &mut content_views,
+                    &mut content_hwnds,
+                    &mut content_web_context,
+                    &mut incognito_web_context,
+                );
+                *control_flow = ControlFlow::Exit;
+            }
+
+            Event::UserEvent(AppEvent::Shortcut { code }) => {
+                run_shortcut(code as usize, &proxy_main, &state);
+            }
+
+            Event::UserEvent(AppEvent::ContentProcessFailed { tab_id, fatal }) => {
+                let url = state
+                    .tab_manager
+                    .tabs
+                    .iter()
+                    .find(|t| t.id == tab_id)
+                    .map(|t| t.url.clone())
+                    .unwrap_or_default();
+                if url.is_empty() || url.starts_with("neura://") {
+                    return;
+                }
+                if !fatal {
+                    if let Some(wv) = content_views.get(&tab_id) {
+                        wake_content_webview(wv);
+                        let _ = wv.load_url(&url);
+                        state.tab_manager.set_tab_loading(&tab_id, true);
+                        watch_load(
+                            &rt,
+                            &proxy_main,
+                            &mut load_watches,
+                            &mut load_watch_next,
+                            tab_id.clone(),
+                            url,
+                        );
+                        apply_layout(
+                            &chrome,
+                            chrome_hwnd,
+                            &content_views,
+                            &state,
+                            &layout_config,
+                            &window,
+                        );
+                        return;
+                    }
+                }
+                content_views.remove(&tab_id);
+                content_hwnds.remove(&tab_id);
+                clear_load_watches(&mut load_watches, &tab_id);
+                let layout = AppLayout::calculate(
+                    layout_size(&window, &state),
+                    window.scale_factor(),
+                    &state,
+                    &layout_config,
+                );
+                let is_incog = state.tab_manager.tab_is_incognito(&tab_id);
+                let ctx = if is_incog {
+                    incognito_web_context.as_mut().unwrap()
+                } else {
+                    content_web_context.as_mut().unwrap()
+                };
+                let ad_script = if is_incog {
+                    String::new()
+                } else {
+                    state.ad_block_engine.init_script().to_string()
+                };
+                let defer_load =
+                    should_restore_startup_cookies(is_incog, cookies_restored, &startup_cookies);
+                match build_content_webview(
+                    &window,
+                    &tab_id,
+                    &url,
+                    layout.content,
+                    proxy_main.clone(),
+                    ctx,
+                    is_incog,
+                    std::sync::Arc::clone(&shared_dl_dir),
+                    tab_zoom(&state, &tab_id),
+                    ad_script,
+                    !defer_load,
+                ) {
+                    Ok(wv) => {
+                        #[cfg(windows)]
+                        let hwnd = webview_hwnd(&wv);
+                        restore_startup_cookies(
+                            &wv,
+                            is_incog,
+                            &startup_cookies,
+                            &mut cookies_restored,
+                        );
+                        content_views.insert(tab_id.clone(), wv);
+                        if defer_load {
+                            if let Some(wv) = content_views.get(&tab_id) {
+                                let _ = wv.load_url(&url);
+                            }
+                        }
+                        state.tab_manager.set_tab_loading(&tab_id, true);
+                        watch_load(
+                            &rt,
+                            &proxy_main,
+                            &mut load_watches,
+                            &mut load_watch_next,
+                            tab_id.clone(),
+                            url,
+                        );
+                        #[cfg(windows)]
+                        track_content_hwnd(hwnd, &tab_id, &mut content_hwnds);
+                        apply_layout(
+                            &chrome,
+                            chrome_hwnd,
+                            &content_views,
+                            &state,
+                            &layout_config,
+                            &window,
+                        );
+                    }
+                    Err(e) => tracing::error!("recover content process: {}", e),
+                }
+            }
+
+            Event::UserEvent(app_event) => {
+                if matches!(
+                    &app_event,
+                    AppEvent::Chrome(ChromeCommand::ToggleFullscreen)
+                ) {
+                    let now = Instant::now();
+                    if last_fullscreen_toggle
+                        .map(|last| now.duration_since(last) < Duration::from_millis(250))
+                        .unwrap_or(false)
+                    {
+                        return;
+                    }
+                    last_fullscreen_toggle = Some(now);
+                }
+
+                if let AppEvent::ContentLoadStalled { tab_id, url, watch } = &app_event {
+                    let key = app::load_key(tab_id, url);
+                    if load_watches.get(&key).copied() != Some(*watch) {
+                        return;
+                    }
+                    load_watches.remove(&key);
+                }
+                if let AppEvent::ContentLoadEnd { tab_id, url } = &app_event {
+                    clear_load_watches(&mut load_watches, tab_id);
+                    // Snapshot cookies after each page load into our isolated store.
+                    // Skip internal pages and incognito tabs (they never share cookies).
+                    if !url.starts_with("neura://") && !state.tab_manager.tab_is_incognito(tab_id) {
+                        if let Some(wv) = content_views.get(tab_id.as_str()) {
+                            browser::cookie_manager::trigger_save(wv, cookie_tx.clone());
+                        }
+                    }
+                }
+                if let AppEvent::ContentLoadProgress {
+                    tab_id, progress, ..
+                } = &app_event
+                {
+                    if *progress >= 0.92 {
+                        clear_load_watches(&mut load_watches, tab_id);
+                    }
+                }
+                if let AppEvent::ContentLoadStart { tab_id, url } = &app_event {
+                    watch_load(
+                        &rt,
+                        &proxy_main,
+                        &mut load_watches,
+                        &mut load_watch_next,
+                        tab_id.clone(),
+                        crate::utils::url::clean_tracking_url(url),
+                    );
+                }
+                if let AppEvent::ContentMetadata { tab_id, url, .. }
+                | AppEvent::ContentNav { tab_id, url, .. } = &app_event
+                {
+                    if state
+                        .tab_manager
+                        .get_tab(tab_id)
+                        .map(|tab| tab.status == crate::browser::tab::TabStatus::Loading)
+                        .unwrap_or(false)
+                    {
+                        watch_load(
+                            &rt,
+                            &proxy_main,
+                            &mut load_watches,
+                            &mut load_watch_next,
+                            tab_id.clone(),
+                            crate::utils::url::clean_tracking_url(url),
+                        );
+                    }
+                }
+                // FilterListsReady: Engine was built on a background thread and stored in
+                // pending_engine.  Just take it — no CPU work on the event loop thread.
+                if matches!(&app_event, AppEvent::FilterListsReady { .. }) {
+                    if let Ok(mut lock) = pending_engine.lock() {
+                        if let Some((engine, domains)) = lock.take() {
+                            let domain_count = domains.len();
+                            let domains_json = serde_json::to_string(&domains)
+                                .unwrap_or_else(|_| "[]".to_string());
+                            state.ad_block_engine.rebuild(engine, domains);
+                            tracing::info!(
+                                "adblock: filter lists ready — {} JS domains",
+                                domain_count
+                            );
+                            for wv in content_views.values() {
+                                let _ = wv.evaluate_script(&format!(
+                                    "window.__nabUpdateDomains&&window.__nabUpdateDomains({})",
+                                    domains_json
+                                ));
+                            }
+                        }
+                    }
+                    return;
+                }
+
+                let persist_session = should_save_session(&app_event);
+                let is_save_settings = matches!(
+                    &app_event,
+                    AppEvent::Chrome(
+                        ChromeCommand::SaveSettings { .. } | ChromeCommand::BrowseDownloadFolder
+                    )
+                );
+                let action_opt = handle_app_event_inner(app_event, &mut state, &chrome);
+                // Keep the shared download dir in sync whenever any setting is saved.
+                if is_save_settings {
+                    if let Ok(mut guard) = shared_dl_dir.lock() {
+                        *guard = download_prefs_from_settings(&state.settings);
+                    }
+                }
+                if let Some(action) = action_opt {
+                    if persist_session {
+                        save_session(&state);
+                    }
+                    if matches!(action, TabAction::SyncClipOnly) {
+                        let layout = AppLayout::calculate(
+                            layout_size(&window, &state),
+                            window.scale_factor(),
+                            &state,
+                            &layout_config,
+                        );
+                        sync_chrome_clip(chrome_hwnd, &state, layout);
+                        #[cfg(windows)]
+                        sync_content_z_order(&content_views, chrome_hwnd, &state);
+                        return;
+                    }
+
+                    apply_layout(
+                        &chrome,
+                        chrome_hwnd,
+                        &content_views,
+                        &state,
+                        &layout_config,
+                        &window,
+                    );
+                    let layout = AppLayout::calculate(
+                        layout_size(&window, &state),
+                        window.scale_factor(),
+                        &state,
+                        &layout_config,
+                    );
+
+                    match action {
+                        TabAction::SyncClipOnly => unreachable!(),
+                        TabAction::Create { tab_id, url } => {
+                            if !url.starts_with("neura://") {
+                                let is_incog = state.tab_manager.tab_is_incognito(&tab_id);
+                                let ctx = if is_incog {
+                                    incognito_web_context.as_mut().unwrap()
+                                } else {
+                                    content_web_context.as_mut().unwrap()
+                                };
+                                let ad_script = if is_incog {
+                                    String::new()
+                                } else {
+                                    state.ad_block_engine.init_script().to_string()
+                                };
+                                let defer_load = should_restore_startup_cookies(
+                                    is_incog,
+                                    cookies_restored,
+                                    &startup_cookies,
+                                );
+                                match build_content_webview(
+                                    &window,
+                                    &tab_id,
+                                    &url,
+                                    layout.content,
+                                    proxy_main.clone(),
+                                    ctx,
+                                    is_incog,
+                                    std::sync::Arc::clone(&shared_dl_dir),
+                                    tab_zoom(&state, &tab_id),
+                                    ad_script,
+                                    !defer_load,
+                                ) {
+                                    Ok(wv) => {
+                                        #[cfg(windows)]
+                                        let hwnd = webview_hwnd(&wv);
+                                        restore_startup_cookies(
+                                            &wv,
+                                            is_incog,
+                                            &startup_cookies,
+                                            &mut cookies_restored,
+                                        );
+                                        content_views.insert(tab_id.clone(), wv);
+                                        if defer_load {
+                                            if let Some(wv) = content_views.get(&tab_id) {
+                                                let _ = wv.load_url(&url);
+                                            }
+                                        }
+                                        watch_load(
+                                            &rt,
+                                            &proxy_main,
+                                            &mut load_watches,
+                                            &mut load_watch_next,
+                                            tab_id.clone(),
+                                            url.clone(),
+                                        );
+                                        #[cfg(windows)]
+                                        track_content_hwnd(hwnd, &tab_id, &mut content_hwnds);
+                                        apply_layout(
+                                            &chrome,
+                                            chrome_hwnd,
+                                            &content_views,
+                                            &state,
+                                            &layout_config,
+                                            &window,
+                                        );
+                                    }
+                                    Err(e) => tracing::error!("create content view: {}", e),
+                                }
+                            }
+                        }
+                        TabAction::Remove(id) => {
+                            content_views.remove(&id);
+                            content_hwnds.remove(&id);
+                            clear_load_watches(&mut load_watches, &id);
+                            apply_layout(
+                                &chrome,
+                                chrome_hwnd,
+                                &content_views,
+                                &state,
+                                &layout_config,
+                                &window,
+                            );
+                        }
+                        TabAction::RemoveMany(ids) => {
+                            for id in ids {
+                                content_views.remove(&id);
+                                content_hwnds.remove(&id);
+                                clear_load_watches(&mut load_watches, &id);
+                            }
+                            apply_layout(
+                                &chrome,
+                                chrome_hwnd,
+                                &content_views,
+                                &state,
+                                &layout_config,
+                                &window,
+                            );
+                        }
+                        TabAction::SyncViews => {
+                            apply_layout(
+                                &chrome,
+                                chrome_hwnd,
+                                &content_views,
+                                &state,
+                                &layout_config,
+                                &window,
+                            );
+                            if let Some(active_id) = state.tab_manager.active_tab_id.clone() {
+                                if !content_views.contains_key(&active_id) {
+                                    if let Some(tab) = state.tab_manager.get_tab(&active_id) {
+                                        let url = tab.url.clone();
+                                        if !url.starts_with("neura://") {
+                                            let rect = AppLayout::calculate(
+                                                layout_size(&window, &state),
+                                                window.scale_factor(),
+                                                &state,
+                                                &layout_config,
+                                            )
+                                            .content;
+                                            let is_incog =
+                                                state.tab_manager.tab_is_incognito(&active_id);
+                                            let ctx = if is_incog {
+                                                incognito_web_context.as_mut().unwrap()
+                                            } else {
+                                                content_web_context.as_mut().unwrap()
+                                            };
+                                            let ad_script = if is_incog {
+                                                String::new()
+                                            } else {
+                                                state.ad_block_engine.init_script().to_string()
+                                            };
+                                            let defer_load = should_restore_startup_cookies(
+                                                is_incog,
+                                                cookies_restored,
+                                                &startup_cookies,
+                                            );
+                                            if let Ok(wv) = build_content_webview(
+                                                &window,
+                                                &active_id,
+                                                &url,
+                                                rect,
+                                                proxy_main.clone(),
+                                                ctx,
+                                                is_incog,
+                                                std::sync::Arc::clone(&shared_dl_dir),
+                                                tab_zoom(&state, &active_id),
+                                                ad_script,
+                                                !defer_load,
+                                            ) {
+                                                #[cfg(windows)]
+                                                let hwnd = webview_hwnd(&wv);
+                                                restore_startup_cookies(
+                                                    &wv,
+                                                    is_incog,
+                                                    &startup_cookies,
+                                                    &mut cookies_restored,
+                                                );
+                                                content_views.insert(active_id.clone(), wv);
+                                                if defer_load {
+                                                    if let Some(wv) = content_views.get(&active_id)
+                                                    {
+                                                        let _ = wv.load_url(&url);
+                                                    }
+                                                }
+                                                watch_load(
+                                                    &rt,
+                                                    &proxy_main,
+                                                    &mut load_watches,
+                                                    &mut load_watch_next,
+                                                    active_id.clone(),
+                                                    url.clone(),
+                                                );
+                                                #[cfg(windows)]
+                                                track_content_hwnd(
+                                                    hwnd,
+                                                    &active_id,
+                                                    &mut content_hwnds,
+                                                );
+                                                apply_layout(
+                                                    &chrome,
+                                                    chrome_hwnd,
+                                                    &content_views,
+                                                    &state,
+                                                    &layout_config,
+                                                    &window,
+                                                );
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            // Sync screenshot protection whenever layout is re-evaluated,
+                            // which covers all workspace switches, tab creates, and mode changes.
+                            #[cfg(windows)]
+                            {
+                                let is_incog = state
+                                    .tab_manager
+                                    .active_workspace()
+                                    .map(|w| w.is_incognito)
+                                    .unwrap_or(false);
+                                set_screenshot_protection(window.hwnd() as isize, is_incog);
+                            }
+                        }
+                        TabAction::ContentScript(js) => {
+                            if let Some(id) = &state.tab_manager.active_tab_id {
+                                if let Some(wv) = content_views.get(id) {
+                                    let _ = wv.evaluate_script(&js);
+                                }
+                            }
+                        }
+                        TabAction::ContentScriptOnTab { tab_id, js } => {
+                            if let Some(wv) = content_views.get(&tab_id) {
+                                let _ = wv.evaluate_script(&js);
+                            }
+                        }
+                        TabAction::SetZoom(level) => {
+                            if let Some(id) = &state.tab_manager.active_tab_id {
+                                if let Some(wv) = content_views.get(id) {
+                                    let _ = wv.zoom(level);
+                                }
+                            }
+                        }
+                        TabAction::SetZoomFor { tab_id, level } => {
+                            if let Some(wv) = content_views.get(&tab_id) {
+                                let _ = wv.zoom(level);
+                            }
+                        }
+                        TabAction::SetZoomAll(level) => {
+                            for wv in content_views.values() {
+                                let _ = wv.zoom(level);
+                            }
+                        }
+                        TabAction::AllContentScript(js) => {
+                            for wv in content_views.values() {
+                                let _ = wv.evaluate_script(&js);
+                            }
+                        }
+                        TabAction::ContentNavigate(url) => {
+                            let watch_tab_id = state.tab_manager.active_tab_id.clone();
+                            if let Some(id) = watch_tab_id.clone() {
+                                if !url.starts_with("neura://") {
+                                    watch_load(
+                                        &rt,
+                                        &proxy_main,
+                                        &mut load_watches,
+                                        &mut load_watch_next,
+                                        id,
+                                        url.clone(),
+                                    );
+                                }
+                            }
+                            apply_layout(
+                                &chrome,
+                                chrome_hwnd,
+                                &content_views,
+                                &state,
+                                &layout_config,
+                                &window,
+                            );
+                            if let Some(id) = &state.tab_manager.active_tab_id {
+                                if url.starts_with("neura://") {
+                                    content_views.remove(id);
+                                    apply_layout(
+                                        &chrome,
+                                        chrome_hwnd,
+                                        &content_views,
+                                        &state,
+                                        &layout_config,
+                                        &window,
+                                    );
+                                } else if let Some(wv) = content_views.get(id) {
+                                    let _ = wv.load_url(&url);
+                                } else {
+                                    let is_incog = state.tab_manager.tab_is_incognito(id);
+                                    let ctx = if is_incog {
+                                        incognito_web_context.as_mut().unwrap()
+                                    } else {
+                                        content_web_context.as_mut().unwrap()
+                                    };
+                                    let ad_script = if is_incog {
+                                        String::new()
+                                    } else {
+                                        state.ad_block_engine.init_script().to_string()
+                                    };
+                                    let defer_load = should_restore_startup_cookies(
+                                        is_incog,
+                                        cookies_restored,
+                                        &startup_cookies,
+                                    );
+                                    match build_content_webview(
+                                        &window,
+                                        id,
+                                        &url,
+                                        layout.content,
+                                        proxy_main.clone(),
+                                        ctx,
+                                        is_incog,
+                                        std::sync::Arc::clone(&shared_dl_dir),
+                                        tab_zoom(&state, id),
+                                        ad_script,
+                                        !defer_load,
+                                    ) {
+                                        Ok(wv) => {
+                                            #[cfg(windows)]
+                                            let hwnd = webview_hwnd(&wv);
+                                            restore_startup_cookies(
+                                                &wv,
+                                                is_incog,
+                                                &startup_cookies,
+                                                &mut cookies_restored,
+                                            );
+                                            content_views.insert(id.clone(), wv);
+                                            if defer_load {
+                                                if let Some(wv) = content_views.get(id) {
+                                                    let _ = wv.load_url(&url);
+                                                }
+                                            }
+                                            watch_load(
+                                                &rt,
+                                                &proxy_main,
+                                                &mut load_watches,
+                                                &mut load_watch_next,
+                                                id.clone(),
+                                                url.clone(),
+                                            );
+                                            #[cfg(windows)]
+                                            track_content_hwnd(hwnd, id, &mut content_hwnds);
+                                            apply_layout(
+                                                &chrome,
+                                                chrome_hwnd,
+                                                &content_views,
+                                                &state,
+                                                &layout_config,
+                                                &window,
+                                            );
+                                        }
+                                        Err(e) => tracing::error!(
+                                            "create content view for navigation: {}",
+                                            e
+                                        ),
+                                    }
+                                }
+                            }
+                        }
+                        TabAction::ReloadContent { tab_id, url } => {
+                            if let Some(wv) = content_views.get(&tab_id) {
+                                wake_content_webview(wv);
+                                let _ = wv.load_url(&url);
+                                watch_load(
+                                    &rt,
+                                    &proxy_main,
+                                    &mut load_watches,
+                                    &mut load_watch_next,
+                                    tab_id.clone(),
+                                    url.clone(),
+                                );
+                                apply_layout(
+                                    &chrome,
+                                    chrome_hwnd,
+                                    &content_views,
+                                    &state,
+                                    &layout_config,
+                                    &window,
+                                );
+                            } else {
+                                let is_incog = state.tab_manager.tab_is_incognito(&tab_id);
+                                let ctx = if is_incog {
+                                    incognito_web_context.as_mut().unwrap()
+                                } else {
+                                    content_web_context.as_mut().unwrap()
+                                };
+                                let ad_script = if is_incog {
+                                    String::new()
+                                } else {
+                                    state.ad_block_engine.init_script().to_string()
+                                };
+                                let defer_load = should_restore_startup_cookies(
+                                    is_incog,
+                                    cookies_restored,
+                                    &startup_cookies,
+                                );
+                                match build_content_webview(
+                                    &window,
+                                    &tab_id,
+                                    &url,
+                                    layout.content,
+                                    proxy_main.clone(),
+                                    ctx,
+                                    is_incog,
+                                    std::sync::Arc::clone(&shared_dl_dir),
+                                    tab_zoom(&state, &tab_id),
+                                    ad_script,
+                                    !defer_load,
+                                ) {
+                                    Ok(wv) => {
+                                        #[cfg(windows)]
+                                        let hwnd = webview_hwnd(&wv);
+                                        restore_startup_cookies(
+                                            &wv,
+                                            is_incog,
+                                            &startup_cookies,
+                                            &mut cookies_restored,
+                                        );
+                                        content_views.insert(tab_id.clone(), wv);
+                                        if defer_load {
+                                            if let Some(wv) = content_views.get(&tab_id) {
+                                                let _ = wv.load_url(&url);
+                                            }
+                                        }
+                                        watch_load(
+                                            &rt,
+                                            &proxy_main,
+                                            &mut load_watches,
+                                            &mut load_watch_next,
+                                            tab_id.clone(),
+                                            url.clone(),
+                                        );
+                                        #[cfg(windows)]
+                                        track_content_hwnd(hwnd, &tab_id, &mut content_hwnds);
+                                        apply_layout(
+                                            &chrome,
+                                            chrome_hwnd,
+                                            &content_views,
+                                            &state,
+                                            &layout_config,
+                                            &window,
+                                        );
+                                    }
+                                    Err(e) => tracing::error!("reload content view: {}", e),
+                                }
+                            }
+                        }
+                        TabAction::ActivateContent {
+                            tab_id,
+                            url,
+                            loading,
+                        } => {
+                            apply_layout(
+                                &chrome,
+                                chrome_hwnd,
+                                &content_views,
+                                &state,
+                                &layout_config,
+                                &window,
+                            );
+                            if let Some(wv) = content_views.get(&tab_id) {
+                                wake_content_webview(wv);
+                                let _ = wv.zoom(tab_zoom(&state, &tab_id));
+                                if loading {
+                                    state.load_recoveries.remove(&app::load_key(&tab_id, &url));
+                                    watch_load(
+                                        &rt,
+                                        &proxy_main,
+                                        &mut load_watches,
+                                        &mut load_watch_next,
+                                        tab_id.clone(),
+                                        url.clone(),
+                                    );
+                                }
+                            } else {
+                                let is_incog = state.tab_manager.tab_is_incognito(&tab_id);
+                                let ctx = if is_incog {
+                                    incognito_web_context.as_mut().unwrap()
+                                } else {
+                                    content_web_context.as_mut().unwrap()
+                                };
+                                let ad_script = if is_incog {
+                                    String::new()
+                                } else {
+                                    state.ad_block_engine.init_script().to_string()
+                                };
+                                let defer_load = should_restore_startup_cookies(
+                                    is_incog,
+                                    cookies_restored,
+                                    &startup_cookies,
+                                );
+                                match build_content_webview(
+                                    &window,
+                                    &tab_id,
+                                    &url,
+                                    layout.content,
+                                    proxy_main.clone(),
+                                    ctx,
+                                    is_incog,
+                                    std::sync::Arc::clone(&shared_dl_dir),
+                                    tab_zoom(&state, &tab_id),
+                                    ad_script,
+                                    !defer_load,
+                                ) {
+                                    Ok(wv) => {
+                                        #[cfg(windows)]
+                                        let hwnd = webview_hwnd(&wv);
+                                        restore_startup_cookies(
+                                            &wv,
+                                            is_incog,
+                                            &startup_cookies,
+                                            &mut cookies_restored,
+                                        );
+                                        content_views.insert(tab_id.clone(), wv);
+                                        if defer_load {
+                                            if let Some(wv) = content_views.get(&tab_id) {
+                                                let _ = wv.load_url(&url);
+                                            }
+                                        }
+                                        state.load_recoveries.remove(&app::load_key(&tab_id, &url));
+                                        watch_load(
+                                            &rt,
+                                            &proxy_main,
+                                            &mut load_watches,
+                                            &mut load_watch_next,
+                                            tab_id.clone(),
+                                            url.clone(),
+                                        );
+                                        #[cfg(windows)]
+                                        track_content_hwnd(hwnd, &tab_id, &mut content_hwnds);
+                                        apply_layout(
+                                            &chrome,
+                                            chrome_hwnd,
+                                            &content_views,
+                                            &state,
+                                            &layout_config,
+                                            &window,
+                                        );
+                                    }
+                                    Err(e) => tracing::error!("activate content view: {}", e),
+                                }
+                            }
+                        }
+                        TabAction::RebuildContent { tab_id, url } => {
+                            content_views.remove(&tab_id);
+                            content_hwnds.remove(&tab_id);
+                            clear_load_watches(&mut load_watches, &tab_id);
+                            let is_incog = state.tab_manager.tab_is_incognito(&tab_id);
+                            let ctx = if is_incog {
+                                incognito_web_context.as_mut().unwrap()
+                            } else {
+                                content_web_context.as_mut().unwrap()
+                            };
+                            let ad_script = if is_incog {
+                                String::new()
+                            } else {
+                                state.ad_block_engine.init_script().to_string()
+                            };
+                            let defer_load = should_restore_startup_cookies(
+                                is_incog,
+                                cookies_restored,
+                                &startup_cookies,
+                            );
+                            match build_content_webview(
+                                &window,
+                                &tab_id,
+                                &url,
+                                layout.content,
+                                proxy_main.clone(),
+                                ctx,
+                                is_incog,
+                                std::sync::Arc::clone(&shared_dl_dir),
+                                tab_zoom(&state, &tab_id),
+                                ad_script,
+                                !defer_load,
+                            ) {
+                                Ok(wv) => {
+                                    #[cfg(windows)]
+                                    let hwnd = webview_hwnd(&wv);
+                                    restore_startup_cookies(
+                                        &wv,
+                                        is_incog,
+                                        &startup_cookies,
+                                        &mut cookies_restored,
+                                    );
+                                    content_views.insert(tab_id.clone(), wv);
+                                    if defer_load {
+                                        if let Some(wv) = content_views.get(&tab_id) {
+                                            let _ = wv.load_url(&url);
+                                        }
+                                    }
+                                    watch_load(
+                                        &rt,
+                                        &proxy_main,
+                                        &mut load_watches,
+                                        &mut load_watch_next,
+                                        tab_id.clone(),
+                                        url.clone(),
+                                    );
+                                    #[cfg(windows)]
+                                    track_content_hwnd(hwnd, &tab_id, &mut content_hwnds);
+                                    apply_layout(
+                                        &chrome,
+                                        chrome_hwnd,
+                                        &content_views,
+                                        &state,
+                                        &layout_config,
+                                        &window,
+                                    );
+                                }
+                                Err(e) => tracing::error!("rebuild content view: {}", e),
+                            }
+                        }
+                        TabAction::DownloadUpdate(download_url) => {
+                            let proxy_dl = proxy_main.clone();
+                            rt.spawn(async move {
+                                let result =
+                                    updater::download_update(&download_url, |received, total| {
+                                        let _ =
+                                            proxy_dl.send_event(AppEvent::UpdateDownloadProgress {
+                                                received,
+                                                total,
+                                            });
+                                    })
+                                    .await;
+                                match result {
+                                    Ok(path) => {
+                                        let _ = proxy_dl.send_event(AppEvent::UpdateDownloaded {
+                                            path: path.to_string_lossy().to_string(),
+                                        });
+                                    }
+                                    Err(e) => {
+                                        let _ =
+                                            proxy_dl.send_event(AppEvent::UpdateDownloadFailed {
+                                                message: e.to_string(),
+                                            });
+                                    }
+                                }
+                            });
+                        }
+                        TabAction::SetFullscreen(active) => {
+                            let _ = chrome.evaluate_script(&format!(
+                                "window.__neura && window.__neura.setContentFullscreen({})",
+                                active
+                            ));
+                            if active {
+                                let was_maximized = custom_maximized || window.is_maximized();
+                                if fullscreen_restore_maximized.is_none() {
+                                    fullscreen_restore_maximized = Some(was_maximized);
+                                }
+                                if was_maximized {
+                                    window.set_maximized(false);
+                                    restore_window(&window);
+                                    custom_maximized = false;
+                                    keep_frameless(&window);
+                                }
+                                fullscreen_msg.store(true, Ordering::SeqCst);
+                                window.set_fullscreen(Some(Fullscreen::Borderless(
+                                    window.current_monitor(),
+                                )));
+                                set_fullscreen_z(&window, true);
+                            } else {
+                                fullscreen_msg.store(false, Ordering::SeqCst);
+                                let should_restore_maximized =
+                                    fullscreen_restore_maximized.take().unwrap_or(false);
+                                window.set_fullscreen(None);
+                                set_fullscreen_z(&window, false);
+                                keep_frameless(&window);
+                                restore_maximized_after_fullscreen = should_restore_maximized;
+                            }
+                            apply_layout(
+                                &chrome,
+                                chrome_hwnd,
+                                &content_views,
+                                &state,
+                                &layout_config,
+                                &window,
+                            );
+                            sync_fullscreen_layout = true;
+                            window.request_redraw();
+                        }
+                    }
+                    let current_active = state.tab_manager.active_tab_id.clone();
+                    if current_active != last_active_tab_id {
+                        let now = Instant::now();
+                        if let Some(id) = last_active_tab_id.as_ref() {
+                            inactive_tabs.insert(id.clone(), now);
+                        }
+                        #[cfg(windows)]
+                        sync_content_z_order(&content_views, chrome_hwnd, &state);
+                        if let Some(ref id) = current_active {
+                            let asleep = inactive_tabs
+                                .remove(id)
+                                .map(|at| at.elapsed() >= TAB_SLEEP_REFRESH_AFTER)
+                                .unwrap_or(false);
+                            if asleep {
+                                if let Some(wv) = content_views.get(id) {
+                                    wake_content_webview(wv);
+                                }
+                                #[cfg(windows)]
+                                if let Some(&hwnd) = content_hwnds.get(id) {
+                                    repaint_content_webview(hwnd);
+                                }
+                            }
+                        }
+                        last_active_tab_id = current_active;
+                    }
+                } else if persist_session {
+                    save_session(&state);
+                }
+            }
+
+            Event::MainEventsCleared => {
+                let code = shortcut_msg.swap(SC_NONE, Ordering::SeqCst);
+                if code != SC_NONE {
+                    run_shortcut(code, &proxy_main, &state);
+                }
+                if f11_msg.swap(false, Ordering::SeqCst) {
+                    let _ =
+                        proxy_main.send_event(AppEvent::Chrome(ChromeCommand::ToggleFullscreen));
+                }
+                if restore_maximized_after_fullscreen {
+                    set_window_maximized(&window, true, &mut custom_maximized);
+                    restore_maximized_after_fullscreen = false;
+                }
+                if sync_fullscreen_layout {
+                    apply_layout(
+                        &chrome,
+                        chrome_hwnd,
+                        &content_views,
+                        &state,
+                        &layout_config,
+                        &window,
+                    );
+                    sync_fullscreen_layout = false;
+                }
+                if Instant::now() >= keepalive_at {
+                    let active = state.tab_manager.active_tab_id.as_deref().unwrap_or("");
+                    let ids: Vec<String> = state
+                        .tab_manager
+                        .tabs
+                        .iter()
+                        .filter(|tab| tab.id != active)
+                        .filter(|tab| !tab.is_neura_page())
+                        .filter(|tab| content_views.contains_key(&tab.id))
+                        .map(|tab| tab.id.clone())
+                        .collect();
+                    if !ids.is_empty() {
+                        keepalive_pos %= ids.len();
+                        if let Some(id) = ids.get(keepalive_pos) {
+                            if let Some(wv) = content_views.get(id) {
+                                wake_content_webview(wv);
+                            }
+                            #[cfg(windows)]
+                            if let Some(&hwnd) = content_hwnds.get(id) {
+                                repaint_content_webview(hwnd);
+                            }
+                        }
+                        keepalive_pos = keepalive_pos.wrapping_add(1);
+                    }
+                    keepalive_at = Instant::now() + TAB_KEEPALIVE_EVERY;
+                }
+                // Periodic proactive cookie snapshot.  Complements per-navigation saves
+                // so cookies written by background JS (e.g. Google token refresh) are
+                // also captured even if no new page navigation occurs.
+                if Instant::now() >= cookie_save_at {
+                    cookie_save_at = Instant::now() + COOKIE_SAVE_EVERY;
+                    let active_id = state.tab_manager.active_tab_id.clone();
+                    if let Some(id) = active_id {
+                        if !state.tab_manager.tab_is_incognito(&id) {
+                            if let Some(wv) = content_views.get(&id) {
+                                browser::cookie_manager::trigger_save(wv, cookie_tx.clone());
+                            }
+                        }
+                    }
+                }
+            }
+
+            Event::WindowEvent {
+                event:
+                    WindowEvent::KeyboardInput {
+                        event,
+                        is_synthetic: false,
+                        ..
+                    },
+                ..
+            } if key_pressed(&event, KeyCode::F11) => {
+                let _ = proxy_main.send_event(AppEvent::Chrome(ChromeCommand::ToggleFullscreen));
+            }
+
+            Event::WindowEvent {
+                event:
+                    WindowEvent::KeyboardInput {
+                        event,
+                        is_synthetic: false,
+                        ..
+                    },
+                ..
+            } if key_pressed(&event, KeyCode::F12) => {
+                let _ = proxy_main.send_event(AppEvent::Chrome(ChromeCommand::OpenDevtools));
+            }
+
+            Event::WindowEvent {
+                event:
+                    WindowEvent::KeyboardInput {
+                        event,
+                        is_synthetic: false,
+                        ..
+                    },
+                ..
+            } if state.content_fullscreen && key_pressed(&event, KeyCode::Escape) => {
+                let _ = proxy_main.send_event(AppEvent::Chrome(
+                    ChromeCommand::ContentFullscreenChange { active: false },
+                ));
+            }
+
+            Event::WindowEvent {
+                event: WindowEvent::Resized(_),
+                ..
+            } => {
+                custom_maximized = window.is_maximized();
+                if state.content_fullscreen {
+                    set_fullscreen_z(&window, true);
+                } else {
+                    keep_frameless(&window);
+                }
+                apply_layout(
+                    &chrome,
+                    chrome_hwnd,
+                    &content_views,
+                    &state,
+                    &layout_config,
+                    &window,
+                );
+            }
+
+            Event::WindowEvent {
+                event: WindowEvent::ScaleFactorChanged { .. },
+                ..
+            } => {
+                if state.content_fullscreen {
+                    set_fullscreen_z(&window, true);
+                } else {
+                    keep_frameless(&window);
+                }
+                apply_layout(
+                    &chrome,
+                    chrome_hwnd,
+                    &content_views,
+                    &state,
+                    &layout_config,
+                    &window,
+                );
+            }
+
+            Event::WindowEvent {
+                event: WindowEvent::CloseRequested,
+                ..
+            } => {
+                if !new_window {
+                    save_window_size(&window, &mut state, custom_maximized);
+                    save_session(&state);
+                }
+                save_open_cookies(&content_views, &state, &data_dir);
+                shutdown_webview2(
+                    crash_sentinel.as_deref(),
+                    &mut content_views,
+                    &mut content_hwnds,
+                    &mut content_web_context,
+                    &mut incognito_web_context,
+                );
+                *control_flow = ControlFlow::Exit;
+            }
+
+            _ => {}
+        }
+    });
+}
+
+#[cfg(windows)]
+fn claim_instance(new_window: bool) -> windows::Win32::Foundation::HANDLE {
+    use windows::Win32::Foundation::HANDLE;
+    // Secondary windows skip the single-instance guard — they share the same profile.
+    if new_window {
+        return HANDLE(0);
+    }
+    use windows::core::w;
+    use windows::Win32::{
+        Foundation::{GetLastError, ERROR_ALREADY_EXISTS},
+        System::Threading::CreateMutexW,
+    };
+
+    let handle =
+        unsafe { CreateMutexW(None, true, w!("Local\\VentusProfileLock")) }.unwrap_or(HANDLE(0));
+    if !handle.is_invalid() && unsafe { GetLastError() } == ERROR_ALREADY_EXISTS {
+        tracing::warn!("Ventus is already running");
+        std::process::exit(0);
+    }
+    handle
+}
+
+#[cfg(not(windows))]
+fn claim_instance(_new_window: bool) {}
+
+#[cfg(windows)]
+fn attach_fullscreen_handler(wv: &WebView, proxy: tao::event_loop::EventLoopProxy<AppEvent>) {
+    use webview2_com::{
+        ContainsFullScreenElementChangedEventHandler,
+        Microsoft::Web::WebView2::Win32::ICoreWebView2,
+    };
+
+    let controller = wv.controller();
+    let webview: ICoreWebView2 = unsafe {
+        match controller.CoreWebView2() {
+            Ok(wv) => wv,
+            Err(_) => return,
+        }
+    };
+
+    let handler =
+        ContainsFullScreenElementChangedEventHandler::create(Box::new(move |sender, _args| {
+            let Some(sender) = sender else {
+                return Ok(());
+            };
+            unsafe {
+                let mut active = Default::default();
+                let _ = sender.ContainsFullScreenElement(&mut active);
+                let active: bool = active.as_bool();
+                let _ =
+                    proxy.send_event(AppEvent::Chrome(ChromeCommand::ContentFullscreenChange {
+                        active,
+                    }));
+            }
+            Ok(())
+        }));
+
+    let mut token = Default::default();
+    unsafe {
+        let _ = webview.add_ContainsFullScreenElementChanged(&handler, &mut token);
+    }
+}
+
+/// Isolated cookie-save Tokio task.
+///
+/// Owns the long-lived write connection to `cookie_store.db`.  Receives
+/// batches of `CookieRecord`s from the main event loop through `rx` and
+/// writes them to SQLite.  Running in a dedicated async task means the save
+/// logic is completely independent of the main browser event loop — even if
+/// the event loop is blocked or panics, cookies already queued in the channel
+/// will still be flushed when the Tokio runtime unwinds.
+async fn run_cookie_save_task(
+    mut rx: tokio::sync::mpsc::UnboundedReceiver<Vec<cookie_store::CookieRecord>>,
+    data_dir: std::path::PathBuf,
+) {
+    let conn = match cookie_store::open(&data_dir) {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::error!("cookie_store save task: failed to open DB: {}", e);
+            return;
+        }
+    };
+    tracing::debug!("cookie_store save task: running");
+    while let Some(cookies) = rx.recv().await {
+        if let Err(e) = cookie_store::save(&conn, &cookies) {
+            tracing::warn!("cookie_store: save failed: {}", e);
+        } else {
+            tracing::debug!("cookie_store: saved {} cookies", cookies.len());
+        }
+        // Purge stale entries as part of each save cycle.
+        if let Ok(n) = cookie_store::purge_expired(&conn) {
+            if n > 0 {
+                tracing::debug!("cookie_store: purged {} expired cookies", n);
+            }
+        }
+    }
+    tracing::debug!("cookie_store save task: channel closed, exiting");
+}
+
+/// Wait for the previous Ventus instance (identified by PID in `sentinel`) to exit before
+/// we attempt to open the same WebView2 profile directory.  If the process is already gone
+/// the function returns immediately (plus a short 200 ms cleanup delay).  If it is still
+/// running we wait up to 3 s for it to exit, then add 500 ms for WebView2's own post-exit
+/// SQLite flush.  Falls back to a plain 800 ms sleep if the PID cannot be read or opened.
+fn wait_for_previous_instance(sentinel: &std::path::Path) {
+    #[cfg(windows)]
+    {
+        use windows::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0};
+        use windows::Win32::System::Threading::{
+            OpenProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE,
+        };
+
+        // Read PID written at the previous startup.
+        let old_pid: Option<u32> = std::fs::read_to_string(sentinel)
+            .ok()
+            .and_then(|s| s.trim().parse().ok());
+
+        if let Some(pid) = old_pid {
+            // SAFETY: standard Win32 call; handle is checked before use.
+            let handle = unsafe { OpenProcess(PROCESS_SYNCHRONIZE, false, pid) };
+            match handle {
+                Ok(h) if !h.is_invalid() => {
+                    tracing::debug!("waiting for previous Ventus PID {} to exit", pid);
+                    // Wait up to 3 s for the old process to finish releasing WebView2 resources.
+                    let result = unsafe { WaitForSingleObject(h, 3000) };
+                    unsafe {
+                        let _ = CloseHandle(h);
+                    }
+                    if result == WAIT_OBJECT_0 {
+                        tracing::debug!(
+                            "previous instance exited; sleeping 500 ms for WebView2 cleanup"
+                        );
+                        std::thread::sleep(Duration::from_millis(500));
+                    } else {
+                        tracing::warn!(
+                            "previous instance (PID {}) did not exit within 3 s; proceeding anyway",
+                            pid
+                        );
+                        std::thread::sleep(Duration::from_millis(500));
+                    }
+                    return;
+                }
+                // Process already gone — this is the crash/kill scenario.
+                // msedgewebview2.exe detects the host PID is gone and begins its own
+                // shutdown, but it still needs time to flush the cookie SQLite database
+                // and release the exclusive profile lock.  200 ms was reliably too short
+                // on every machine tested; 2 500 ms covers slow laptops under load while
+                // keeping the restart feel acceptable for what is already an abnormal exit.
+                _ => {
+                    tracing::debug!(
+                        "previous Ventus instance already gone; \
+                         waiting 2 500 ms for WebView2 profile lock to be released"
+                    );
+                    std::thread::sleep(Duration::from_millis(2_500));
+                    return;
+                }
+            }
+        }
+        // Fallback: PID couldn't be read — use a safe fixed sleep.
+        std::thread::sleep(Duration::from_millis(800));
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = sentinel;
+        std::thread::sleep(Duration::from_millis(800));
+    }
+}
+
+/// Pump the Win32 message queue for up to `ms` milliseconds.
+///
+/// WebView2 COM callbacks (e.g. the `GetCookies` completion handler fired by
+/// `trigger_save`) are posted as window messages to the UI thread.  If we drop
+/// the WebView objects before those messages are dispatched the callbacks never
+/// run and the final cookie snapshot is lost.  Draining the queue here gives
+/// any in-flight callbacks a chance to execute while COM objects are still alive.
+#[cfg(windows)]
+fn drain_message_queue_ms(ms: u64) {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        DispatchMessageW, PeekMessageW, TranslateMessage, MSG, PM_REMOVE,
+    };
+    let deadline = std::time::Instant::now() + Duration::from_millis(ms);
+    while std::time::Instant::now() < deadline {
+        let mut msg = MSG::default();
+        // SAFETY: standard Win32 call; msg is fully initialised by PeekMessageW.
+        let got = unsafe { PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE) };
+        if got.as_bool() {
+            unsafe {
+                let _ = TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+        } else {
+            // Queue is empty — short sleep so we don't busy-spin.
+            std::thread::sleep(Duration::from_millis(8));
+        }
+    }
+}
+
+/// Explicitly release all WebView2 resources before TAO calls process::exit().
+/// TAO's run() is `-> !` and calls process::exit() which skips Rust Drop, so without this
+/// call the WebView2 browser process outlives Ventus, holds the profile lock, and the next
+/// launch silently falls back to ephemeral temp storage — losing all persistent cookies.
+fn shutdown_webview2(
+    crash_sentinel: Option<&std::path::Path>,
+    content_views: &mut HashMap<String, WebView>,
+    content_hwnds: &mut HashMap<String, isize>,
+    content_web_context: &mut Option<wry::WebContext>,
+    incognito_web_context: &mut Option<wry::WebContext>,
+) {
+    // Remove crash sentinel first — clean shutdown path. New-window instances have no sentinel.
+    if let Some(sentinel) = crash_sentinel {
+        let _ = std::fs::remove_file(sentinel);
+    }
+    // Drain the Win32 message queue so that any pending COM callbacks (e.g. the
+    // GetCookies completion from the final trigger_save call) can execute before
+    // we destroy the WebView2 objects they reference.  300 ms is enough for the
+    // round-trip to msedgewebview2.exe on all tested hardware.
+    #[cfg(windows)]
+    drain_message_queue_ms(300);
+    // Drop all WebViews (releases ICoreWebView2Controller references).
+    content_views.clear();
+    content_hwnds.clear();
+    // Drop WebContexts (releases ICoreWebView2Environment references). Once both
+    // reach zero, msedgewebview2.exe flushes its cookie DB and exits.
+    drop(content_web_context.take());
+    drop(incognito_web_context.take());
+    // Give WebView2 ~800 ms to flush the SQLite cookie database before process::exit().
+    // 300 ms was too tight on slower machines; the cookie DB flush needs more headroom.
+    std::thread::sleep(Duration::from_millis(800));
+}
+
+#[cfg(windows)]
+fn attach_process_failed_handler(
+    wv: &WebView,
+    proxy: tao::event_loop::EventLoopProxy<AppEvent>,
+    tab_id: String,
+) {
+    use webview2_com::{
+        Microsoft::Web::WebView2::Win32::{
+            ICoreWebView2, COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_EXITED,
+            COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_UNRESPONSIVE,
+        },
+        ProcessFailedEventHandler,
+    };
+
+    let controller = wv.controller();
+    let webview: ICoreWebView2 = unsafe {
+        match controller.CoreWebView2() {
+            Ok(wv) => wv,
+            Err(_) => return,
+        }
+    };
+
+    let handler = ProcessFailedEventHandler::create(Box::new(move |_sender, args| {
+        let Some(args) = args else {
+            return Ok(());
+        };
+        let mut kind = COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_EXITED;
+        unsafe {
+            let _ = args.ProcessFailedKind(&mut kind);
+        }
+        // Only auto-reload on renderer crash/unresponsive. Browser-process failure
+        // is catastrophic (requires environment recreation) and rare; log it instead.
+        if kind == COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_EXITED
+            || kind == COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_UNRESPONSIVE
+        {
+            let _ = proxy.send_event(AppEvent::ContentProcessFailed {
+                tab_id: tab_id.clone(),
+                fatal: kind == COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_EXITED,
+            });
+        } else {
+            tracing::error!(
+                "WebView2 browser process failed (kind={}) — restart required",
+                kind.0
+            );
+        }
+        Ok(())
+    }));
+
+    let mut token = Default::default();
+    unsafe {
+        let _ = webview.add_ProcessFailed(&handler, &mut token);
+    }
+}
+
+#[cfg(windows)]
+fn attach_accelerators(wv: &WebView, proxy: tao::event_loop::EventLoopProxy<AppEvent>) {
+    use webview2_com::{
+        AcceleratorKeyPressedEventHandler,
+        Microsoft::Web::WebView2::Win32::{
+            COREWEBVIEW2_KEY_EVENT_KIND, COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN,
+            COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN,
+        },
+    };
+    use windows::Win32::UI::Input::KeyboardAndMouse::{GetKeyState, VK_CONTROL, VK_MENU, VK_SHIFT};
+
+    let controller = wv.controller();
+    let handler = AcceleratorKeyPressedEventHandler::create(Box::new(move |_, args| {
+        let Some(args) = args else {
+            return Ok(());
+        };
+
+        unsafe {
+            let mut kind = COREWEBVIEW2_KEY_EVENT_KIND::default();
+            args.KeyEventKind(&mut kind)?;
+            if kind != COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN
+                && kind != COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN
+            {
+                return Ok(());
+            }
+
+            let mut vk = 0;
+            args.VirtualKey(&mut vk)?;
+            let mut lparam = 0;
+            args.KeyEventLParam(&mut lparam)?;
+            let repeat = (lparam as u32 & (1 << 30)) != 0;
+            let mut mods = 0;
+            if (GetKeyState(VK_CONTROL.0 as i32) as u16 & 0x8000) != 0 {
+                mods |= MOD_CTRL;
+            }
+            if (GetKeyState(VK_SHIFT.0 as i32) as u16 & 0x8000) != 0 {
+                mods |= MOD_SHIFT;
+            }
+            if (GetKeyState(VK_MENU.0 as i32) as u16 & 0x8000) != 0 {
+                mods |= MOD_ALT;
+            }
+            let code = msg_shortcut(vk, mods, repeat);
+            if code != SC_NONE {
+                args.SetHandled(true)?;
+                let _ = proxy.send_event(AppEvent::Shortcut { code: code as u32 });
+            }
+        }
+
+        Ok(())
+    }));
+    let mut token = Default::default();
+    unsafe {
+        let _ = controller.add_AcceleratorKeyPressed(&handler, &mut token);
+    }
+}
+
+fn build_content_webview(
+    window: &tao::window::Window,
+    tab_id: &str,
+    url: &str,
+    rect: Rect,
+    proxy: tao::event_loop::EventLoopProxy<AppEvent>,
+    web_context: &mut wry::WebContext,
+    incognito: bool,
+    download_dir: std::sync::Arc<std::sync::Mutex<DownloadPrefs>>,
+    global_zoom: f64,
+    // Ad block init script — empty string for incognito or when disabled.
+    ad_block_script: String,
+    load_now: bool,
+) -> anyhow::Result<WebView> {
+    let is_neura = url.starts_with("neura://");
+    let proxy_ipc = proxy.clone();
+    let proxy_load = proxy.clone();
+    let proxy_new_window = proxy.clone();
+    let proxy_dl_start = proxy.clone();
+    let proxy_dl_complete = proxy.clone();
+    let tab_id_ipc = tab_id.to_string();
+    let tab_id_str = tab_id.to_string();
+    let dl_dir_arc = std::sync::Arc::clone(&download_dir);
+
+    let builder = WebViewBuilder::new_as_child(window)
+        .with_bounds(rect)
+        .with_background_color((6, 7, 9, 255))
+        .with_incognito(incognito)
+        .with_initialization_script(&content_initialization_script(
+            global_zoom,
+            &ad_block_script,
+        ));
+    #[cfg(windows)]
+    let builder = builder
+        .with_browser_accelerator_keys(false)
+        // Disable sleeping-tabs so background tabs don't go blank when returning to them.
+        // --no-first-run: prevents first-run profile handling that can wipe or reset state.
+        .with_additional_browser_args(
+            "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,SleepingTabs,AutoDiscardTabs \
+             --disable-backgrounding-occluded-windows --disable-renderer-backgrounding \
+             --disable-background-timer-throttling \
+             --no-first-run \
+             --disk-cache-size=209715200",
+        );
+    let builder = builder
+        .with_new_window_req_handler(move |url| {
+            if !url.trim().is_empty() && url != "about:blank" {
+                let _ = proxy_new_window
+                    .send_event(AppEvent::Chrome(ChromeCommand::OpenInNewTab { url }));
+            }
+            false
+        })
+        .with_ipc_handler(move |req: wry::http::Request<String>| {
+            let body = req.body();
+            if let Ok(value) = serde_json::from_str::<serde_json::Value>(body) {
+                if value.get("cmd").and_then(|v| v.as_str()) == Some("open_in_new_tab") {
+                    let url = value
+                        .get("url")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default()
+                        .to_string();
+                    if !url.trim().is_empty() {
+                        let _ = proxy_ipc
+                            .send_event(AppEvent::Chrome(ChromeCommand::OpenInNewTab { url }));
+                    }
+                    return;
+                }
+                if value.get("cmd").and_then(|v| v.as_str()) == Some("context_menu") {
+                    let x = value.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                    let y = value.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                    let link_url = value
+                        .get("link_url")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default()
+                        .to_string();
+                    let image_src = value
+                        .get("image_src")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default()
+                        .to_string();
+                    let selected_text = value
+                        .get("selected_text")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default()
+                        .to_string();
+                    let page_url = value
+                        .get("page_url")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default()
+                        .to_string();
+                    let can_back = value
+                        .get("can_back")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
+                    let _ = proxy_ipc.send_event(AppEvent::ContentContextMenu {
+                        tab_id: tab_id_ipc.clone(),
+                        x,
+                        y,
+                        link_url,
+                        image_src,
+                        selected_text,
+                        page_url,
+                        can_back,
+                    });
+                    return;
+                }
+                if value.get("cmd").and_then(|v| v.as_str()) == Some("content_nav_state") {
+                    let can_back = value
+                        .get("can_back")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
+                    let _ = proxy_ipc.send_event(AppEvent::ContentNavState {
+                        tab_id: tab_id_ipc.clone(),
+                        can_back,
+                    });
+                    return;
+                }
+                if value.get("cmd").and_then(|v| v.as_str()) == Some("content_progress") {
+                    let progress = value
+                        .get("progress")
+                        .and_then(|v| v.as_f64())
+                        .unwrap_or(0.0)
+                        .clamp(0.0, 1.0);
+                    let url = value
+                        .get("url")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default()
+                        .to_string();
+                    let _ = proxy_ipc.send_event(AppEvent::ContentLoadProgress {
+                        tab_id: tab_id_ipc.clone(),
+                        url,
+                        progress,
+                    });
+                    return;
+                }
+                if value.get("cmd").and_then(|v| v.as_str()) == Some("content_metadata") {
+                    let url = value
+                        .get("url")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default()
+                        .to_string();
+                    let title = value
+                        .get("title")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default()
+                        .to_string();
+                    let favicon = value
+                        .get("favicon")
+                        .and_then(|v| v.as_str())
+                        .filter(|v| !v.is_empty())
+                        .map(|v| v.to_string());
+                    let replace = value
+                        .get("replace")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
+                    let _ = proxy_ipc.send_event(AppEvent::ContentMetadata {
+                        tab_id: tab_id_ipc.clone(),
+                        url,
+                        title,
+                        favicon,
+                        replace,
+                    });
+                    return;
+                }
+                if value.get("cmd").and_then(|v| v.as_str()) == Some("ai_tool_result") {
+                    let call_id = value
+                        .get("call_id")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default()
+                        .to_string();
+                    let result = value
+                        .get("result")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("{}")
+                        .to_string();
+                    let _ = proxy_ipc.send_event(AppEvent::AiToolResult { call_id, result });
+                    return;
+                }
+                if value.get("cmd").and_then(|v| v.as_str()) == Some("begin_resize") {
+                    let edge = value
+                        .get("edge")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("right")
+                        .to_string();
+                    let _ =
+                        proxy_ipc.send_event(AppEvent::Chrome(ChromeCommand::BeginResize { edge }));
+                    return;
+                }
+                if value.get("cmd").and_then(|v| v.as_str()) == Some("tab_audio_state") {
+                    let playing = value
+                        .get("playing")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
+                    let _ = proxy_ipc.send_event(AppEvent::Chrome(ChromeCommand::TabAudioState {
+                        tab_id: tab_id_ipc.clone(),
+                        playing,
+                    }));
+                    return;
+                }
+            }
+            if let Ok(cmd) = serde_json::from_str::<ChromeCommand>(body) {
+                let _ = proxy_ipc.send_event(AppEvent::Chrome(cmd));
+            }
+        })
+        .with_on_page_load_handler(move |event, loaded_url: String| match event {
+            wry::PageLoadEvent::Started => {
+                let nav_url = if is_neura && !loaded_url.starts_with("http") {
+                    "neura://newtab".to_string()
+                } else {
+                    loaded_url
+                };
+                let _ = proxy_load.send_event(AppEvent::ContentLoadStart {
+                    tab_id: tab_id_str.clone(),
+                    url: nav_url,
+                });
+            }
+            wry::PageLoadEvent::Finished => {
+                let nav_url = if is_neura && !loaded_url.starts_with("http") {
+                    "neura://newtab".to_string()
+                } else {
+                    loaded_url
+                };
+                let _ = proxy_load.send_event(AppEvent::ContentNav {
+                    tab_id: tab_id_str.clone(),
+                    url: nav_url.clone(),
+                    title: String::new(),
+                });
+                let _ = proxy_load.send_event(AppEvent::ContentLoadEnd {
+                    tab_id: tab_id_str.clone(),
+                    url: nav_url,
+                });
+            }
+        })
+        .with_download_started_handler(move |url: String, path: &mut std::path::PathBuf| {
+            let filename = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("download")
+                .to_string();
+            let prefs = dl_dir_arc.lock().unwrap_or_else(|e| e.into_inner()).clone();
+            let target_path = if prefs.ask {
+                let mut dlg = rfd::FileDialog::new()
+                    .set_title("Save file")
+                    .set_file_name(&filename);
+                if prefs.dir.exists() {
+                    dlg = dlg.set_directory(&prefs.dir);
+                }
+                match dlg.save_file() {
+                    Some(path) => path,
+                    None => return false,
+                }
+            } else {
+                unique_download_path(&prefs.dir, &filename)
+            };
+            if let Some(parent) = target_path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            *path = target_path.clone();
+            let path_str = target_path.to_string_lossy().to_string();
+            let filename = target_path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or(filename.as_str())
+                .to_string();
+            let _ = proxy_dl_start.send_event(AppEvent::DownloadStarted {
+                url,
+                filename,
+                path: path_str,
+            });
+            true
+        })
+        .with_download_completed_handler(
+            move |url: String, path: Option<std::path::PathBuf>, success: bool| {
+                let _ = proxy_dl_complete.send_event(AppEvent::DownloadCompleted {
+                    url,
+                    path: path.map(|p| p.to_string_lossy().to_string()),
+                    success,
+                });
+            },
+        );
+
+    let wv = if is_neura {
+        builder
+            .with_web_context(web_context)
+            .with_html(ui::new_tab::new_tab_html())
+            .build()?
+    } else if load_now {
+        builder
+            .with_web_context(web_context)
+            .with_url(url)
+            .build()?
+    } else {
+        builder.with_web_context(web_context).build()?
+    };
+    let _ = wv.set_background_color((6, 7, 9, 255));
+    let _ = wv.zoom(global_zoom);
+    #[cfg(windows)]
+    attach_accelerators(&wv, proxy.clone());
+    #[cfg(windows)]
+    attach_fullscreen_handler(&wv, proxy.clone());
+    #[cfg(windows)]
+    attach_process_failed_handler(&wv, proxy.clone(), tab_id.to_string());
+
+    Ok(wv)
+}
+
+fn wake_content_webview(wv: &WebView) {
+    let _ = wv.evaluate_script(
+        "try{window.focus();window.dispatchEvent(new Event('focus'));document.dispatchEvent(new Event('visibilitychange'));}catch(_){ }",
+    );
+}
+
+#[derive(Clone)]
+struct DownloadPrefs {
+    dir: std::path::PathBuf,
+    ask: bool,
+}
+
+fn download_prefs_from_settings(settings: &config::AppSettings) -> DownloadPrefs {
+    DownloadPrefs {
+        dir: download_dir_from_settings(settings),
+        ask: settings.downloads.ask_where_to_save,
+    }
+}
+
+fn download_dir_from_settings(settings: &config::AppSettings) -> std::path::PathBuf {
+    let configured = settings.downloads.default_folder.trim();
+    if !configured.is_empty() {
+        return std::path::PathBuf::from(configured);
+    }
+    directories::UserDirs::new()
+        .and_then(|dirs| dirs.download_dir().map(|path| path.to_path_buf()))
+        .unwrap_or_else(|| {
+            std::env::var_os("USERPROFILE")
+                .map(std::path::PathBuf::from)
+                .map(|home| home.join("Downloads"))
+                .unwrap_or_else(|| std::path::PathBuf::from("Downloads"))
+        })
+}
+
+fn load_settings(conn: &rusqlite::Connection) -> config::AppSettings {
+    let mut settings = settings_store::get::<config::AppSettings>(conn, "app_settings")
+        .unwrap_or(None)
+        .unwrap_or_default();
+    if let Some(v) = settings_store::get::<String>(conn, "homepage").unwrap_or(None) {
+        settings.homepage = app::normalize_homepage(&v);
+    }
+    if let Some(v) = settings_store::get::<String>(conn, "download_path").unwrap_or(None) {
+        settings.downloads.default_folder = v;
+    }
+    if let Some(v) = settings_store::get::<bool>(conn, "ask_where_to_save").unwrap_or(None) {
+        settings.downloads.ask_where_to_save = v;
+    }
+    if let Some(v) = settings_store::get::<String>(conn, "startup_behavior").unwrap_or(None) {
+        settings.startup_behavior = match v.as_str() {
+            "last_session" => config::StartupBehavior::LastSession,
+            "home_page" | "specific_pages" => config::StartupBehavior::HomePage,
+            _ => config::StartupBehavior::NewTab,
+        };
+    }
+    settings.homepage = app::normalize_homepage(&settings.homepage);
+    let _ = settings_store::set(conn, "app_settings", &settings);
+    settings
+}
+
+fn unique_download_path(download_dir: &std::path::Path, filename: &str) -> std::path::PathBuf {
+    let clean_name = if filename.trim().is_empty() {
+        "download"
+    } else {
+        filename
+    };
+    let candidate = download_dir.join(clean_name);
+    if !candidate.exists() {
+        return candidate;
+    }
+
+    let path = std::path::Path::new(clean_name);
+    let stem = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .filter(|s| !s.is_empty())
+        .unwrap_or("download");
+    let ext = path.extension().and_then(|e| e.to_str());
+    for i in 1..1000 {
+        let filename = match ext {
+            Some(ext) if !ext.is_empty() => format!("{} ({}).{}", stem, i, ext),
+            _ => format!("{} ({})", stem, i),
+        };
+        let candidate = download_dir.join(filename);
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+    download_dir.join(clean_name)
+}
+
+fn content_initialization_script(_global_zoom: f64, ad_block_script: &str) -> String {
+    // Ad block script runs first so fetch/XHR are intercepted before any page code.
+    let ad_prefix = if ad_block_script.is_empty() {
+        String::new()
+    } else {
+        format!("{}\n", ad_block_script)
+    };
+    let script = r#"
+(() => {
+  let isTop = false;
+  try { isTop = window.top === window; } catch (_) {}
+  if (window.__neuraContentBridgeInstalled) return;
+  window.__neuraContentBridgeInstalled = true;
+  const post = (payload) => {
+    try {
+      if (window.ipc && typeof window.ipc.postMessage === 'function') {
+        window.ipc.postMessage(JSON.stringify(payload));
+      }
+    } catch (_) {}
+  };
+  const sendProgress = (progress) => {
+    if (isTop) post({cmd:'content_progress', progress, url: location.href});
+  };
+  const faviconHref = () => {
+    const icons = Array.from(document.querySelectorAll('link[rel]')).filter(icon => {
+      const rel = (icon.getAttribute('rel') || '').toLowerCase();
+      return icon.href && (rel.includes('icon') || rel.includes('apple-touch-icon') || rel.includes('mask-icon'));
+    });
+    const href = icons.map(icon => icon.href).find(Boolean);
+    if (href) return href;
+    try { return new URL('/favicon.ico', location.href).href; } catch (_) { return ''; }
+  };
+  let lastHref = location.href;
+  const sendMetadata = (replace = false) => {
+    if (!isTop) return;
+    post({
+      cmd:'content_metadata',
+      url: location.href,
+      title: document.title || location.href,
+      favicon: faviconHref(),
+      replace
+    });
+  };
+  const sendLocationChange = (replace = false) => {
+    if (!isTop) return;
+    const href = location.href;
+    if (href === lastHref) {
+      setTimeout(() => {
+        sendMetadata(replace);
+        sendNavState();
+      }, 50);
+      return;
+    }
+    lastHref = href;
+    setTimeout(() => {
+      sendMetadata(replace);
+      sendNavState();
+    }, 50);
+  };
+  const sendNavState = () => {
+    if (!isTop) return;
+    let canBack = false;
+    try {
+      if (window.navigation && window.navigation.currentEntry) {
+        canBack = window.navigation.currentEntry.index > 0;
+      } else {
+        canBack = history.length > 1;
+      }
+    } catch(_) {}
+    try { post({cmd:'content_nav_state', can_back: canBack}); } catch(_) {}
+  };
+
+  sendProgress(0.12);
+  document.addEventListener('readystatechange', () => {
+    if (document.readyState === 'interactive') {
+      sendProgress(0.65);
+      sendMetadata();
+    } else if (document.readyState === 'complete') {
+      sendMetadata();
+      sendNavState();
+      sendProgress(0.92);
+    }
+  });
+  window.addEventListener('DOMContentLoaded', () => {
+    sendProgress(0.75);
+    sendMetadata();
+    sendNavState();
+  });
+  window.addEventListener('load', () => {
+    sendMetadata();
+    sendNavState();
+    sendProgress(0.96);
+  });
+  try {
+    const favObs = new MutationObserver(records => {
+      if (!isTop) return;
+      if (!records.some(r => r.target && r.target.tagName === 'LINK' || Array.from(r.addedNodes || []).some(n => n.tagName === 'LINK'))) return;
+      setTimeout(() => sendMetadata(true), 50);
+    });
+    favObs.observe(document.documentElement, {subtree:true, childList:true, attributes:true, attributeFilter:['href','rel']});
+  } catch (_) {}
+  setInterval(() => {
+    if (location.href !== lastHref) sendLocationChange(false);
+  }, 250);
+  const pushState = history.pushState;
+  history.pushState = function() {
+    const result = pushState.apply(this, arguments);
+    sendLocationChange(false);
+    return result;
+  };
+  const replaceState = history.replaceState;
+  history.replaceState = function() {
+    const result = replaceState.apply(this, arguments);
+    sendLocationChange(true);
+    return result;
+  };
+  window.addEventListener('popstate', () => { sendLocationChange(true); });
+  setTimeout(sendMetadata, 1200);
+
+  document.addEventListener('auxclick', function(e) {
+    if (e.button !== 1) return;
+    const link = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+    if (!link || !link.href) return;
+    e.preventDefault();
+    post({cmd:'open_in_new_tab', url: link.href});
+  }, true);
+  document.addEventListener('click', function(e) {
+    const link = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+    if (!link || !link.href) return;
+    const target = (link.target || '').toLowerCase();
+    if (target !== '_blank' && !e.ctrlKey && !e.metaKey) return;
+    e.preventDefault();
+    post({cmd:'open_in_new_tab', url: link.href});
+  }, true);
+  const fsChange = function() {
+    post({cmd: 'content_fullscreen_change', active: !!document.fullscreenElement || !!document.webkitFullscreenElement});
+  };
+  const fsNames = ['requestFullscreen', 'webkitRequestFullscreen', 'webkitRequestFullScreen', 'msRequestFullscreen'];
+  const fsName = fsNames.find(name => typeof Element.prototype[name] === 'function');
+  const reqFs = fsName ? Element.prototype[fsName] : null;
+  if (reqFs && !Element.prototype.__neuraFs) {
+    Element.prototype.__neuraFs = true;
+    const reqWrap = function() {
+      post({cmd: 'content_fullscreen_change', active: true});
+      const p = reqFs.apply(this, arguments);
+      return p;
+    };
+    fsNames.forEach(name => {
+      if (typeof Element.prototype[name] === 'function') Element.prototype[name] = reqWrap;
+    });
+  }
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'F11') {
+      e.preventDefault();
+      e.stopPropagation();
+      post({cmd:'toggle_fullscreen'});
+      return;
+    }
+    if (e.key === 'Escape' && window.__neuraContentFullscreen) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (document.fullscreenElement && document.exitFullscreen) {
+        try { document.exitFullscreen().catch(function() {}); } catch(_) {}
+      }
+      post({cmd:'content_fullscreen_change', active:false});
+      return;
+    }
+    const ctrl = e.ctrlKey || e.metaKey;
+    if (!ctrl) return;
+    const key = e.key.toLowerCase();
+    if (key === 't' && !e.shiftKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      post({cmd:'begin_spotlight'});
+    } else if (key === 't' && e.shiftKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      post({cmd:'reopen_tab'});
+    } else if (key === 'h' && !e.shiftKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      post({cmd:'open_history_panel'});
+    } else if (key === 'j' && !e.shiftKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      post({cmd:'open_downloads_panel'});
+    }
+  }, true);
+  document.addEventListener('wheel', function(e) {
+    if (!e.ctrlKey && !e.metaKey) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const delta = e.deltaY < 0 ? 0.1 : -0.1;
+    post({cmd:'zoom_delta', delta});
+  }, {capture:true, passive:false});
+
+  // Signal Rust when cursor enters the content area so the auto-hide sidebar can close.
+  // Chrome's SetWindowRgn clip means WM_MOUSELEAVE never fires when cursor moves from
+  // sidebar (inside clip) to content area (outside clip but inside window rectangle).
+  // This IPC is the only reliable signal source for that transition.
+  // Also tracks cursor proximity to the window edge so resize handles work.
+  const RESIZE_ZONE = 6; // px from edge to show resize cursor
+  let __resizeEdge = null;
+  let __sbThrottle = false;
+  document.addEventListener('mousemove', function(e) {
+    // Sidebar auto-close throttle
+    if (!__sbThrottle) {
+      __sbThrottle = true;
+      try { window.ipc.postMessage('{"cmd":"sidebar_auto_close"}'); } catch(_) {}
+      setTimeout(function() { __sbThrottle = false; }, 100);
+    }
+    // Window-edge resize cursor detection
+    var W = document.documentElement.clientWidth;
+    var H = document.documentElement.clientHeight;
+    var x = e.clientX, y = e.clientY;
+    var onR = x >= W - RESIZE_ZONE;
+    var onB = y >= H - RESIZE_ZONE;
+    var onL = x <= RESIZE_ZONE;
+    var edge = null;
+    var cur  = '';
+    if (onR && onB) { edge = 'bottomright'; cur = 'nwse-resize'; }
+    else if (onL && onB) { edge = 'bottomleft'; cur = 'nesw-resize'; }
+    else if (onR)  { edge = 'right';  cur = 'ew-resize'; }
+    else if (onB)  { edge = 'bottom'; cur = 's-resize'; }
+    else if (onL)  { edge = 'left';   cur = 'ew-resize'; }
+    if (edge !== __resizeEdge) {
+      __resizeEdge = edge;
+      document.documentElement.style.cursor = cur;
+    }
+  }, {passive: true, capture: true});
+
+  document.addEventListener('mousedown', function(e) {
+    if (__resizeEdge && e.button === 0) {
+      try { post({cmd: 'begin_resize', edge: __resizeEdge}); } catch(_) {}
+      // Don't preventDefault — let the page also handle it normally
+    }
+  }, {capture: true});
+
+  // Context menu: intercept right-clicks and relay target info to Rust so the
+  // chrome overlay can render a custom browser context menu.
+  document.addEventListener('contextmenu', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const target = e.target;
+    const linkEl = target.closest ? target.closest('a[href]') : null;
+    const linkUrl = linkEl ? (linkEl.href || '') : '';
+    let imageSrc = '';
+    if (target.tagName === 'IMG') {
+      imageSrc = target.src || target.currentSrc || '';
+    } else if (target.tagName === 'VIDEO' || target.tagName === 'AUDIO') {
+      imageSrc = target.src || target.currentSrc || '';
+    }
+    const sel = window.getSelection ? window.getSelection().toString().trim() : '';
+    post({
+      cmd: 'context_menu',
+      x: e.clientX,
+      y: e.clientY,
+      link_url: linkUrl,
+      image_src: imageSrc,
+      selected_text: sel.length > 300 ? sel.slice(0, 300) : sel,
+      page_url: location.href,
+      can_back: history.length > 1
+    });
+  }, true);
+
+  // Relay native fullscreen changes (e.g. YouTube player fullscreen button)
+  // so Rust can resize the content WebView to fill the entire window.
+  document.addEventListener('fullscreenchange', fsChange);
+  document.addEventListener('webkitfullscreenchange', fsChange);
+
+  // Audio/video playback detection — reports tab_audio_state to Rust via IPC so the
+  // sidebar can show an animated speaker indicator and allow mute from the tab list.
+  if (isTop) {
+    let __audioPlaying = false;
+    const __checkAudio = function() {
+      const playing = Array.from(document.querySelectorAll('audio,video'))
+        .some(function(m) { return !m.paused && !m.muted && !m.ended && m.readyState > 2; });
+      if (playing !== __audioPlaying) {
+        __audioPlaying = playing;
+        post({cmd:'tab_audio_state', playing: playing});
+      }
+    };
+    document.addEventListener('play',         __checkAudio, true);
+    document.addEventListener('pause',        __checkAudio, true);
+    document.addEventListener('ended',        __checkAudio, true);
+    document.addEventListener('volumechange', __checkAudio, true);
+    setInterval(__checkAudio, 3000);
+    window.__muteTab = function(muted) {
+      document.querySelectorAll('audio,video').forEach(function(m) { m.muted = muted; });
+    };
+  }
+})();
+"#;
+    format!("{ad_prefix}{script}")
+}
+
+fn slim_feed_articles(json: &serde_json::Value) -> serde_json::Value {
+    let Some(items) = json.get("articles").and_then(|v| v.as_array()) else {
+        return serde_json::json!([]);
+    };
+    serde_json::Value::Array(
+        items
+            .iter()
+            .map(|a| {
+                serde_json::json!({
+                    "title": a.get("title").cloned().unwrap_or_default(),
+                    "summary": a.get("summary").cloned().unwrap_or_default(),
+                    "whyItMatters": a.get("whyItMatters").cloned().unwrap_or_default(),
+                    "coverImage": a.get("coverImage").cloned().unwrap_or_default(),
+                    "imageSource": a.get("imageSource").cloned().unwrap_or_default(),
+                    "imageSourceUrl": a.get("imageSourceUrl").cloned().unwrap_or_default(),
+                    "sources": a.get("sources").cloned().unwrap_or_default(),
+                    "createdAt": a.get("createdAt").cloned().unwrap_or_default(),
+                })
+            })
+            .collect(),
+    )
+}
+
+#[derive(Clone, Copy)]
+struct LayoutConfig {
+    sidebar_expanded_w: u32,
+    sidebar_collapsed_w: u32,
+    toolbar_h: u32,
+    ai_sidebar_w: u32,
+    min_content_w: u32,
+    min_ai_sidebar_w: u32,
+}
+
+#[derive(Clone, Copy)]
+struct AppLayout {
+    window_w: u32,
+    window_h: u32,
+    scale_factor: f64,
+    sidebar_w: u32,
+    clip_sidebar_w: u32,
+    toolbar_h: u32,
+    ai_w: u32,
+    sidebar_css_w: f64,
+    toolbar_css_h: f64,
+    ai_css_w: f64,
+    frame_side_w: u32,
+    frame_bottom_h: u32,
+    frame_side_css: f64,
+    frame_bottom_css: f64,
+    content: Rect,
+}
+
+impl AppLayout {
+    fn calculate(
+        size: tao::dpi::PhysicalSize<u32>,
+        scale_factor: f64,
+        state: &AppState,
+        config: &LayoutConfig,
+    ) -> Self {
+        let scale = scale_factor.max(1.0);
+        let logical_w = size.width as f64 / scale;
+        let logical_h = size.height as f64 / scale;
+
+        // Content fullscreen: hide all chrome, content fills the entire window.
+        if state.content_fullscreen {
+            return Self {
+                window_w: size.width.max(1),
+                window_h: size.height.max(1),
+                scale_factor: scale,
+                sidebar_w: 0,
+                clip_sidebar_w: 0,
+                toolbar_h: 0,
+                ai_w: 0,
+                sidebar_css_w: 0.0,
+                toolbar_css_h: 0.0,
+                ai_css_w: 0.0,
+                frame_side_w: 0,
+                frame_bottom_h: 0,
+                frame_side_css: 0.0,
+                frame_bottom_css: 0.0,
+                content: Rect {
+                    x: 0,
+                    y: 0,
+                    width: size.width.max(1),
+                    height: size.height.max(1),
+                },
+            };
+        }
+
+        let is_auto_hide = matches!(
+            state.settings.appearance.sidebar_mode,
+            crate::config::SidebarMode::AutoHide
+        );
+        let min_content_w = config.min_content_w as f64;
+        let sidebar_css_w = if is_auto_hide && state.sidebar_pinned {
+            // Pinned: sidebar is solid — push content to the right
+            (config.sidebar_expanded_w as f64).min((logical_w - min_content_w).max(0.0))
+        } else if is_auto_hide {
+            0.0 // hover-only overlay — content stays full width
+        } else if state.sidebar_collapsed {
+            config.sidebar_collapsed_w as f64
+        } else {
+            (config.sidebar_expanded_w as f64).min((logical_w - min_content_w).max(0.0))
+        };
+
+        // AI sidebar pushes content from the right.
+        let ai_css_w = if state.ai_sidebar_open {
+            let max_for_ai = (logical_w - min_content_w).max(0.0);
+            (config.ai_sidebar_w as f64)
+                .min(max_for_ai)
+                .max((config.min_ai_sidebar_w as f64).min(max_for_ai))
+        } else {
+            0.0
+        };
+
+        let bm_bar_extra = if state.settings.appearance.show_bookmarks_bar {
+            30u32
+        } else {
+            0u32
+        };
+        let toolbar_css_h = ((config.toolbar_h + bm_bar_extra) as f64).min(logical_h.max(1.0));
+        let sidebar_w = logical_to_physical(sidebar_css_w, scale);
+
+        // Thin frame strips rendered by chrome, matching the toolbar color.
+        // Left: sidebar trigger in auto-hide mode + decorative border in all modes.
+        // Right: decorative border separating content from the window edge / AI panel.
+        // Bottom: decorative border below content.
+        const FRAME_LOGICAL: f64 = 5.0;
+        let frame_side = logical_to_physical(FRAME_LOGICAL, scale);
+        let frame_bottom = logical_to_physical(FRAME_LOGICAL, scale);
+
+        // clip_sidebar_w: how many pixels from the left chrome's clip region covers.
+        // Includes the visible sidebar (if any) PLUS the left frame strip.
+        // When auto-hide floating (not pinned): sidebar area covers the frame, so just sidebar_expanded_w.
+        // When auto-hide pinned: content is pushed right of the sidebar, frame sits between — include both.
+        // When auto-hide closed: only the left frame strip.
+        // Non-auto-hide: sidebar + left frame.
+        let clip_sidebar_w = if is_auto_hide {
+            let exp_w = logical_to_physical(config.sidebar_expanded_w as f64, scale);
+            if state.sidebar_auto_hide_open {
+                if state.sidebar_pinned {
+                    exp_w + frame_side // sidebar + frame both visible
+                } else {
+                    exp_w // floating: sidebar overlays frame area, clip = sidebar width
+                }
+            } else {
+                frame_side // closed: just the left frame strip
+            }
+        } else {
+            sidebar_w + frame_side
+        };
+
+        let toolbar_h = logical_to_physical(toolbar_css_h, scale);
+        let ai_w = logical_to_physical(ai_css_w, scale).min(size.width);
+
+        // Content offset: how far content starts from the window left edge.
+        // Auto-hide pinned → after sidebar + frame; auto-hide floating/closed → after frame only.
+        // Non-auto-hide → after sidebar + frame.
+        let content_offset = if is_auto_hide {
+            if state.sidebar_pinned {
+                logical_to_physical(config.sidebar_expanded_w as f64, scale).min(size.width)
+                    + frame_side
+            } else {
+                frame_side
+            }
+        } else {
+            sidebar_w + frame_side
+        };
+
+        let content_x = content_offset as i32;
+        let content_w = size
+            .width
+            .saturating_sub(ai_w)
+            .saturating_sub(content_offset)
+            .saturating_sub(frame_side) // right frame strip
+            .max(1);
+        let content_h = size
+            .height
+            .saturating_sub(toolbar_h)
+            .saturating_sub(frame_bottom)
+            .max(1);
+
+        Self {
+            window_w: size.width.max(1),
+            window_h: size.height.max(1),
+            scale_factor: scale,
+            sidebar_w,
+            clip_sidebar_w,
+            toolbar_h,
+            ai_w,
+            sidebar_css_w,
+            toolbar_css_h,
+            ai_css_w,
+            frame_side_w: frame_side,
+            frame_bottom_h: frame_bottom,
+            frame_side_css: FRAME_LOGICAL,
+            frame_bottom_css: FRAME_LOGICAL,
+            content: Rect {
+                x: content_x,
+                y: toolbar_h as i32,
+                width: content_w,
+                height: content_h,
+            },
+        }
+    }
+}
+
+fn logical_to_physical(value: f64, scale_factor: f64) -> u32 {
+    (value * scale_factor).round().max(0.0) as u32
+}
+
+fn watch_load(
+    rt: &tokio::runtime::Runtime,
+    proxy: &tao::event_loop::EventLoopProxy<AppEvent>,
+    watches: &mut HashMap<String, u64>,
+    next: &mut u64,
+    tab_id: String,
+    url: String,
+) {
+    let proxy = proxy.clone();
+    let url = crate::utils::url::clean_tracking_url(&url);
+    *next = next.wrapping_add(1).max(1);
+    let watch = *next;
+    watches.insert(app::load_key(&tab_id, &url), watch);
+    rt.spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(LOAD_STALL_AFTER)).await;
+        let _ = proxy.send_event(AppEvent::ContentLoadStalled { tab_id, url, watch });
+    });
+}
+
+fn webview_cookie_db_exists(data_dir: &std::path::Path) -> bool {
+    let base = data_dir.join("webview_data");
+    [
+        base.join("EBWebView")
+            .join("Default")
+            .join("Network")
+            .join("Cookies"),
+        base.join("Default").join("Network").join("Cookies"),
+    ]
+    .iter()
+    .any(|path| path.is_file())
+}
+
+fn should_restore_startup_cookies(
+    incognito: bool,
+    restored: bool,
+    cookies: &[cookie_store::CookieRecord],
+) -> bool {
+    !incognito && !restored && !cookies.is_empty()
+}
+
+fn restore_startup_cookies(
+    wv: &WebView,
+    incognito: bool,
+    cookies: &[cookie_store::CookieRecord],
+    restored: &mut bool,
+) {
+    if !should_restore_startup_cookies(incognito, *restored, cookies) {
+        return;
+    }
+    browser::cookie_manager::restore_cookies(wv, cookies);
+    *restored = true;
+}
+
+fn save_open_cookies(
+    content_views: &HashMap<String, WebView>,
+    state: &AppState,
+    data_dir: &std::path::Path,
+) {
+    let Ok(conn) = cookie_store::open(data_dir) else {
+        return;
+    };
+    for (tid, wv) in content_views {
+        if state.tab_manager.tab_is_incognito(tid) {
+            continue;
+        }
+        let cookies = browser::cookie_manager::snapshot(wv, Duration::from_millis(900));
+        if cookies.is_empty() {
+            continue;
+        }
+        let _ = cookie_store::save(&conn, &cookies);
+    }
+    let _ = cookie_store::purge_expired(&conn);
+}
+
+fn clear_load_watches(watches: &mut HashMap<String, u64>, tab_id: &str) {
+    let key = format!("{}\n", tab_id);
+    watches.retain(|k, _| !k.starts_with(&key));
+}
+
+fn apply_layout(
+    chrome: &WebView,
+    chrome_hwnd: Option<isize>,
+    content_views: &HashMap<String, WebView>,
+    state: &AppState,
+    config: &LayoutConfig,
+    window: &tao::window::Window,
+) {
+    let layout = AppLayout::calculate(
+        layout_size(window, state),
+        window.scale_factor(),
+        state,
+        config,
+    );
+    sync_chrome(chrome, chrome_hwnd, state, layout);
+    sync_content_views(content_views, state, layout);
+    #[cfg(windows)]
+    sync_content_z_order(content_views, chrome_hwnd, state);
+}
+
+fn layout_size(window: &tao::window::Window, state: &AppState) -> PhysicalSize<u32> {
+    #[cfg(windows)]
+    if state.content_fullscreen {
+        use windows::Win32::{
+            Foundation::HWND,
+            Graphics::Gdi::{
+                GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+            },
+        };
+        unsafe {
+            let hwnd = HWND(window.hwnd());
+            let monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+            let mut info = MONITORINFO {
+                cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+                ..Default::default()
+            };
+            if GetMonitorInfoW(monitor, &mut info).as_bool() {
+                let r = info.rcMonitor;
+                return PhysicalSize::new((r.right - r.left) as u32, (r.bottom - r.top) as u32);
+            }
+        }
+    }
+    #[cfg(windows)]
+    let _ = state;
+    #[cfg(not(windows))]
+    if state.content_fullscreen || window.fullscreen().is_some() {
+        if let Some(monitor) = window.current_monitor() {
+            return monitor.size();
+        }
+    }
+    window.inner_size()
+}
+
+fn key_pressed(event: &KeyEvent, key: KeyCode) -> bool {
+    event.state == ElementState::Pressed && !event.repeat && event.physical_key == key
+}
+
+fn update_msg_mods(mods: &AtomicUsize, vk: u32, down: bool) {
+    let bit = match vk {
+        0x10 | 0xa0 | 0xa1 => MOD_SHIFT,
+        0x11 | 0xa2 | 0xa3 => MOD_CTRL,
+        0x12 | 0xa4 | 0xa5 => MOD_ALT,
+        _ => return,
+    };
+    if down {
+        mods.fetch_or(bit, Ordering::SeqCst);
+    } else {
+        mods.fetch_and(!bit, Ordering::SeqCst);
+    }
+}
+
+fn msg_shortcut(vk: u32, mods: usize, repeat: bool) -> usize {
+    if repeat {
+        return SC_NONE;
+    }
+    let ctrl = mods & MOD_CTRL != 0;
+    let shift = mods & MOD_SHIFT != 0;
+    let alt = mods & MOD_ALT != 0;
+    if alt && !ctrl {
+        return SC_NONE;
+    }
+    if ctrl {
+        return match vk {
+            0x54 if shift => SC_REOPEN_TAB,
+            0x54 => SC_SPOTLIGHT,
+            0x4e => SC_NEW_WINDOW,
+            0x57 => SC_CLOSE_TAB,
+            0x4c => SC_FOCUS_URL,
+            0x4b => SC_TAB_SEARCH,
+            0x48 if !shift => SC_HISTORY,
+            0x4a if !shift => SC_DOWNLOADS,
+            0x44 => SC_BOOKMARK,
+            0x41 if shift => SC_AI,
+            0x42 => SC_SIDEBAR,
+            0xbc => SC_SETTINGS,
+            0x52 => SC_RELOAD,
+            0xbb | 0x6b => SC_ZOOM_IN,
+            0xbd | 0x6d => SC_ZOOM_OUT,
+            0x30 | 0x60 => SC_ZOOM_RESET,
+            _ => SC_NONE,
+        };
+    }
+    match vk {
+        0x74 => SC_RELOAD,
+        0x7a => SC_FULLSCREEN,
+        0x7b => SC_DEVTOOLS,
+        _ => SC_NONE,
+    }
+}
+
+fn run_shortcut(code: usize, proxy: &tao::event_loop::EventLoopProxy<AppEvent>, state: &AppState) {
+    let cmd = match code {
+        SC_SPOTLIGHT => Some(ChromeCommand::BeginSpotlight),
+        SC_REOPEN_TAB => Some(ChromeCommand::ReopenTab),
+        SC_NEW_WINDOW => Some(ChromeCommand::OpenInNewWindow {
+            url: "neura://newtab".into(),
+        }),
+        SC_CLOSE_TAB => state
+            .tab_manager
+            .active_tab_id
+            .clone()
+            .map(|id| ChromeCommand::CloseTab { id }),
+        SC_FOCUS_URL => Some(ChromeCommand::FocusAddressBar),
+        SC_TAB_SEARCH => Some(ChromeCommand::OpenTabSearch),
+        SC_HISTORY => Some(ChromeCommand::OpenHistoryPanel),
+        SC_DOWNLOADS => Some(ChromeCommand::OpenDownloadsPanel),
+        SC_BOOKMARK => bookmark_shortcut(state),
+        SC_AI => Some(ChromeCommand::ToggleAiSidebar),
+        SC_SIDEBAR => Some(ChromeCommand::SidebarToggle),
+        SC_SETTINGS => Some(ChromeCommand::OpenSettings),
+        SC_RELOAD => Some(ChromeCommand::Reload),
+        SC_ZOOM_IN => Some(ChromeCommand::ZoomDelta { delta: 0.1 }),
+        SC_ZOOM_OUT => Some(ChromeCommand::ZoomDelta { delta: -0.1 }),
+        SC_ZOOM_RESET => Some(ChromeCommand::ZoomSet { level: 1.0 }),
+        SC_BACK => Some(ChromeCommand::Back),
+        SC_FORWARD => Some(ChromeCommand::Forward),
+        SC_FULLSCREEN => Some(ChromeCommand::ToggleFullscreen),
+        SC_DEVTOOLS => Some(ChromeCommand::OpenDevtools),
+        _ => None,
+    };
+    if let Some(cmd) = cmd {
+        let _ = proxy.send_event(AppEvent::Chrome(cmd));
+    }
+}
+
+fn bookmark_shortcut(state: &AppState) -> Option<ChromeCommand> {
+    let tab = state.tab_manager.active_tab()?;
+    let url = tab.url.clone();
+    if repositories::is_bookmarked(&state.conn, &url).unwrap_or(false) {
+        Some(ChromeCommand::BookmarkRemove { url })
+    } else {
+        Some(ChromeCommand::BookmarkAdd)
+    }
+}
+
+fn toggle_window_maximized(window: &tao::window::Window, maxed: &mut bool) {
+    set_window_maximized(window, !*maxed, maxed);
+}
+
+#[cfg(windows)]
+fn set_window_maximized(window: &tao::window::Window, next: bool, maxed: &mut bool) {
+    keep_frameless(window);
+    window.set_maximized(next);
+    *maxed = next;
+    keep_frameless(window);
+}
+
+#[cfg(not(windows))]
+fn set_window_maximized(window: &tao::window::Window, next: bool, maxed: &mut bool) {
+    window.set_maximized(next);
+    *maxed = next;
+}
+
+#[cfg(windows)]
+fn set_fullscreen_z(window: &tao::window::Window, active: bool) {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        SetWindowPos, HWND_NOTOPMOST, SWP_NOMOVE, SWP_NOSIZE,
+    };
+    if active {
+        return;
+    }
+    unsafe {
+        let hwnd = HWND(window.hwnd());
+        let _ = SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+    }
+}
+
+#[cfg(not(windows))]
+fn set_fullscreen_z(_window: &tao::window::Window, _active: bool) {}
+
+#[cfg(windows)]
+fn restore_window(window: &tao::window::Window) {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::WindowsAndMessaging::{ShowWindow, SW_RESTORE};
+    unsafe {
+        let _ = ShowWindow(HWND(window.hwnd()), SW_RESTORE);
+    }
+}
+
+#[cfg(not(windows))]
+fn restore_window(_window: &tao::window::Window) {}
+
+/// Initiate a native Windows resize drag from a JS-side resize handle mousedown.
+/// ReleaseCapture() frees any mouse capture (e.g. from the WebView child), then
+/// SendMessage(WM_NCLBUTTONDOWN) hands control to the system's resize loop, which
+/// tracks the mouse until button-up and resizes the window normally.
+#[cfg(windows)]
+fn begin_window_resize(hwnd: isize, edge: &str) {
+    use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
+    use windows::Win32::UI::Input::KeyboardAndMouse::ReleaseCapture;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        SendMessageW, HTBOTTOM, HTBOTTOMLEFT, HTBOTTOMRIGHT, HTLEFT, HTRIGHT, HTTOP, HTTOPLEFT,
+        HTTOPRIGHT, WM_NCLBUTTONDOWN,
+    };
+    let ht: usize = match edge {
+        "left" => HTLEFT as usize,
+        "right" => HTRIGHT as usize,
+        "top" => HTTOP as usize,
+        "bottom" => HTBOTTOM as usize,
+        "topleft" => HTTOPLEFT as usize,
+        "topright" => HTTOPRIGHT as usize,
+        "bottomleft" => HTBOTTOMLEFT as usize,
+        "bottomright" => HTBOTTOMRIGHT as usize,
+        _ => return,
+    };
+    unsafe {
+        let _ = ReleaseCapture();
+        let _ = SendMessageW(HWND(hwnd), WM_NCLBUTTONDOWN, WPARAM(ht), LPARAM(0));
+    }
+}
+
+fn keep_frameless(window: &tao::window::Window) {
+    #[cfg(windows)]
+    {
+        use windows::Win32::{
+            Foundation::HWND,
+            UI::WindowsAndMessaging::{
+                GetWindowLongPtrW, SetWindowLongPtrW, SetWindowPos, GWL_STYLE, SWP_FRAMECHANGED,
+                SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, WS_CAPTION, WS_MAXIMIZEBOX,
+                WS_MINIMIZEBOX, WS_POPUP, WS_SYSMENU, WS_THICKFRAME,
+            },
+        };
+
+        unsafe {
+            let hwnd = HWND(window.hwnd());
+            let style = GetWindowLongPtrW(hwnd, GWL_STYLE);
+            let remove = WS_POPUP.0 as isize;
+            let add = (WS_CAPTION | WS_THICKFRAME | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX).0
+                as isize;
+            let next = (style & !remove) | add;
+            if next != style {
+                let _ = SetWindowLongPtrW(hwnd, GWL_STYLE, next);
+                let _ = SetWindowPos(
+                    hwnd,
+                    HWND(0),
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+                );
+            }
+        }
+    }
+    #[cfg(not(windows))]
+    window.set_decorations(false);
+}
+
+#[cfg(windows)]
+fn set_square_corners(window: &tao::window::Window) {
+    use windows::Win32::{
+        Foundation::HWND,
+        Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND},
+    };
+    unsafe {
+        let hwnd = HWND(window.hwnd());
+        let pref = DWMWCP_DONOTROUND;
+        let _ = DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_WINDOW_CORNER_PREFERENCE,
+            &pref as *const _ as *const _,
+            std::mem::size_of_val(&pref) as u32,
+        );
+    }
+}
+
+#[cfg(not(windows))]
+fn set_square_corners(_window: &tao::window::Window) {}
+
+#[cfg(windows)]
+fn set_window_background_dark(window: &tao::window::Window) {
+    use windows::Win32::{
+        Foundation::{COLORREF, HWND},
+        Graphics::Gdi::CreateSolidBrush,
+        UI::WindowsAndMessaging::{SetClassLongPtrW, GET_CLASS_LONG_INDEX},
+    };
+    unsafe {
+        let hwnd = HWND(window.hwnd());
+        let brush = CreateSolidBrush(COLORREF(0x00090706));
+        SetClassLongPtrW(hwnd, GET_CLASS_LONG_INDEX(-10i32), brush.0 as isize);
+    }
+}
+
+#[cfg(not(windows))]
+fn set_window_background_dark(_window: &tao::window::Window) {}
+
+/// Prevent the window from appearing in screenshots/screen-recordings when in incognito mode.
+/// Uses WDA_EXCLUDEFROMCAPTURE (Windows 10 2004+). Silently no-ops on older builds.
+#[cfg(windows)]
+fn set_screenshot_protection(hwnd_val: isize, protect: bool) {
+    use windows::Win32::{
+        Foundation::HWND,
+        UI::WindowsAndMessaging::{SetWindowDisplayAffinity, WDA_EXCLUDEFROMCAPTURE, WDA_NONE},
+    };
+    unsafe {
+        let hwnd = HWND(hwnd_val);
+        let affinity = if protect {
+            WDA_EXCLUDEFROMCAPTURE
+        } else {
+            WDA_NONE
+        };
+        let _ = SetWindowDisplayAffinity(hwnd, affinity);
+    }
+}
+
+#[cfg(windows)]
+fn clamp_window_to_work_area(window: &tao::window::Window) {
+    use windows::Win32::{
+        Foundation::{HWND, RECT},
+        Graphics::Gdi::{
+            GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+        },
+        UI::WindowsAndMessaging::{GetWindowRect, SetWindowPos, SWP_NOACTIVATE, SWP_NOZORDER},
+    };
+
+    unsafe {
+        let hwnd = HWND(window.hwnd());
+        let mut rect = RECT::default();
+        let _ = GetWindowRect(hwnd, &mut rect);
+
+        let monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        let mut info = MONITORINFO {
+            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+            ..Default::default()
+        };
+        if !GetMonitorInfoW(monitor, &mut info).as_bool() {
+            return;
+        }
+
+        let work = info.rcWork;
+        let max_w = work.right - work.left;
+        let max_h = work.bottom - work.top;
+        let old_w = rect.right - rect.left;
+        let old_h = rect.bottom - rect.top;
+        let bad_size = old_w >= max_w || old_h >= max_h;
+        let w = if bad_size {
+            1280.min(max_w).max(800)
+        } else {
+            old_w.min(max_w).max(800)
+        };
+        let h = if bad_size {
+            800.min(max_h).max(500)
+        } else {
+            old_h.min(max_h).max(500)
+        };
+        let mut x = if bad_size {
+            work.left + (max_w - w) / 2
+        } else {
+            rect.left
+        };
+        let mut y = if bad_size {
+            work.top + (max_h - h) / 2
+        } else {
+            rect.top
+        };
+
+        if x + w > work.right {
+            x = work.right - w;
+        }
+        if y + h > work.bottom {
+            y = work.bottom - h;
+        }
+        if x < work.left {
+            x = work.left;
+        }
+        if y < work.top {
+            y = work.top;
+        }
+
+        if x == rect.left && y == rect.top && w == old_w && h == old_h {
+            return;
+        }
+
+        let _ = SetWindowPos(hwnd, HWND(0), x, y, w, h, SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+}
+
+#[cfg(not(windows))]
+fn clamp_window_to_work_area(_window: &tao::window::Window) {}
+
+fn sync_content_views(
+    content_views: &HashMap<String, WebView>,
+    state: &AppState,
+    layout: AppLayout,
+) {
+    let active_id = state.tab_manager.active_tab_id.as_deref().unwrap_or("");
+    let active_is_neura_page = state
+        .tab_manager
+        .active_tab()
+        .map(|tab| tab.is_neura_page())
+        .unwrap_or(false);
+
+    for (id, wv) in content_views {
+        if id == active_id && !active_is_neura_page {
+            let _ = wv.set_visible(true);
+            let _ = wv.set_bounds(layout.content);
+            let _ = wv.evaluate_script(&format!(
+                "window.__neuraContentFullscreen={}",
+                state.content_fullscreen
+            ));
+        } else {
+            let _ = wv.set_visible(false);
+        }
+    }
+}
+
+fn sync_chrome(chrome: &WebView, chrome_hwnd: Option<isize>, state: &AppState, layout: AppLayout) {
+    let _ = chrome.set_bounds(Rect {
+        x: 0,
+        y: 0,
+        width: layout.window_w,
+        height: layout.window_h,
+    });
+    let _ = chrome.evaluate_script(&format!(
+        "window.__neura&&window.__neura.setLayout({:.3},{:.3},{:.3},{:.3},{:.3})",
+        layout.sidebar_css_w,
+        layout.toolbar_css_h,
+        layout.ai_css_w,
+        layout.frame_side_css,
+        layout.frame_bottom_css
+    ));
+
+    #[cfg(windows)]
+    if let Some(hwnd) = chrome_hwnd {
+        move_child_window(hwnd, 0, 0, layout.window_w, layout.window_h);
+        set_chrome_clip_region(
+            hwnd,
+            layout.window_w,
+            layout.window_h,
+            layout.clip_sidebar_w,
+            layout.toolbar_h,
+            layout.ai_w,
+            state.ai_sidebar_open,
+            chrome_owns_content(state),
+            state
+                .suggestion_overlay_rect
+                .map(|rect| rect.to_physical(layout.scale_factor)),
+            layout.frame_side_w,
+            layout.frame_bottom_h,
+        );
+    }
+}
+
+fn sync_chrome_clip(chrome_hwnd: Option<isize>, state: &AppState, layout: AppLayout) {
+    #[cfg(windows)]
+    if let Some(hwnd) = chrome_hwnd {
+        set_chrome_clip_region(
+            hwnd,
+            layout.window_w,
+            layout.window_h,
+            layout.clip_sidebar_w,
+            layout.toolbar_h,
+            layout.ai_w,
+            state.ai_sidebar_open,
+            chrome_owns_content(state),
+            state
+                .suggestion_overlay_rect
+                .map(|rect| rect.to_physical(layout.scale_factor)),
+            layout.frame_side_w,
+            layout.frame_bottom_h,
+        );
+    }
+
+    #[cfg(not(windows))]
+    let _ = (chrome_hwnd, state, layout);
+}
+
+#[cfg(windows)]
+fn sync_content_z_order(
+    content_views: &HashMap<String, WebView>,
+    chrome_hwnd: Option<isize>,
+    state: &AppState,
+) {
+    if chrome_needs_top(state) {
+        if let Some(chrome) = chrome_hwnd {
+            bring_hwnd_to_top(chrome);
+        }
+        return;
+    }
+
+    let Some(id) = state.tab_manager.active_tab_id.as_deref() else {
+        return;
+    };
+    let Some(wv) = content_views.get(id) else {
+        return;
+    };
+    let Some(hwnd) = webview_hwnd(wv) else {
+        return;
+    };
+    bring_hwnd_to_top(hwnd);
+    repaint_content_webview(hwnd);
+}
+
+fn chrome_owns_content(state: &AppState) -> bool {
+    state.chrome_overlay_open
+        || state.spotlight_open
+        || state
+            .tab_manager
+            .active_tab()
+            .map(|tab| tab.is_neura_page())
+            .unwrap_or(false)
+}
+
+fn chrome_needs_top(state: &AppState) -> bool {
+    chrome_owns_content(state)
+        || state.suggestion_overlay_rect.is_some()
+        || (state.sidebar_auto_hide_open && !state.sidebar_pinned)
+}
+
+#[cfg(windows)]
+fn bring_hwnd_to_top(hwnd: isize) {
+    use windows::Win32::{
+        Foundation::HWND,
+        UI::WindowsAndMessaging::{
+            SetWindowPos, HWND_TOP, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOREDRAW, SWP_NOSIZE,
+        },
+    };
+    unsafe {
+        // SWP_NOREDRAW: suppress GDI WM_ERASEBKGND/WM_PAINT during Z-order change.
+        // WebView2 uses DirectComposition for rendering and updates independently, so
+        // GDI repaints are not needed and only cause a black flash before DComp composites.
+        let _ = SetWindowPos(
+            HWND(hwnd),
+            HWND_TOP,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOREDRAW,
+        );
+    }
+}
+
+#[cfg(windows)]
+fn move_child_window(hwnd: isize, x: i32, y: i32, width: u32, height: u32) {
+    use windows::Win32::{Foundation::HWND, UI::WindowsAndMessaging::MoveWindow};
+
+    unsafe {
+        // bRepaint=false: WebView2 uses DirectComposition and repaints itself via DComp,
+        // not GDI WM_PAINT. Forcing GDI repaint here fires before SetWindowRgn updates
+        // the clip region, causing chrome's opaque background to briefly cover content.
+        let _ = MoveWindow(
+            HWND(hwnd),
+            x,
+            y,
+            width.max(1) as i32,
+            height.max(1) as i32,
+            false,
+        );
+    }
+}
+
+#[cfg(windows)]
+fn webview_hwnd(wv: &WebView) -> Option<isize> {
+    unsafe {
+        let mut hwnd = std::mem::MaybeUninit::uninit();
+        wv.controller().ParentWindow(hwnd.as_mut_ptr()).ok()?;
+        let hwnd = hwnd.assume_init();
+        if hwnd.0 == 0 {
+            None
+        } else {
+            Some(hwnd.0 as isize)
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct PhysicalClipRect {
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
+}
+
+impl app::ChromeClipRect {
+    fn to_physical(self, scale_factor: f64) -> PhysicalClipRect {
+        PhysicalClipRect {
+            x: (self.x * scale_factor).floor().max(0.0) as i32,
+            y: (self.y * scale_factor).floor().max(0.0) as i32,
+            width: (self.width * scale_factor).ceil().max(1.0) as i32,
+            height: (self.height * scale_factor).ceil().max(1.0) as i32,
+        }
+    }
+}
+
+#[cfg(windows)]
+fn set_chrome_clip_region(
+    hwnd: isize,
+    window_w: u32,
+    window_h: u32,
+    sidebar_w: u32,
+    toolbar_h: u32,
+    ai_sidebar_w: u32,
+    ai_open: bool,
+    overlay_open: bool,
+    floating_rect: Option<PhysicalClipRect>,
+    frame_side_w: u32,
+    frame_bottom_h: u32,
+) {
+    use windows::Win32::{
+        Foundation::HWND,
+        Graphics::Gdi::{CombineRgn, CreateRectRgn, DeleteObject, SetWindowRgn, RGN_OR},
+    };
+
+    #[derive(Clone, Copy)]
+    struct ClipSpec {
+        window_w: u32,
+        window_h: u32,
+        sidebar_w: u32,
+        toolbar_h: u32,
+        ai_sidebar_w: u32,
+        ai_open: bool,
+        overlay_open: bool,
+        floating_rect: Option<PhysicalClipRect>,
+        frame_side_w: u32,
+        frame_bottom_h: u32,
+    }
+
+    unsafe fn create_region(spec: ClipSpec) -> windows::Win32::Graphics::Gdi::HRGN {
+        if spec.overlay_open {
+            return CreateRectRgn(0, 0, spec.window_w as i32, spec.window_h as i32);
+        }
+
+        let toolbar = CreateRectRgn(0, 0, spec.window_w as i32, spec.toolbar_h as i32);
+        let sidebar = CreateRectRgn(
+            0,
+            spec.toolbar_h as i32,
+            spec.sidebar_w as i32,
+            spec.window_h as i32,
+        );
+        let _ = CombineRgn(toolbar, toolbar, sidebar, RGN_OR);
+        let _ = DeleteObject(sidebar);
+
+        if spec.ai_open {
+            let left = spec.window_w.saturating_sub(spec.ai_sidebar_w) as i32;
+            let ai = CreateRectRgn(
+                left,
+                spec.toolbar_h as i32,
+                spec.window_w as i32,
+                spec.window_h as i32,
+            );
+            let _ = CombineRgn(toolbar, toolbar, ai, RGN_OR);
+            let _ = DeleteObject(ai);
+        }
+
+        if let Some(rect) = spec.floating_rect {
+            let left = rect.x.clamp(0, spec.window_w as i32);
+            let top = rect.y.clamp(0, spec.window_h as i32);
+            let right = (rect.x + rect.width).clamp(left, spec.window_w as i32);
+            let bottom = (rect.y + rect.height).clamp(top, spec.window_h as i32);
+            if right > left && bottom > top {
+                let floating = CreateRectRgn(left, top, right, bottom);
+                let _ = CombineRgn(toolbar, toolbar, floating, RGN_OR);
+                let _ = DeleteObject(floating);
+            }
+        }
+
+        // Right frame strip: between content and window/AI-panel edge
+        if spec.frame_side_w > 0 {
+            let right_r = spec.window_w.saturating_sub(spec.ai_sidebar_w) as i32;
+            let right_l = right_r - spec.frame_side_w as i32;
+            if right_l >= 0 && right_r > right_l {
+                let rf = CreateRectRgn(
+                    right_l,
+                    spec.toolbar_h as i32,
+                    right_r,
+                    spec.window_h as i32,
+                );
+                let _ = CombineRgn(toolbar, toolbar, rf, RGN_OR);
+                let _ = DeleteObject(rf);
+            }
+        }
+
+        // Bottom frame strip
+        if spec.frame_bottom_h > 0 {
+            let bot_top = spec.window_h.saturating_sub(spec.frame_bottom_h) as i32;
+            let bf = CreateRectRgn(0, bot_top, spec.window_w as i32, spec.window_h as i32);
+            let _ = CombineRgn(toolbar, toolbar, bf, RGN_OR);
+            let _ = DeleteObject(bf);
+        }
+
+        toolbar
+    }
+
+    unsafe {
+        let spec = ClipSpec {
+            window_w,
+            window_h,
+            sidebar_w,
+            toolbar_h,
+            ai_sidebar_w,
+            ai_open,
+            overlay_open,
+            floating_rect,
+            frame_side_w,
+            frame_bottom_h,
+        };
+        let region = create_region(spec);
+        let _ = SetWindowRgn(HWND(hwnd), region, false);
+    }
+}
+
+#[cfg(windows)]
+fn track_content_hwnd(
+    hwnd: Option<isize>,
+    tab_id: &str,
+    content_hwnds: &mut HashMap<String, isize>,
+) {
+    let Some(hwnd) = hwnd else {
+        return;
+    };
+    content_hwnds.insert(tab_id.to_string(), hwnd);
+}
+
+#[cfg(windows)]
+fn repaint_content_webview(hwnd: isize) {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::Graphics::Gdi::{InvalidateRect, UpdateWindow};
+    unsafe {
+        // bErase=false: do NOT erase the GDI background. WebView2 renders via DirectComposition,
+        // not GDI. Erasing to black (bErase=true) leaves a black hole visible for the brief
+        // window between the GDI erase and the DComp surface being composited on top.
+        let _ = InvalidateRect(HWND(hwnd), None, false);
+        let _ = UpdateWindow(HWND(hwnd));
+    }
+}
+
+fn save_session(state: &AppState) {
+    let active_id = state.tab_manager.active_tab_id.as_deref();
+    let _ = repositories::save_session(
+        &state.conn,
+        &state.tab_manager.workspaces,
+        &state.tab_manager.active_workspace_id,
+        &state.tab_manager.tabs,
+        active_id,
+    );
+}
+
+fn should_save_session(event: &AppEvent) -> bool {
+    matches!(
+        event,
+        AppEvent::ContentNav { .. }
+            | AppEvent::ContentMetadata { .. }
+            | AppEvent::Chrome(ChromeCommand::Navigate { .. })
+            | AppEvent::Chrome(ChromeCommand::NavigateFromOverlay { .. })
+            | AppEvent::Chrome(ChromeCommand::Back)
+            | AppEvent::Chrome(ChromeCommand::Forward)
+            | AppEvent::Chrome(ChromeCommand::NewTab)
+            | AppEvent::Chrome(ChromeCommand::CloseTab { .. })
+            | AppEvent::Chrome(ChromeCommand::SwitchTab { .. })
+            | AppEvent::Chrome(ChromeCommand::PinTab { .. })
+            | AppEvent::Chrome(ChromeCommand::UnpinTab { .. })
+            | AppEvent::Chrome(ChromeCommand::NewWorkspace { .. })
+            | AppEvent::Chrome(ChromeCommand::RenameWorkspace { .. })
+            | AppEvent::Chrome(ChromeCommand::DeleteWorkspace { .. })
+            | AppEvent::Chrome(ChromeCommand::SwitchWorkspace { .. })
+            | AppEvent::Chrome(ChromeCommand::ReopenTab)
+            | AppEvent::Chrome(ChromeCommand::OpenInNewTab { .. })
+    )
+}
+
+fn save_window_size(window: &tao::window::Window, state: &mut AppState, maxed: bool) {
+    if state.content_fullscreen || maxed {
+        return;
+    }
+    let size = window.inner_size();
+    let scale = window.scale_factor().max(1.0);
+    state.settings.window_width = (size.width as f64 / scale).round() as u32;
+    state.settings.window_height = (size.height as f64 / scale).round() as u32;
+    let _ = settings_store::set(&state.conn, "app_settings", &state.settings);
+}
+
+// ── Agent context snapshot ─────────────────────────────────────────────────────
+
+/// Snapshot of browser state passed to the async agent loop.
+struct AgentSnapshot {
+    tab_id: String,
+    page_url: String,
+    page_title: String,
+    tabs: Vec<serde_json::Value>,
+    history_items: Vec<serde_json::Value>,
+}
+
+fn build_agent_snapshot(state: &AppState) -> AgentSnapshot {
+    let active = state.tab_manager.active_tab();
+    let tab_id = state.tab_manager.active_tab_id.clone().unwrap_or_default();
+    let page_url = active.map(|t| t.url.clone()).unwrap_or_default();
+    let page_title = active.map(|t| t.title.clone()).unwrap_or_default();
+
+    let tabs: Vec<serde_json::Value> = state
+        .tab_manager
+        .active_workspace_tabs()
+        .iter()
+        .map(|t| {
+            let is_active = state.tab_manager.active_tab_id.as_deref() == Some(&t.id);
+            serde_json::json!({
+                "tab_id": t.id,
+                "title": t.title,
+                "url": t.url,
+                "active": is_active,
+            })
+        })
+        .collect();
+
+    let history_items: Vec<serde_json::Value> =
+        storage::repositories::list_history(&state.conn, 60)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|h| {
+                serde_json::json!({
+                    "url": h.url,
+                    "title": h.title,
+                })
+            })
+            .collect();
+
+    AgentSnapshot {
+        tab_id,
+        page_url,
+        page_title,
+        tabs,
+        history_items,
+    }
+}
+
+// ── Tool execution ─────────────────────────────────────────────────────────────
+
+/// Execute a single tool call from the AI, returning the result string.
+async fn execute_tool(
+    tc: &ai::provider::ToolCall,
+    snapshot: &AgentSnapshot,
+    pending: &std::sync::Arc<
+        std::sync::Mutex<std::collections::HashMap<String, tokio::sync::oneshot::Sender<String>>>,
+    >,
+    proxy: &tao::event_loop::EventLoopProxy<AppEvent>,
+) -> String {
+    use ai::browser_tools::{
+        js_click_element, js_get_interactive_elements, js_get_page_text, js_scroll_page,
+        js_type_text,
+    };
+
+    let args: serde_json::Value =
+        serde_json::from_str(&tc.function.arguments).unwrap_or(serde_json::json!({}));
+
+    match tc.function.name.as_str() {
+        // ── State tools (answered instantly from snapshot) ────────────────────
+        "get_current_url" => serde_json::json!({
+            "url": snapshot.page_url,
+            "title": snapshot.page_title,
+        })
+        .to_string(),
+        "list_tabs" => serde_json::to_string(&snapshot.tabs).unwrap_or_else(|_| "[]".into()),
+        "search_history" => {
+            let q = args["query"].as_str().unwrap_or("").to_lowercase();
+            let results: Vec<_> = snapshot
+                .history_items
+                .iter()
+                .filter(|h| {
+                    let url = h["url"].as_str().unwrap_or("").to_lowercase();
+                    let title = h["title"].as_str().unwrap_or("").to_lowercase();
+                    url.contains(&q) || title.contains(&q)
+                })
+                .take(20)
+                .collect();
+            serde_json::to_string(&results).unwrap_or_else(|_| "[]".into())
+        }
+
+        // ── Browser action tools (fire proxy event, no result needed) ─────────
+        "navigate" => {
+            let url = args["url"].as_str().unwrap_or("").to_string();
+            if !url.is_empty() {
+                let _ = proxy.send_event(AppEvent::Chrome(ChromeCommand::Navigate {
+                    url: url.clone(),
+                }));
+                tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+                serde_json::json!({"success": true, "navigating_to": url}).to_string()
+            } else {
+                r#"{"error":"url is required"}"#.into()
+            }
+        }
+        "go_back" => {
+            let _ = proxy.send_event(AppEvent::Chrome(ChromeCommand::Back));
+            r#"{"success":true}"#.into()
+        }
+        "go_forward" => {
+            let _ = proxy.send_event(AppEvent::Chrome(ChromeCommand::Forward));
+            r#"{"success":true}"#.into()
+        }
+        "new_tab" => {
+            let _ = proxy.send_event(AppEvent::Chrome(ChromeCommand::NewTab));
+            if let Some(url) = args["url"].as_str() {
+                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                let _ = proxy.send_event(AppEvent::Chrome(ChromeCommand::Navigate {
+                    url: url.to_string(),
+                }));
+            }
+            r#"{"success":true}"#.into()
+        }
+        "switch_tab" => {
+            let id = args["tab_id"].as_str().unwrap_or("").to_string();
+            let _ = proxy.send_event(AppEvent::Chrome(ChromeCommand::SwitchTab { id }));
+            r#"{"success":true}"#.into()
+        }
+
+        // ── Page tools (JS round-trip through content WebView) ────────────────
+        "get_page_text" => {
+            execute_page_js(
+                js_get_page_text(&tc.id),
+                &tc.id,
+                &snapshot.tab_id,
+                pending,
+                proxy,
+            )
+            .await
+        }
+        "get_page_interactive_elements" => {
+            execute_page_js(
+                js_get_interactive_elements(&tc.id),
+                &tc.id,
+                &snapshot.tab_id,
+                pending,
+                proxy,
+            )
+            .await
+        }
+        "click_element" => {
+            let eid = args["element_id"].as_str().unwrap_or("").to_string();
+            execute_page_js(
+                js_click_element(&tc.id, &eid),
+                &tc.id,
+                &snapshot.tab_id,
+                pending,
+                proxy,
+            )
+            .await
+        }
+        "type_text" => {
+            let eid = args["element_id"].as_str().unwrap_or("");
+            let text = args["text"].as_str().unwrap_or("");
+            execute_page_js(
+                js_type_text(&tc.id, eid, text),
+                &tc.id,
+                &snapshot.tab_id,
+                pending,
+                proxy,
+            )
+            .await
+        }
+        "scroll_page" => {
+            let dir = args["direction"].as_str().unwrap_or("down");
+            let amount = args["amount"].as_i64().unwrap_or(400);
+            execute_page_js(
+                js_scroll_page(&tc.id, dir, amount),
+                &tc.id,
+                &snapshot.tab_id,
+                pending,
+                proxy,
+            )
+            .await
+        }
+
+        other => format!(r#"{{"error":"unknown tool: {other}"}}"#),
+    }
+}
+
+/// Send JS to the active content WebView and wait (with timeout) for the result.
+async fn execute_page_js(
+    js: String,
+    call_id: &str,
+    tab_id: &str,
+    pending: &std::sync::Arc<
+        std::sync::Mutex<std::collections::HashMap<String, tokio::sync::oneshot::Sender<String>>>,
+    >,
+    proxy: &tao::event_loop::EventLoopProxy<AppEvent>,
+) -> String {
+    let (tx, rx) = tokio::sync::oneshot::channel::<String>();
+    if let Ok(mut map) = pending.lock() {
+        map.insert(call_id.to_string(), tx);
+    }
+    let _ = proxy.send_event(AppEvent::AiExecutePageJs {
+        call_id: call_id.to_string(),
+        tab_id: tab_id.to_string(),
+        js,
+    });
+    match tokio::time::timeout(std::time::Duration::from_secs(12), rx).await {
+        Ok(Ok(result)) => result,
+        Ok(Err(_)) => r#"{"error":"channel closed"}"#.into(),
+        Err(_) => {
+            // Timeout — clean up the pending entry
+            if let Ok(mut map) = pending.lock() {
+                map.remove(call_id);
+            }
+            r#"{"error":"timeout waiting for page result"}"#.into()
+        }
+    }
+}
+
+// ── Main entry point ───────────────────────────────────────────────────────────
+
+/// Handle a quick-action button click (Summarize, Explain, Key Points, Ask Anything).
+///
+/// Unlike handle_ai_message (which uses the agent loop and relies on the AI choosing to
+/// call get_page_text), this function reads the page text DIRECTLY before calling the AI,
+/// then sends a single prompt with the page content baked in.  No tool calls, no indirection,
+/// no risk of the AI skipping the tool and returning an empty response.
+fn handle_ai_quick_action(
+    action: String,
+    state: &AppState,
+    chrome: &WebView,
+    proxy: &tao::event_loop::EventLoopProxy<AppEvent>,
+    rt: &tokio::runtime::Runtime,
+) {
+    let Some(prov) = ai::build_provider(&state.settings) else {
+        let _ = chrome.evaluate_script(
+            "window.__neura&&window.__neura.showError('No AI provider configured. Add an API key in Settings \u{2192} AI Providers.')"
+        );
+        return;
+    };
+
+    let task_label: &str = match action.as_str() {
+        "summarize" => "write a clear, concise summary of the page",
+        "explain" => "explain in plain language what this page is about",
+        "key_points" => "list the key points from this page as a bullet list",
+        "ask_anything" => "describe what you can help the user with based on this page",
+        other => other,
+    };
+    let task_label = task_label.to_string();
+
+    let pending = state.ai_pending_tools.clone();
+    let proxy_task = proxy.clone();
+    let model = state.settings.ai.default_model.clone();
+    let temperature = state.settings.ai.temperature;
+    let max_tokens = state.settings.ai.max_tokens;
+    let tab_id = state.tab_manager.active_tab_id.clone().unwrap_or_default();
+
+    // Build a unique call_id for the page-text round-trip
+    let call_id = format!("qa-{}", uuid_v4_simple());
+
+    // Generate the JS that reads the page and posts the result back via IPC
+    let page_js = ai::browser_tools::js_get_page_text(&call_id);
+
+    rt.spawn(async move {
+        // Step 1 — read the page text directly (guaranteed, no AI indirection)
+        let page_text_raw =
+            execute_page_js(page_js, &call_id, &tab_id, &pending, &proxy_task).await;
+
+        // Unquote the JSON-encoded string the JS sends back
+        let page_text: String =
+            serde_json::from_str(&page_text_raw).unwrap_or_else(|_| page_text_raw.clone());
+
+        let page_context = if page_text.trim().is_empty() || page_text.starts_with("Error") {
+            "The page text could not be read (the page may not have loaded yet or may be empty)."
+                .to_string()
+        } else {
+            format!(
+                "=== PAGE TEXT ===\n{}\n=== END OF PAGE TEXT ===",
+                page_text.trim()
+            )
+        };
+
+        // Step 2 — single AI call with page text embedded in the system prompt
+        let system = format!(
+            "You are a helpful AI assistant embedded in a web browser. \
+             The user has pressed a quick-action button and you must {} \
+             based ONLY on the page text provided below. \
+             Do NOT use your training knowledge about the topic — \
+             answer solely from the page content. \
+             Use markdown formatting where helpful (bold, bullet lists). \
+             Keep your response focused and under 400 words.\n\n{}",
+            task_label, page_context
+        );
+
+        let msgs = vec![
+            ai::ChatMessage::system(system),
+            ai::ChatMessage::user(format!("Please {}.", task_label)),
+        ];
+
+        let req = ai::ChatRequest {
+            messages: msgs,
+            model,
+            temperature,
+            max_tokens,
+            stream: false,
+            tools: None, // No tool calls — page text is already in the prompt
+        };
+
+        match prov.chat(req).await {
+            Ok(resp) => {
+                let text = resp.content;
+                if text.is_empty() {
+                    let _ = proxy_task.send_event(AppEvent::AiError {
+                        message: "AI returned an empty response. Please try again.".into(),
+                    });
+                    return;
+                }
+                // Stream word-by-word for a nicer UX
+                let words: Vec<&str> = text.split(' ').collect();
+                let chunk_size = 3.max(words.len() / 20);
+                let mut i = 0;
+                while i < words.len() {
+                    let end = (i + chunk_size).min(words.len());
+                    let chunk = words[i..end].join(" ");
+                    let sep = if end < words.len() { " " } else { "" };
+                    let _ = proxy_task.send_event(AppEvent::AiChunk {
+                        text: format!("{}{}", chunk, sep),
+                        done: false,
+                    });
+                    i = end;
+                    tokio::time::sleep(std::time::Duration::from_millis(15)).await;
+                }
+                let _ = proxy_task.send_event(AppEvent::AiChunk {
+                    text: String::new(),
+                    done: true,
+                });
+            }
+            Err(e) => {
+                let _ = proxy_task.send_event(AppEvent::AiError {
+                    message: format!("AI error: {}", e),
+                });
+            }
+        }
+    });
+}
+
+/// Generate a simple random hex ID without pulling in the uuid crate.
+fn uuid_v4_simple() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let t = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    format!("{:x}", t)
+}
+
+fn handle_ai_message(
+    text: String,
+    state: &AppState,
+    chrome: &WebView,
+    proxy: &tao::event_loop::EventLoopProxy<AppEvent>,
+    rt: &tokio::runtime::Runtime,
+) {
+    let Some(prov) = ai::build_provider(&state.settings) else {
+        let _ = chrome.evaluate_script(
+            "window.__neura&&window.__neura.showError('No AI provider configured. Add an API key in Settings \u{2192} AI Providers.')"
+        );
+        return;
+    };
+
+    let snapshot = build_agent_snapshot(state);
+    let pending = state.ai_pending_tools.clone();
+    let proxy_agent = proxy.clone();
+    let user_text = text.clone();
+
+    // Build initial message list including conversation history
+    let active = state.tab_manager.active_tab();
+    let page_ctx = active
+        .map(|t| format!("Current page: {} ({})", t.title, t.url))
+        .unwrap_or_default();
+    let system = format!("{}\n\nYou have access to browser control tools. Use them to help the user interact with the browser and web pages. Always read the page first before clicking elements.\n\n{}", ai::prompts::SYSTEM_PROMPT, page_ctx);
+
+    let mut msgs: Vec<ai::ChatMessage> = vec![ai::ChatMessage::system(system)];
+    msgs.extend(state.ai_messages.clone());
+    msgs.push(ai::ChatMessage::user(text));
+
+    let model = state.settings.ai.default_model.clone();
+    let temperature = state.settings.ai.temperature;
+    let max_tokens = state.settings.ai.max_tokens;
+    let stream_final = state.settings.ai.stream_responses;
+
+    rt.spawn(async move {
+        // Agent loop — up to 12 iterations (tool call rounds)
+        const MAX_STEPS: usize = 12;
+
+        for step in 0..MAX_STEPS {
+            let req = ai::ChatRequest {
+                messages: msgs.clone(),
+                model: model.clone(),
+                temperature,
+                max_tokens,
+                stream: false, // No streaming during tool-call rounds
+                tools: Some(ai::browser_tools::browser_tool_definitions()),
+            };
+
+            let resp = match prov.chat(req).await {
+                Ok(r) => r,
+                Err(e) => {
+                    let _ = proxy_agent.send_event(AppEvent::AiError {
+                        message: format!("AI error: {}", e),
+                    });
+                    return;
+                }
+            };
+
+            let has_tool_calls = resp
+                .tool_calls
+                .as_ref()
+                .map(|v| !v.is_empty())
+                .unwrap_or(false);
+
+            if !has_tool_calls {
+                // Final text response — stream it if streaming is enabled
+                let final_text = resp.content.clone();
+                if stream_final && !final_text.is_empty() {
+                    // Simulate word-by-word streaming for a nicer UX
+                    let words: Vec<&str> = final_text.splitn(100, ' ').collect();
+                    let chunk_size = 3.max(words.len() / 20);
+                    let mut i = 0;
+                    while i < words.len() {
+                        let end = (i + chunk_size).min(words.len());
+                        let chunk = words[i..end].join(" ");
+                        let sep = if end < words.len() { " " } else { "" };
+                        let _ = proxy_agent.send_event(AppEvent::AiChunk {
+                            text: format!("{}{}", chunk, sep),
+                            done: false,
+                        });
+                        i = end;
+                        tokio::time::sleep(std::time::Duration::from_millis(15)).await;
+                    }
+                } else if !final_text.is_empty() {
+                    let _ = proxy_agent.send_event(AppEvent::AiChunk {
+                        text: final_text.clone(),
+                        done: false,
+                    });
+                }
+                let _ = proxy_agent.send_event(AppEvent::AiChunk {
+                    text: String::new(),
+                    done: true,
+                });
+                // Persist exchange to conversation history
+                let _ = proxy_agent.send_event(AppEvent::AiSaveMessages {
+                    user_text,
+                    assistant_text: final_text,
+                });
+                return;
+            }
+
+            // Tool calls requested
+            let tool_calls = resp.tool_calls.unwrap();
+
+            // Record assistant's tool-call message in the conversation
+            msgs.push(ai::ChatMessage::assistant_with_tool_calls(
+                tool_calls.clone(),
+            ));
+
+            // Show tool call labels in the AI sidebar
+            for tc in &tool_calls {
+                let label =
+                    ai::browser_tools::tool_call_label(&tc.function.name, &tc.function.arguments);
+                let _ = proxy_agent.send_event(AppEvent::AiToolCallDisplay { label });
+            }
+
+            // Execute all tool calls and collect results
+            for tc in &tool_calls {
+                let result = execute_tool(tc, &snapshot, &pending, &proxy_agent).await;
+                tracing::debug!(
+                    "tool {} → {}",
+                    tc.function.name,
+                    &result[..result.len().min(200)]
+                );
+                msgs.push(ai::ChatMessage::tool_result(&tc.id, result));
+            }
+
+            // If this is not the first step, guard against runaway loops with a brief pause
+            if step > 0 {
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            }
+        }
+
+        // Exceeded max steps
+        let _ = proxy_agent.send_event(AppEvent::AiError {
+            message: "Agent reached maximum steps — please try a simpler request.".into(),
+        });
+    });
+}
+
+fn handle_spotlight_ai_query(
+    text: String,
+    state: &AppState,
+    proxy: &tao::event_loop::EventLoopProxy<AppEvent>,
+    rt: &tokio::runtime::Runtime,
+) {
+    let Some(prov) = ai::build_provider(&state.settings) else {
+        let _ = proxy.send_event(AppEvent::SpotlightAiError {
+            message: "No AI provider configured. Add an API key in Settings → AI Providers."
+                .to_string(),
+        });
+        return;
+    };
+
+    let proxy_task = proxy.clone();
+    let model = state.settings.ai.default_model.clone();
+    let provider_id = state.settings.ai.default_provider.clone();
+    let temperature = state.settings.ai.temperature;
+    let max_tokens = state.settings.ai.max_tokens;
+    let query_text = text.clone();
+
+    rt.spawn(async move {
+        let today = chrono::Local::now().format("%B %d, %Y").to_string();
+
+        // ── 2. Try native provider web-search (Gemini Google Search / Anthropic web_search) ──
+        let native_system = format!(
+            "You are a helpful AI assistant embedded in a web browser. \
+             Today's date is {today}. \
+             Search the web for the latest information to answer the user's question. \
+             Be concise and accurate. Use markdown formatting (bold key values, bullet lists). \
+             Keep the answer under 300 words unless more detail is truly needed."
+        );
+        let native_msgs = vec![
+            ai::ChatMessage::system(native_system),
+            ai::ChatMessage::user(query_text.clone()),
+        ];
+        let native_req = ai::ChatRequest {
+            messages: native_msgs,
+            model: model.clone(),
+            temperature,
+            max_tokens,
+            stream: false,
+            tools: None,
+        };
+
+        // Only call spotlight_chat for providers that support native search.
+        // Others return Ok(None) from the default trait impl so we fall through.
+        let native_result = if matches!(provider_id.as_str(), "gemini" | "anthropic") {
+            prov.spotlight_chat(native_req).await
+        } else {
+            Ok(None)
+        };
+
+        match native_result {
+            Ok(Some(answer)) if !answer.is_empty() => {
+                // Native search returned a grounded answer — stream it.
+                stream_spotlight_text(answer, &proxy_task).await;
+                return;
+            }
+            Err(e) => {
+                // Native search failed — log and fall through to Wikipedia path.
+                eprintln!("[spotlight] native search error: {e}");
+            }
+            _ => {}
+        }
+
+        // ── 3. Fallback: parallel Wikipedia + currency + DDG Instant ──────────
+        let currency_query = detect_currency_query(&query_text);
+        let market_symbol = detect_market_query(&query_text);
+        let (currency_ctx, market_ctx, instant_ctx, wiki_snippets) = tokio::join!(
+            async {
+                if let Some(query) = currency_query {
+                    fetch_currency_rate(&query).await
+                } else {
+                    None
+                }
+            },
+            async {
+                if let Some((symbol, name)) = market_symbol {
+                    fetch_market_quote(&symbol, &name).await
+                } else {
+                    None
+                }
+            },
+            fetch_duckduckgo_instant(&query_text),
+            fetch_wikipedia_search(&query_text)
+        );
+
+        let mut ctx_parts: Vec<String> = Vec::new();
+        if let Some(ref rate) = currency_ctx {
+            ctx_parts.push(rate.clone());
+        }
+        if let Some(ref market) = market_ctx {
+            ctx_parts.push(market.clone());
+        }
+        if let Some(ref instant) = instant_ctx {
+            ctx_parts.push(instant.clone());
+        }
+        if !wiki_snippets.is_empty() {
+            ctx_parts.push(format!(
+                "**Wikipedia search results:**\n{}",
+                wiki_snippets
+                    .iter()
+                    .enumerate()
+                    .map(|(i, s)| format!("{}. {}", i + 1, s))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            ));
+        }
+
+        let system = if ctx_parts.is_empty() {
+            format!(
+                "You are a helpful AI assistant embedded in a web browser. \
+                 Today's date is {today}. \
+                 No live search results were retrieved for this query. \
+                 Answer honestly — if the answer depends on real-time or recent data \
+                 that you may not have, say so explicitly rather than guessing. \
+                 Use markdown formatting where helpful. Keep answers under 300 words."
+            )
+        } else {
+            let search_block = ctx_parts.join("\n\n");
+            format!(
+                "You are a helpful AI assistant embedded in a web browser. \
+                 Today's date is {today}.\n\n\
+                 The following live web search results were retrieved for the user's query:\n\n\
+                 {search_block}\n\n\
+                 IMPORTANT RULES:\n\
+                 - Answer using ONLY the search results shown above.\n\
+                 - Do NOT use your training knowledge or make up facts.\n\
+                 - If the search results do not contain enough information, say so.\n\
+                 - Be concise and accurate. Use markdown formatting where helpful \
+                 (bold for key values, bullet lists for multiple items).\n\
+                 - Keep the answer under 300 words unless more detail is truly needed."
+            )
+        };
+
+        let msgs = vec![ai::ChatMessage::system(system), ai::ChatMessage::user(text)];
+        let req = ai::ChatRequest {
+            messages: msgs,
+            model,
+            temperature,
+            max_tokens,
+            stream: false,
+            tools: None,
+        };
+
+        match prov.chat(req).await {
+            Ok(resp) => {
+                if resp.content.is_empty() {
+                    let _ = proxy_task.send_event(AppEvent::SpotlightAiError {
+                        message: "No response from AI.".to_string(),
+                    });
+                    return;
+                }
+                stream_spotlight_text(resp.content, &proxy_task).await;
+            }
+            Err(e) => {
+                let _ = proxy_task.send_event(AppEvent::SpotlightAiError {
+                    message: format!("AI error: {}", e),
+                });
+            }
+        }
+    });
+}
+
+/// Stream an already-complete text answer back to the Spotlight UI word-by-word
+/// so it feels like a live response.
+async fn stream_spotlight_text(text: String, proxy: &tao::event_loop::EventLoopProxy<AppEvent>) {
+    let words: Vec<&str> = text.split(' ').collect();
+    let chunk_size = 3.max(words.len() / 25);
+    let mut i = 0;
+    while i < words.len() {
+        let end = (i + chunk_size).min(words.len());
+        let chunk = words[i..end].join(" ");
+        let sep = if end < words.len() { " " } else { "" };
+        let _ = proxy.send_event(AppEvent::SpotlightAiChunk {
+            text: format!("{}{}", chunk, sep),
+            done: false,
+        });
+        i = end;
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    let _ = proxy.send_event(AppEvent::SpotlightAiChunk {
+        text: String::new(),
+        done: true,
+    });
+}
+
+#[derive(Clone)]
+struct CurrencyQuery {
+    amount: f64,
+    from: String,
+    to: String,
+}
+
+fn detect_currency_query(q: &str) -> Option<CurrencyQuery> {
+    let mut s = q.to_lowercase();
+    s = s.replace(',', "");
+    s = s.replace('$', " usd ");
+    s = s.replace('€', " eur ");
+    s = s.replace('£', " gbp ");
+    s = s.replace('¥', " jpy ");
+    for ch in ['?', '!', ':', ';', '(', ')', '[', ']', '{', '}'] {
+        s = s.replace(ch, " ");
+    }
+    let tokens: Vec<&str> = s.split_whitespace().collect();
+    if tokens.len() < 2 {
+        return None;
+    }
+
+    let seps = ["to", "ke", "in", "into", "as", "for"];
+    for (i, token) in tokens.iter().enumerate() {
+        if !seps.contains(token) {
+            continue;
+        }
+        let left = &tokens[..i];
+        let right = &tokens[i + 1..];
+        let (from, amount) = find_currency_left(left)?;
+        let to = find_currency_right(right)?;
+        if from != to {
+            return Some(CurrencyQuery { amount, from, to });
+        }
+    }
+
+    let found: Vec<(usize, String)> = tokens
+        .iter()
+        .enumerate()
+        .filter_map(|(i, token)| currency_code(token).map(|code| (i, code.to_string())))
+        .collect();
+    if found.len() < 2 || found[0].1 == found[1].1 {
+        return None;
+    }
+    let amount = tokens[..found[0].0]
+        .iter()
+        .rev()
+        .find_map(|token| token.parse::<f64>().ok())
+        .unwrap_or(1.0);
+    Some(CurrencyQuery {
+        amount,
+        from: found[0].1.clone(),
+        to: found[1].1.clone(),
+    })
+}
+
+fn find_currency_left(tokens: &[&str]) -> Option<(String, f64)> {
+    for token in tokens.iter().rev() {
+        let Some(code) = currency_code(token) else {
+            continue;
+        };
+        let amount = tokens
+            .iter()
+            .rev()
+            .find_map(|token| token.parse::<f64>().ok())
+            .unwrap_or(1.0);
+        return Some((code.to_string(), amount));
+    }
+    None
+}
+
+fn find_currency_right(tokens: &[&str]) -> Option<String> {
+    tokens
+        .iter()
+        .find_map(|token| currency_code(token).map(|code| code.to_string()))
+}
+
+fn currency_code(token: &str) -> Option<&'static str> {
+    match token {
+        "usd" | "dollar" | "dollars" | "buck" | "bucks" | "us$" => Some("USD"),
+        "idr" | "rupiah" | "rp" => Some("IDR"),
+        "jpy" | "yen" => Some("JPY"),
+        "cny" | "yuan" | "rmb" | "renminbi" => Some("CNY"),
+        "eur" | "euro" | "euros" => Some("EUR"),
+        "gbp" | "pound" | "pounds" | "sterling" => Some("GBP"),
+        "sgd" | "singapore" => Some("SGD"),
+        "myr" | "ringgit" => Some("MYR"),
+        "thb" | "baht" => Some("THB"),
+        "aud" => Some("AUD"),
+        "cad" => Some("CAD"),
+        "chf" | "franc" => Some("CHF"),
+        "hkd" => Some("HKD"),
+        "krw" | "won" => Some("KRW"),
+        "inr" | "rupee" | "rupees" => Some("INR"),
+        "php" | "peso" | "pesos" => Some("PHP"),
+        "vnd" | "dong" => Some("VND"),
+        "twd" => Some("TWD"),
+        "brl" | "real" | "reais" => Some("BRL"),
+        "mxn" => Some("MXN"),
+        "rub" | "ruble" | "rouble" => Some("RUB"),
+        "zar" | "rand" => Some("ZAR"),
+        "aed" | "dirham" => Some("AED"),
+        "sar" | "riyal" => Some("SAR"),
+        "try" | "lira" => Some("TRY"),
+        "nok" => Some("NOK"),
+        "sek" => Some("SEK"),
+        "dkk" => Some("DKK"),
+        "nzd" => Some("NZD"),
+        _ => None,
+    }
+}
+
+async fn fetch_currency_rate(query: &CurrencyQuery) -> Option<String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(6))
+        .user_agent(crate::version::USER_AGENT)
+        .build()
+        .ok()?;
+
+    let url = format!("https://open.er-api.com/v6/latest/{}", query.from);
+    let resp = client.get(&url).send().await.ok()?;
+    let json: serde_json::Value = resp.json().await.ok()?;
+
+    if json["result"].as_str() != Some("success") {
+        return None;
+    }
+
+    let rate = json["rates"][&query.to].as_f64()?;
+    let converted = query.amount * rate;
+    let updated = json["time_last_update_utc"].as_str().unwrap_or("recently");
+
+    Some(format!(
+        "**Live currency conversion:** {} {} = **{} {}**\nRate: 1 {} = {} {}.\nSource: open.er-api.com, updated: {}.",
+        fmt_currency_value(query.amount),
+        query.from,
+        fmt_currency_value(converted),
+        query.to,
+        query.from,
+        fmt_currency_value(rate),
+        query.to,
+        updated
+    ))
+}
+
+fn fmt_currency_value(n: f64) -> String {
+    let decimals = if n.abs() >= 100.0 { 2 } else { 4 };
+    let s = format!("{n:.decimals$}");
+    let parts: Vec<&str> = s.split('.').collect();
+    let mut int = String::new();
+    for (i, ch) in parts[0].chars().rev().enumerate() {
+        if i > 0 && i % 3 == 0 {
+            int.push(',');
+        }
+        int.push(ch);
+    }
+    let int = int.chars().rev().collect::<String>();
+    if parts.len() == 1 {
+        return int;
+    }
+    let frac = parts[1].trim_end_matches('0');
+    if frac.is_empty() {
+        int
+    } else {
+        format!("{int}.{frac}")
+    }
+}
+
+#[cfg(test)]
+mod shortcut_tests {
+    use super::*;
+
+    #[test]
+    fn maps_tab_shortcuts() {
+        assert_eq!(msg_shortcut(0x54, MOD_CTRL, false), SC_SPOTLIGHT);
+        assert_eq!(
+            msg_shortcut(0x54, MOD_CTRL | MOD_SHIFT, false),
+            SC_REOPEN_TAB
+        );
+        assert_eq!(msg_shortcut(0x57, MOD_CTRL, false), SC_CLOSE_TAB);
+    }
+
+    #[test]
+    fn maps_nav_and_window_shortcuts() {
+        assert_eq!(msg_shortcut(0x25, MOD_ALT, false), SC_NONE);
+        assert_eq!(msg_shortcut(0x27, MOD_ALT, false), SC_NONE);
+        assert_eq!(msg_shortcut(0x74, 0, false), SC_RELOAD);
+        assert_eq!(msg_shortcut(0x7a, 0, false), SC_FULLSCREEN);
+    }
+
+    #[test]
+    fn ignores_repeats_and_plain_letters() {
+        assert_eq!(msg_shortcut(0x54, MOD_CTRL, true), SC_NONE);
+        assert_eq!(msg_shortcut(0x54, 0, false), SC_NONE);
+    }
+}
+
+#[cfg(test)]
+mod currency_tests {
+    use super::*;
+
+    #[test]
+    fn parses_code_amount() {
+        let q = detect_currency_query("100 usd to idr").unwrap();
+        assert_eq!(q.from, "USD");
+        assert_eq!(q.to, "IDR");
+        assert_eq!(q.amount, 100.0);
+    }
+
+    #[test]
+    fn parses_names() {
+        let q = detect_currency_query("jpy to yuan").unwrap();
+        assert_eq!(q.from, "JPY");
+        assert_eq!(q.to, "CNY");
+        assert_eq!(q.amount, 1.0);
+    }
+
+    #[test]
+    fn parses_symbol_amount() {
+        let q = detect_currency_query("$10 to rupiah").unwrap();
+        assert_eq!(q.from, "USD");
+        assert_eq!(q.to, "IDR");
+        assert_eq!(q.amount, 10.0);
+    }
+
+    #[test]
+    fn parses_indonesian_separator() {
+        let q = detect_currency_query("25000 yen ke rupiah").unwrap();
+        assert_eq!(q.from, "JPY");
+        assert_eq!(q.to, "IDR");
+        assert_eq!(q.amount, 25000.0);
+    }
+}
+
+fn detect_market_query(q: &str) -> Option<(String, String)> {
+    let q = q.to_lowercase();
+    if q.contains("ihsg") || q.contains("jkse") || q.contains("jakarta composite") {
+        return Some(("%5EJKSE".to_string(), "IHSG".to_string()));
+    }
+    None
+}
+
+async fn fetch_market_quote(symbol: &str, name: &str) -> Option<String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(8))
+        .user_agent(crate::version::USER_AGENT)
+        .build()
+        .ok()?;
+    let url = format!(
+        "https://query1.finance.yahoo.com/v8/finance/chart/{}?range=1d&interval=1m",
+        symbol
+    );
+    let json: serde_json::Value = client.get(&url).send().await.ok()?.json().await.ok()?;
+    let result = json["chart"]["result"].as_array()?.first()?;
+    let meta = &result["meta"];
+    let price = meta["regularMarketPrice"]
+        .as_f64()
+        .or_else(|| meta["previousClose"].as_f64())?;
+    let previous = meta["previousClose"]
+        .as_f64()
+        .or_else(|| meta["chartPreviousClose"].as_f64());
+    let currency = meta["currency"].as_str().unwrap_or("");
+    let exchange = meta["exchangeName"].as_str().unwrap_or("Yahoo Finance");
+    let updated = meta["regularMarketTime"]
+        .as_i64()
+        .and_then(|ts| chrono::DateTime::from_timestamp(ts, 0))
+        .map(|dt| dt.format("%Y-%m-%d %H:%M UTC").to_string())
+        .unwrap_or_else(|| "latest available".to_string());
+    let change = previous.map(|prev| {
+        let diff = price - prev;
+        let pct = if prev != 0.0 {
+            diff / prev * 100.0
+        } else {
+            0.0
+        };
+        format!(" ({diff:+.2}, {pct:+.2}%)")
+    });
+
+    Some(format!(
+        "**Live market data:** {name} is **{price:.2} {currency}**{}.\nSource: Yahoo Finance chart API, exchange: {exchange}, updated: {updated}.",
+        change.unwrap_or_default()
+    ))
+}
+
+/// Search Wikipedia and return up to 4 plain-text snippet strings.
+/// Uses the MediaWiki Action API — completely free, no key, works from any network.
+/// Snippets are HTML-cleaned via `decode_html_text` before being returned.
+async fn fetch_wikipedia_search(query: &str) -> Vec<String> {
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(6))
+        .user_agent(crate::version::USER_AGENT)
+        .build()
+    {
+        Ok(c) => c,
+        Err(_) => return Vec::new(),
+    };
+
+    let resp = match client
+        .get("https://en.wikipedia.org/w/api.php")
+        .query(&[
+            ("action", "query"),
+            ("list", "search"),
+            ("srsearch", query),
+            ("format", "json"),
+            ("utf8", "1"),
+            ("srlimit", "4"),
+            ("srprop", "snippet|titlesnippet"),
+        ])
+        .send()
+        .await
+    {
+        Ok(r) => r,
+        Err(_) => return Vec::new(),
+    };
+
+    let json: serde_json::Value = match resp.json().await {
+        Ok(j) => j,
+        Err(_) => return Vec::new(),
+    };
+
+    let arr = match json["query"]["search"].as_array() {
+        Some(a) => a,
+        None => return Vec::new(),
+    };
+
+    arr.iter()
+        .filter_map(|item| {
+            let title = item["title"].as_str()?;
+            let snippet = item["snippet"].as_str()?;
+            let clean = decode_html_text(snippet);
+            let clean = clean.trim();
+            if clean.is_empty() {
+                return None;
+            }
+            Some(format!("**{}** — {}", title, clean))
+        })
+        .collect()
+}
+
+/// Decode common HTML entities and strip inline tags from a snippet string.
+/// Handles &amp; &lt; &gt; &quot; &#39; and removes <b>/<em>/<span> tags.
+fn decode_html_text(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if ch == '<' {
+            // Skip until closing '>'
+            for c in chars.by_ref() {
+                if c == '>' {
+                    break;
+                }
+            }
+        } else if ch == '&' {
+            // Collect entity up to ';'
+            let mut entity = String::new();
+            for c in chars.by_ref() {
+                if c == ';' {
+                    break;
+                }
+                entity.push(c);
+            }
+            match entity.as_str() {
+                "amp" => out.push('&'),
+                "lt" => out.push('<'),
+                "gt" => out.push('>'),
+                "quot" => out.push('"'),
+                "#39" | "apos" => out.push('\''),
+                "#160" | "nbsp" => out.push(' '),
+                _ => {
+                    // Unknown entity — emit as-is
+                    out.push('&');
+                    out.push_str(&entity);
+                    out.push(';');
+                }
+            }
+        } else {
+            out.push(ch);
+        }
+    }
+
+    out
+}
+
+/// Fetch live data from the DuckDuckGo Instant Answer API (no key required).
+/// Returns a formatted context string when a direct answer or abstract is available,
+/// covering currency conversions, calculations, unit conversions, and factual queries.
+async fn fetch_duckduckgo_instant(query: &str) -> Option<String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .user_agent(crate::version::USER_AGENT)
+        .build()
+        .ok()?;
+
+    let resp = client
+        .get("https://api.duckduckgo.com/")
+        .query(&[
+            ("q", query),
+            ("format", "json"),
+            ("no_html", "1"),
+            ("skip_disambig", "1"),
+        ])
+        .send()
+        .await
+        .ok()?;
+
+    let json: serde_json::Value = resp.json().await.ok()?;
+
+    let mut parts: Vec<String> = Vec::new();
+
+    // Direct answer — covers currency conversions, calculations, unit conversions, etc.
+    if let Some(answer) = json["Answer"].as_str() {
+        let a = answer.trim();
+        if !a.is_empty() {
+            parts.push(format!("**Live answer:** {}", a));
+        }
+    }
+
+    // Wikipedia / knowledge-base abstract for factual queries
+    if let Some(text) = json["AbstractText"].as_str() {
+        let t = text.trim();
+        if !t.is_empty() {
+            let snippet = if t.len() > 500 { &t[..500] } else { t };
+            let source = json["AbstractSource"].as_str().unwrap_or("reference");
+            parts.push(format!("**From {}:** {}", source, snippet));
+        }
+    }
+
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join("\n\n"))
+    }
+}

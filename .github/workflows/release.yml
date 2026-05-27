@@ -1,0 +1,77 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version
+        id: ver
+        shell: pwsh
+        run: |
+          $v = (Get-Content config.yaml | Where-Object { $_ -match '^\s*version:' }) -replace '^\s*version:\s*','' -replace '[''"]','' -replace '\s',''
+          echo "VERSION=$v" >> $env:GITHUB_OUTPUT
+          Write-Host "Version: $v"
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Build release
+        run: cargo build --release
+
+      - name: Install Inno Setup
+        run: choco install innosetup --yes --no-progress
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion="${{ steps.ver.outputs.VERSION }}" installer\neura-search.iss
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Neura Search v${{ steps.ver.outputs.VERSION }}"
+          body: |
+            ## Install
+
+            Download **NeuraSearch-Setup-${{ steps.ver.outputs.VERSION }}.exe** and run it.
+
+            Windows may show a SmartScreen warning because the app is not yet code-signed — click **More info → Run anyway**.
+
+            ## Requirements
+
+            - Windows 10 (build 17763) or later
+            - Microsoft WebView2 Runtime (pre-installed on Windows 10 20H1+ and all Windows 11)
+
+            ---
+            `neura-search.exe` is the raw binary used by the in-app auto-updater — you don't need to download it manually.
+          files: |
+            dist/NeuraSearch-Setup-${{ steps.ver.outputs.VERSION }}.exe
+            target/release/neura-search.exe
+          draft: false
+          prerelease: false
+          fail_on_unmatched_files: true

@@ -1,0 +1,82 @@
+[package]
+name = "ventus"
+version = "1.0.0"
+edition = "2021"
+description = "Ventus — a focused desktop browser with AI built in"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/neura-spheres/Ventus"
+homepage = "https://github.com/neura-spheres/Ventus"
+keywords = ["browser", "desktop", "webview", "ai", "rust"]
+categories = ["gui"]
+
+[[bin]]
+name = "ventus"
+path = "src/main.rs"
+
+[dependencies]
+wry = { version = "0.38", features = ["devtools"] }
+tao = "0.28"
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.31", features = ["bundled"] }
+reqwest = { version = "0.12", features = ["json", "stream"] }
+anyhow = "1"
+thiserror = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+directories = "5"
+url = "2"
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+keyring = "2"
+futures-util = "0.3"
+async-trait = "0.1"
+base64 = "0.22"
+image = { version = "0.25", features = ["png"], default-features = false }
+semver = "1"
+adblock = { version = "0.8", default-features = false, features = ["full-regex-handling"] }
+# object-pooling was removed: it uses Rc<RefCell<>> internally (via the lifeguard crate),
+# making Engine !Send.  Removing it lets us build the Engine on a spawn_blocking thread
+# instead of blocking the TAO event loop.  The pooling only benefits high-frequency Rust-side
+# URL matching; we use the JS-side domain Set for that path, so there is no perf regression.
+rfd = { version = "0.14", default-features = false }
+# Pin rmp to the last version with public read_data_* functions (adblock's rmp-serde 0.15 needs them).
+rmp = "=0.8.11"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.57", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Dwm",
+    "Win32_Graphics_Gdi",
+    "Win32_Security",
+    "Win32_System_Threading",
+    "Win32_System_WinRT",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_WindowsAndMessaging"
+] }
+webview2-com = "0.29"
+# Pinned to the version used by webview2-com-sys 0.29, so that PCWSTR/PWSTR/Interface
+# types in cookie_manager.rs are type-compatible with ICoreWebView2CookieManager.
+# Both 0.54 and 0.57 of windows-core already exist in the dep tree; this alias just
+# makes the 0.54 copy addressable from our code without downgrading the `windows` crate.
+wv2core = { package = "windows-core", version = "0.54" }
+# Alias for the `windows` crate at the version webview2-com uses.  Needed for
+# Win32::Foundation::BOOL which is passed as an out-parameter to cookie getters.
+wv2win  = { package = "windows", version = "0.54", default-features = false, features = ["Win32_Foundation"] }
+
+[build-dependencies]
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+[target.'cfg(windows)'.build-dependencies]
+winres = "0.1"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+
+[profile.dev]
+opt-level = 1

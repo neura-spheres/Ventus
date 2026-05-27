@@ -1,0 +1,351 @@
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Theme {
+    Dark,
+    Light,
+    System,
+}
+
+impl Default for Theme {
+    fn default() -> Self {
+        Theme::System
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SidebarMode {
+    Expanded,
+    Compact,
+    AutoHide,
+}
+
+impl Default for SidebarMode {
+    fn default() -> Self {
+        SidebarMode::AutoHide
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StartupBehavior {
+    NewTab,
+    LastSession,
+    /// Serializes as "home_page" to match the HTML <option value="home_page"> element.
+    /// Accepts legacy "specific_pages" values from older saved settings.
+    #[serde(alias = "specific_pages")]
+    HomePage,
+}
+
+impl Default for StartupBehavior {
+    fn default() -> Self {
+        StartupBehavior::NewTab
+    }
+}
+
+fn default_zoom_level() -> f64 {
+    1.0
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AppearanceSettings {
+    pub theme: Theme,
+    pub accent_color: String,
+    pub sidebar_mode: SidebarMode,
+    pub compact_toolbar: bool,
+    pub show_home_button: bool,
+    pub show_bookmarks_button: bool,
+    pub show_bookmarks_bar: bool,
+    pub corner_radius: String,
+    pub font_size: String,
+    pub new_tab_background: String,
+    pub new_tab_bg_color: String,
+    #[serde(default = "default_zoom_level")]
+    pub zoom_level: f64,
+}
+
+impl Default for AppearanceSettings {
+    fn default() -> Self {
+        Self {
+            theme: Theme::default(),
+            accent_color: "#8b5cf6".to_string(),
+            sidebar_mode: SidebarMode::default(),
+            compact_toolbar: false,
+            show_home_button: true,
+            show_bookmarks_button: true,
+            show_bookmarks_bar: false,
+            corner_radius: "soft".to_string(),
+            font_size: "medium".to_string(),
+            new_tab_background: "default".to_string(),
+            new_tab_bg_color: "#141414".to_string(),
+            zoom_level: 1.0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SearchSettings {
+    pub default_engine: String,
+    pub site_shortcuts_enabled: bool,
+    #[serde(default = "default_true")]
+    pub suggestions_enabled: bool,
+    #[serde(default = "default_true")]
+    pub trending_enabled: bool,
+}
+
+impl Default for SearchSettings {
+    fn default() -> Self {
+        Self {
+            default_engine: "google".to_string(),
+            site_shortcuts_enabled: true,
+            suggestions_enabled: true,
+            trending_enabled: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TabSettings {
+    pub new_tab_position: String,
+    pub close_tab_behavior: String,
+    pub confirm_close_many: bool,
+    pub enable_pinned_tabs: bool,
+    pub restore_tabs_on_startup: bool,
+}
+
+impl Default for TabSettings {
+    fn default() -> Self {
+        Self {
+            new_tab_position: "after_current".to_string(),
+            close_tab_behavior: "focus_last_active".to_string(),
+            confirm_close_many: true,
+            enable_pinned_tabs: true,
+            restore_tabs_on_startup: true,
+        }
+    }
+}
+
+fn default_feed_layout() -> String {
+    "cards".to_string()
+}
+
+fn default_newtab_theme() -> String {
+    "focus".to_string()
+}
+
+fn default_clock_style() -> String {
+    "serif".to_string()
+}
+
+fn default_wallpaper_source() -> String {
+    "nature".to_string()
+}
+
+fn default_wallpaper_color() -> String {
+    "#141414".to_string()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct NewTabSettings {
+    #[serde(default = "default_true")]
+    pub show_search: bool,
+    #[serde(default = "default_true")]
+    pub show_quick_links: bool,
+    #[serde(default = "default_true")]
+    pub show_background: bool,
+    #[serde(default = "default_feed_layout")]
+    pub feed_layout: String,
+    /// Layout preset: "minimal" | "focus" | "horizon" | "informative"
+    #[serde(default = "default_newtab_theme")]
+    pub theme: String,
+    #[serde(default = "default_clock_style")]
+    pub clock_style: String,
+    /// Wallpaper source: "daily" | "nature" | "url" | "upload" | "color" | "none"
+    #[serde(default = "default_wallpaper_source")]
+    pub wallpaper_source: String,
+    /// Custom wallpaper URL (used when wallpaper_source == "url")
+    #[serde(default)]
+    pub wallpaper_url: String,
+    /// Solid color hex for wallpaper_source == "color"
+    #[serde(default = "default_wallpaper_color")]
+    pub wallpaper_color: String,
+}
+
+impl Default for NewTabSettings {
+    fn default() -> Self {
+        Self {
+            show_search: true,
+            show_quick_links: true,
+            show_background: true,
+            feed_layout: default_feed_layout(),
+            theme: default_newtab_theme(),
+            clock_style: default_clock_style(),
+            wallpaper_source: default_wallpaper_source(),
+            wallpaper_url: String::new(),
+            wallpaper_color: default_wallpaper_color(),
+        }
+    }
+}
+
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PrivacySettings {
+    pub disable_history: bool,
+    pub do_not_track: bool,
+    pub https_only: bool,
+    /// Ad blocker enabled globally (default on). Always off in incognito.
+    #[serde(default = "default_true")]
+    pub ad_blocker_enabled: bool,
+    /// Hostnames where the ad blocker is disabled (user-added exceptions).
+    #[serde(default)]
+    pub ad_blocker_exceptions: Vec<String>,
+}
+
+impl Default for PrivacySettings {
+    fn default() -> Self {
+        Self {
+            disable_history: false,
+            do_not_track: false,
+            https_only: false,
+            ad_blocker_enabled: true,
+            ad_blocker_exceptions: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DownloadSettings {
+    pub default_folder: String,
+    pub ask_where_to_save: bool,
+    pub auto_open: bool,
+}
+
+impl Default for DownloadSettings {
+    fn default() -> Self {
+        Self {
+            default_folder: String::new(),
+            ask_where_to_save: true,
+            auto_open: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AiSettings {
+    pub enabled: bool,
+    pub default_provider: String,
+    pub default_model: String,
+    pub temperature: f32,
+    pub max_tokens: u32,
+    pub stream_responses: bool,
+    pub save_chat_history: bool,
+    pub summarization_style: String,
+    pub system_prompt: String,
+    pub include_page_context: bool,
+    pub max_page_text_length: usize,
+    pub warn_before_sending_page: bool,
+    pub allow_browser_actions: bool,
+    pub require_action_confirmation: bool,
+}
+
+impl Default for AiSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            default_provider: "openai".to_string(),
+            default_model: "gpt-4o-mini".to_string(),
+            temperature: 0.7,
+            max_tokens: 2048,
+            stream_responses: true,
+            save_chat_history: true,
+            summarization_style: "bullet_points".to_string(),
+            system_prompt: "You are Neura, an intelligent browser assistant. You help users understand and navigate web content. Be concise and helpful.".to_string(),
+            include_page_context: true,
+            max_page_text_length: 8000,
+            warn_before_sending_page: true,
+            allow_browser_actions: false,
+            require_action_confirmation: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderConfig {
+    pub id: String,
+    pub enabled: bool,
+    pub base_url: Option<String>,
+    pub model: String,
+    pub temperature: f32,
+    pub max_tokens: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AppSettings {
+    pub homepage: String,
+    pub startup_behavior: StartupBehavior,
+    pub appearance: AppearanceSettings,
+    pub search: SearchSettings,
+    pub tabs: TabSettings,
+    #[serde(default)]
+    pub new_tab: NewTabSettings,
+    pub privacy: PrivacySettings,
+    pub downloads: DownloadSettings,
+    pub ai: AiSettings,
+    pub window_width: u32,
+    pub window_height: u32,
+    pub window_x: Option<i32>,
+    pub window_y: Option<i32>,
+    pub sidebar_width: u32,
+    #[serde(default)]
+    pub region: String,
+}
+
+impl Default for AppSettings {
+    fn default() -> Self {
+        Self {
+            homepage: "neura://newtab".to_string(),
+            startup_behavior: StartupBehavior::default(),
+            appearance: AppearanceSettings::default(),
+            search: SearchSettings::default(),
+            tabs: TabSettings::default(),
+            new_tab: NewTabSettings::default(),
+            privacy: PrivacySettings::default(),
+            downloads: DownloadSettings::default(),
+            ai: AiSettings::default(),
+            window_width: 1400,
+            window_height: 900,
+            window_x: None,
+            window_y: None,
+            sidebar_width: 240,
+            region: String::new(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AppSettings;
+
+    #[test]
+    fn old_settings_keep_defaults() {
+        let settings: AppSettings =
+            serde_json::from_str(r#"{"homepage":"https://google.com"}"#).expect("settings parse");
+        assert_eq!(settings.homepage, "https://google.com");
+        assert_eq!(settings.downloads.default_folder, "");
+        assert!(settings.downloads.ask_where_to_save);
+        assert!(settings.search.suggestions_enabled);
+    }
+}
