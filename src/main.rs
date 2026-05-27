@@ -628,6 +628,38 @@ fn main() {
                 });
             }
 
+            Event::UserEvent(AppEvent::Chrome(ChromeCommand::FetchCurrencyRates)) => {
+                let proxy_cur = proxy_main.clone();
+                rt.spawn(async move {
+                    let client = reqwest::Client::builder()
+                        .user_agent(crate::version::USER_AGENT)
+                        .timeout(std::time::Duration::from_secs(10))
+                        .build();
+                    let res = match client {
+                        Ok(c) => c.get("https://open.er-api.com/v6/latest/USD").send().await,
+                        Err(e) => Err(e),
+                    };
+                    match res {
+                        Ok(resp) => match resp.json::<serde_json::Value>().await {
+                            Ok(json) => {
+                                if let Some(rates) = json.get("rates").cloned() {
+                                    let _ = proxy_cur
+                                        .send_event(AppEvent::CurrencyRatesLoaded { rates });
+                                } else {
+                                    let _ = proxy_cur.send_event(AppEvent::CurrencyRatesFailed);
+                                }
+                            }
+                            Err(_) => {
+                                let _ = proxy_cur.send_event(AppEvent::CurrencyRatesFailed);
+                            }
+                        },
+                        Err(_) => {
+                            let _ = proxy_cur.send_event(AppEvent::CurrencyRatesFailed);
+                        }
+                    }
+                });
+            }
+
             Event::UserEvent(AppEvent::Chrome(ChromeCommand::AiMessage { text })) => {
                 handle_ai_message(text, &state, &chrome, &proxy_main, &rt);
             }

@@ -182,6 +182,7 @@ pub enum ChromeCommand {
     AdBlockStats {
         killed: u32,
     },
+    FetchCurrencyRates,
 }
 
 #[derive(Debug, Clone)]
@@ -310,6 +311,10 @@ pub enum AppEvent {
     SpotlightAiError {
         message: String,
     },
+    CurrencyRatesLoaded {
+        rates: serde_json::Value,
+    },
+    CurrencyRatesFailed,
     /// WebView2 renderer process for a specific tab crashed or became unresponsive.
     /// The main thread auto-reloads the tab so the user doesn't see a permanent blank page.
     ContentProcessFailed {

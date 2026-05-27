@@ -308,6 +308,14 @@ pub fn handle_chrome_command(
         ChromeCommand::SwitchWorkspace { id } => {
             state.tab_manager.switch_workspace(&id);
             state.push_state_to_chrome(chrome);
+            if matches!(state.settings.appearance.sidebar_mode, crate::config::SidebarMode::AutoHide)
+                && state.sidebar_auto_hide_open
+                && !state.sidebar_pinned
+            {
+                let _ = chrome.evaluate_script(
+                    "window.__neura&&window.__neura.closeSidebar&&window.__neura.closeSidebar()",
+                );
+            }
             Some(TabAction::SyncViews)
         }
         ChromeCommand::DeleteWorkspace { id } => {
@@ -757,6 +765,7 @@ pub fn handle_chrome_command(
             let _ = settings_store::set(&state.conn, "dismissed_update_version", &version);
             None
         }
+        ChromeCommand::FetchCurrencyRates => None,
         ChromeCommand::BeginSpotlight => {
             if state.spotlight_open {
                 state.spotlight_open = false;
@@ -1394,6 +1403,14 @@ pub fn handle_app_event_inner(
             ));
             None
         }
+        AppEvent::CurrencyRatesLoaded { rates } => {
+            let _ = chrome.evaluate_script(&format!(
+                "window.__neura && window.__neura.setCurrencyRates({})",
+                rates
+            ));
+            None
+        }
+        AppEvent::CurrencyRatesFailed => None,
         AppEvent::NeuraFeedLoaded { articles } => {
             let _ = chrome.evaluate_script(&format!(
                 "window.__neura && window.__neura.setNeuraFeed({})",
@@ -1781,6 +1798,11 @@ fn handle_save_settings(
         "new_tab_wallpaper_color" => {
             if let Some(v) = value.as_str() {
                 state.settings.new_tab.wallpaper_color = v.to_string();
+            }
+        }
+        "new_tab_wallpaper_data" => {
+            if let Some(v) = value.as_str() {
+                state.settings.new_tab.wallpaper_data = v.to_string();
             }
         }
         "region" => {

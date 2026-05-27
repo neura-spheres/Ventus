@@ -175,6 +175,9 @@ pub struct NewTabSettings {
     /// Solid color hex for wallpaper_source == "color"
     #[serde(default = "default_wallpaper_color")]
     pub wallpaper_color: String,
+    /// Base64 data URL for uploaded wallpaper (wallpaper_source == "upload")
+    #[serde(default)]
+    pub wallpaper_data: String,
 }
 
 impl Default for NewTabSettings {
@@ -189,6 +192,7 @@ impl Default for NewTabSettings {
             wallpaper_source: default_wallpaper_source(),
             wallpaper_url: String::new(),
             wallpaper_color: default_wallpaper_color(),
+            wallpaper_data: String::new(),
         }
     }
 }

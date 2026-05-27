@@ -59,8 +59,8 @@ pub fn chrome_html() -> String {
   --shadow:0 4px 24px rgba(0,0,0,0.55);
   --shadow-sm:0 2px 10px rgba(0,0,0,0.4);
   /* New-tab */
-  --nt-scrim:linear-gradient(180deg,rgba(8,8,8,0.48),rgba(8,8,8,0.76));
-  --nt-vignette:radial-gradient(circle at 18% 0%,rgba(59,130,246,0.36),transparent 38%),radial-gradient(circle at 85% 15%,rgba(139,92,246,0.28),transparent 38%);
+  --nt-scrim:linear-gradient(rgba(18,18,18,0.10),rgba(18,18,18,0.10));
+  --nt-vignette:linear-gradient(transparent,transparent);
   --nt-panel:rgba(14,14,14,0.72);
   --nt-panel-strong:rgba(14,14,14,0.88);
   --nt-glass:rgba(255,255,255,0.10);
@@ -152,8 +152,8 @@ pub fn chrome_html() -> String {
   --accent-text:var(--accent);
   --soft-btn-bg:rgba(0,0,0,0.04);
   --soft-btn-bg-hover:rgba(0,0,0,0.07);
-  --nt-scrim:linear-gradient(180deg,rgba(247,248,255,0.72),rgba(247,248,255,0.90));
-  --nt-vignette:radial-gradient(circle at 18% 0%,rgba(37,99,235,0.18),transparent 40%),radial-gradient(circle at 86% 12%,rgba(124,58,237,0.14),transparent 40%);
+  --nt-scrim:linear-gradient(rgba(18,18,18,0.10),rgba(18,18,18,0.10));
+  --nt-vignette:linear-gradient(transparent,transparent);
   --nt-panel:rgba(255,255,255,0.72);
   --nt-panel-strong:rgba(255,255,255,0.92);
   --nt-glass:rgba(255,255,255,0.56);
@@ -2944,7 +2944,7 @@ svg{display:block;flex-shrink:0}
         <div class="settings-group">
           <label>Country / Region</label>
           <select class="settings-select" id="set-region" onchange="onRegionChange(this.value)">
-            <option value="">— Not set —</option>
+            <option value="">Not set</option>
           </select>
           <div class="hint">Adjusts unit and currency suggestions in Spotlight</div>
         </div>
@@ -3242,7 +3242,7 @@ svg{display:block;flex-shrink:0}
         <div id="adblock-exceptions-section" style="margin:0 0 12px;padding:10px 12px;background:var(--bg);border-radius:var(--radius-sm);border:1px solid var(--border-subtle)">
           <div style="font-size:11px;font-weight:600;color:var(--text-dim);letter-spacing:.04em;margin-bottom:6px">SITE EXCEPTIONS</div>
           <div id="adblock-exceptions-list" style="display:flex;flex-direction:column;gap:4px">
-            <div style="font-size:12px;color:var(--text-muted);font-style:italic">No exceptions — blocker is active on all sites</div>
+            <div style="font-size:12px;color:var(--text-muted);font-style:italic">No exceptions, blocker is active on all sites</div>
           </div>
         </div>
         <div class="settings-toggle">
@@ -3449,7 +3449,7 @@ svg{display:block;flex-shrink:0}
           <button class="ob-btn-secondary" style="margin:0;padding:4px 10px;font-size:11px" onclick="obClearDetect()">Change</button>
         </div>
         <select id="ob-region-select" class="settings-select" style="width:100%;margin-top:6px" onchange="obSelectRegion(this.value)">
-          <option value="">— Not set —</option>
+          <option value="">Not set</option>
         </select>
         <div class="ob-actions">
           <button class="ob-btn-secondary" onclick="obPrev()">Back</button>
@@ -3486,7 +3486,7 @@ svg{display:block;flex-shrink:0}
 
       <div class="ob-step" id="ob-step-4">
         <h2 class="ob-title">Connect an AI</h2>
-        <p class="ob-sub">Paste an API key to unlock the AI sidebar. Optional — you can do this later in Settings.</p>
+        <p class="ob-sub">Paste an API key to unlock the AI sidebar. Optional, you can do this later in Settings.</p>
         <div class="ob-api-row">
           <label>Anthropic (Claude)</label>
           <input class="ob-api-input" id="ob-anthropic-key" type="password" placeholder="sk-ant-...">
@@ -3651,6 +3651,10 @@ function nav(action) { send(action); }
 // ============================================================
 // RUST -> JS INTERFACE
 // ============================================================
+let _liveRates = null;   // {USD:1, EUR:0.92, IDR:15700, ...} keyed UPPERCASE
+let _liveRatesTs = 0;    // Date.now() when last fetched
+const _RATES_TTL = 3600_000; // 1 hour
+
 window.__neura = {
   setState(s) {
     state = {...state, ...s};
@@ -3721,6 +3725,12 @@ window.__neura = {
     neuraFeedLoaded = true;
     neuraFeedError = message || 'Neura Feed is not loading right now.';
     renderNeuraFeed();
+  },
+  setCurrencyRates(rates) {
+    _liveRates = rates;
+    _liveRatesTs = Date.now();
+    const tspInput = document.getElementById('tsp-input');
+    if (tspInput && tspInput.value.trim()) renderTspSuggestions(tspInput.value);
   },
   showOnboarding() { openOnboarding(); },
   updateNavState(canBack, canForward, loading) {
@@ -3894,17 +3904,17 @@ function renderAdBlockBtn() {
   const excepted = !!state.ad_blocker_site_excepted;
   if (!active) {
     btn.style.color = 'var(--text-dim)';
-    btn.title = 'Ad blocker — click for info';
+    btn.title = 'Ad blocker - click for info';
     iconOn.style.display = 'none';
     iconOff.style.display = '';
   } else if (excepted) {
     btn.style.color = '#f59e0b';
-    btn.title = 'Ad blocker paused for this site — click for info';
+    btn.title = 'Ad blocker paused for this site - click for info';
     iconOn.style.display = '';
     iconOff.style.display = 'none';
   } else {
     btn.style.color = '#22c55e';
-    btn.title = 'Ad blocker active — click for info';
+    btn.title = 'Ad blocker active - click for info';
     iconOn.style.display = '';
     iconOff.style.display = 'none';
   }
@@ -3990,7 +4000,7 @@ function renderAdBlockExceptions(exceptions) {
   const list = document.getElementById('adblock-exceptions-list');
   if (!list) return;
   if (!exceptions || exceptions.length === 0) {
-    list.innerHTML = '<div style="font-size:12px;color:var(--text-muted);font-style:italic">No exceptions — blocker is active on all sites</div>';
+    list.innerHTML = '<div style="font-size:12px;color:var(--text-muted);font-style:italic">No exceptions, blocker is active on all sites</div>';
     return;
   }
   list.innerHTML = exceptions.map(host => `
@@ -5458,44 +5468,16 @@ function ntPickWallpaperFile() {
 
 function ntSaveUploadedWallpaper(dataUrl, cb) {
   try {
-    let done = false;
-    const finish = ok => {
-      if (done) return;
-      done = true;
-      cb(ok);
-    };
-    const req = indexedDB.open('ventus_nt', 1);
-    req.onupgradeneeded = e => {
-      const db = e.target.result;
-      if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv');
-    };
-    req.onsuccess = e => {
-      const db = e.target.result;
-      const tx = db.transaction('kv', 'readwrite');
-      tx.oncomplete = () => { db.close(); finish(true); };
-      tx.onerror = () => { db.close(); finish(false); };
-      tx.onabort = () => { db.close(); finish(false); };
-      const put = tx.objectStore('kv').put(dataUrl, 'wallpaper');
-      put.onerror = () => finish(false);
-    };
-    req.onerror = () => finish(false);
-    req.onblocked = () => finish(false);
+    saveSetting('new_tab_wallpaper_data', dataUrl);
+    if (state.settings && state.settings.new_tab) state.settings.new_tab.wallpaper_data = dataUrl;
+    cb(true);
   } catch(err) { cb(false); }
 }
 
 function ntLoadUploadedWallpaper(cb) {
-  try {
-    const req = indexedDB.open('ventus_nt', 1);
-    req.onupgradeneeded = e => e.target.result.createObjectStore('kv');
-    req.onsuccess = e => {
-      const db = e.target.result;
-      const tx = db.transaction('kv', 'readonly');
-      const r2 = tx.objectStore('kv').get('wallpaper');
-      r2.onsuccess = () => cb(r2.result || null);
-      r2.onerror = () => cb(null);
-    };
-    req.onerror = () => cb(null);
-  } catch(err) { cb(null); }
+  const nt = newtabSettings();
+  const data = (nt && nt.wallpaper_data) || null;
+  setTimeout(() => cb(data), 0);
 }
 
 let _ntClockTick = null;
@@ -6191,7 +6173,7 @@ function populateRegionSettings() {
   if (!select) return;
   const current = (state.settings && state.settings.region) || '';
   const sorted = Object.entries(_COUNTRY_DATA).sort((a,b) => a[1].name.localeCompare(b[1].name));
-  select.innerHTML = '<option value="">— Not set —</option>' +
+  select.innerHTML = '<option value="">Not set</option>' +
     sorted.map(([code, c]) =>
       `<option value="${escAttr(code)}"${code === current ? ' selected' : ''}>${countryFlag(code)} ${escHtml(c.name)}</option>`
     ).join('');
@@ -6702,6 +6684,13 @@ function _doConvert({value, fromU, toU}) {
          : toU.f === 'K' ? c + 273.15
          :                  (c + 273.15) * 9 / 5; // Rankine
   }
+  if (fromU.t === 'currency' && _liveRates) {
+    const fk = fromU.k.toUpperCase();
+    const tk = toU.k.toUpperCase();
+    const fRate = _liveRates[fk];
+    const tRate = _liveRates[tk];
+    if (fRate && tRate) return value * (tRate / fRate);
+  }
   // Linear conversion through shared base unit
   return value * fromU.f / toU.f;
 }
@@ -6903,8 +6892,16 @@ function renderConvCard(query) {
   const copyVal   = String(rounded);
   const expr  = `${conv.value} ${conv.fromStr} → ${conv.toStr}`;
   const label = _CONV_LABEL[conv.fromU.t] || conv.fromU.t;
-  const disc  = conv.fromU.t === 'currency'
-    ? `<div class="tsp-conv-disclaimer">⚠ Static rates · not live</div>` : '';
+  let disc = '';
+  if (conv.fromU.t === 'currency') {
+    const stale = !_liveRates || (Date.now() - _liveRatesTs) > _RATES_TTL;
+    if (stale) {
+      send('FetchCurrencyRates');
+      disc = `<div class="tsp-conv-disclaimer">Updating rates...</div>`;
+    } else {
+      disc = `<div class="tsp-conv-disclaimer">Live rates</div>`;
+    }
+  }
   return `<div class="tsp-calc-card" onclick="navigator.clipboard&&navigator.clipboard.writeText('${copyVal}').catch(()=>{})" title="Click to copy">
     <div class="tsp-conv-type">${escHtml(label)}</div>
     <div class="tsp-calc-expr">${escHtml(expr)}</div>
