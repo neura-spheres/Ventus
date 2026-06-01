@@ -9,7 +9,7 @@ use wry::WebView;
 use crate::adblock::AdBlockEngine;
 use crate::browser::downloads::DownloadManager;
 use crate::browser::tab_manager::TabManager;
-use crate::config::AppSettings;
+use crate::config::{AppSettings, SecureDnsMode, SecureDnsProvider};
 use crate::storage::{keychain, repositories, settings_store};
 use crate::ui::events::{AppEvent, ChromeCommand};
 
@@ -105,18 +105,35 @@ impl AppState {
         ));
     }
 
+    pub fn push_newtab_wallpaper_to_chrome(&self, chrome: &WebView) {
+        let data = self.settings.new_tab.wallpaper_data.as_str();
+        if data.is_empty() {
+            return;
+        }
+        let json = serde_json::to_string(data).unwrap_or_default();
+        let _ = chrome.evaluate_script(&format!(
+            "window.__neura && window.__neura.setNewtabWallpaperData({})",
+            json
+        ));
+    }
+
     pub fn chrome_state_json(&self) -> String {
         let active_tab = self.tab_manager.active_tab();
         let workspace_tab_counts = self.tab_manager.workspace_tab_counts();
         let active_url = active_tab.map(|t| t.url.as_str()).unwrap_or("");
-        let is_incognito = self
-            .tab_manager
-            .active_workspace()
-            .map(|w| w.is_incognito)
-            .unwrap_or(false);
-        let ad_blocker_active = self.settings.privacy.ad_blocker_enabled && !is_incognito;
+        let ad_blocker_active = self.settings.privacy.ad_blocker_enabled;
         let ad_blocker_site_excepted =
             !active_url.is_empty() && self.ad_block_engine.is_site_excepted(active_url);
+        let mut settings_value = serde_json::to_value(&self.settings).unwrap_or_default();
+        if let Some(nt) = settings_value
+            .get_mut("new_tab")
+            .and_then(|v| v.as_object_mut())
+        {
+            nt.insert(
+                "wallpaper_data".to_string(),
+                serde_json::Value::String(String::new()),
+            );
+        }
         serde_json::to_string(&serde_json::json!({
             "tabs": self.tab_manager.active_workspace_tabs(),
             "workspaces": &self.tab_manager.workspaces,
@@ -128,7 +145,7 @@ impl AppState {
             "can_go_back": active_tab.map(|t| t.can_go_back).unwrap_or(false),
             "can_go_fwd": active_tab.map(|t| t.can_go_forward).unwrap_or(false),
             "is_loading": active_tab.map(|t| t.status == crate::browser::tab::TabStatus::Loading).unwrap_or(false),
-            "settings": &self.settings,
+            "settings": settings_value,
             "search_engines": &self.cached_search_engines,
             "sidebar_collapsed": self.sidebar_collapsed,
             "ai_open": self.ai_sidebar_open,
@@ -172,6 +189,10 @@ pub enum TabAction {
         tab_id: String,
         url: String,
     },
+    NudgeContent {
+        tab_id: String,
+        url: String,
+    },
     ActivateContent {
         tab_id: String,
         url: String,
@@ -183,6 +204,7 @@ pub enum TabAction {
         tab_id: String,
         url: String,
     },
+    Relaunch,
     DownloadUpdate(String),
     SetFullscreen(bool),
     ContentScriptOnTab {
@@ -210,6 +232,7 @@ pub fn handle_chrome_command(
                     if finish_internal_nav(&tab_id, &url, state, chrome) {
                         return Some(TabAction::ContentNavigate(url));
                     }
+                    clear_loading_favicon(state, &tab_id);
                     state.pending_nav_urls.insert(tab_id, url.clone());
                     state.push_state_to_chrome(chrome);
                     return Some(TabAction::ContentNavigate(url));
@@ -224,6 +247,7 @@ pub fn handle_chrome_command(
                     if finish_internal_nav(&tab_id, &url, state, chrome) {
                         return Some(TabAction::ContentNavigate(url));
                     }
+                    clear_loading_favicon(state, &tab_id);
                     state.pending_nav_urls.insert(tab_id, url.clone());
                     state.push_state_to_chrome(chrome);
                     return Some(TabAction::ContentNavigate(url));
@@ -308,14 +332,6 @@ pub fn handle_chrome_command(
         ChromeCommand::SwitchWorkspace { id } => {
             state.tab_manager.switch_workspace(&id);
             state.push_state_to_chrome(chrome);
-            if matches!(state.settings.appearance.sidebar_mode, crate::config::SidebarMode::AutoHide)
-                && state.sidebar_auto_hide_open
-                && !state.sidebar_pinned
-            {
-                let _ = chrome.evaluate_script(
-                    "window.__neura&&window.__neura.closeSidebar&&window.__neura.closeSidebar()",
-                );
-            }
             Some(TabAction::SyncViews)
         }
         ChromeCommand::DeleteWorkspace { id } => {
@@ -426,6 +442,12 @@ pub fn handle_chrome_command(
             let should_close_overlay = key == "onboarding_done";
             let needs_layout = key == "sidebar_mode" || key == "show_bookmarks_bar";
             let ad_blocker_toggled = key == "ad_blocker_enabled";
+            let secure_dns_changed = key.starts_with("secure_dns_");
+            let secure_dns_valid = key != "secure_dns_template"
+                || value
+                    .as_str()
+                    .and_then(crate::config::clean_doh_url)
+                    .is_some();
             handle_save_settings(key, value, state, chrome);
             if should_close_overlay {
                 state.chrome_overlay_open = false;
@@ -438,6 +460,12 @@ pub fn handle_chrome_command(
             if needs_layout {
                 return Some(TabAction::SyncViews);
             }
+            if secure_dns_changed && secure_dns_valid {
+                let _ = chrome.evaluate_script(
+                    "window.__neura && window.__neura.showSuccess('Applying Secure DNS...')",
+                );
+                return Some(TabAction::Relaunch);
+            }
             if ad_blocker_toggled {
                 return None;
             }
@@ -446,9 +474,6 @@ pub fn handle_chrome_command(
         ChromeCommand::TabAudioState { tab_id, playing } => {
             if let Some(tab) = state.tab_manager.tabs.iter_mut().find(|t| t.id == tab_id) {
                 tab.is_audio_playing = playing;
-                if !playing {
-                    tab.is_muted = false;
-                }
             }
             state.push_state_to_chrome(chrome);
             None
@@ -789,6 +814,35 @@ pub fn handle_chrome_command(
             let _ = chrome.evaluate_script("openSettings('downloads')");
             None
         }
+        ChromeCommand::OpenIncognito => {
+            let existing = state
+                .tab_manager
+                .workspaces
+                .iter()
+                .find(|w| w.is_incognito)
+                .map(|w| w.id.clone());
+            let (tab_id, url) = if let Some(ws_id) = existing {
+                state.tab_manager.switch_workspace(&ws_id);
+                let tab = state.tab_manager.new_tab(None);
+                (tab.id.clone(), tab.url.clone())
+            } else {
+                let ws_id = {
+                    let ws =
+                        state
+                            .tab_manager
+                            .add_workspace("Incognito", true, Some("🔐".to_string()));
+                    ws.accent_color = "#6b7280".to_string();
+                    ws.id.clone()
+                };
+                state.tab_manager.switch_workspace(&ws_id);
+                match state.tab_manager.active_tab() {
+                    Some(tab) => (tab.id.clone(), tab.url.clone()),
+                    None => return Some(TabAction::SyncViews),
+                }
+            };
+            state.push_state_to_chrome(chrome);
+            Some(TabAction::Create { tab_id, url })
+        }
         _ => None,
     }
 }
@@ -826,6 +880,12 @@ fn finish_internal_nav(tab_id: &str, url: &str, state: &mut AppState, chrome: &W
     true
 }
 
+fn clear_loading_favicon(state: &mut AppState, tab_id: &str) {
+    if let Some(tab) = state.tab_manager.tabs.iter_mut().find(|t| t.id == tab_id) {
+        tab.favicon = None;
+    }
+}
+
 fn navigate_current_tab(url: String, state: &mut AppState, chrome: &WebView) -> Option<TabAction> {
     if let Some(tab_id) = state.tab_manager.active_tab_id.clone() {
         clear_transient_chrome(state, chrome);
@@ -834,6 +894,7 @@ fn navigate_current_tab(url: String, state: &mut AppState, chrome: &WebView) -> 
         if finish_internal_nav(&tab_id, &resolved_url, state, chrome) {
             return Some(TabAction::ContentNavigate(resolved_url));
         }
+        clear_loading_favicon(state, &tab_id);
         state.tab_manager.set_tab_loading(&tab_id, true);
         state
             .pending_nav_urls
@@ -854,6 +915,7 @@ fn reload_current_tab(state: &mut AppState, chrome: &WebView) -> Option<TabActio
     }
     clear_transient_chrome(state, chrome);
     state.pending_nav_urls.insert(tab_id.clone(), url.clone());
+    clear_loading_favicon(state, &tab_id);
     state.tab_manager.set_tab_loading(&tab_id, true);
     state.load_recoveries.remove(&load_key(&tab_id, &url));
     let _ = chrome.evaluate_script("window.__neura && window.__neura.startLoadProgress()");
@@ -928,7 +990,7 @@ fn host_key(host: Option<&str>) -> String {
 }
 
 fn can_accept_redirect(state: &AppState, tab_id: &str, url: &str) -> bool {
-    if !(url.starts_with("http://") || url.starts_with("https://")) {
+    if !(url.starts_with("http://") || url.starts_with("https://") || url.starts_with("file://")) {
         return false;
     }
     state
@@ -1017,15 +1079,27 @@ pub fn handle_app_event_inner(
         }
         AppEvent::ContentLoadStart { tab_id, url } => {
             let clean_url = crate::utils::url::clean_tracking_url(&url);
-            if !clean_url.trim().is_empty()
+            let track_url = !clean_url.trim().is_empty()
                 && clean_url != "about:blank"
-                && !clean_url.starts_with("neura://")
-            {
-                let cur = state
-                    .tab_manager
-                    .get_tab(&tab_id)
-                    .map(|tab| tab.url.clone())
-                    .unwrap_or_default();
+                && !clean_url.starts_with("neura://");
+            let cur = state
+                .tab_manager
+                .get_tab(&tab_id)
+                .map(|tab| tab.url.clone())
+                .unwrap_or_default();
+            let same_doc = track_url
+                && !cur.is_empty()
+                && cur != clean_url
+                && same_nav(&cur, &clean_url)
+                && !state.pending_nav_urls.contains_key(&tab_id);
+            if same_doc {
+                return None;
+            }
+            if let Some(tab) = state.tab_manager.tabs.iter_mut().find(|t| t.id == tab_id) {
+                tab.is_audio_playing = false;
+                tab.is_muted = false;
+            }
+            if track_url {
                 if cur.is_empty() || !same_nav(&cur, &clean_url) {
                     state
                         .pending_nav_urls
@@ -1038,6 +1112,7 @@ pub fn handle_app_event_inner(
                 .get_tab(&tab_id)
                 .map(|tab| tab.status == crate::browser::tab::TabStatus::Loading)
                 .unwrap_or(false);
+            clear_loading_favicon(state, &tab_id);
             state.tab_manager.set_tab_loading(&tab_id, true);
             if state.tab_manager.active_tab_id.as_deref() == Some(tab_id.as_str()) {
                 let active = state
@@ -1070,13 +1145,19 @@ pub fn handle_app_event_inner(
                         .replace_tab_nav(&tab_id, &clean_url, &clean_url);
                 }
             }
-            if state
+            let url_mismatch = state
                 .tab_manager
                 .get_tab(&tab_id)
                 .map(|tab| !same_nav(&tab.url, &clean_url))
-                .unwrap_or(true)
-            {
-                return None;
+                .unwrap_or(true);
+            if url_mismatch {
+                if !can_accept_redirect(state, &tab_id, &clean_url) {
+                    return None;
+                }
+                state.pending_nav_urls.remove(&tab_id);
+                state
+                    .tab_manager
+                    .replace_tab_nav(&tab_id, &clean_url, &clean_url);
             }
             if let Some(tab) = state.tab_manager.get_tab(&tab_id) {
                 state.load_recoveries.remove(&load_key(&tab_id, &tab.url));
@@ -1107,7 +1188,12 @@ pub fn handle_app_event_inner(
             url,
             progress,
         } => {
-            if state.tab_manager.active_tab_id.as_deref() == Some(tab_id.as_str()) {
+            let is_loading = state
+                .tab_manager
+                .get_tab(&tab_id)
+                .map(|tab| tab.status == crate::browser::tab::TabStatus::Loading)
+                .unwrap_or(false);
+            if is_loading && state.tab_manager.active_tab_id.as_deref() == Some(tab_id.as_str()) {
                 let _ = chrome.evaluate_script(&format!(
                     "window.__neura && window.__neura.setLoadProgress({:.3})",
                     progress.clamp(0.0, 1.0)
@@ -1117,15 +1203,21 @@ pub fn handle_app_event_inner(
             let done = progress >= 0.92
                 && !clean_url.trim().is_empty()
                 && clean_url != "about:blank"
-                && state
+                && is_loading;
+            if done {
+                let url_mismatch = state
                     .tab_manager
                     .get_tab(&tab_id)
-                    .map(|tab| {
-                        tab.status == crate::browser::tab::TabStatus::Loading
-                            && same_nav(&tab.url, &clean_url)
-                    })
-                    .unwrap_or(false);
-            if done {
+                    .map(|tab| !same_nav(&tab.url, &clean_url))
+                    .unwrap_or(true);
+                if url_mismatch {
+                    if !can_accept_redirect(state, &tab_id, &clean_url) {
+                        return None;
+                    }
+                    state
+                        .tab_manager
+                        .replace_tab_nav(&tab_id, &clean_url, &clean_url);
+                }
                 state.pending_nav_urls.remove(&tab_id);
                 state.load_recoveries.remove(&load_key(&tab_id, &clean_url));
                 state.tab_manager.set_tab_loading(&tab_id, false);
@@ -1144,6 +1236,10 @@ pub fn handle_app_event_inner(
                         .evaluate_script("window.__neura && window.__neura.finishLoadProgress()");
                 }
                 state.push_state_to_chrome(chrome);
+                return Some(TabAction::SetZoomFor {
+                    tab_id: tab_id.clone(),
+                    level: tab_zoom(state, &tab_id),
+                });
             }
             None
         }
@@ -1172,7 +1268,14 @@ pub fn handle_app_event_inner(
             };
             let key = load_key(&tab_id, &recover_url);
             let tries = state.load_recoveries.entry(key).or_insert(0);
-            if *tries < 2 {
+            if *tries == 0 {
+                *tries += 1;
+                return Some(TabAction::NudgeContent {
+                    tab_id,
+                    url: recover_url,
+                });
+            }
+            if *tries < 3 {
                 *tries += 1;
                 return Some(TabAction::ReloadContent {
                     tab_id,
@@ -1618,6 +1721,10 @@ fn handle_save_settings(
     state: &mut AppState,
     chrome: &WebView,
 ) {
+    let sync_wallpaper_data = matches!(
+        key.as_str(),
+        "new_tab_wallpaper_source" | "new_tab_wallpaper_data"
+    );
     match key.as_str() {
         "theme" => {
             if let Some(t) = value.as_str() {
@@ -1683,6 +1790,32 @@ fn handle_save_settings(
                     .collect();
                 state.ad_block_engine.set_exceptions(exceptions.clone());
                 state.settings.privacy.ad_blocker_exceptions = exceptions;
+            }
+        }
+        "secure_dns_enabled" => {
+            if let Some(v) = value.as_bool() {
+                state.settings.privacy.secure_dns_enabled = v;
+            }
+        }
+        "secure_dns_provider" => {
+            if let Some(v) = value.as_str() {
+                state.settings.privacy.secure_dns_provider = SecureDnsProvider::from_id(v);
+            }
+        }
+        "secure_dns_mode" => {
+            if let Some(v) = value.as_str() {
+                state.settings.privacy.secure_dns_mode = SecureDnsMode::from_id(v);
+            }
+        }
+        "secure_dns_template" => {
+            if let Some(v) = value.as_str() {
+                if let Some(url) = crate::config::clean_doh_url(v) {
+                    state.settings.privacy.secure_dns_template = url;
+                } else {
+                    let _ = chrome.evaluate_script(
+                        "window.__neura && window.__neura.showError('Use a valid HTTPS DNS endpoint')",
+                    );
+                }
             }
         }
         "sidebar_mode" => {
@@ -1784,10 +1917,12 @@ fn handle_save_settings(
         }
         "new_tab_wallpaper_source" => {
             if let Some(v) = value.as_str() {
-                state.settings.new_tab.wallpaper_source = match v {
+                let src = match v {
                     "daily" | "nature" | "url" | "upload" | "color" | "none" => v.to_string(),
                     _ => "daily".to_string(),
                 };
+                state.settings.new_tab.show_background = src != "none";
+                state.settings.new_tab.wallpaper_source = src;
             }
         }
         "new_tab_wallpaper_url" => {
@@ -1816,6 +1951,9 @@ fn handle_save_settings(
     }
     let _ = settings_store::set(&state.conn, "app_settings", &state.settings);
     state.push_state_to_chrome(chrome);
+    if sync_wallpaper_data {
+        state.push_newtab_wallpaper_to_chrome(chrome);
+    }
 }
 
 fn ai_model_for(provider: &str) -> &'static str {

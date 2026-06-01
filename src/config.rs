@@ -201,18 +201,89 @@ fn default_true() -> bool {
     true
 }
 
+pub const CLOUDFLARE_DOH: &str = "https://1.1.1.1/dns-query";
+pub const CLOUDFLARE_MALWARE_DOH: &str = "https://1.1.1.2/dns-query";
+pub const CLOUDFLARE_FAMILY_DOH: &str = "https://1.1.1.3/dns-query";
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum SecureDnsProvider {
+    Cloudflare,
+    CloudflareMalware,
+    CloudflareFamily,
+    Custom,
+}
+
+impl Default for SecureDnsProvider {
+    fn default() -> Self {
+        Self::Cloudflare
+    }
+}
+
+impl SecureDnsProvider {
+    pub fn from_id(id: &str) -> Self {
+        match id {
+            "cloudflare_malware" => Self::CloudflareMalware,
+            "cloudflare_family" => Self::CloudflareFamily,
+            "custom" => Self::Custom,
+            _ => Self::Cloudflare,
+        }
+    }
+
+    pub fn endpoint(&self, custom: &str) -> Option<String> {
+        match self {
+            Self::Cloudflare => Some(CLOUDFLARE_DOH.to_string()),
+            Self::CloudflareMalware => Some(CLOUDFLARE_MALWARE_DOH.to_string()),
+            Self::CloudflareFamily => Some(CLOUDFLARE_FAMILY_DOH.to_string()),
+            Self::Custom => clean_doh_url(custom),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum SecureDnsMode {
+    Automatic,
+    Secure,
+}
+
+impl Default for SecureDnsMode {
+    fn default() -> Self {
+        Self::Secure
+    }
+}
+
+impl SecureDnsMode {
+    pub fn from_id(id: &str) -> Self {
+        match id {
+            "automatic" => Self::Automatic,
+            _ => Self::Secure,
+        }
+    }
+
+    pub fn as_arg(&self) -> &'static str {
+        match self {
+            Self::Automatic => "automatic",
+            Self::Secure => "secure",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct PrivacySettings {
     pub disable_history: bool,
     pub do_not_track: bool,
     pub https_only: bool,
-    /// Ad blocker enabled globally (default on). Always off in incognito.
     #[serde(default = "default_true")]
     pub ad_blocker_enabled: bool,
     /// Hostnames where the ad blocker is disabled (user-added exceptions).
     #[serde(default)]
     pub ad_blocker_exceptions: Vec<String>,
+    pub secure_dns_enabled: bool,
+    pub secure_dns_provider: SecureDnsProvider,
+    pub secure_dns_mode: SecureDnsMode,
+    pub secure_dns_template: String,
 }
 
 impl Default for PrivacySettings {
@@ -223,8 +294,32 @@ impl Default for PrivacySettings {
             https_only: false,
             ad_blocker_enabled: true,
             ad_blocker_exceptions: Vec::new(),
+            secure_dns_enabled: false,
+            secure_dns_provider: SecureDnsProvider::default(),
+            secure_dns_mode: SecureDnsMode::default(),
+            secure_dns_template: CLOUDFLARE_DOH.to_string(),
         }
     }
+}
+
+impl PrivacySettings {
+    pub fn secure_dns_endpoint(&self) -> Option<String> {
+        if !self.secure_dns_enabled {
+            return None;
+        }
+        self.secure_dns_provider.endpoint(&self.secure_dns_template)
+    }
+}
+
+pub fn clean_doh_url(input: &str) -> Option<String> {
+    let url = input.trim();
+    if url.is_empty() || !url.starts_with("https://") {
+        return None;
+    }
+    if url.chars().any(|c| c.is_whitespace()) {
+        return None;
+    }
+    Some(url.to_string())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -351,5 +446,14 @@ mod tests {
         assert_eq!(settings.downloads.default_folder, "");
         assert!(settings.downloads.ask_where_to_save);
         assert!(settings.search.suggestions_enabled);
+        assert!(!settings.privacy.secure_dns_enabled);
+        assert_eq!(
+            settings.privacy.secure_dns_provider,
+            super::SecureDnsProvider::Cloudflare
+        );
+        assert_eq!(
+            settings.privacy.secure_dns_mode,
+            super::SecureDnsMode::Secure
+        );
     }
 }

@@ -183,6 +183,7 @@ pub enum ChromeCommand {
         killed: u32,
     },
     FetchCurrencyRates,
+    OpenIncognito,
 }
 
 #[derive(Debug, Clone)]

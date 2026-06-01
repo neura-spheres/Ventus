@@ -12,7 +12,7 @@ mod utils;
 mod version;
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     sync::{
         atomic::{AtomicBool, AtomicIsize, AtomicUsize, Ordering},
         Arc,
@@ -63,8 +63,11 @@ const SC_BACK: usize = 17;
 const SC_FORWARD: usize = 18;
 const SC_FULLSCREEN: usize = 19;
 const SC_DEVTOOLS: usize = 20;
+const SC_INCOGNITO: usize = 21;
+const SC_TAB_1: usize = 22;
+const SC_TAB_9: usize = 30;
 const LOAD_STALL_AFTER: u64 = 30;
-const TAB_SLEEP_REFRESH_AFTER: Duration = Duration::from_secs(20 * 60);
+const TAB_SLEEP_REFRESH_AFTER: Duration = Duration::from_secs(5 * 60);
 const TAB_KEEPALIVE_EVERY: Duration = Duration::from_secs(45);
 /// How often to take a proactive cookie snapshot (in addition to the
 /// per-navigation save triggered by ContentLoadEnd events).
@@ -76,17 +79,22 @@ fn main() {
 
     let mut cli_url: Option<String> = None;
     let mut new_window = false;
+    let mut wait_for_pid: Option<u32> = None;
+    let mut restore_session = false;
     {
         let mut args = std::env::args().skip(1);
         while let Some(arg) = args.next() {
             match arg.as_str() {
                 "--new-window" => new_window = true,
                 "--url" => cli_url = args.next(),
+                "--wait-for-pid" => wait_for_pid = args.next().and_then(|pid| pid.parse().ok()),
+                "--restore-session" => restore_session = true,
                 _ => {}
             }
         }
     }
 
+    wait_for_relaunch_parent(wait_for_pid);
     let _instance = claim_instance(new_window);
 
     let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
@@ -267,6 +275,7 @@ fn main() {
 
     let mut state = AppState::new(conn, settings);
     state.chrome_overlay_open = !onboarding_done;
+    let mut restored_tabs: HashSet<String> = HashSet::new();
 
     if let Some(ref url) = cli_url {
         let ws_id = state.tab_manager.active_workspace_id.clone();
@@ -277,10 +286,12 @@ fn main() {
         state.tab_manager.active_tab_id = Some(tab_id);
     }
 
-    if matches!(
-        state.settings.startup_behavior,
-        config::StartupBehavior::LastSession
-    ) && cli_url.is_none()
+    if (restore_session
+        || matches!(
+            state.settings.startup_behavior,
+            config::StartupBehavior::LastSession
+        ))
+        && cli_url.is_none()
     {
         if let Ok(Some(saved)) = repositories::load_session(&state.conn) {
             state.tab_manager.workspaces = saved.workspaces;
@@ -300,6 +311,9 @@ fn main() {
                 tab.forward_stack = saved_tab.forward_stack;
                 tab.status = browser::tab::TabStatus::Complete;
                 tab.sync_nav_flags();
+                if !tab.is_neura_page() {
+                    restored_tabs.insert(tab.id.clone());
+                }
                 state.tab_manager.tabs.push(tab);
             }
             if state.tab_manager.active_tab_id.is_none() {
@@ -338,6 +352,7 @@ fn main() {
         .map(|t| t.url.clone())
         .unwrap_or_else(|| browser::tab::Tab::new_tab_url().to_string());
     let win_size = window.inner_size();
+    let browser_args = webview_args(&state.settings);
 
     let proxy_chrome = proxy.clone();
     let proxy_chrome_load = proxy.clone();
@@ -350,7 +365,9 @@ fn main() {
         })
         .with_transparent(true);
     #[cfg(windows)]
-    let chrome_builder = chrome_builder.with_browser_accelerator_keys(false);
+    let chrome_builder = chrome_builder
+        .with_browser_accelerator_keys(false)
+        .with_additional_browser_args(browser_args.clone());
     let chrome = chrome_builder
         .with_html(chrome_html())
         .with_ipc_handler(move |req: wry::http::Request<String>| {
@@ -437,9 +454,12 @@ fn main() {
     let ubol_dir = ubol_dir();
     let mut ubol_done = false;
     let mut ubol_enabled: Option<bool> = None;
+    let mut ubol_tab: Option<String> = None;
+    let mut first_load_after_layout: Option<(String, String)> = None;
 
     if !first_url.starts_with("neura://") {
         let first_is_incognito = state.tab_manager.tab_is_incognito(&first_tab_id);
+        clear_tab_favicon(&mut state, &first_tab_id);
         state.tab_manager.set_tab_loading(&first_tab_id, true);
         let ctx = if first_is_incognito {
             incognito_web_context.as_mut().unwrap()
@@ -448,11 +468,9 @@ fn main() {
         };
         let defer_first_load =
             should_restore_startup_cookies(first_is_incognito, cookies_restored, &startup_cookies);
-        let first_ad_script = if first_is_incognito {
-            String::new()
-        } else {
-            state.ad_block_engine.init_script().to_string()
-        };
+        let _ = restored_tabs.remove(&first_tab_id);
+        let load_first_later = defer_first_load;
+        let first_ad_script = state.ad_block_engine.init_script().to_string();
         let first_wv = build_content_webview(
             &window,
             &first_tab_id,
@@ -463,8 +481,9 @@ fn main() {
             first_is_incognito,
             std::sync::Arc::clone(&shared_dl_dir),
             tab_zoom(&state, &first_tab_id),
+            &browser_args,
             first_ad_script,
-            !defer_first_load,
+            !load_first_later,
         )
         .expect("build first content webview");
         #[cfg(windows)]
@@ -477,18 +496,19 @@ fn main() {
                 &startup_cookies,
                 &mut cookies_restored,
             );
-            if defer_first_load {
-                let _ = wv.load_url(&first_url);
-            }
         }
-        watch_load(
-            &rt,
-            &proxy,
-            &mut load_watches,
-            &mut load_watch_next,
-            first_tab_id.clone(),
-            first_url.clone(),
-        );
+        if load_first_later {
+            first_load_after_layout = Some((first_tab_id.clone(), first_url.clone()));
+        } else {
+            watch_load(
+                &rt,
+                &proxy,
+                &mut load_watches,
+                &mut load_watch_next,
+                first_tab_id.clone(),
+                first_url.clone(),
+            );
+        }
         #[cfg(windows)]
         track_content_hwnd(first_hwnd, &first_tab_id, &mut content_hwnds);
         sync_active_ubol(
@@ -497,6 +517,7 @@ fn main() {
             ubol_dir.as_deref(),
             &mut ubol_done,
             &mut ubol_enabled,
+            &mut ubol_tab,
         );
     }
     apply_layout(
@@ -507,6 +528,19 @@ fn main() {
         &layout_config,
         &window,
     );
+    if let Some((tab_id, url)) = first_load_after_layout.take() {
+        if let Some(wv) = content_views.get(&tab_id) {
+            let _ = wv.load_url(&url);
+            watch_load(
+                &rt,
+                &proxy,
+                &mut load_watches,
+                &mut load_watch_next,
+                tab_id,
+                url,
+            );
+        }
+    }
     // Apply screenshot protection immediately if the initial workspace is incognito.
     #[cfg(windows)]
     {
@@ -535,6 +569,7 @@ fn main() {
                 let js = state.chrome_state_json();
                 let _ = chrome
                     .evaluate_script(&format!("window.__neura&&window.__neura.setState({})", js));
+                state.push_newtab_wallpaper_to_chrome(&chrome);
                 if !onboarding_done {
                     let _ = chrome.evaluate_script(
                         "setTimeout(()=>window.__neura&&window.__neura.showOnboarding(),100)",
@@ -774,6 +809,7 @@ fn main() {
                     if let Some(wv) = content_views.get(&tab_id) {
                         wake_content_webview(wv);
                         let _ = wv.load_url(&url);
+                        clear_tab_favicon(&mut state, &tab_id);
                         state.tab_manager.set_tab_loading(&tab_id, true);
                         watch_load(
                             &rt,
@@ -809,11 +845,7 @@ fn main() {
                 } else {
                     content_web_context.as_mut().unwrap()
                 };
-                let ad_script = if is_incog {
-                    String::new()
-                } else {
-                    state.ad_block_engine.init_script().to_string()
-                };
+                let ad_script = state.ad_block_engine.init_script().to_string();
                 let defer_load =
                     should_restore_startup_cookies(is_incog, cookies_restored, &startup_cookies);
                 match build_content_webview(
@@ -826,6 +858,7 @@ fn main() {
                     is_incog,
                     std::sync::Arc::clone(&shared_dl_dir),
                     tab_zoom(&state, &tab_id),
+                    &browser_args,
                     ad_script,
                     !defer_load,
                 ) {
@@ -844,6 +877,7 @@ fn main() {
                                 let _ = wv.load_url(&url);
                             }
                         }
+                        clear_tab_favicon(&mut state, &tab_id);
                         state.tab_manager.set_tab_loading(&tab_id, true);
                         watch_load(
                             &rt,
@@ -900,14 +934,6 @@ fn main() {
                         }
                     }
                 }
-                if let AppEvent::ContentLoadProgress {
-                    tab_id, progress, ..
-                } = &app_event
-                {
-                    if *progress >= 0.92 {
-                        clear_load_watches(&mut load_watches, tab_id);
-                    }
-                }
                 if let AppEvent::ContentLoadStart { tab_id, url } = &app_event {
                     watch_load(
                         &rt,
@@ -917,6 +943,30 @@ fn main() {
                         tab_id.clone(),
                         crate::utils::url::clean_tracking_url(url),
                     );
+                }
+                if let AppEvent::ContentLoadProgress {
+                    tab_id,
+                    url,
+                    progress,
+                } = &app_event
+                {
+                    if *progress > 0.0
+                        && *progress < 0.92
+                        && state
+                            .tab_manager
+                            .get_tab(tab_id)
+                            .map(|tab| tab.status == crate::browser::tab::TabStatus::Loading)
+                            .unwrap_or(false)
+                    {
+                        watch_load(
+                            &rt,
+                            &proxy_main,
+                            &mut load_watches,
+                            &mut load_watch_next,
+                            tab_id.clone(),
+                            crate::utils::url::clean_tracking_url(url),
+                        );
+                    }
                 }
                 if let AppEvent::ContentMetadata { tab_id, url, .. }
                 | AppEvent::ContentNav { tab_id, url, .. } = &app_event
@@ -944,7 +994,21 @@ fn main() {
                         ChromeCommand::SaveSettings { .. } | ChromeCommand::BrowseDownloadFolder
                     )
                 );
+                let progress_tab_id = match &app_event {
+                    AppEvent::ContentLoadProgress { tab_id, .. } => Some(tab_id.clone()),
+                    _ => None,
+                };
                 let action_opt = handle_app_event_inner(app_event, &mut state, &chrome);
+                if let Some(tab_id) = progress_tab_id {
+                    if state
+                        .tab_manager
+                        .get_tab(&tab_id)
+                        .map(|tab| tab.status != crate::browser::tab::TabStatus::Loading)
+                        .unwrap_or(true)
+                    {
+                        clear_load_watches(&mut load_watches, &tab_id);
+                    }
+                }
                 // Keep the shared download dir in sync whenever any setting is saved.
                 if is_save_settings {
                     if let Ok(mut guard) = shared_dl_dir.lock() {
@@ -958,6 +1022,7 @@ fn main() {
                         ubol_dir.as_deref(),
                         &mut ubol_done,
                         &mut ubol_enabled,
+                        &mut ubol_tab,
                     );
                     if persist_session {
                         save_session(&state);
@@ -1000,11 +1065,7 @@ fn main() {
                                 } else {
                                     content_web_context.as_mut().unwrap()
                                 };
-                                let ad_script = if is_incog {
-                                    String::new()
-                                } else {
-                                    state.ad_block_engine.init_script().to_string()
-                                };
+                                let ad_script = state.ad_block_engine.init_script().to_string();
                                 let defer_load = should_restore_startup_cookies(
                                     is_incog,
                                     cookies_restored,
@@ -1020,6 +1081,7 @@ fn main() {
                                     is_incog,
                                     std::sync::Arc::clone(&shared_dl_dir),
                                     tab_zoom(&state, &tab_id),
+                                    &browser_args,
                                     ad_script,
                                     !defer_load,
                                 ) {
@@ -1117,16 +1179,14 @@ fn main() {
                                             } else {
                                                 content_web_context.as_mut().unwrap()
                                             };
-                                            let ad_script = if is_incog {
-                                                String::new()
-                                            } else {
-                                                state.ad_block_engine.init_script().to_string()
-                                            };
+                                            let ad_script =
+                                                state.ad_block_engine.init_script().to_string();
                                             let defer_load = should_restore_startup_cookies(
                                                 is_incog,
                                                 cookies_restored,
                                                 &startup_cookies,
                                             );
+                                            let _ = restored_tabs.remove(&active_id);
                                             if let Ok(wv) = build_content_webview(
                                                 &window,
                                                 &active_id,
@@ -1137,6 +1197,7 @@ fn main() {
                                                 is_incog,
                                                 std::sync::Arc::clone(&shared_dl_dir),
                                                 tab_zoom(&state, &active_id),
+                                                &browser_args,
                                                 ad_script,
                                                 !defer_load,
                                             ) {
@@ -1265,11 +1326,7 @@ fn main() {
                                     } else {
                                         content_web_context.as_mut().unwrap()
                                     };
-                                    let ad_script = if is_incog {
-                                        String::new()
-                                    } else {
-                                        state.ad_block_engine.init_script().to_string()
-                                    };
+                                    let ad_script = state.ad_block_engine.init_script().to_string();
                                     let defer_load = should_restore_startup_cookies(
                                         is_incog,
                                         cookies_restored,
@@ -1285,6 +1342,7 @@ fn main() {
                                         is_incog,
                                         std::sync::Arc::clone(&shared_dl_dir),
                                         tab_zoom(&state, id),
+                                        &browser_args,
                                         ad_script,
                                         !defer_load,
                                     ) {
@@ -1330,6 +1388,31 @@ fn main() {
                                 }
                             }
                         }
+                        TabAction::NudgeContent { tab_id, url } => {
+                            if let Some(wv) = content_views.get(&tab_id) {
+                                let active = state.tab_manager.active_tab_id.as_deref()
+                                    == Some(tab_id.as_str());
+                                wake_content_webview(wv);
+                                if active {
+                                    let _ = wv.set_visible(false);
+                                    let _ = wv.set_visible(true);
+                                    let _ = wv.set_bounds(layout.content);
+                                    let _ = wv.focus();
+                                    #[cfg(windows)]
+                                    if let Some(&hwnd) = content_hwnds.get(&tab_id) {
+                                        repaint_content_webview(hwnd);
+                                    }
+                                }
+                                watch_load(
+                                    &rt,
+                                    &proxy_main,
+                                    &mut load_watches,
+                                    &mut load_watch_next,
+                                    tab_id,
+                                    url,
+                                );
+                            }
+                        }
                         TabAction::ReloadContent { tab_id, url } => {
                             if let Some(wv) = content_views.get(&tab_id) {
                                 wake_content_webview(wv);
@@ -1357,11 +1440,7 @@ fn main() {
                                 } else {
                                     content_web_context.as_mut().unwrap()
                                 };
-                                let ad_script = if is_incog {
-                                    String::new()
-                                } else {
-                                    state.ad_block_engine.init_script().to_string()
-                                };
+                                let ad_script = state.ad_block_engine.init_script().to_string();
                                 let defer_load = should_restore_startup_cookies(
                                     is_incog,
                                     cookies_restored,
@@ -1377,6 +1456,7 @@ fn main() {
                                     is_incog,
                                     std::sync::Arc::clone(&shared_dl_dir),
                                     tab_zoom(&state, &tab_id),
+                                    &browser_args,
                                     ad_script,
                                     !defer_load,
                                 ) {
@@ -1433,8 +1513,28 @@ fn main() {
                             );
                             if let Some(wv) = content_views.get(&tab_id) {
                                 wake_content_webview(wv);
+                                let _ = wv.focus();
                                 let _ = wv.zoom(tab_zoom(&state, &tab_id));
-                                if loading {
+                                let stale = inactive_tabs
+                                    .remove(&tab_id)
+                                    .map(|at| at.elapsed() >= TAB_SLEEP_REFRESH_AFTER)
+                                    .unwrap_or(false);
+                                let restored = restored_tabs.remove(&tab_id);
+                                if stale || restored {
+                                    clear_tab_favicon(&mut state, &tab_id);
+                                    state.tab_manager.set_tab_loading(&tab_id, true);
+                                    state.load_recoveries.remove(&app::load_key(&tab_id, &url));
+                                    let _ = wv.load_url(&url);
+                                    state.push_state_to_chrome(&chrome);
+                                    watch_load(
+                                        &rt,
+                                        &proxy_main,
+                                        &mut load_watches,
+                                        &mut load_watch_next,
+                                        tab_id.clone(),
+                                        url.clone(),
+                                    );
+                                } else if loading {
                                     state.load_recoveries.remove(&app::load_key(&tab_id, &url));
                                     watch_load(
                                         &rt,
@@ -1452,16 +1552,14 @@ fn main() {
                                 } else {
                                     content_web_context.as_mut().unwrap()
                                 };
-                                let ad_script = if is_incog {
-                                    String::new()
-                                } else {
-                                    state.ad_block_engine.init_script().to_string()
-                                };
+                                let ad_script = state.ad_block_engine.init_script().to_string();
                                 let defer_load = should_restore_startup_cookies(
                                     is_incog,
                                     cookies_restored,
                                     &startup_cookies,
                                 );
+                                let _ = restored_tabs.remove(&tab_id);
+                                let load_later = defer_load;
                                 match build_content_webview(
                                     &window,
                                     &tab_id,
@@ -1472,8 +1570,9 @@ fn main() {
                                     is_incog,
                                     std::sync::Arc::clone(&shared_dl_dir),
                                     tab_zoom(&state, &tab_id),
+                                    &browser_args,
                                     ad_script,
-                                    !defer_load,
+                                    !load_later,
                                 ) {
                                     Ok(wv) => {
                                         #[cfg(windows)]
@@ -1485,11 +1584,9 @@ fn main() {
                                             &mut cookies_restored,
                                         );
                                         content_views.insert(tab_id.clone(), wv);
-                                        if defer_load {
-                                            if let Some(wv) = content_views.get(&tab_id) {
-                                                let _ = wv.load_url(&url);
-                                            }
-                                        }
+                                        clear_tab_favicon(&mut state, &tab_id);
+                                        state.tab_manager.set_tab_loading(&tab_id, true);
+                                        state.push_state_to_chrome(&chrome);
                                         state.load_recoveries.remove(&app::load_key(&tab_id, &url));
                                         watch_load(
                                             &rt,
@@ -1509,6 +1606,14 @@ fn main() {
                                             &layout_config,
                                             &window,
                                         );
+                                        if let Some(wv) = content_views.get(&tab_id) {
+                                            let _ = wv.focus();
+                                        }
+                                        if load_later {
+                                            if let Some(wv) = content_views.get(&tab_id) {
+                                                let _ = wv.load_url(&url);
+                                            }
+                                        }
                                     }
                                     Err(e) => tracing::error!("activate content view: {}", e),
                                 }
@@ -1524,11 +1629,7 @@ fn main() {
                             } else {
                                 content_web_context.as_mut().unwrap()
                             };
-                            let ad_script = if is_incog {
-                                String::new()
-                            } else {
-                                state.ad_block_engine.init_script().to_string()
-                            };
+                            let ad_script = state.ad_block_engine.init_script().to_string();
                             let defer_load = should_restore_startup_cookies(
                                 is_incog,
                                 cookies_restored,
@@ -1544,6 +1645,7 @@ fn main() {
                                 is_incog,
                                 std::sync::Arc::clone(&shared_dl_dir),
                                 tab_zoom(&state, &tab_id),
+                                &browser_args,
                                 ad_script,
                                 !defer_load,
                             ) {
@@ -1583,6 +1685,24 @@ fn main() {
                                 }
                                 Err(e) => tracing::error!("rebuild content view: {}", e),
                             }
+                        }
+                        TabAction::Relaunch => {
+                            let active_url =
+                                state.tab_manager.active_tab().map(|tab| tab.url.clone());
+                            if !new_window {
+                                save_window_size(&window, &mut state, custom_maximized);
+                                save_session(&state);
+                            }
+                            save_open_cookies(&content_views, &state, &data_dir);
+                            relaunch_app(new_window, active_url.as_deref());
+                            shutdown_webview2(
+                                crash_sentinel.as_deref(),
+                                &mut content_views,
+                                &mut content_hwnds,
+                                &mut content_web_context,
+                                &mut incognito_web_context,
+                            );
+                            *control_flow = ControlFlow::Exit;
                         }
                         TabAction::DownloadUpdate(download_url) => {
                             let proxy_dl = proxy_main.clone();
@@ -1666,14 +1786,38 @@ fn main() {
                                 .remove(id)
                                 .map(|at| at.elapsed() >= TAB_SLEEP_REFRESH_AFTER)
                                 .unwrap_or(false);
-                            if asleep {
-                                if let Some(wv) = content_views.get(id) {
-                                    wake_content_webview(wv);
+                            let restored = restored_tabs.remove(id);
+                            if let Some(wv) = content_views.get(id) {
+                                wake_content_webview(wv);
+                                let _ = wv.focus();
+                            }
+                            if asleep || restored {
+                                let url = state
+                                    .tab_manager
+                                    .get_tab(id)
+                                    .map(|tab| tab.url.clone())
+                                    .unwrap_or_default();
+                                if !url.trim().is_empty() && !url.starts_with("neura://") {
+                                    if let Some(wv) = content_views.get(id) {
+                                        clear_tab_favicon(&mut state, id);
+                                        state.tab_manager.set_tab_loading(id, true);
+                                        state.load_recoveries.remove(&app::load_key(id, &url));
+                                        let _ = wv.load_url(&url);
+                                        state.push_state_to_chrome(&chrome);
+                                        watch_load(
+                                            &rt,
+                                            &proxy_main,
+                                            &mut load_watches,
+                                            &mut load_watch_next,
+                                            id.clone(),
+                                            url,
+                                        );
+                                    }
                                 }
-                                #[cfg(windows)]
-                                if let Some(&hwnd) = content_hwnds.get(id) {
-                                    repaint_content_webview(hwnd);
-                                }
+                            }
+                            #[cfg(windows)]
+                            if let Some(&hwnd) = content_hwnds.get(id) {
+                                repaint_content_webview(hwnd);
                             }
                         }
                         last_active_tab_id = current_active;
@@ -1687,6 +1831,7 @@ fn main() {
                     ubol_dir.as_deref(),
                     &mut ubol_done,
                     &mut ubol_enabled,
+                    &mut ubol_tab,
                 );
             }
 
@@ -1881,6 +2026,57 @@ fn claim_instance(new_window: bool) -> windows::Win32::Foundation::HANDLE {
 
 #[cfg(not(windows))]
 fn claim_instance(_new_window: bool) {}
+
+#[cfg(windows)]
+fn wait_for_relaunch_parent(pid: Option<u32>) {
+    let Some(pid) = pid else {
+        return;
+    };
+    if pid == std::process::id() {
+        return;
+    }
+
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Threading::{
+        OpenProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE,
+    };
+
+    let handle = unsafe { OpenProcess(PROCESS_SYNCHRONIZE, false, pid) };
+    match handle {
+        Ok(h) if !h.is_invalid() => {
+            unsafe {
+                let _ = WaitForSingleObject(h, 8_000);
+                let _ = CloseHandle(h);
+            }
+            std::thread::sleep(Duration::from_millis(500));
+        }
+        _ => std::thread::sleep(Duration::from_millis(1_000)),
+    }
+}
+
+#[cfg(not(windows))]
+fn wait_for_relaunch_parent(pid: Option<u32>) {
+    if pid.is_some() {
+        std::thread::sleep(Duration::from_millis(1_000));
+    }
+}
+
+fn relaunch_app(new_window: bool, url: Option<&str>) {
+    if let Ok(exe) = std::env::current_exe() {
+        let mut cmd = std::process::Command::new(exe);
+        cmd.arg("--wait-for-pid")
+            .arg(std::process::id().to_string());
+        if new_window {
+            cmd.arg("--new-window");
+            if let Some(url) = url {
+                cmd.arg("--url").arg(url);
+            }
+        } else {
+            cmd.arg("--restore-session");
+        }
+        let _ = cmd.spawn();
+    }
+}
 
 #[cfg(windows)]
 fn attach_fullscreen_handler(wv: &WebView, proxy: tao::event_loop::EventLoopProxy<AppEvent>) {
@@ -2207,14 +2403,13 @@ fn build_content_webview(
     incognito: bool,
     download_dir: std::sync::Arc<std::sync::Mutex<DownloadPrefs>>,
     global_zoom: f64,
-    // Ad block init script — empty string for incognito or when disabled.
+    browser_args: &str,
     ad_block_script: String,
     load_now: bool,
 ) -> anyhow::Result<WebView> {
     let is_neura = url.starts_with("neura://");
     let proxy_ipc = proxy.clone();
     let proxy_load = proxy.clone();
-    let proxy_new_window = proxy.clone();
     let proxy_dl_start = proxy.clone();
     let proxy_dl_complete = proxy.clone();
     let tab_id_ipc = tab_id.to_string();
@@ -2232,22 +2427,11 @@ fn build_content_webview(
     #[cfg(windows)]
     let builder = builder
         .with_browser_accelerator_keys(false)
-        // Disable sleeping-tabs so background tabs don't go blank when returning to them.
-        // --no-first-run: prevents first-run profile handling that can wipe or reset state.
-        .with_additional_browser_args(
-            "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,SleepingTabs,AutoDiscardTabs \
-             --disable-backgrounding-occluded-windows --disable-renderer-backgrounding \
-             --disable-background-timer-throttling \
-             --no-first-run \
-             --disk-cache-size=209715200",
-        );
+        .with_additional_browser_args(browser_args.to_string());
     let builder = builder
         .with_new_window_req_handler(move |url| {
-            if !url.trim().is_empty() && url != "about:blank" {
-                let _ = proxy_new_window
-                    .send_event(AppEvent::Chrome(ChromeCommand::OpenInNewTab { url }));
-            }
-            false
+            let url = url.trim().to_ascii_lowercase();
+            url == "about:blank" || url.starts_with("http://") || url.starts_with("https://")
         })
         .with_ipc_handler(move |req: wry::http::Request<String>| {
             let body = req.body();
@@ -2312,6 +2496,20 @@ fn build_content_webview(
                         tab_id: tab_id_ipc.clone(),
                         can_back,
                     });
+                    return;
+                }
+                if value.get("cmd").and_then(|v| v.as_str()) == Some("content_load_start") {
+                    let url = value
+                        .get("url")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default()
+                        .to_string();
+                    if !url.trim().is_empty() && url != "about:blank" {
+                        let _ = proxy_ipc.send_event(AppEvent::ContentLoadStart {
+                            tab_id: tab_id_ipc.clone(),
+                            url,
+                        });
+                    }
                     return;
                 }
                 if value.get("cmd").and_then(|v| v.as_str()) == Some("content_progress") {
@@ -2399,6 +2597,19 @@ fn build_content_webview(
             }
             if let Ok(cmd) = serde_json::from_str::<ChromeCommand>(body) {
                 let _ = proxy_ipc.send_event(AppEvent::Chrome(cmd));
+            }
+        })
+        .with_navigation_handler({
+            let proxy_nav = proxy.clone();
+            let tab_id_nav = tab_id.to_string();
+            move |url| {
+                if !url.trim().is_empty() && url != "about:blank" {
+                    let _ = proxy_nav.send_event(AppEvent::ContentLoadStart {
+                        tab_id: tab_id_nav.clone(),
+                        url: url.clone(),
+                    });
+                }
+                true
             }
         })
         .with_on_page_load_handler(move |event, loaded_url: String| match event {
@@ -2505,8 +2716,14 @@ fn build_content_webview(
 
 fn wake_content_webview(wv: &WebView) {
     let _ = wv.evaluate_script(
-        "try{window.focus();window.dispatchEvent(new Event('focus'));document.dispatchEvent(new Event('visibilitychange'));}catch(_){ }",
+        "try{window.focus();window.dispatchEvent(new Event('focus'));window.dispatchEvent(new Event('resize'));document.dispatchEvent(new Event('visibilitychange'));}catch(_){ }",
     );
+}
+
+fn clear_tab_favicon(state: &mut AppState, tab_id: &str) {
+    if let Some(tab) = state.tab_manager.tabs.iter_mut().find(|t| t.id == tab_id) {
+        tab.favicon = None;
+    }
 }
 
 #[derive(Clone)]
@@ -2520,6 +2737,28 @@ fn download_prefs_from_settings(settings: &config::AppSettings) -> DownloadPrefs
         dir: download_dir_from_settings(settings),
         ask: settings.downloads.ask_where_to_save,
     }
+}
+
+fn webview_args(settings: &config::AppSettings) -> String {
+    let mut args = vec![
+        "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,SleepingTabs,AutoDiscardTabs"
+            .to_string(),
+        "--disable-backgrounding-occluded-windows".to_string(),
+        "--disable-renderer-backgrounding".to_string(),
+        "--disable-background-timer-throttling".to_string(),
+        "--no-first-run".to_string(),
+        "--disk-cache-size=1073741824".to_string(),
+        "--media-cache-size=536870912".to_string(),
+    ];
+    if let Some(url) = settings.privacy.secure_dns_endpoint() {
+        args.push("--enable-features=DnsOverHttps".to_string());
+        args.push(format!(
+            "--dns-over-https-mode={}",
+            settings.privacy.secure_dns_mode.as_arg()
+        ));
+        args.push(format!("--dns-over-https-templates={}", url));
+    }
+    args.join(" ")
 }
 
 fn download_dir_from_settings(settings: &config::AppSettings) -> std::path::PathBuf {
@@ -2613,44 +2852,83 @@ fn content_initialization_script(_global_zoom: f64, ad_block_script: &str) -> St
       }
     } catch (_) {}
   };
+  if (!isTop) return;
   const sendProgress = (progress) => {
     if (isTop) post({cmd:'content_progress', progress, url: location.href});
   };
   const faviconHref = () => {
-    const icons = Array.from(document.querySelectorAll('link[rel]')).filter(icon => {
+    const root = document.head || document.documentElement;
+    if (!root) return '';
+    const icons = root.querySelectorAll('link[rel]');
+    for (const icon of icons) {
       const rel = (icon.getAttribute('rel') || '').toLowerCase();
-      return icon.href && (rel.includes('icon') || rel.includes('apple-touch-icon') || rel.includes('mask-icon'));
-    });
-    const href = icons.map(icon => icon.href).find(Boolean);
-    if (href) return href;
+      if (icon.href && (rel.includes('icon') || rel.includes('apple-touch-icon') || rel.includes('mask-icon'))) return icon.href;
+    }
     try { return new URL('/favicon.ico', location.href).href; } catch (_) { return ''; }
   };
   let lastHref = location.href;
+  let lastMeta = '';
+  let metaTimer = 0;
   const sendMetadata = (replace = false) => {
     if (!isTop) return;
+    const favicon = faviconHref();
+    const title = document.title || location.href;
+    const key = location.href + '\n' + title + '\n' + favicon + '\n' + replace;
+    if (key === lastMeta) return;
+    lastMeta = key;
     post({
       cmd:'content_metadata',
       url: location.href,
-      title: document.title || location.href,
-      favicon: faviconHref(),
+      title,
+      favicon,
       replace
     });
+  };
+  const queueMetadata = (replace = false, wait = 50) => {
+    clearTimeout(metaTimer);
+    metaTimer = setTimeout(() => sendMetadata(replace), wait);
   };
   const sendLocationChange = (replace = false) => {
     if (!isTop) return;
     const href = location.href;
     if (href === lastHref) {
       setTimeout(() => {
-        sendMetadata(replace);
+        queueMetadata(replace);
         sendNavState();
       }, 50);
       return;
     }
     lastHref = href;
-    setTimeout(() => {
-      sendMetadata(replace);
+    post({cmd:'content_load_start', url: href});
+    sendProgress(0.22);
+    let done = false;
+    let obs = null;
+    let settleTimer = 0;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(settleTimer);
+      if (obs) obs.disconnect();
+      queueMetadata(replace);
       sendNavState();
-    }, 50);
+      sendProgress(0.96);
+    };
+    const settle = () => {
+      clearTimeout(settleTimer);
+      settleTimer = setTimeout(finish, 600);
+    };
+    try {
+      if (document.body) {
+        obs = new MutationObserver(settle);
+        obs.observe(document.body, {childList:true, subtree:true});
+      }
+    } catch (_) {}
+    setTimeout(() => {
+      queueMetadata(replace);
+      sendNavState();
+      sendProgress(0.72);
+    }, 350);
+    setTimeout(finish, 8000);
   };
   const sendNavState = () => {
     if (!isTop) return;
@@ -2669,34 +2947,51 @@ fn content_initialization_script(_global_zoom: f64, ad_block_script: &str) -> St
   document.addEventListener('readystatechange', () => {
     if (document.readyState === 'interactive') {
       sendProgress(0.65);
-      sendMetadata();
+      queueMetadata();
     } else if (document.readyState === 'complete') {
-      sendMetadata();
+      queueMetadata();
       sendNavState();
       sendProgress(0.92);
     }
   });
   window.addEventListener('DOMContentLoaded', () => {
     sendProgress(0.75);
-    sendMetadata();
+    queueMetadata();
     sendNavState();
   });
   window.addEventListener('load', () => {
-    sendMetadata();
+    queueMetadata();
     sendNavState();
     sendProgress(0.96);
   });
   try {
-    const favObs = new MutationObserver(records => {
-      if (!isTop) return;
-      if (!records.some(r => r.target && r.target.tagName === 'LINK' || Array.from(r.addedNodes || []).some(n => n.tagName === 'LINK'))) return;
-      setTimeout(() => sendMetadata(true), 50);
-    });
-    favObs.observe(document.documentElement, {subtree:true, childList:true, attributes:true, attributeFilter:['href','rel']});
+    const watchFavicons = () => {
+      const head = document.head;
+      if (!head) {
+        setTimeout(watchFavicons, 120);
+        return;
+      }
+      const favObs = new MutationObserver(records => {
+        for (const r of records) {
+          if (r.target && r.target.tagName === 'LINK') {
+            queueMetadata(true, 80);
+            return;
+          }
+          for (const n of r.addedNodes || []) {
+            if (n.tagName === 'LINK') {
+              queueMetadata(true, 80);
+              return;
+            }
+          }
+        }
+      });
+      favObs.observe(head, {subtree:true, childList:true, attributes:true, attributeFilter:['href','rel']});
+    };
+    watchFavicons();
   } catch (_) {}
   setInterval(() => {
     if (location.href !== lastHref) sendLocationChange(false);
-  }, 250);
+  }, 1000);
   const pushState = history.pushState;
   history.pushState = function() {
     const result = pushState.apply(this, arguments);
@@ -2802,7 +3097,7 @@ fn content_initialization_script(_global_zoom: f64, ad_block_script: &str) -> St
     if (!__sbThrottle) {
       __sbThrottle = true;
       try { window.ipc.postMessage('{"cmd":"sidebar_auto_close"}'); } catch(_) {}
-      setTimeout(function() { __sbThrottle = false; }, 100);
+      setTimeout(function() { __sbThrottle = false; }, 300);
     }
     // Window-edge resize cursor detection
     var W = document.documentElement.clientWidth;
@@ -3172,9 +3467,6 @@ fn active_ubol_enabled(state: &AppState) -> bool {
     let Some(id) = state.tab_manager.active_tab_id.as_ref() else {
         return false;
     };
-    if state.tab_manager.tab_is_incognito(id) {
-        return false;
-    }
     let Some(tab) = state.tab_manager.get_tab(id) else {
         return false;
     };
@@ -3187,6 +3479,7 @@ fn sync_active_ubol(
     dir: Option<&std::path::Path>,
     done: &mut bool,
     last: &mut Option<bool>,
+    last_id: &mut Option<String>,
 ) {
     let Some(dir) = dir else {
         return;
@@ -3194,19 +3487,17 @@ fn sync_active_ubol(
     let Some(id) = state.tab_manager.active_tab_id.as_ref() else {
         return;
     };
-    if state.tab_manager.tab_is_incognito(id) {
-        return;
-    }
     let Some(wv) = views.get(id) else {
         return;
     };
     let enabled = active_ubol_enabled(state);
-    if *done && *last == Some(enabled) {
+    if *done && *last == Some(enabled) && last_id.as_deref() == Some(id.as_str()) {
         return;
     }
     browser::extensions::sync_ubol(wv, dir, enabled);
     *done = true;
     *last = Some(enabled);
+    *last_id = Some(id.clone());
 }
 
 fn restore_startup_cookies(
@@ -3333,6 +3624,7 @@ fn msg_shortcut(vk: u32, mods: usize, repeat: bool) -> usize {
         return match vk {
             0x54 if shift => SC_REOPEN_TAB,
             0x54 => SC_SPOTLIGHT,
+            0x4e if shift => SC_INCOGNITO,
             0x4e => SC_NEW_WINDOW,
             0x57 => SC_CLOSE_TAB,
             0x4c => SC_FOCUS_URL,
@@ -3347,6 +3639,8 @@ fn msg_shortcut(vk: u32, mods: usize, repeat: bool) -> usize {
             0xbb | 0x6b => SC_ZOOM_IN,
             0xbd | 0x6d => SC_ZOOM_OUT,
             0x30 | 0x60 => SC_ZOOM_RESET,
+            n @ 0x31..=0x39 if !shift => SC_TAB_1 + (n as usize - 0x31),
+            n @ 0x61..=0x69 if !shift => SC_TAB_1 + (n as usize - 0x61),
             _ => SC_NONE,
         };
     }
@@ -3386,6 +3680,12 @@ fn run_shortcut(code: usize, proxy: &tao::event_loop::EventLoopProxy<AppEvent>, 
         SC_FORWARD => Some(ChromeCommand::Forward),
         SC_FULLSCREEN => Some(ChromeCommand::ToggleFullscreen),
         SC_DEVTOOLS => Some(ChromeCommand::OpenDevtools),
+        SC_INCOGNITO => Some(ChromeCommand::OpenIncognito),
+        code if (SC_TAB_1..=SC_TAB_9).contains(&code) => state
+            .tab_manager
+            .active_workspace_tabs()
+            .get(code - SC_TAB_1)
+            .map(|tab| ChromeCommand::SwitchTab { id: tab.id.clone() }),
         _ => None,
     };
     if let Some(cmd) = cmd {
@@ -3663,8 +3963,8 @@ fn sync_content_views(
 
     for (id, wv) in content_views {
         if id == active_id && !active_is_neura_page {
-            let _ = wv.set_visible(true);
             let _ = wv.set_bounds(layout.content);
+            let _ = wv.set_visible(true);
             let _ = wv.evaluate_script(&format!(
                 "window.__neuraContentFullscreen={}",
                 state.content_fullscreen
@@ -4896,6 +5196,28 @@ fn fmt_currency_value(n: f64) -> String {
         int
     } else {
         format!("{int}.{frac}")
+    }
+}
+
+#[cfg(test)]
+mod webview_arg_tests {
+    use super::*;
+
+    #[test]
+    fn secure_dns_adds_cloudflare_args() {
+        let mut settings = config::AppSettings::default();
+        settings.privacy.secure_dns_enabled = true;
+        let args = webview_args(&settings);
+        assert!(args.contains("--enable-features=DnsOverHttps"));
+        assert!(args.contains("--dns-over-https-mode=secure"));
+        assert!(args.contains("--dns-over-https-templates=https://1.1.1.1/dns-query"));
+    }
+
+    #[test]
+    fn secure_dns_off_keeps_doh_out() {
+        let settings = config::AppSettings::default();
+        let args = webview_args(&settings);
+        assert!(!args.contains("dns-over-https"));
     }
 }
 

@@ -107,6 +107,12 @@ pub fn chrome_html() -> String {
   --accent-text:#a5b4fc;
   --soft-btn-bg:rgba(255,255,255,0.06);
   --soft-btn-bg-hover:rgba(255,255,255,0.10);
+  --sidebar-bottom-icon:rgba(255,255,255,0.72);
+  --sidebar-bottom-icon-hover:rgba(255,255,255,0.94);
+  --sidebar-bottom-icon-disabled:rgba(255,255,255,0.34);
+  --load-ring:rgba(255,255,255,0.82);
+  --load-ring-soft:rgba(255,255,255,0.30);
+  --load-ring-faint:rgba(255,255,255,0.09);
 }
 [data-theme="light"]{
   /* Ventus light theme — soft paper-white with purple tint */
@@ -152,6 +158,12 @@ pub fn chrome_html() -> String {
   --accent-text:var(--accent);
   --soft-btn-bg:rgba(0,0,0,0.04);
   --soft-btn-bg-hover:rgba(0,0,0,0.07);
+  --sidebar-bottom-icon:rgba(26,27,46,0.66);
+  --sidebar-bottom-icon-hover:rgba(26,27,46,0.9);
+  --sidebar-bottom-icon-disabled:rgba(26,27,46,0.28);
+  --load-ring:rgba(255,255,255,0.92);
+  --load-ring-soft:rgba(255,255,255,0.44);
+  --load-ring-faint:rgba(255,255,255,0.20);
   --nt-scrim:linear-gradient(rgba(18,18,18,0.10),rgba(18,18,18,0.10));
   --nt-vignette:linear-gradient(transparent,transparent);
   --nt-panel:rgba(255,255,255,0.72);
@@ -318,10 +330,11 @@ body{font-family:var(--font);background:transparent;color:var(--text);font-size:
 .tb-btn.active{color:var(--accent);background:var(--accent-dim)}
 
 #address-bar{
+  --address-fill:var(--bg);
   display:flex;
   align-items:center;
   gap:6px;
-  background:var(--bg);
+  background:var(--address-fill);
   border:1px solid var(--border);
   border-radius:999px;
   padding:0 10px;
@@ -333,11 +346,48 @@ body{font-family:var(--font);background:transparent;color:var(--text);font-size:
   width:clamp(220px,calc(100% - 520px),560px);
   margin:0 auto;
   flex-shrink:0;
+  position:relative;
+  isolation:isolate;
 }
+#address-bar > *{position:relative;z-index:1}
 #address-bar:focus-within{
+  --address-fill:var(--bg-elevated);
   border-color:var(--accent);
   box-shadow:0 0 0 3px var(--accent-dim),0 0 12px var(--accent-glow);
-  background:var(--bg-elevated);
+  background:var(--address-fill);
+}
+@property --load-angle{
+  syntax:"<angle>";
+  inherits:false;
+  initial-value:0deg;
+}
+#address-bar::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  border-radius:inherit;
+  pointer-events:none;
+  opacity:0;
+  border:1px solid transparent;
+  background:
+    linear-gradient(var(--address-fill),var(--address-fill)) padding-box,
+    conic-gradient(from var(--load-angle),transparent 0deg,transparent 206deg,var(--load-ring-faint) 236deg,var(--load-ring-soft) 258deg,var(--load-ring) 282deg,var(--load-ring-soft) 306deg,var(--load-ring-faint) 330deg,transparent 360deg) border-box;
+  transition:opacity 0.32s ease;
+  z-index:0;
+}
+#address-bar.loading{border-color:transparent}
+#address-bar.loading::before{
+  opacity:1;
+  animation:address-load-orbit 2.9s linear infinite;
+}
+#address-bar.loading.done{border-color:var(--border)}
+#address-bar.loading.done:focus-within{border-color:var(--accent)}
+#address-bar.loading.done::before{
+  animation:none;
+  opacity:0;
+}
+@keyframes address-load-orbit{
+  to{--load-angle:360deg}
 }
 #address-bar .favicon{width:14px;height:14px;flex-shrink:0;border-radius:2px}
 /* small icon buttons inside the address bar pill */
@@ -688,25 +738,25 @@ body{font-family:var(--font);background:transparent;color:var(--text);font-size:
 }
 .sb-bottom-btn{
   width:28px;height:28px;border:none;border-radius:8px;
-  background:transparent;color:var(--text-dim);cursor:pointer;
+  background:transparent;color:var(--sidebar-bottom-icon);cursor:pointer;
   display:flex;align-items:center;justify-content:center;
   transition:all 0.15s ease;flex-shrink:0;
 }
-.sb-bottom-btn:hover{background:var(--bg-hover);color:var(--text)}
+.sb-bottom-btn:hover{background:var(--bg-hover);color:var(--sidebar-bottom-icon-hover)}
 .sb-ws-nav{
   flex:1 1 auto;min-width:0;overflow:hidden;
   display:flex;align-items:center;justify-content:center;gap:3px;
 }
 .sb-ws-nav-btn{
   width:18px;height:18px;border:none;border-radius:5px;padding:0;
-  background:transparent;color:var(--text-dim);cursor:pointer;
+  background:transparent;color:var(--sidebar-bottom-icon);cursor:pointer;
   display:flex;align-items:center;justify-content:center;flex-shrink:0;
   opacity:0;pointer-events:none;
   transition:opacity 0.2s ease,background 0.15s ease,color 0.15s ease;
 }
 .sb-ws-nav-btn.visible{opacity:1;pointer-events:auto}
-.sb-ws-nav-btn:hover:not(:disabled){background:var(--bg-hover);color:var(--text)}
-.sb-ws-nav-btn:disabled{opacity:0.22;cursor:not-allowed}
+.sb-ws-nav-btn:hover:not(:disabled){background:var(--bg-hover);color:var(--sidebar-bottom-icon-hover)}
+.sb-ws-nav-btn:disabled{opacity:1;color:var(--sidebar-bottom-icon-disabled);cursor:not-allowed}
 .sb-ws-dots{
   flex:1 1 auto;min-width:0;max-width:100%;
   display:flex;align-items:center;justify-content:center;gap:4px;
@@ -728,7 +778,7 @@ body{font-family:var(--font);background:transparent;color:var(--text);font-size:
 .ws-dot-mark{position:absolute;width:5px;height:5px;border-radius:999px;background:var(--text);opacity:0;transform:scale(.7);transition:opacity 0.16s ease,transform 0.2s cubic-bezier(0.34,1.15,0.64,1)}
 .ws-dot.active .ws-dot-icon{opacity:1;transform:scale(1.05)}
 .ws-dot.muted .ws-dot-icon{opacity:0;transform:scale(.68)}
-.ws-dot.muted .ws-dot-mark{opacity:.6;transform:scale(1)}
+.ws-dot.muted .ws-dot-mark{opacity:.78;transform:scale(1)}
 .ws-dot.muted:hover .ws-dot-icon{opacity:1;transform:scale(1)}
 .ws-dot.muted:hover .ws-dot-mark{opacity:0;transform:scale(.45)}
 .ws-dot:hover{transform:scale(1.08)}
@@ -927,33 +977,6 @@ body{font-family:var(--font);background:transparent;color:var(--text);font-size:
 .tab-close:hover{background:rgba(239,68,68,0.15);color:#f87171}
 .tab-item.loading{animation:tab-chip-pulse 1.8s ease-in-out infinite}
 .tab-item.active.loading{animation:tab-chip-pulse-active 1.8s ease-in-out infinite}
-
-#page-progress{
-  position:fixed;
-  top:calc(var(--toolbar-h) - 2px);
-  left:0;
-  width:100vw;
-  height:2px;
-  z-index:220;
-  pointer-events:none;
-  opacity:0;
-  transition:opacity 0.18s ease;
-}
-#page-progress.visible{opacity:1}
-#page-progress-bar{
-  width:0%;
-  height:100%;
-  background:linear-gradient(90deg,#3b82f6,#6366f1,#8b5cf6,#6366f1);
-  background-size:300% 100%;
-  box-shadow:0 0 12px rgba(99,102,241,0.5);
-  transition:width 0.18s ease;
-  animation:ventus-progress-shimmer 2s linear infinite;
-}
-@keyframes ventus-progress-shimmer{
-  0%{background-position:100% 0}
-  100%{background-position:-100% 0}
-}
-
 
 #ai-header{
   display:flex;align-items:center;justify-content:space-between;gap:12px;
@@ -1620,9 +1643,6 @@ body{font-family:var(--font);background:transparent;color:var(--text);font-size:
 #newtab-placeholder.nt-clock-rounded #newtab-clock{font-family:'SF Pro Rounded','Aptos Rounded','Segoe UI Variable Display',var(--font);font-weight:300;letter-spacing:-0.055em}
 #newtab-placeholder.nt-clock-mono #newtab-clock{font-family:'SF Mono','Cascadia Code','Consolas',monospace;font-weight:300;letter-spacing:-0.08em;font-feature-settings:'tnum' 1,'zero' 1}
 #newtab-placeholder.nt-clock-serif #newtab-clock{font-family:'New York','Iowan Old Style','Georgia',serif;font-weight:400;letter-spacing:-0.055em}
-/* ── Newtab theme: MINIMAL (no wallpaper, centered, clean) ── */
-#newtab-placeholder.nt-theme-minimal{background:var(--bg)!important}
-#newtab-placeholder.nt-theme-minimal #newtab-bg{display:none}
 #newtab-placeholder.nt-theme-minimal .newtab-shell{justify-content:center;align-items:center;gap:0}
 #newtab-placeholder.nt-theme-minimal .newtab-top{display:none}
 #newtab-placeholder.nt-theme-minimal .newtab-feed{display:none!important}
@@ -1680,7 +1700,54 @@ body{font-family:var(--font);background:transparent;color:var(--text);font-size:
 .nt-wp-src-btn:hover{border-color:var(--accent);color:var(--text)}
 .nt-wp-src-btn.active{border-color:var(--accent);background:var(--accent-dim);color:var(--accent)}
 .nt-wp-extra{display:flex;align-items:center;gap:10px;margin-top:4px}
-.nt-wp-upload-preview{width:80px;height:50px;border-radius:8px;object-fit:cover;border:1px solid var(--border);display:none}
+.nt-wp-upload-preview{width:80px;height:50px;border-radius:8px;object-fit:cover;border:1px solid var(--border);display:none;cursor:pointer}
+
+#update-modal{
+  position:fixed;inset:0;z-index:2100;display:none;align-items:center;justify-content:center;
+  pointer-events:none;
+}
+#update-modal.open{display:flex}
+.update-modal-panel{
+  width:min(468px,calc(100vw - 32px));max-height:78vh;
+  background:color-mix(in srgb,var(--modal-bg) 92%,transparent);
+  border:1px solid var(--modal-border);
+  border-radius:24px;
+  box-shadow:var(--modal-shadow);
+  -webkit-backdrop-filter:blur(24px) saturate(150%);
+  backdrop-filter:blur(24px) saturate(150%);
+  overflow:hidden;pointer-events:auto;
+  animation:ventus-scale-in 0.24s cubic-bezier(0.16,1,0.3,1);
+}
+.update-modal-head{display:flex;align-items:flex-start;gap:14px;padding:22px 22px 16px}
+.update-modal-icon{
+  width:42px;height:42px;border-radius:14px;display:flex;align-items:center;justify-content:center;
+  background:var(--accent-dim);color:var(--accent);flex-shrink:0;
+}
+.update-modal-copy{flex:1;min-width:0}
+.update-modal-title{font-size:18px;font-weight:700;letter-spacing:-0.3px;color:var(--text)}
+.update-modal-sub{font-size:12px;color:var(--text-muted);line-height:1.5;margin-top:4px}
+.update-modal-close{
+  width:30px;height:30px;border-radius:999px;border:none;background:var(--soft-btn-bg);
+  color:var(--text-muted);display:flex;align-items:center;justify-content:center;cursor:pointer;
+  transition:background var(--transition),color var(--transition);flex-shrink:0;
+}
+.update-modal-close:hover{background:var(--soft-btn-bg-hover);color:var(--text)}
+.update-modal-body{padding:0 22px 20px}
+.update-modal-notes{
+  display:none;max-height:220px;overflow-y:auto;padding:13px 14px;border-radius:16px;
+  background:var(--modal-bg-2);border:1px solid var(--modal-border);
+  color:var(--text-muted);font-size:12px;line-height:1.6;white-space:pre-wrap;
+}
+.update-modal-notes.visible{display:block}
+.update-modal-progress{display:none;margin-top:4px}
+.update-modal-progress.visible{display:block}
+.update-modal-track{height:5px;background:var(--border);border-radius:999px;overflow:hidden}
+.update-modal-bar{height:100%;width:0%;background:var(--accent);border-radius:999px;transition:width 0.25s ease}
+.update-modal-progress-label{font-size:11px;color:var(--text-muted);margin-top:8px}
+.update-modal-actions{
+  display:flex;justify-content:flex-end;gap:8px;padding:14px 22px 22px;border-top:1px solid var(--modal-border);
+}
+.update-spin{animation:spin 1s linear infinite}
 
 /* tab search modal */
 #tab-search-modal{
@@ -2081,15 +2148,6 @@ body{font-family:var(--font);background:transparent;color:var(--text);font-size:
 }
 .ut-btn-update:hover{background:var(--accent-hover);transform:translateY(-1px);box-shadow:0 4px 14px var(--accent-glow)}
 .ut-btn-update:active{transform:translateY(0)}
-.ut-close{
-  position:absolute;top:8px;right:8px;
-  width:22px;height:22px;border:none;background:transparent;
-  border-radius:50%;color:var(--text-muted);cursor:pointer;
-  display:flex;align-items:center;justify-content:center;
-  transition:background var(--transition),color var(--transition);
-  padding:0;
-}
-.ut-close:hover{background:var(--bg-hover);color:var(--text)}
 
 
 /* context menu */
@@ -2451,6 +2509,9 @@ svg{display:block;flex-shrink:0}
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
     </span>
     <img id="active-favicon" class="favicon" style="display:none" src="" alt="">
+    <span id="active-loading-icon" class="favicon" style="display:none">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 0 20"/></svg>
+    </span>
     <input id="url-input" type="text" placeholder="Search or enter a URL"
       onkeydown="handleUrlKey(event)"
       oninput="handleUrlInput(this.value)"
@@ -2489,7 +2550,6 @@ svg{display:block;flex-shrink:0}
   </div>
   </div>
 </div>
-<div id="page-progress"><div id="page-progress-bar"></div></div>
 <div id="bookmarks-bar"></div>
 </div>
 <div id="url-suggestions" class="suggestions-panel"></div>
@@ -2563,7 +2623,7 @@ svg{display:block;flex-shrink:0}
     <span class="more-item-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
     <span class="more-item-label">Settings</span>
   </button>
-  <button class="more-item" onclick="closeMoreMenu();send('CheckForUpdate')" role="menuitem">
+  <button class="more-item" onclick="closeMoreMenu();checkForUpdate()" role="menuitem">
     <span class="more-item-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg></span>
     <span class="more-item-label">Check for Updates</span>
   </button>
@@ -2609,7 +2669,7 @@ svg{display:block;flex-shrink:0}
 
   <!-- Brand: logo + title + new tab — unchanged -->
   <div class="sidebar-brand">
-    <div class="sidebar-brand-left" onclick="send('Navigate',{url:'neura://newtab'})" title="New tab">
+    <div class="sidebar-brand-left" onclick="send('NewTab')" title="New tab">
       <img class="sidebar-brand-logo" src="__LOGO_URL__" alt="">
       <div class="sidebar-brand-info">
         <span class="sidebar-brand-name">Ventus</span>
@@ -3114,12 +3174,13 @@ svg{display:block;flex-shrink:0}
               style="width:100%;box-sizing:border-box">
           </div>
           <!-- Upload -->
-          <div id="nt-wp-upload-row" style="display:none;margin-top:8px;display:none;align-items:center;gap:10px">
-            <button class="settings-btn-sm" onclick="ntPickWallpaperFile()">Choose file</button>
-            <img id="nt-wp-upload-preview" class="nt-wp-upload-preview" alt="">
+          <div id="nt-wp-upload-row" style="display:none;margin-top:8px;align-items:center;gap:10px">
+            <button class="settings-btn-sm" id="nt-wp-upload-choose" onclick="ntPickWallpaperFile()">Choose file</button>
+            <button class="settings-btn-sm" id="nt-wp-upload-use" onclick="useUploadedWallpaper(true)" style="display:none">Use photo</button>
+            <img id="nt-wp-upload-preview" class="nt-wp-upload-preview" onclick="useUploadedWallpaper(true)" alt="">
           </div>
           <!-- Color -->
-          <div id="nt-wp-color-row" style="display:none;margin-top:8px;display:none;align-items:center;gap:10px">
+          <div id="nt-wp-color-row" style="display:none;margin-top:8px;align-items:center;gap:10px">
             <input type="color" id="nt-wp-color-input" value="#141414"
               oninput="saveSetting('new_tab_wallpaper_color',this.value);initWallpaper(window.__ntState||{})"
               style="width:40px;height:32px;border:none;background:none;cursor:pointer;padding:0;border-radius:6px">
@@ -3235,7 +3296,7 @@ svg{display:block;flex-shrink:0}
         <div class="settings-toggle">
           <div class="settings-toggle-info">
             <div class="toggle-title">Ad &amp; Tracker Blocker</div>
-            <div class="toggle-desc">Block ads, trackers, and malicious scripts. Always off in incognito.</div>
+            <div class="toggle-desc">Block ads, trackers, and malicious scripts.</div>
           </div>
           <div class="toggle-switch on" id="toggle-ad-blocker-enabled" onclick="toggleSetting('ad_blocker_enabled')"></div>
         </div>
@@ -3244,6 +3305,36 @@ svg{display:block;flex-shrink:0}
           <div id="adblock-exceptions-list" style="display:flex;flex-direction:column;gap:4px">
             <div style="font-size:12px;color:var(--text-muted);font-style:italic">No exceptions, blocker is active on all sites</div>
           </div>
+        </div>
+        <div class="settings-toggle">
+          <div class="settings-toggle-info">
+            <div class="toggle-title">Secure DNS</div>
+            <div class="toggle-desc">Use Cloudflare DNS-over-HTTPS for browser DNS lookups</div>
+          </div>
+          <div class="toggle-switch" id="toggle-secure-dns-enabled" onclick="toggleSetting('secure_dns_enabled')"></div>
+        </div>
+        <div id="secure-dns-options" style="margin:0 0 12px;padding:10px 12px;background:var(--bg);border-radius:var(--radius-sm);border:1px solid var(--border-subtle)">
+          <div class="settings-group" style="margin-bottom:12px">
+            <label for="set-secure-dns-provider">Provider</label>
+            <select class="settings-select" id="set-secure-dns-provider" onchange="saveSetting('secure_dns_provider',this.value)">
+              <option value="cloudflare">Cloudflare 1.1.1.1</option>
+              <option value="cloudflare_malware">Cloudflare malware blocking</option>
+              <option value="cloudflare_family">Cloudflare family filtering</option>
+              <option value="custom">Custom HTTPS endpoint</option>
+            </select>
+          </div>
+          <div class="settings-group" style="margin-bottom:12px">
+            <label for="set-secure-dns-mode">Mode</label>
+            <select class="settings-select" id="set-secure-dns-mode" onchange="saveSetting('secure_dns_mode',this.value)">
+              <option value="secure">Strict, no local DNS fallback</option>
+              <option value="automatic">Automatic fallback if DoH fails</option>
+            </select>
+          </div>
+          <div class="settings-group" id="secure-dns-custom-row" style="margin-bottom:12px">
+            <label for="set-secure-dns-template">Custom endpoint</label>
+            <input class="settings-input" id="set-secure-dns-template" type="url" inputmode="url" placeholder="https://1.1.1.1/dns-query" onblur="saveSetting('secure_dns_template',this.value)" onkeydown="if(event.key==='Enter'){saveSetting('secure_dns_template',this.value);this.blur();}">
+          </div>
+          <div style="font-size:11px;color:var(--text-muted);line-height:1.5">Ventus restarts after DNS changes so the browser process uses it.</div>
         </div>
         <div class="settings-toggle">
           <div class="settings-toggle-info">
@@ -3524,6 +3615,31 @@ svg{display:block;flex-shrink:0}
   </div>
 </div>
 
+<div id="update-modal">
+  <div class="update-modal-panel" id="update-modal-panel" role="dialog" aria-modal="true" aria-labelledby="update-modal-title">
+    <div class="update-modal-head">
+      <div class="update-modal-icon" id="update-modal-icon">
+        <svg id="update-modal-icon-svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+      </div>
+      <div class="update-modal-copy">
+        <div class="update-modal-title" id="update-modal-title">Checking for updates</div>
+        <div class="update-modal-sub" id="update-modal-sub">This should only take a moment.</div>
+      </div>
+      <button class="update-modal-close" onclick="closeUpdateModal(false)" title="Close">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="update-modal-body">
+      <div class="update-modal-notes" id="update-modal-notes"></div>
+      <div class="update-modal-progress" id="update-modal-progress">
+        <div class="update-modal-track"><div class="update-modal-bar" id="update-modal-bar"></div></div>
+        <div class="update-modal-progress-label" id="update-modal-progress-label"></div>
+      </div>
+    </div>
+    <div class="update-modal-actions" id="update-modal-actions"></div>
+  </div>
+</div>
+
 <!-- UPDATE TOAST -->
 <div id="update-toast">
   <div class="ut-icon">
@@ -3537,9 +3653,6 @@ svg{display:block;flex-shrink:0}
     <button class="ut-btn-later" onclick="dismissUpdateToast()">Later</button>
     <button class="ut-btn-update" onclick="installUpdate();dismissUpdateToast()">Update</button>
   </div>
-  <button class="ut-close" onclick="dismissUpdateToast()" title="Dismiss">
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-  </button>
 </div>
 
 <!-- Window edge resize handles — transparent hit zones, trigger native Win32 resize.
@@ -3635,6 +3748,7 @@ let neuraFeedLoaded = false;
 let neuraFeedError = '';
 let newtabBgSeed = '';
 let newtabBgCss = '';
+let newtabWallpaperData = '';
 let settingDrafts = {};
 const trendingSearches = ['AI news', 'technology', 'Indonesia news', 'startup funding', 'web design'];
 
@@ -3659,6 +3773,11 @@ window.__neura = {
   setState(s) {
     state = {...state, ...s};
     render();
+  },
+  setNewtabWallpaperData(d) {
+    newtabWallpaperData = d || '';
+    if (newtabSettings().wallpaper_source === 'upload') applyNewtabSettings();
+    syncNewtabSettingsUI();
   },
   setLayout(sidebarW, toolbarH, aiW, frameSideW, frameBottomH) {
     const root = document.documentElement;
@@ -3738,10 +3857,12 @@ window.__neura = {
     document.getElementById('btn-forward').disabled = !canForward;
     const reloadBtn = document.getElementById('btn-reload');
     if (loading) {
+      if (!loadProgressTimer && loadProgress <= 0) startLoadProgress();
       reloadBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
       reloadBtn.onclick = () => nav('Stop');
       reloadBtn.title = 'Stop loading';
     } else {
+      if (loadProgressTimer || loadProgress > 0 && loadProgress < 1) finishLoadProgress();
       reloadBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>';
       reloadBtn.onclick = () => nav('Reload');
       reloadBtn.title = 'Reload (F5)';
@@ -3770,7 +3891,9 @@ window.__neura = {
   },
   clearTransientUi() {
     hideSuggestions();
-    ['settings-overlay','tab-search-modal','workspace-modal','workspace-delete-modal','context-menu','adblock-modal','adblock-backdrop','download-panel','model-modal','tab-spotlight-overlay'].forEach(id => {
+    const updateModal = document.getElementById('update-modal');
+    if (updateModal && updateModal.classList.contains('open')) closeUpdateModal(false);
+    ['settings-overlay','tab-search-modal','workspace-modal','workspace-delete-modal','context-menu','adblock-modal','adblock-backdrop','download-panel','model-modal','tab-spotlight-overlay','update-modal'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.classList.remove('open');
     });
@@ -3803,37 +3926,48 @@ window.__neura = {
   setUpdateState({ status, version, notes, error, received, total }) {
     const area = document.getElementById('update-status-area');
     const btn = document.getElementById('btn-check-update');
-    if (!area) return;
     if (status === 'checking') {
       btn && (btn.disabled = true);
-      area.innerHTML = '<div style="display:flex;align-items:center;gap:8px;color:var(--text-muted);font-size:12px"><svg style="animation:spin 1s linear infinite" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Checking for updates…</div>';
+      if (area) area.innerHTML = '<div style="display:flex;align-items:center;gap:8px;color:var(--text-muted);font-size:12px"><svg style="animation:spin 1s linear infinite" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Checking for updates...</div>';
+      if (__manualUpdateCheck || isUpdateModalOpen()) showUpdateModal({status});
     } else if (status === 'up_to_date') {
       btn && (btn.disabled = false);
-      area.innerHTML = '<div style="display:flex;align-items:center;gap:8px;color:var(--success);font-size:12px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>You\'re up to date.</div>';
+      if (area) area.innerHTML = '<div style="display:flex;align-items:center;gap:8px;color:var(--success);font-size:12px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>You\'re up to date.</div>';
+      if (__manualUpdateCheck || isUpdateModalOpen()) showUpdateModal({status});
+      __manualUpdateCheck = false;
     } else if (status === 'available') {
       btn && (btn.disabled = false);
-      area.innerHTML = `<div style="display:flex;flex-direction:column;gap:10px">
+      if (area) area.innerHTML = `<div style="display:flex;flex-direction:column;gap:10px">
         <div style="display:flex;align-items:center;gap:8px">
           <span style="padding:2px 8px;border-radius:10px;background:var(--accent-dim);color:var(--accent);font-size:11px;font-weight:600">v${escHtml(version)} available</span>
         </div>
-        ${notes ? `<div style="font-size:11px;color:var(--text-muted);max-height:80px;overflow-y:auto;white-space:pre-wrap;line-height:1.5">${escHtml(notes.slice(0,400))}${notes.length>400?'\u2026':''}</div>` : ''}
+        ${notes ? `<div style="font-size:11px;color:var(--text-muted);max-height:80px;overflow-y:auto;white-space:pre-wrap;line-height:1.5">${escHtml(notes.slice(0,400))}${notes.length>400?'...':''}</div>` : ''}
         <button class="ob-btn-primary" onclick="installUpdate()" style="align-self:flex-start;padding:6px 16px;font-size:12px">Download &amp; install</button>
       </div>`;
-      showUpdateToast(version, notes);
+      if (__manualUpdateCheck || isUpdateModalOpen()) {
+        showUpdateModal({status, version, notes});
+      } else {
+        showUpdateToast(version, notes);
+      }
+      __manualUpdateCheck = false;
     } else if (status === 'downloading') {
       btn && (btn.disabled = true);
       const pct = total > 0 ? Math.round((received / total) * 100) : null;
-      const label = pct !== null ? `Downloading\u2026 ${pct}%` : 'Downloading\u2026';
+      const label = pct !== null ? `Downloading... ${pct}%` : 'Downloading...';
       const bar = pct !== null
         ? `<div style="margin-top:8px;height:4px;background:var(--border);border-radius:2px;overflow:hidden"><div style="height:100%;background:var(--accent);width:${pct}%;transition:width 0.3s ease"></div></div>`
         : '';
-      area.innerHTML = `<div style="font-size:12px;color:var(--text-muted)">${label}${bar}</div>`;
+      if (area) area.innerHTML = `<div style="font-size:12px;color:var(--text-muted)">${label}${bar}</div>`;
+      if (isUpdateModalOpen()) showUpdateModal({status, received, total});
     } else if (status === 'installing') {
       btn && (btn.disabled = true);
-      area.innerHTML = '<div style="font-size:12px;color:var(--text-muted)">Installing update and restarting\u2026</div>';
+      if (area) area.innerHTML = '<div style="font-size:12px;color:var(--text-muted)">Installing update and restarting...</div>';
+      if (isUpdateModalOpen()) showUpdateModal({status});
     } else if (status === 'error') {
       btn && (btn.disabled = false);
-      area.innerHTML = `<div style="font-size:12px;color:var(--danger)">${escHtml(error || 'Update check failed.')}</div>`;
+      if (area) area.innerHTML = `<div style="font-size:12px;color:var(--danger)">${escHtml(error || 'Update check failed.')}</div>`;
+      if (__manualUpdateCheck || isUpdateModalOpen()) showUpdateModal({status, error});
+      __manualUpdateCheck = false;
     }
   },
   showContextMenu(data) { showBrowserContextMenu(data); },
@@ -4073,8 +4207,12 @@ function syncWsDots() {
   if (!el) return;
   const overflow = el.scrollWidth > el.clientWidth + 1;
   el.classList.toggle('scrollable', overflow);
+  if (!overflow) { el.scrollLeft = 0; return; }
   const active = el.querySelector('.ws-dot.active');
-  if (overflow && active) active.scrollIntoView({block: 'nearest', inline: 'center'});
+  if (!active) return;
+  const elRect = el.getBoundingClientRect();
+  const aRect = active.getBoundingClientRect();
+  el.scrollLeft += (aRect.left + aRect.width / 2) - (elRect.left + elRect.width / 2);
 }
 
 function scrollWsDots(e) {
@@ -4116,7 +4254,7 @@ function showWsPop(wsId, el) {
   document.getElementById('sb-ws-pop-count').textContent = tabCount + ' tab' + (tabCount !== 1 ? 's' : '');
   const note = document.getElementById('sb-ws-pop-note');
   if (note) {
-    note.textContent = ws.is_incognito ? 'Incognito workspace. History is not saved here, and ad blocker is off.' : '';
+    note.textContent = ws.is_incognito ? 'Incognito workspace. History is not saved here.' : '';
     note.style.display = ws.is_incognito ? 'block' : 'none';
   }
   const delBtn = document.getElementById('sb-ws-pop-delete');
@@ -4202,6 +4340,7 @@ function renderTabs() {
 
 function tabIconUrl(tab) {
   if (!tab) return '';
+  if (tab.status === 'loading') return '';
   if (tab.favicon) return tab.favicon;
   try {
     const h = new URL(tab.url).hostname;
@@ -4292,20 +4431,19 @@ function applyNewtabSettings() {
   const root = document.getElementById('newtab-placeholder');
   if (!root) return;
   const nt = newtabSettings();
-  // store for wallpaper callbacks
   window.__ntState = nt;
   const layout = nt.feed_layout === 'headlines' || nt.feed_layout === 'compact' ? nt.feed_layout : 'cards';
+  const bg = nt.show_background !== false && nt.wallpaper_source !== 'none';
+  root.classList.toggle('nt-hide-background', !bg);
   root.classList.toggle('nt-hide-search', nt.show_search === false);
   root.classList.toggle('nt-hide-shortcuts', nt.show_quick_links === false);
   root.classList.toggle('nt-feed-headlines', layout === 'headlines');
   root.classList.toggle('nt-feed-compact', layout === 'compact');
-  // theme
   ['nt-theme-minimal','nt-theme-focus','nt-theme-horizon','nt-theme-informative'].forEach(c => root.classList.remove(c));
   const theme = nt.theme || 'focus';
   root.classList.add('nt-theme-' + theme);
   ['nt-clock-sf','nt-clock-rounded','nt-clock-mono','nt-clock-serif'].forEach(c => root.classList.remove(c));
   root.classList.add('nt-clock-' + clockStyle(nt.clock_style));
-  // wallpaper
   initWallpaper(nt);
 }
 
@@ -4564,16 +4702,9 @@ function openIncognitoWorkspace() {
 }
 // Ctrl+Shift+N: switch to existing incognito workspace (opening a new tab there),
 // or silently create one named "Incognito" if none exists yet.
-function openOrCreateIncognitoWorkspace() {
-  const existing = (state.workspaces || []).find(w => w.is_incognito);
-  if (existing) {
-    if (state.active_workspace_id !== existing.id) {
-      switchWorkspace(existing.id);
-    }
-    openNewTabSpotlight();
-  } else {
-    send('NewWorkspace', {name: 'Incognito', is_incognito: true, icon: '🔐', accent_color: '#6b7280'});
-  }
+function switchToTabIndex(i) {
+  const tab = (state.tabs || [])[i];
+  if (tab) send('SwitchTab', {id: tab.id});
 }
 function openWorkspaceModal(wsId = null) {
   const modal = document.getElementById('workspace-modal');
@@ -4872,9 +5003,18 @@ function saveSetting(key, value) {
 }
 function rememberSetting(key, value) {
   if (!state.settings) state.settings = {};
+  if (key.startsWith('new_tab_')) {
+    if (!state.settings.new_tab) state.settings.new_tab = {};
+    state.settings.new_tab[key.replace('new_tab_', '')] = value;
+  }
   if (key === 'startup_behavior') state.settings.startup_behavior = value;
   if (key === 'homepage') state.settings.homepage = value;
   if (key === 'region') state.settings.region = value;
+  if (key.startsWith('secure_dns_')) {
+    if (!state.settings.privacy) state.settings.privacy = {};
+    state.settings.privacy[key] = value;
+    syncSecureDnsSettingsUI();
+  }
   if (key === 'download_path') {
     if (!state.settings.downloads) state.settings.downloads = {};
     state.settings.downloads.default_folder = value;
@@ -4932,9 +5072,14 @@ function populateSettingsPanel() {
   setToggleEl('toggle-trending', trendingEnabled());
   setToggleEl('toggle-history', !priv.disable_history);
   setToggleEl('toggle-ad-blocker-enabled', priv.ad_blocker_enabled !== false);
+  setToggleEl('toggle-secure-dns-enabled', !!priv.secure_dns_enabled);
+  setSelectValue('set-secure-dns-provider', priv.secure_dns_provider || 'cloudflare');
+  setSelectValue('set-secure-dns-mode', priv.secure_dns_mode || 'secure');
+  setInputValue('set-secure-dns-template', priv.secure_dns_template || 'https://1.1.1.1/dns-query');
   setToggleEl('toggle-new-tab-show-search', nt.show_search !== false);
   setToggleEl('toggle-new-tab-show-quick-links', nt.show_quick_links !== false);
   syncNewtabSettingsUI();
+  syncSecureDnsSettingsUI();
   renderAdBlockExceptions(priv.ad_blocker_exceptions || []);
   updateProviderDdUI(ai.default_provider || 'openai');
   const zoomPct = Math.round((app.zoom_level || 1.0) * 100);
@@ -4942,9 +5087,20 @@ function populateSettingsPanel() {
   onZoomSliderInput(zoomPct);
   populateRegionSettings();
 }
+function syncSecureDnsSettingsUI() {
+  const priv = ((state.settings || {}).privacy) || {};
+  const enabled = !!priv.secure_dns_enabled;
+  const provider = priv.secure_dns_provider || 'cloudflare';
+  const box = document.getElementById('secure-dns-options');
+  if (box) {
+    box.style.opacity = enabled ? '1' : '0.58';
+    box.querySelectorAll('select,input').forEach(el => { el.disabled = !enabled; });
+  }
+  const custom = document.getElementById('secure-dns-custom-row');
+  if (custom) custom.style.display = provider === 'custom' ? 'block' : 'none';
+}
 function syncNewtabSettingsUI() {
   const nt = newtabSettings();
-  // theme cards
   const theme = nt.theme || 'focus';
   document.querySelectorAll('.nt-theme-card').forEach(c => {
     c.classList.toggle('selected', c.dataset.theme === theme);
@@ -4953,7 +5109,6 @@ function syncNewtabSettingsUI() {
   document.querySelectorAll('.nt-clock-card').forEach(c => {
     c.classList.toggle('selected', c.dataset.clock === clock);
   });
-  // wallpaper source
   const src = nt.wallpaper_source || 'nature';
   syncWallpaperSourceUI(src, nt);
 }
@@ -5017,14 +5172,11 @@ function startLoadProgress() {
   if (loadProgressTimer && loadProgress > 0 && loadProgress < 1) return;
   clearInterval(loadProgressTimer);
   loadProgress = 0.08;
-  const wrap = document.getElementById('page-progress');
-  const bar = document.getElementById('page-progress-bar');
-  wrap.classList.add('visible');
-  bar.style.width = '8%';
+  setAddressLoadProgress(loadProgress);
   loadProgressTimer = setInterval(() => {
     if (loadProgress < 0.88) {
       loadProgress += Math.max(0.015, (0.9 - loadProgress) * 0.06);
-      bar.style.width = `${Math.round(loadProgress * 100)}%`;
+      setAddressLoadProgress(loadProgress);
     }
   }, 350);
 }
@@ -5032,22 +5184,27 @@ function setLoadProgress(progress) {
   const next = Math.max(loadProgress || 0, Math.min(progress, 0.98));
   if (next <= 0) return;
   loadProgress = next;
-  document.getElementById('page-progress').classList.add('visible');
-  document.getElementById('page-progress-bar').style.width = `${Math.round(next * 100)}%`;
+  setAddressLoadProgress(next);
 }
 function finishLoadProgress() {
   clearInterval(loadProgressTimer);
   loadProgressTimer = null;
   loadProgress = 1;
-  const wrap = document.getElementById('page-progress');
-  const bar = document.getElementById('page-progress-bar');
-  wrap.classList.add('visible');
-  bar.style.width = '100%';
+  setAddressLoadProgress(1);
+  const bar = document.getElementById('address-bar');
+  if (bar) bar.classList.add('done');
   setTimeout(() => {
-    wrap.classList.remove('visible');
-    bar.style.width = '0%';
+    if (bar) {
+      bar.classList.remove('loading','done');
+    }
     loadProgress = 0;
-  }, 260);
+  }, 420);
+}
+function setAddressLoadProgress(progress) {
+  const bar = document.getElementById('address-bar');
+  if (!bar) return;
+  bar.classList.add('loading');
+  bar.classList.remove('done');
 }
 
 // ============================================================
@@ -5092,6 +5249,16 @@ function handleUrlBlur() {
   restoreDisplayUrl();
 }
 function handleUrlKey(e) {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    const raw = e.target.value.trim();
+    if (!raw) return;
+    const url = /^[a-z0-9-]+$/i.test(raw) ? 'https://www.' + raw + '.com' : raw;
+    hideSuggestions();
+    send('Navigate', {url});
+    e.target.blur();
+    return;
+  }
   if (handleSuggestionKey(e, 'url')) return;
   const input = e.target;
   // Accept inline completion: Tab or ArrowRight when there's a selection (ghost text active).
@@ -5221,24 +5388,34 @@ function updateLockIcon(url) {
   const lock = document.getElementById('lock-icon');
   const warn = document.getElementById('insecure-icon');
   const favicon = document.getElementById('active-favicon');
+  const loadingIcon = document.getElementById('active-loading-icon');
   const tab = state.tabs && state.tabs.find(t => t.id === state.active_tab_id);
-  if (tab && tab.favicon) {
+  if (tab && tab.status === 'loading') {
+    loadingIcon.style.display = 'flex';
+    favicon.style.display = 'none';
+    lock.style.display = 'none';
+    warn.style.display = 'none';
+  } else if (tab && tab.favicon) {
     favicon.src = tab.favicon;
     favicon.style.display = 'block';
+    loadingIcon.style.display = 'none';
     lock.style.display = 'none';
     warn.style.display = 'none';
   } else if (url && url.startsWith('https://')) {
     lock.style.display = 'flex';
     warn.style.display = 'none';
     favicon.style.display = 'none';
+    loadingIcon.style.display = 'none';
   } else if (url && url.startsWith('http://')) {
     warn.style.display = 'flex';
     lock.style.display = 'none';
     favicon.style.display = 'none';
+    loadingIcon.style.display = 'none';
   } else {
     lock.style.display = 'none';
     warn.style.display = 'none';
     favicon.style.display = 'none';
+    loadingIcon.style.display = 'none';
   }
 }
 function checkNewtabPlaceholder(url) {
@@ -5354,15 +5531,9 @@ function initWallpaper(nt) {
     return;
   }
   if (src === 'upload') {
-    ntLoadUploadedWallpaper(dataUrl => {
-      if (dataUrl) {
-        setNewtabBg(cssBgUrl(dataUrl));
-        const prev = document.getElementById('nt-wp-upload-preview');
-        if (prev) { prev.src = dataUrl; prev.style.display = 'block'; }
-      } else {
-        setNewtabBg('');
-      }
-    });
+    const dataUrl = newtabWallpaperData || '';
+    setUploadPreview(dataUrl);
+    setNewtabBg(dataUrl ? cssBgUrl(dataUrl) : '');
     return;
   }
   if (src === 'nature') {
@@ -5398,27 +5569,33 @@ function setClockStyle(style) {
 }
 
 function setWallpaperSource(src) {
+  if (!state.settings) state.settings = {};
+  if (!state.settings.new_tab) state.settings.new_tab = {};
   saveSetting('new_tab_wallpaper_source', src);
-  if (state.settings && state.settings.new_tab) state.settings.new_tab.wallpaper_source = src;
+  state.settings.new_tab.wallpaper_source = src;
+  state.settings.new_tab.show_background = src !== 'none';
   const nt = newtabSettings();
   window.__ntState = nt;
   syncWallpaperSourceUI(src, nt);
-  initWallpaper(nt);
+  if (src === 'upload' && !newtabWallpaperData) {
+    setNewtabBg('');
+    ntPickWallpaperFile();
+    return;
+  }
+  applyNewtabSettings();
 }
 
 function syncWallpaperSourceUI(src, nt) {
-  // source buttons
   document.querySelectorAll('.nt-wp-src-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.src === src);
   });
-  // conditional rows
   const urlRow = document.getElementById('nt-wp-url-row');
   const uploadRow = document.getElementById('nt-wp-upload-row');
   const colorRow = document.getElementById('nt-wp-color-row');
   if (urlRow) urlRow.style.display = src === 'url' ? 'block' : 'none';
   if (uploadRow) uploadRow.style.display = src === 'upload' ? 'flex' : 'none';
   if (colorRow) colorRow.style.display = src === 'color' ? 'flex' : 'none';
-  // populate inputs from stored settings
+  setUploadPreview(newtabWallpaperData);
   if (src === 'url' && nt && nt.wallpaper_url) {
     const inp = document.getElementById('nt-wp-url-input');
     if (inp) inp.value = nt.wallpaper_url;
@@ -5430,6 +5607,36 @@ function syncWallpaperSourceUI(src, nt) {
     if (inp) inp.value = col;
     if (lbl) lbl.textContent = col;
   }
+}
+
+function setUploadPreview(dataUrl) {
+  const prev = document.getElementById('nt-wp-upload-preview');
+  const use = document.getElementById('nt-wp-upload-use');
+  const choose = document.getElementById('nt-wp-upload-choose');
+  if (prev) {
+    prev.src = dataUrl || '';
+    prev.style.display = dataUrl ? 'block' : 'none';
+  }
+  if (use) use.style.display = dataUrl ? 'inline-block' : 'none';
+  if (choose) choose.textContent = dataUrl ? 'Change photo' : 'Choose file';
+}
+
+function useUploadedWallpaper(showMsg) {
+  if (!state.settings) state.settings = {};
+  if (!state.settings.new_tab) state.settings.new_tab = {};
+  const dataUrl = newtabWallpaperData || '';
+  if (!dataUrl) {
+    ntPickWallpaperFile();
+    return;
+  }
+  state.settings.new_tab.wallpaper_source = 'upload';
+  state.settings.new_tab.show_background = true;
+  saveSetting('new_tab_wallpaper_source', 'upload');
+  const nt = newtabSettings();
+  window.__ntState = nt;
+  syncWallpaperSourceUI('upload', nt);
+  applyNewtabSettings();
+  if (showMsg) toast('Wallpaper applied', 'success');
 }
 
 function ntPickWallpaperFile() {
@@ -5447,16 +5654,7 @@ function ntPickWallpaperFile() {
           toast('Could not save wallpaper', 'error');
           return;
         }
-        if (!state.settings) state.settings = {};
-        if (!state.settings.new_tab) state.settings.new_tab = {};
-        state.settings.new_tab.wallpaper_source = 'upload';
-        saveSetting('new_tab_wallpaper_source', 'upload');
-        setNewtabBg(cssBgUrl(dataUrl));
-        const nt = newtabSettings();
-        window.__ntState = nt;
-        syncWallpaperSourceUI('upload', nt);
-        const prev = document.getElementById('nt-wp-upload-preview');
-        if (prev) { prev.src = dataUrl; prev.style.display = 'block'; }
+        useUploadedWallpaper(false);
         toast('Wallpaper saved', 'success');
       });
     };
@@ -5468,16 +5666,10 @@ function ntPickWallpaperFile() {
 
 function ntSaveUploadedWallpaper(dataUrl, cb) {
   try {
+    newtabWallpaperData = dataUrl;
     saveSetting('new_tab_wallpaper_data', dataUrl);
-    if (state.settings && state.settings.new_tab) state.settings.new_tab.wallpaper_data = dataUrl;
     cb(true);
   } catch(err) { cb(false); }
-}
-
-function ntLoadUploadedWallpaper(cb) {
-  const nt = newtabSettings();
-  const data = (nt && nt.wallpaper_data) || null;
-  setTimeout(() => cb(data), 0);
 }
 
 let _ntClockTick = null;
@@ -6185,8 +6377,8 @@ function populateRegionSettings() {
 function openSettings(section='general') {
   send('OpenSettings');
   document.getElementById('settings-overlay').classList.add('open');
+  populateSettingsPanel();
   switchSettings(section);
-  populateRegionSettings();
 }
 function closeSettings() {
   send('CloseSettings');
@@ -6252,6 +6444,12 @@ function toggleSetting(key) {
     state.settings.search.trending_enabled = val;
     renderSuggestionPanels();
   }
+  if (key === 'secure_dns_enabled') {
+    if (!state.settings) state.settings = {};
+    if (!state.settings.privacy) state.settings.privacy = {};
+    state.settings.privacy.secure_dns_enabled = val;
+    syncSecureDnsSettingsUI();
+  }
   if (key.startsWith('new_tab_')) {
     if (!state.settings) state.settings = {};
     if (!state.settings.new_tab) state.settings.new_tab = {};
@@ -6273,9 +6471,13 @@ function setTheme(t) {
   send('SaveSettings', {key: 'theme', value: t});
 }
 function checkForUpdate() {
+  __manualUpdateCheck = true;
+  showUpdateModal({status: 'checking'});
   send('CheckForUpdate');
 }
 function installUpdate() {
+  __manualUpdateCheck = true;
+  showUpdateModal({status: 'downloading', received: 0, total: 0});
   send('InstallUpdate');
 }
 
@@ -7038,6 +7240,100 @@ function tspKeydown(e) {
 
 let __updateToastTimer = null;
 let __pendingUpdateVersion = null;
+let __manualUpdateCheck = false;
+let __updateModalVersion = null;
+function isUpdateModalOpen() {
+  const modal = document.getElementById('update-modal');
+  return !!modal && modal.classList.contains('open');
+}
+function updateModalCopy(status, data) {
+  if (status === 'up_to_date') return {title: 'Ventus is up to date', sub: 'You already have the newest version.'};
+  if (status === 'available') return {title: 'Update available', sub: data.version ? `Ventus v${data.version} is ready.` : 'A new Ventus update is ready.'};
+  if (status === 'downloading') {
+    const pct = data.total > 0 ? Math.round((data.received / data.total) * 100) : null;
+    return {title: 'Downloading update', sub: pct !== null ? `${pct}% downloaded.` : 'Getting the installer ready.'};
+  }
+  if (status === 'installing') return {title: 'Installing update', sub: 'Ventus will restart when it is done.'};
+  if (status === 'error') return {title: 'Could not check updates', sub: data.error || 'Something went wrong.'};
+  return {title: 'Checking for updates', sub: 'This should only take a moment.'};
+}
+function setUpdateModalIcon(status) {
+  const svg = document.getElementById('update-modal-icon-svg');
+  if (!svg) return;
+  let html = '<path d="M21 12a9 9 0 1 1-6.219-8.56"/>';
+  if (status === 'up_to_date') html = '<polyline points="20 6 9 17 4 12"/>';
+  if (status === 'available') html = '<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/>';
+  if (status === 'error') html = '<circle cx="12" cy="12" r="9"/><path d="M12 8v5"/><path d="M12 16h.01"/>';
+  svg.innerHTML = html;
+  svg.classList.toggle('update-spin', status === 'checking' || status === 'downloading' || status === 'installing');
+}
+function setUpdateModalActions(status) {
+  const actions = document.getElementById('update-modal-actions');
+  if (!actions) return;
+  let html = '';
+  if (status === 'available') html = '<button class="ob-btn-secondary" onclick="closeUpdateModal(true)">Later</button><button class="ob-btn-primary" onclick="installUpdate()">Update now</button>';
+  if (status === 'up_to_date' || status === 'error') html = '<button class="ob-btn-primary" onclick="closeUpdateModal(false)">Done</button>';
+  actions.innerHTML = html;
+  actions.style.display = html ? 'flex' : 'none';
+}
+function setUpdateModalProgress(status, data) {
+  const box = document.getElementById('update-modal-progress');
+  const bar = document.getElementById('update-modal-bar');
+  const label = document.getElementById('update-modal-progress-label');
+  if (!box || !bar || !label) return;
+  if (status !== 'downloading') {
+    box.classList.remove('visible');
+    bar.style.width = '0%';
+    label.textContent = '';
+    return;
+  }
+  const pct = data.total > 0 ? Math.round((data.received / data.total) * 100) : null;
+  box.classList.add('visible');
+  bar.style.width = pct !== null ? `${pct}%` : '18%';
+  label.textContent = pct !== null ? `Downloading... ${pct}%` : 'Downloading...';
+}
+function showUpdateModal(data) {
+  const modal = document.getElementById('update-modal');
+  if (!modal) return;
+  const status = (data && data.status) || 'checking';
+  const copy = updateModalCopy(status, data || {});
+  const title = document.getElementById('update-modal-title');
+  const sub = document.getElementById('update-modal-sub');
+  const notes = document.getElementById('update-modal-notes');
+  if (title) title.textContent = copy.title;
+  if (sub) sub.textContent = copy.sub;
+  if (notes) {
+    notes.textContent = status === 'available' ? ((data && data.notes) || 'No release notes for this update.') : '';
+    notes.classList.toggle('visible', status === 'available');
+  }
+  if (status === 'available') __updateModalVersion = (data && data.version) || null;
+  if (status === 'up_to_date' || status === 'error') __updateModalVersion = null;
+  setUpdateModalIcon(status);
+  setUpdateModalActions(status);
+  setUpdateModalProgress(status, data || {});
+  modal.classList.add('open');
+  syncUpdateModalClip();
+}
+function closeUpdateModal(dismiss) {
+  const modal = document.getElementById('update-modal');
+  if (!modal || !modal.classList.contains('open')) return;
+  modal.classList.remove('open');
+  send('SuggestionOverlay', {visible:false, x:0, y:0, width:0, height:0});
+  if (dismiss && __updateModalVersion) {
+    send('DismissUpdate', {version: __updateModalVersion});
+    __updateModalVersion = null;
+  }
+}
+function syncUpdateModalClip() {
+  const modal = document.getElementById('update-modal');
+  const panel = document.getElementById('update-modal-panel');
+  if (!modal || !panel || !modal.classList.contains('open')) return;
+  requestAnimationFrame(() => {
+    if (!modal.classList.contains('open')) return;
+    const rect = panel.getBoundingClientRect();
+    send('SuggestionOverlay', {visible:true, x:rect.left - 14, y:rect.top - 14, width:rect.width + 28, height:rect.height + 28});
+  });
+}
 function showUpdateToast(version, notes) {
   const toast = document.getElementById('update-toast');
   if (!toast) return;
@@ -7932,8 +8228,9 @@ document.addEventListener('keydown', e => {
   const ctrl = e.ctrlKey || e.metaKey;
   const key = e.key.toLowerCase();
   if (ctrl && e.shiftKey && key === 't') { e.preventDefault(); send('ReopenTab'); }
-  else if (ctrl && e.shiftKey && key === 'n') { e.preventDefault(); openOrCreateIncognitoWorkspace(); }
+  else if (ctrl && e.shiftKey && key === 'n') { e.preventDefault(); send('OpenIncognito'); }
   else if (ctrl && key === 'n') { e.preventDefault(); send('OpenInNewWindow', {url: 'neura://newtab'}); }
+  else if (ctrl && !e.shiftKey && /^[1-9]$/.test(e.key)) { e.preventDefault(); switchToTabIndex(parseInt(e.key, 10) - 1); }
   else if (ctrl && key === 't') { e.preventDefault(); openNewTabSpotlight(); }
   else if (ctrl && e.key === 'w') { e.preventDefault(); if (state.active_tab_id) send('CloseTab', {id: state.active_tab_id}); }
   else if (ctrl && key === 'l') { e.preventDefault(); focusUrl(); }
@@ -7959,6 +8256,7 @@ document.addEventListener('keydown', e => {
     else if (document.getElementById('more-menu').classList.contains('open')) closeMoreMenu();
     else if (document.getElementById('download-panel').classList.contains('open')) closeDownloadPanel();
     else if (document.getElementById('model-modal').classList.contains('open')) closeModelModal();
+    else if (document.getElementById('update-modal').classList.contains('open')) closeUpdateModal(false);
     else if (document.getElementById('settings-overlay').classList.contains('open')) closeSettings();
     else if (document.getElementById('tab-search-modal').classList.contains('open')) closeTabSearch();
     else if (document.getElementById('update-toast').classList.contains('visible')) dismissUpdateToast();
@@ -7969,7 +8267,10 @@ document.addEventListener('keydown', e => {
   else if (e.key === 'F11') { e.preventDefault(); send('ToggleFullscreen'); }
   else if (e.key === 'F12') { send('OpenDevtools'); }
 });
-window.addEventListener('resize', refreshSuggestionOverlayBounds, {passive: true});
+window.addEventListener('resize', () => {
+  refreshSuggestionOverlayBounds();
+  syncUpdateModalClip();
+}, {passive: true});
 
 // ============================================================
 // UTILS

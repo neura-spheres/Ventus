@@ -31,7 +31,7 @@ Write-Host "Binary: $exeSource ($([Math]::Round((Get-Item $exeSource).Length / 1
 $isccPaths = @(
     "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
     "C:\Program Files\Inno Setup 6\ISCC.exe",
-    (Get-Command ISCC.exe -ErrorAction SilentlyContinue)?.Source
+    (Get-Command ISCC.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -ErrorAction SilentlyContinue)
 )
 $iscc = $isccPaths | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
 if (-not $iscc) {
