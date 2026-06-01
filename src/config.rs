@@ -201,9 +201,12 @@ fn default_true() -> bool {
     true
 }
 
-pub const CLOUDFLARE_DOH: &str = "https://1.1.1.1/dns-query";
-pub const CLOUDFLARE_MALWARE_DOH: &str = "https://1.1.1.2/dns-query";
-pub const CLOUDFLARE_FAMILY_DOH: &str = "https://1.1.1.3/dns-query";
+pub const CLOUDFLARE_DOH: &str = "https://cloudflare-dns.com/dns-query";
+pub const CLOUDFLARE_MALWARE_DOH: &str = "https://security.cloudflare-dns.com/dns-query";
+pub const CLOUDFLARE_FAMILY_DOH: &str = "https://family.cloudflare-dns.com/dns-query";
+pub const GOOGLE_DOH: &str = "https://dns.google/dns-query";
+pub const OPENDNS_DOH: &str = "https://dns.opendns.com/dns-query";
+pub const OPENDNS_FAMILY_DOH: &str = "https://familyshield.opendns.com/dns-query";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
@@ -211,6 +214,11 @@ pub enum SecureDnsProvider {
     Cloudflare,
     CloudflareMalware,
     CloudflareFamily,
+    Google,
+    #[serde(rename = "opendns", alias = "open_dns")]
+    OpenDns,
+    #[serde(rename = "opendns_family", alias = "open_dns_family")]
+    OpenDnsFamily,
     Custom,
 }
 
@@ -225,6 +233,9 @@ impl SecureDnsProvider {
         match id {
             "cloudflare_malware" => Self::CloudflareMalware,
             "cloudflare_family" => Self::CloudflareFamily,
+            "google" => Self::Google,
+            "opendns" | "open_dns" => Self::OpenDns,
+            "opendns_family" | "open_dns_family" => Self::OpenDnsFamily,
             "custom" => Self::Custom,
             _ => Self::Cloudflare,
         }
@@ -235,6 +246,9 @@ impl SecureDnsProvider {
             Self::Cloudflare => Some(CLOUDFLARE_DOH.to_string()),
             Self::CloudflareMalware => Some(CLOUDFLARE_MALWARE_DOH.to_string()),
             Self::CloudflareFamily => Some(CLOUDFLARE_FAMILY_DOH.to_string()),
+            Self::Google => Some(GOOGLE_DOH.to_string()),
+            Self::OpenDns => Some(OPENDNS_DOH.to_string()),
+            Self::OpenDnsFamily => Some(OPENDNS_FAMILY_DOH.to_string()),
             Self::Custom => clean_doh_url(custom),
         }
     }
@@ -455,5 +469,108 @@ mod tests {
             settings.privacy.secure_dns_mode,
             super::SecureDnsMode::Secure
         );
+    }
+
+    #[test]
+    fn built_in_providers_use_expected_doh_templates() {
+        assert_eq!(
+            super::SecureDnsProvider::Cloudflare.endpoint(""),
+            Some(super::CLOUDFLARE_DOH.to_string())
+        );
+        assert_eq!(
+            super::SecureDnsProvider::CloudflareMalware.endpoint(""),
+            Some(super::CLOUDFLARE_MALWARE_DOH.to_string())
+        );
+        assert_eq!(
+            super::SecureDnsProvider::CloudflareFamily.endpoint(""),
+            Some(super::CLOUDFLARE_FAMILY_DOH.to_string())
+        );
+        assert_eq!(
+            super::SecureDnsProvider::Google.endpoint(""),
+            Some(super::GOOGLE_DOH.to_string())
+        );
+        assert_eq!(
+            super::SecureDnsProvider::OpenDns.endpoint(""),
+            Some(super::OPENDNS_DOH.to_string())
+        );
+        assert_eq!(
+            super::SecureDnsProvider::OpenDnsFamily.endpoint(""),
+            Some(super::OPENDNS_FAMILY_DOH.to_string())
+        );
+    }
+
+    #[test]
+    fn opendns_provider_ids_match_settings_ui() {
+        assert_eq!(
+            serde_json::to_string(&super::SecureDnsProvider::OpenDns).unwrap(),
+            r#""opendns""#
+        );
+        assert_eq!(
+            serde_json::to_string(&super::SecureDnsProvider::OpenDnsFamily).unwrap(),
+            r#""opendns_family""#
+        );
+        assert_eq!(
+            serde_json::from_str::<super::SecureDnsProvider>(r#""open_dns""#).unwrap(),
+            super::SecureDnsProvider::OpenDns
+        );
+        assert_eq!(
+            serde_json::from_str::<super::SecureDnsProvider>(r#""open_dns_family""#).unwrap(),
+            super::SecureDnsProvider::OpenDnsFamily
+        );
+    }
+
+    #[test]
+    fn provider_ids_accept_all_settings_ui_values() {
+        let cases = [
+            ("cloudflare", super::SecureDnsProvider::Cloudflare),
+            (
+                "cloudflare_malware",
+                super::SecureDnsProvider::CloudflareMalware,
+            ),
+            (
+                "cloudflare_family",
+                super::SecureDnsProvider::CloudflareFamily,
+            ),
+            ("google", super::SecureDnsProvider::Google),
+            ("opendns", super::SecureDnsProvider::OpenDns),
+            ("open_dns", super::SecureDnsProvider::OpenDns),
+            ("opendns_family", super::SecureDnsProvider::OpenDnsFamily),
+            ("open_dns_family", super::SecureDnsProvider::OpenDnsFamily),
+            ("custom", super::SecureDnsProvider::Custom),
+            ("unknown", super::SecureDnsProvider::Cloudflare),
+        ];
+
+        for (id, provider) in cases {
+            assert_eq!(super::SecureDnsProvider::from_id(id), provider);
+        }
+    }
+
+    #[test]
+    fn secure_dns_endpoint_respects_toggle_and_custom_validation() {
+        let mut privacy = super::PrivacySettings::default();
+        assert_eq!(privacy.secure_dns_endpoint(), None);
+
+        privacy.secure_dns_enabled = true;
+        assert_eq!(
+            privacy.secure_dns_endpoint(),
+            Some(super::CLOUDFLARE_DOH.to_string())
+        );
+
+        privacy.secure_dns_provider = super::SecureDnsProvider::Custom;
+        privacy.secure_dns_template = " https://dns.example/dns-query ".to_string();
+        assert_eq!(
+            privacy.secure_dns_endpoint(),
+            Some("https://dns.example/dns-query".to_string())
+        );
+
+        for invalid in [
+            "",
+            "http://dns.example/dns-query",
+            "https://dns.example/dns query",
+            "https://dns.example/\tdns-query",
+        ] {
+            privacy.secure_dns_template = invalid.to_string();
+            assert_eq!(privacy.secure_dns_endpoint(), None);
+        }
     }
 }
