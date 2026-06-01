@@ -204,7 +204,7 @@ pub enum TabAction {
         tab_id: String,
         url: String,
     },
-    Relaunch,
+    ApplySecureDns,
     DownloadUpdate(String),
     SetFullscreen(bool),
     ContentScriptOnTab {
@@ -443,6 +443,11 @@ pub fn handle_chrome_command(
             let needs_layout = key == "sidebar_mode" || key == "show_bookmarks_bar";
             let ad_blocker_toggled = key == "ad_blocker_enabled";
             let secure_dns_changed = key.starts_with("secure_dns_");
+            let secure_dns_before = if secure_dns_changed {
+                Some(secure_dns_signature(&state.settings))
+            } else {
+                None
+            };
             let secure_dns_valid = key != "secure_dns_template"
                 || value
                     .as_str()
@@ -461,10 +466,16 @@ pub fn handle_chrome_command(
                 return Some(TabAction::SyncViews);
             }
             if secure_dns_changed && secure_dns_valid {
-                let _ = chrome.evaluate_script(
-                    "window.__neura && window.__neura.showSuccess('Applying Secure DNS...')",
-                );
-                return Some(TabAction::Relaunch);
+                let secure_dns_after = secure_dns_signature(&state.settings);
+                if secure_dns_before
+                    .as_ref()
+                    .map_or(true, |before| before != &secure_dns_after)
+                {
+                    let _ = chrome.evaluate_script(
+                        "window.__neura && window.__neura.showSuccess('Applying Secure DNS...')",
+                    );
+                    return Some(TabAction::ApplySecureDns);
+                }
             }
             if ad_blocker_toggled {
                 return None;
@@ -998,6 +1009,13 @@ fn can_accept_redirect(state: &AppState, tab_id: &str, url: &str) -> bool {
         .get_tab(tab_id)
         .map(|tab| tab.status == crate::browser::tab::TabStatus::Loading)
         .unwrap_or(false)
+}
+
+fn secure_dns_signature(settings: &AppSettings) -> (Option<String>, SecureDnsMode) {
+    (
+        settings.privacy.secure_dns_endpoint(),
+        settings.privacy.secure_dns_mode.clone(),
+    )
 }
 
 pub fn handle_app_event_inner(

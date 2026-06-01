@@ -3309,7 +3309,7 @@ svg{display:block;flex-shrink:0}
         <div class="settings-toggle">
           <div class="settings-toggle-info">
             <div class="toggle-title">Secure DNS</div>
-            <div class="toggle-desc">Use Cloudflare DNS-over-HTTPS for browser DNS lookups</div>
+            <div class="toggle-desc">Use DNS-over-HTTPS for browser DNS lookups</div>
           </div>
           <div class="toggle-switch" id="toggle-secure-dns-enabled" onclick="toggleSetting('secure_dns_enabled')"></div>
         </div>
@@ -3318,9 +3318,12 @@ svg{display:block;flex-shrink:0}
             <label for="set-secure-dns-provider">Provider</label>
             <select class="settings-select" id="set-secure-dns-provider" onchange="saveSetting('secure_dns_provider',this.value)">
               <option value="cloudflare">Cloudflare 1.1.1.1</option>
-              <option value="cloudflare_malware">Cloudflare malware blocking</option>
-              <option value="cloudflare_family">Cloudflare family filtering</option>
-              <option value="custom">Custom HTTPS endpoint</option>
+              <option value="cloudflare_malware">Cloudflare Malware Protection</option>
+              <option value="cloudflare_family">Cloudflare Family Protection</option>
+              <option value="google">Google Public DNS</option>
+              <option value="opendns">OpenDNS</option>
+              <option value="opendns_family">OpenDNS FamilyShield</option>
+              <option value="custom">Custom DoH Endpoint</option>
             </select>
           </div>
           <div class="settings-group" style="margin-bottom:12px">
@@ -3332,9 +3335,9 @@ svg{display:block;flex-shrink:0}
           </div>
           <div class="settings-group" id="secure-dns-custom-row" style="margin-bottom:12px">
             <label for="set-secure-dns-template">Custom endpoint</label>
-            <input class="settings-input" id="set-secure-dns-template" type="url" inputmode="url" placeholder="https://1.1.1.1/dns-query" onblur="saveSetting('secure_dns_template',this.value)" onkeydown="if(event.key==='Enter'){saveSetting('secure_dns_template',this.value);this.blur();}">
+            <input class="settings-input" id="set-secure-dns-template" type="url" inputmode="url" placeholder="https://cloudflare-dns.com/dns-query" onblur="saveSetting('secure_dns_template',this.value)" onkeydown="if(event.key==='Enter'){saveSetting('secure_dns_template',this.value);this.blur();}">
           </div>
-          <div style="font-size:11px;color:var(--text-muted);line-height:1.5">Ventus restarts after DNS changes so the browser process uses it.</div>
+          <div style="font-size:11px;color:var(--text-muted);line-height:1.5">Ventus stays open; active web pages refresh to use DNS changes.</div>
         </div>
         <div class="settings-toggle">
           <div class="settings-toggle-info">
@@ -5075,7 +5078,7 @@ function populateSettingsPanel() {
   setToggleEl('toggle-secure-dns-enabled', !!priv.secure_dns_enabled);
   setSelectValue('set-secure-dns-provider', priv.secure_dns_provider || 'cloudflare');
   setSelectValue('set-secure-dns-mode', priv.secure_dns_mode || 'secure');
-  setInputValue('set-secure-dns-template', priv.secure_dns_template || 'https://1.1.1.1/dns-query');
+  setInputValue('set-secure-dns-template', priv.secure_dns_template || 'https://cloudflare-dns.com/dns-query');
   setToggleEl('toggle-new-tab-show-search', nt.show_search !== false);
   setToggleEl('toggle-new-tab-show-quick-links', nt.show_quick_links !== false);
   syncNewtabSettingsUI();
@@ -8341,4 +8344,35 @@ if (window.__neura_show_onboarding) {
 </html>"##;
     html.replace("__LOGO_URL__", &logo)
         .replace("__APP_VERSION__", version)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::chrome_html;
+
+    #[test]
+    fn secure_dns_options_match_supported_provider_ids() {
+        let html = chrome_html();
+        for expected in [
+            r#"<option value="cloudflare">Cloudflare 1.1.1.1</option>"#,
+            r#"<option value="cloudflare_malware">Cloudflare Malware Protection</option>"#,
+            r#"<option value="cloudflare_family">Cloudflare Family Protection</option>"#,
+            r#"<option value="google">Google Public DNS</option>"#,
+            r#"<option value="opendns">OpenDNS</option>"#,
+            r#"<option value="opendns_family">OpenDNS FamilyShield</option>"#,
+            r#"<option value="custom">Custom DoH Endpoint</option>"#,
+        ] {
+            assert!(
+                html.contains(expected),
+                "missing Secure DNS option: {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn secure_dns_copy_no_longer_promises_restart() {
+        let html = chrome_html();
+        assert!(html.contains("Ventus stays open; active web pages refresh to use DNS changes."));
+        assert!(!html.contains("Ventus restarts after DNS changes"));
+    }
 }

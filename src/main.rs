@@ -69,6 +69,8 @@ const SC_TAB_9: usize = 30;
 const LOAD_STALL_AFTER: u64 = 30;
 const TAB_SLEEP_REFRESH_AFTER: Duration = Duration::from_secs(5 * 60);
 const TAB_KEEPALIVE_EVERY: Duration = Duration::from_secs(45);
+const WEBVIEW_PROFILE_RELEASE_TIMEOUT: Duration = Duration::from_secs(5);
+const WEBVIEW_PROFILE_RELEASE_POLL: u64 = 50;
 /// How often to take a proactive cookie snapshot (in addition to the
 /// per-navigation save triggered by ContentLoadEnd events).
 const COOKIE_SAVE_EVERY: Duration = Duration::from_secs(5 * 60);
@@ -352,7 +354,11 @@ fn main() {
         .map(|t| t.url.clone())
         .unwrap_or_else(|| browser::tab::Tab::new_tab_url().to_string());
     let win_size = window.inner_size();
-    let browser_args = webview_args(&state.settings);
+    #[cfg(windows)]
+    if let Some(chrome_profile_dir) = default_webview2_data_dir() {
+        sync_webview_secure_dns_prefs(&chrome_profile_dir, &state.settings);
+    }
+    let mut browser_args = webview_args(&state.settings);
 
     let proxy_chrome = proxy.clone();
     let proxy_chrome_load = proxy.clone();
@@ -425,11 +431,13 @@ fn main() {
     // doesn't exist or is locked by a stale process, so we pre-create it here.
     let webview_data_dir = data_dir.join("webview_data");
     std::fs::create_dir_all(&webview_data_dir).expect("create WebView2 profile");
+    #[cfg(windows)]
+    sync_webview_secure_dns_prefs(&webview_data_dir, &state.settings);
     // Wrapped in Option so we can explicitly drop it before TAO calls process::exit().
     // Without this, Rust's Drop never runs for these contexts, so msedgewebview2.exe outlives
     // the Ventus process and holds the profile lock — causing the next launch to silently use
     // temp storage and lose all cookies.
-    let mut content_web_context = Some(wry::WebContext::new(Some(webview_data_dir)));
+    let mut content_web_context = Some(wry::WebContext::new(Some(webview_data_dir.clone())));
 
     // Incognito tabs get their own ephemeral data directory that is wiped on every startup,
     // so cookies, cache, and localStorage never persist across sessions.
@@ -441,7 +449,9 @@ fn main() {
     };
     std::fs::remove_dir_all(&incognito_data_dir).ok();
     std::fs::create_dir_all(&incognito_data_dir).ok();
-    let mut incognito_web_context = Some(wry::WebContext::new(Some(incognito_data_dir)));
+    #[cfg(windows)]
+    sync_webview_secure_dns_prefs(&incognito_data_dir, &state.settings);
+    let mut incognito_web_context = Some(wry::WebContext::new(Some(incognito_data_dir.clone())));
 
     let mut content_views: HashMap<String, WebView> = HashMap::new();
     let mut content_hwnds: HashMap<String, isize> = HashMap::new();
@@ -1686,23 +1696,146 @@ fn main() {
                                 Err(e) => tracing::error!("rebuild content view: {}", e),
                             }
                         }
-                        TabAction::Relaunch => {
-                            let active_url =
-                                state.tab_manager.active_tab().map(|tab| tab.url.clone());
-                            if !new_window {
-                                save_window_size(&window, &mut state, custom_maximized);
-                                save_session(&state);
+                        TabAction::ApplySecureDns => {
+                            browser_args = webview_args(&state.settings);
+                            #[cfg(windows)]
+                            {
+                                if let Some(chrome_profile_dir) = default_webview2_data_dir() {
+                                    sync_webview_secure_dns_prefs(
+                                        &chrome_profile_dir,
+                                        &state.settings,
+                                    );
+                                }
+                                sync_webview_secure_dns_prefs(&webview_data_dir, &state.settings);
+                                sync_webview_secure_dns_prefs(
+                                    &incognito_data_dir,
+                                    &state.settings,
+                                );
                             }
+
                             save_open_cookies(&content_views, &state, &data_dir);
-                            relaunch_app(new_window, active_url.as_deref());
-                            shutdown_webview2(
-                                crash_sentinel.as_deref(),
-                                &mut content_views,
-                                &mut content_hwnds,
-                                &mut content_web_context,
-                                &mut incognito_web_context,
+                            #[cfg(windows)]
+                            drain_message_queue_ms(200);
+                            content_views.clear();
+                            content_hwnds.clear();
+                            load_watches.clear();
+                            inactive_tabs.clear();
+                            drop(content_web_context.take());
+                            drop(incognito_web_context.take());
+                            #[cfg(windows)]
+                            {
+                                if !wait_for_webview_profiles_released(
+                                    &[
+                                        webview_data_dir.as_path(),
+                                        incognito_data_dir.as_path(),
+                                    ],
+                                    WEBVIEW_PROFILE_RELEASE_TIMEOUT,
+                                ) {
+                                    tracing::warn!(
+                                        "secure_dns: timed out waiting for WebView2 profile release"
+                                    );
+                                }
+                            }
+                            #[cfg(not(windows))]
+                            std::thread::sleep(Duration::from_millis(800));
+
+                            std::fs::create_dir_all(&webview_data_dir).ok();
+                            std::fs::create_dir_all(&incognito_data_dir).ok();
+                            #[cfg(windows)]
+                            {
+                                sync_webview_secure_dns_prefs(&webview_data_dir, &state.settings);
+                                sync_webview_secure_dns_prefs(
+                                    &incognito_data_dir,
+                                    &state.settings,
+                                );
+                            }
+                            content_web_context =
+                                Some(wry::WebContext::new(Some(webview_data_dir.clone())));
+                            incognito_web_context =
+                                Some(wry::WebContext::new(Some(incognito_data_dir.clone())));
+                            ubol_done = false;
+                            ubol_enabled = None;
+                            ubol_tab = None;
+
+                            let active_content =
+                                state.tab_manager.active_tab_id.clone().and_then(|tab_id| {
+                                    state
+                                        .tab_manager
+                                        .get_tab(&tab_id)
+                                        .map(|tab| (tab_id, tab.url.clone()))
+                                });
+                            if let Some((tab_id, url)) = active_content {
+                                if !url.starts_with("neura://") {
+                                    clear_tab_favicon(&mut state, &tab_id);
+                                    state.tab_manager.set_tab_loading(&tab_id, true);
+                                    state.load_recoveries.remove(&app::load_key(&tab_id, &url));
+                                    state.push_state_to_chrome(&chrome);
+
+                                    let is_incog = state.tab_manager.tab_is_incognito(&tab_id);
+                                    let ctx = if is_incog {
+                                        incognito_web_context.as_mut().unwrap()
+                                    } else {
+                                        content_web_context.as_mut().unwrap()
+                                    };
+                                    let ad_script = state.ad_block_engine.init_script().to_string();
+                                    match build_content_webview(
+                                        &window,
+                                        &tab_id,
+                                        &url,
+                                        layout.content,
+                                        proxy_main.clone(),
+                                        ctx,
+                                        is_incog,
+                                        std::sync::Arc::clone(&shared_dl_dir),
+                                        tab_zoom(&state, &tab_id),
+                                        &browser_args,
+                                        ad_script,
+                                        true,
+                                    ) {
+                                        Ok(wv) => {
+                                            #[cfg(windows)]
+                                            let hwnd = webview_hwnd(&wv);
+                                            content_views.insert(tab_id.clone(), wv);
+                                            watch_load(
+                                                &rt,
+                                                &proxy_main,
+                                                &mut load_watches,
+                                                &mut load_watch_next,
+                                                tab_id.clone(),
+                                                url.clone(),
+                                            );
+                                            #[cfg(windows)]
+                                            track_content_hwnd(hwnd, &tab_id, &mut content_hwnds);
+                                            if let Some(wv) = content_views.get(&tab_id) {
+                                                let _ = wv.focus();
+                                            }
+                                        }
+                                        Err(e) => {
+                                            tracing::error!("apply secure DNS content rebuild: {}", e)
+                                        }
+                                    }
+                                }
+                            }
+
+                            apply_layout(
+                                &chrome,
+                                chrome_hwnd,
+                                &content_views,
+                                &state,
+                                &layout_config,
+                                &window,
                             );
-                            *control_flow = ControlFlow::Exit;
+                            sync_active_ubol(
+                                &content_views,
+                                &state,
+                                ubol_dir.as_deref(),
+                                &mut ubol_done,
+                                &mut ubol_enabled,
+                                &mut ubol_tab,
+                            );
+                            let _ = chrome.evaluate_script(
+                                "window.__neura && window.__neura.showSuccess('Secure DNS applied')",
+                            );
                         }
                         TabAction::DownloadUpdate(download_url) => {
                             let proxy_dl = proxy_main.clone();
@@ -2061,23 +2194,6 @@ fn wait_for_relaunch_parent(pid: Option<u32>) {
     }
 }
 
-fn relaunch_app(new_window: bool, url: Option<&str>) {
-    if let Ok(exe) = std::env::current_exe() {
-        let mut cmd = std::process::Command::new(exe);
-        cmd.arg("--wait-for-pid")
-            .arg(std::process::id().to_string());
-        if new_window {
-            cmd.arg("--new-window");
-            if let Some(url) = url {
-                cmd.arg("--url").arg(url);
-            }
-        } else {
-            cmd.arg("--restore-session");
-        }
-        let _ = cmd.spawn();
-    }
-}
-
 #[cfg(windows)]
 fn attach_fullscreen_handler(wv: &WebView, proxy: tao::event_loop::EventLoopProxy<AppEvent>) {
     use webview2_com::{
@@ -2247,6 +2363,51 @@ fn drain_message_queue_ms(ms: u64) {
             // Queue is empty — short sleep so we don't busy-spin.
             std::thread::sleep(Duration::from_millis(8));
         }
+    }
+}
+
+#[cfg(windows)]
+fn webview_profile_lock_paths(profile_root: &std::path::Path) -> [std::path::PathBuf; 2] {
+    [
+        profile_root.join("EBWebView").join("lockfile"),
+        profile_root.join("EBWebView").join("LOCK"),
+    ]
+}
+
+#[cfg(windows)]
+fn webview_profile_lock_released(profile_root: &std::path::Path) -> bool {
+    use std::os::windows::fs::OpenOptionsExt;
+
+    webview_profile_lock_paths(profile_root)
+        .into_iter()
+        .filter(|lock_path| lock_path.exists())
+        .all(|lock_path| {
+            std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .share_mode(0)
+                .open(lock_path)
+                .is_ok()
+        })
+}
+
+#[cfg(windows)]
+fn wait_for_webview_profiles_released(
+    profile_roots: &[&std::path::Path],
+    timeout: Duration,
+) -> bool {
+    let deadline = Instant::now() + timeout;
+    loop {
+        if profile_roots
+            .iter()
+            .all(|profile_root| webview_profile_lock_released(profile_root))
+        {
+            return true;
+        }
+        if Instant::now() >= deadline {
+            return false;
+        }
+        drain_message_queue_ms(WEBVIEW_PROFILE_RELEASE_POLL);
     }
 }
 
@@ -2751,7 +2912,11 @@ fn webview_args(settings: &config::AppSettings) -> String {
         "--media-cache-size=536870912".to_string(),
     ];
     if let Some(url) = settings.privacy.secure_dns_endpoint() {
-        args.push("--enable-features=DnsOverHttps".to_string());
+        args.push("--enable-async-dns".to_string());
+        args.push(format!(
+            "--enable-features={}",
+            doh_feature_arg(&url, &settings.privacy.secure_dns_mode)
+        ));
         args.push(format!(
             "--dns-over-https-mode={}",
             settings.privacy.secure_dns_mode.as_arg()
@@ -2759,6 +2924,93 @@ fn webview_args(settings: &config::AppSettings) -> String {
         args.push(format!("--dns-over-https-templates={}", url));
     }
     args.join(" ")
+}
+
+fn doh_feature_arg(url: &str, mode: &config::SecureDnsMode) -> String {
+    let fallback = matches!(mode, config::SecureDnsMode::Automatic);
+    let encoded_url: String = url::form_urlencoded::byte_serialize(url.as_bytes()).collect();
+    format!("DnsOverHttps:Fallback/{fallback}/Templates/{encoded_url}")
+}
+
+fn default_webview2_data_dir() -> Option<std::path::PathBuf> {
+    let mut path = std::env::current_exe().ok()?.into_os_string();
+    path.push(".WebView2");
+    Some(std::path::PathBuf::from(path))
+}
+
+fn sync_webview_secure_dns_prefs(profile_root: &std::path::Path, settings: &config::AppSettings) {
+    if let Err(err) = write_webview_secure_dns_prefs(profile_root, settings) {
+        tracing::warn!(
+            "secure_dns: failed to update WebView2 prefs at {}: {}",
+            profile_root.display(),
+            err
+        );
+    }
+}
+
+fn write_webview_secure_dns_prefs(
+    profile_root: &std::path::Path,
+    settings: &config::AppSettings,
+) -> anyhow::Result<()> {
+    let profile_dir = profile_root.join("EBWebView");
+    std::fs::create_dir_all(&profile_dir)?;
+    let local_state_path = profile_dir.join("Local State");
+    let mut local_state = match std::fs::read_to_string(&local_state_path) {
+        Ok(json) => serde_json::from_str::<serde_json::Value>(&json)
+            .unwrap_or_else(|_| serde_json::json!({})),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => serde_json::json!({}),
+        Err(err) => return Err(err.into()),
+    };
+    apply_secure_dns_local_state(&mut local_state, settings);
+    std::fs::write(local_state_path, serde_json::to_vec(&local_state)?)?;
+    Ok(())
+}
+
+fn apply_secure_dns_local_state(
+    local_state: &mut serde_json::Value,
+    settings: &config::AppSettings,
+) {
+    let endpoint = settings.privacy.secure_dns_endpoint();
+    let enabled = endpoint.is_some();
+    let mode = if enabled {
+        settings.privacy.secure_dns_mode.as_arg()
+    } else {
+        "off"
+    };
+    let templates = endpoint.unwrap_or_default();
+    let fallback = enabled
+        && matches!(
+            settings.privacy.secure_dns_mode,
+            config::SecureDnsMode::Automatic
+        );
+
+    let dns_prefs = json_object_child(local_state, "dns_over_https");
+    dns_prefs.insert("mode".into(), serde_json::Value::String(mode.to_string()));
+    dns_prefs.insert("templates".into(), serde_json::Value::String(templates));
+    dns_prefs.insert(
+        "automatic_mode_fallback_to_doh".into(),
+        serde_json::Value::Bool(fallback),
+    );
+
+    let async_dns = json_object_child(local_state, "async_dns");
+    async_dns.insert("enabled".into(), serde_json::Value::Bool(enabled));
+}
+
+fn json_object_child<'a>(
+    value: &'a mut serde_json::Value,
+    key: &str,
+) -> &'a mut serde_json::Map<String, serde_json::Value> {
+    if !value.is_object() {
+        *value = serde_json::json!({});
+    }
+    let root = value.as_object_mut().expect("JSON value is an object");
+    let child = root
+        .entry(key.to_string())
+        .or_insert_with(|| serde_json::json!({}));
+    if !child.is_object() {
+        *child = serde_json::json!({});
+    }
+    child.as_object_mut().expect("JSON child is an object")
 }
 
 fn download_dir_from_settings(settings: &config::AppSettings) -> std::path::PathBuf {
@@ -5203,14 +5455,92 @@ fn fmt_currency_value(n: f64) -> String {
 mod webview_arg_tests {
     use super::*;
 
+    fn secure_dns_cases() -> [(config::SecureDnsProvider, &'static str); 6] {
+        [
+            (
+                config::SecureDnsProvider::Cloudflare,
+                config::CLOUDFLARE_DOH,
+            ),
+            (
+                config::SecureDnsProvider::CloudflareMalware,
+                config::CLOUDFLARE_MALWARE_DOH,
+            ),
+            (
+                config::SecureDnsProvider::CloudflareFamily,
+                config::CLOUDFLARE_FAMILY_DOH,
+            ),
+            (config::SecureDnsProvider::Google, config::GOOGLE_DOH),
+            (config::SecureDnsProvider::OpenDns, config::OPENDNS_DOH),
+            (
+                config::SecureDnsProvider::OpenDnsFamily,
+                config::OPENDNS_FAMILY_DOH,
+            ),
+        ]
+    }
+
     #[test]
     fn secure_dns_adds_cloudflare_args() {
         let mut settings = config::AppSettings::default();
         settings.privacy.secure_dns_enabled = true;
         let args = webview_args(&settings);
-        assert!(args.contains("--enable-features=DnsOverHttps"));
+        assert!(args.contains("--enable-async-dns"));
+        assert!(args.contains(
+            "--enable-features=DnsOverHttps:Fallback/false/Templates/https%3A%2F%2Fcloudflare-dns.com%2Fdns-query"
+        ));
         assert!(args.contains("--dns-over-https-mode=secure"));
-        assert!(args.contains("--dns-over-https-templates=https://1.1.1.1/dns-query"));
+        assert!(args.contains("--dns-over-https-templates=https://cloudflare-dns.com/dns-query"));
+    }
+
+    #[test]
+    fn secure_dns_automatic_allows_fallback_in_feature_params() {
+        let mut settings = config::AppSettings::default();
+        settings.privacy.secure_dns_enabled = true;
+        settings.privacy.secure_dns_mode = config::SecureDnsMode::Automatic;
+        let args = webview_args(&settings);
+        assert!(args.contains(
+            "--enable-features=DnsOverHttps:Fallback/true/Templates/https%3A%2F%2Fcloudflare-dns.com%2Fdns-query"
+        ));
+        assert!(args.contains("--dns-over-https-mode=automatic"));
+    }
+
+    #[test]
+    fn secure_dns_args_cover_all_builtin_providers() {
+        for (provider, endpoint) in secure_dns_cases() {
+            let mut settings = config::AppSettings::default();
+            settings.privacy.secure_dns_enabled = true;
+            settings.privacy.secure_dns_provider = provider;
+
+            let args = webview_args(&settings);
+
+            assert!(args.contains("--enable-async-dns"));
+            assert!(args.contains(&format!(
+                "--enable-features={}",
+                doh_feature_arg(endpoint, &config::SecureDnsMode::Secure)
+            )));
+            assert!(args.contains("--dns-over-https-mode=secure"));
+            assert!(args.contains(&format!("--dns-over-https-templates={endpoint}")));
+        }
+    }
+
+    #[test]
+    fn secure_dns_custom_args_require_valid_https_endpoint() {
+        let mut settings = config::AppSettings::default();
+        settings.privacy.secure_dns_enabled = true;
+        settings.privacy.secure_dns_provider = config::SecureDnsProvider::Custom;
+        settings.privacy.secure_dns_template = " https://dns.example/dns-query ".to_string();
+
+        let args = webview_args(&settings);
+        assert!(args.contains("--dns-over-https-templates=https://dns.example/dns-query"));
+
+        for invalid in [
+            "",
+            "http://dns.example/dns-query",
+            "https://dns.example/dns query",
+        ] {
+            settings.privacy.secure_dns_template = invalid.to_string();
+            let args = webview_args(&settings);
+            assert!(!args.contains("dns-over-https"));
+        }
     }
 
     #[test]
@@ -5218,6 +5548,163 @@ mod webview_arg_tests {
         let settings = config::AppSettings::default();
         let args = webview_args(&settings);
         assert!(!args.contains("dns-over-https"));
+    }
+
+    #[test]
+    fn secure_dns_local_state_sets_cloudflare_prefs() {
+        let mut settings = config::AppSettings::default();
+        settings.privacy.secure_dns_enabled = true;
+        let mut local_state = serde_json::json!({"existing": true});
+
+        apply_secure_dns_local_state(&mut local_state, &settings);
+
+        assert_eq!(local_state["existing"], true);
+        assert_eq!(local_state["dns_over_https"]["mode"], "secure");
+        assert_eq!(
+            local_state["dns_over_https"]["templates"],
+            "https://cloudflare-dns.com/dns-query"
+        );
+        assert_eq!(
+            local_state["dns_over_https"]["automatic_mode_fallback_to_doh"],
+            false
+        );
+        assert_eq!(local_state["async_dns"]["enabled"], true);
+    }
+
+    #[test]
+    fn secure_dns_local_state_turns_off_stale_prefs() {
+        let settings = config::AppSettings::default();
+        let mut local_state = serde_json::json!({
+            "dns_over_https": {
+                "mode": "secure",
+                "templates": "https://cloudflare-dns.com/dns-query",
+                "automatic_mode_fallback_to_doh": true
+            },
+            "async_dns": {
+                "enabled": true
+            }
+        });
+
+        apply_secure_dns_local_state(&mut local_state, &settings);
+
+        assert_eq!(local_state["dns_over_https"]["mode"], "off");
+        assert_eq!(local_state["dns_over_https"]["templates"], "");
+        assert_eq!(
+            local_state["dns_over_https"]["automatic_mode_fallback_to_doh"],
+            false
+        );
+        assert_eq!(local_state["async_dns"]["enabled"], false);
+    }
+
+    #[test]
+    fn secure_dns_local_state_covers_all_providers_and_modes() {
+        for (provider, endpoint) in secure_dns_cases() {
+            for (mode, mode_arg, fallback) in [
+                (config::SecureDnsMode::Secure, "secure", false),
+                (config::SecureDnsMode::Automatic, "automatic", true),
+            ] {
+                let mut settings = config::AppSettings::default();
+                settings.privacy.secure_dns_enabled = true;
+                settings.privacy.secure_dns_provider = provider.clone();
+                settings.privacy.secure_dns_mode = mode;
+                let mut local_state = serde_json::json!({"keep_me": {"nested": true}});
+
+                apply_secure_dns_local_state(&mut local_state, &settings);
+
+                assert_eq!(local_state["keep_me"]["nested"], true);
+                assert_eq!(local_state["dns_over_https"]["mode"], mode_arg);
+                assert_eq!(local_state["dns_over_https"]["templates"], endpoint);
+                assert_eq!(
+                    local_state["dns_over_https"]["automatic_mode_fallback_to_doh"],
+                    fallback
+                );
+                assert_eq!(local_state["async_dns"]["enabled"], true);
+            }
+        }
+    }
+
+    #[test]
+    fn write_webview_secure_dns_prefs_preserves_existing_local_state() {
+        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join("tmp")
+            .join(format!(
+                "secure-dns-local-state-test-{}",
+                std::process::id()
+            ));
+        let profile_dir = root.join("EBWebView");
+        let local_state_path = profile_dir.join("Local State");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&profile_dir).unwrap();
+        std::fs::write(
+            &local_state_path,
+            r#"{"unrelated":{"value":7},"dns_over_https":{"mode":"off"}}"#,
+        )
+        .unwrap();
+
+        let mut settings = config::AppSettings::default();
+        settings.privacy.secure_dns_enabled = true;
+        settings.privacy.secure_dns_provider = config::SecureDnsProvider::Google;
+        settings.privacy.secure_dns_mode = config::SecureDnsMode::Automatic;
+
+        write_webview_secure_dns_prefs(&root, &settings).unwrap();
+
+        let local_state = serde_json::from_str::<serde_json::Value>(
+            &std::fs::read_to_string(&local_state_path).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(local_state["unrelated"]["value"], 7);
+        assert_eq!(local_state["dns_over_https"]["mode"], "automatic");
+        assert_eq!(
+            local_state["dns_over_https"]["templates"],
+            config::GOOGLE_DOH
+        );
+        assert_eq!(
+            local_state["dns_over_https"]["automatic_mode_fallback_to_doh"],
+            true
+        );
+        assert_eq!(local_state["async_dns"]["enabled"], true);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn webview_profile_lock_paths_include_real_webview2_lockfile() {
+        let root = std::path::PathBuf::from(r"C:\VentusProfile");
+        let paths = webview_profile_lock_paths(&root);
+        assert_eq!(paths[0], root.join("EBWebView").join("lockfile"));
+        assert_eq!(paths[1], root.join("EBWebView").join("LOCK"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn webview_profile_lock_released_detects_exclusive_lock() {
+        use std::os::windows::fs::OpenOptionsExt;
+
+        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join("tmp")
+            .join(format!("webview-profile-lock-test-{}", std::process::id()));
+        let lock_dir = root.join("EBWebView");
+        let lock_path = lock_dir.join("lockfile");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&lock_dir).unwrap();
+        std::fs::write(&lock_path, b"").unwrap();
+
+        assert!(webview_profile_lock_released(&root));
+
+        let guard = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .share_mode(0)
+            .open(&lock_path)
+            .unwrap();
+
+        assert!(!webview_profile_lock_released(&root));
+
+        drop(guard);
+        assert!(webview_profile_lock_released(&root));
+        let _ = std::fs::remove_dir_all(&root);
     }
 }
 
