@@ -5016,10 +5016,36 @@ function _doHideSidebar() {
   _syncSidebarBtnState();
   clearSidebarClipTimer();
   if (wasPinned) send('SidebarPeek', {visible: true, pinned: false});
+  // Drive the clip column down in lockstep with the slide-out so no black gap shows.
+  animSidebarClip();
   sidebarClipTimer = setTimeout(() => {
     sidebarClipTimer = null;
     if (!sidebarPeeking) send('SidebarPeek', {visible: false, pinned: false});
   }, 220);
+}
+
+// Stream the auto-hide sidebar's live right-edge to Rust each animation frame so
+// the chrome clip column + content cut track the sliding sidebar exactly. This
+// keeps the area the sidebar vacates filled by content (outside the clip) instead
+// of the transparent chrome showing the dark window background as a black bar.
+// Reads getBoundingClientRect() so it follows the real (eased) CSS transform.
+function animSidebarClip() {
+  const myId = ++sidebarClipAnimId;
+  const el = document.getElementById('sidebar');
+  if (!el) return;
+  const startT = performance.now();
+  const DUR = 260; // > the 0.2s CSS slide and the 220ms SidebarPeek timeout
+  function frame(now) {
+    if (myId !== sidebarClipAnimId) return; // superseded by a newer show/hide
+    const right = Math.max(0, el.getBoundingClientRect().right);
+    send('SidebarClipWidth', {w: right});
+    if (now - startT < DUR) {
+      requestAnimationFrame(frame);
+    } else {
+      send('SidebarClipWidth', {w: -1}); // release override → normal clip logic
+    }
+  }
+  requestAnimationFrame(frame);
 }
 
 // pin=true: opened via button click — stays open until explicitly closed
@@ -5031,12 +5057,11 @@ function showFloatingSidebar(pin) {
     sidebarPinned = !!pin;
     sidebarPeeking = true;
     document.getElementById('app').classList.add('sidebar-floating-open');
-    if (pin) {
-      send('SidebarPeek', {visible: true, pinned: false});
-      scheduleSidebarPin();
-    } else {
-      send('SidebarPeek', {visible: true, pinned: false});
-    }
+    // Start the clip collapsed so it grows with the slide-in (no full-width flash).
+    send('SidebarClipWidth', {w: 0});
+    send('SidebarPeek', {visible: true, pinned: false});
+    if (pin) scheduleSidebarPin();
+    animSidebarClip();
   } else if (pin) {
     sidebarPinned = true;
     scheduleSidebarPin();
@@ -8346,6 +8371,7 @@ let sidebarPinned  = false;
 let sidebarHideTimer = null;
 let sidebarClipTimer = null;
 let sidebarPinTimer = null;
+let sidebarClipAnimId = 0;
 const sidebarHideDelay = 100;
 let tabSearchIdx = -1;
 function openTabSearch(fromRust) {

@@ -2987,8 +2987,35 @@ fn build_content_webview(
                     return;
                 }
             }
+            // SECURITY: content WebViews host untrusted web pages, and every page has
+            // window.ipc.postMessage. This fallthrough must NOT forward commands blindly —
+            // doing so would let any site disable HTTPS-only (save_settings), execute a
+            // local file (open_file), trigger an update install (install_update), close the
+            // window (window_close), hijack navigation, etc.
+            //
+            // Only forward the small set of NON-privileged UI/state commands that the
+            // injected content_initialization_script legitimately emits and that are not
+            // already handled explicitly above. Everything else is dropped.
+            //
+            // When adding a new content→Rust command to the content init script, it MUST be
+            // added to this whitelist too, otherwise it will be silently ignored here.
             if let Ok(cmd) = serde_json::from_str::<ChromeCommand>(body) {
-                let _ = proxy_ipc.send_event(AppEvent::Chrome(cmd));
+                let allowed = matches!(
+                    cmd,
+                    ChromeCommand::SidebarAutoClose                  // mousemove auto-hide signal
+                        | ChromeCommand::ToggleFullscreen            // F11 inside page content
+                        | ChromeCommand::ContentFullscreenChange { .. } // video-player fullscreen
+                        | ChromeCommand::BeginSpotlight              // Ctrl+T
+                        | ChromeCommand::ReopenTab                   // Ctrl+Shift+T
+                        | ChromeCommand::OpenHistoryPanel            // Ctrl+H
+                        | ChromeCommand::OpenDownloadsPanel          // Ctrl+J
+                        | ChromeCommand::ZoomDelta { .. }            // Ctrl+wheel zoom
+                );
+                if allowed {
+                    let _ = proxy_ipc.send_event(AppEvent::Chrome(cmd));
+                } else {
+                    tracing::debug!("blocked untrusted content IPC command");
+                }
             }
         })
         .with_navigation_handler({
@@ -3984,7 +4011,13 @@ impl AppLayout {
 
         let clip_sidebar_w = if is_auto_hide {
             let exp_w = logical_to_physical(config.sidebar_expanded_w as f64, scale);
-            if state.sidebar_auto_hide_open {
+            if let Some(ov) = state.sidebar_clip_w_override {
+                // JS streams the sidebar's live edge during the slide animation so the
+                // chrome clip column (and the content cut derived from it) follow the
+                // sidebar exactly, leaving no transparent gap that would expose the dark
+                // window background as a black bar.
+                logical_to_physical(ov, scale).min(exp_w)
+            } else if state.sidebar_auto_hide_open {
                 exp_w
             } else {
                 frame_side

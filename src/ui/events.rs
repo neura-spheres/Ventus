@@ -117,6 +117,14 @@ pub enum ChromeCommand {
         pinned: bool,
     },
     SidebarAutoClose,
+    /// During the auto-hide sidebar's slide animation, JS streams the sidebar's
+    /// live right-edge position (CSS px) so Rust can size the chrome clip column
+    /// and content cut to track it exactly — preventing the dark window background
+    /// from showing through the transparent chrome behind the sliding sidebar.
+    /// `w < 0` clears the override (animation finished, return to normal clip).
+    SidebarClipWidth {
+        w: f64,
+    },
     SuggestionOverlay {
         visible: bool,
         x: f64,

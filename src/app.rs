@@ -33,6 +33,10 @@ pub struct AppState {
     pub chrome_overlay_open: bool,
     pub sidebar_auto_hide_open: bool,
     pub sidebar_pinned: bool,
+    /// Live clip-column width (CSS px) streamed by JS while the auto-hide sidebar
+    /// slides. When `Some`, the layout uses it for the chrome clip + content cut so
+    /// they follow the sidebar's animated edge. `None` = no animation in progress.
+    pub sidebar_clip_w_override: Option<f64>,
     pub suggestion_overlay_rect: Option<ChromeClipRect>,
     pub pending_update_url: Option<String>,
     pub pending_update_version: Option<String>,
@@ -81,6 +85,7 @@ impl AppState {
             chrome_overlay_open: false,
             sidebar_auto_hide_open: false,
             sidebar_pinned: false,
+            sidebar_clip_w_override: None,
             suggestion_overlay_rect: None,
             pending_update_url: None,
             pending_update_version: None,
@@ -581,6 +586,7 @@ pub fn handle_chrome_command(
             };
             state.sidebar_auto_hide_open = false;
             state.sidebar_pinned = false;
+            state.sidebar_clip_w_override = None;
             let _ = settings_store::set(&state.conn, "sidebar_mode", &next);
             let _ = settings_store::set(&state.conn, "app_settings", &state.settings);
             state.push_state_to_chrome(chrome);
@@ -682,6 +688,12 @@ pub fn handle_chrome_command(
         ChromeCommand::SidebarPeek { visible, pinned } => {
             state.sidebar_auto_hide_open = visible;
             state.sidebar_pinned = visible && pinned;
+            Some(TabAction::SyncSidebarClip)
+        }
+        ChromeCommand::SidebarClipWidth { w } => {
+            // JS streams the sliding sidebar's live edge so the clip column + content
+            // cut track it (no dark gap). `w < 0` ends the animation → normal clip.
+            state.sidebar_clip_w_override = if w < 0.0 { None } else { Some(w.max(0.0)) };
             Some(TabAction::SyncSidebarClip)
         }
         ChromeCommand::SidebarAutoClose => {
