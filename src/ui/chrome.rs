@@ -4761,7 +4761,9 @@ function toggleSidebar() {
   const app = document.getElementById('app');
   const isAutoHide = app.classList.contains('sidebar-auto-hide');
   if (isAutoHide) {
-    if (sidebarPeeking) {
+    // Toggle pins/unpins the sidebar. Pinned = solid, pushes content smaller.
+    // Pressing again (or while only hover-peeking) returns to the overlay/auto-hide.
+    if (sidebarPinned) {
       hideFloatingSidebar(true);
     } else {
       showFloatingSidebar(true);

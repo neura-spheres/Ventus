@@ -3980,7 +3980,14 @@ impl AppLayout {
         );
         let min_content_w = config.min_content_w as f64;
         let sidebar_css_w = if is_auto_hide {
-            0.0
+            // Pinned auto-hide sidebar is solid and pushes content aside; unpinned it is
+            // a zero-width overlay (the floating sidebar paints on top of full-width
+            // content, so the content WebView stays full width and is visually clipped).
+            if state.sidebar_pinned {
+                (config.sidebar_expanded_w as f64).min((logical_w - min_content_w).max(0.0))
+            } else {
+                0.0
+            }
         } else if is_compact || state.sidebar_collapsed {
             config.sidebar_collapsed_w as f64
         } else {
@@ -4009,7 +4016,7 @@ impl AppLayout {
         let frame_side = logical_to_physical(FRAME_LOGICAL, scale);
         let frame_bottom = logical_to_physical(FRAME_LOGICAL, scale);
 
-        let clip_sidebar_w = if is_auto_hide {
+        let clip_sidebar_w = if is_auto_hide && !state.sidebar_pinned {
             let exp_w = logical_to_physical(config.sidebar_expanded_w as f64, scale);
             if let Some(ov) = state.sidebar_clip_w_override {
                 // JS streams the sidebar's live edge during the slide animation so the
@@ -4023,13 +4030,15 @@ impl AppLayout {
                 frame_side
             }
         } else {
+            // Solid sidebar (non-auto-hide, or pinned auto-hide): clip covers the full
+            // sidebar column plus the left frame strip, aligning with content_offset.
             sidebar_w + frame_side
         };
 
         let toolbar_h = logical_to_physical(toolbar_css_h, scale);
         let ai_w = logical_to_physical(ai_css_w, scale).min(size.width);
 
-        let content_offset = if is_auto_hide {
+        let content_offset = if is_auto_hide && !state.sidebar_pinned {
             frame_side
         } else {
             sidebar_w + frame_side

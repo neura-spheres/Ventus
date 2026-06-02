@@ -686,9 +686,17 @@ pub fn handle_chrome_command(
             None
         }
         ChromeCommand::SidebarPeek { visible, pinned } => {
+            let was_pinned = state.sidebar_pinned;
             state.sidebar_auto_hide_open = visible;
             state.sidebar_pinned = visible && pinned;
-            Some(TabAction::SyncSidebarClip)
+            // Pinning/unpinning changes the solid sidebar width, so the content WebViews
+            // must be repositioned and resized (full layout pass). A pure hover-peek (no
+            // change in pin state) only needs the chrome clip column updated.
+            if state.sidebar_pinned != was_pinned {
+                Some(TabAction::SyncViews)
+            } else {
+                Some(TabAction::SyncSidebarClip)
+            }
         }
         ChromeCommand::SidebarClipWidth { w } => {
             // JS streams the sliding sidebar's live edge so the clip column + content
