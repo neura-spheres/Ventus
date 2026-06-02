@@ -49,6 +49,10 @@ fn default_zoom_level() -> f64 {
     1.0
 }
 
+fn default_font_family() -> String {
+    "system".to_string()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AppearanceSettings {
@@ -61,6 +65,8 @@ pub struct AppearanceSettings {
     pub show_bookmarks_bar: bool,
     pub corner_radius: String,
     pub font_size: String,
+    #[serde(default = "default_font_family")]
+    pub font_family: String,
     pub new_tab_background: String,
     pub new_tab_bg_color: String,
     #[serde(default = "default_zoom_level")]
@@ -79,6 +85,7 @@ impl Default for AppearanceSettings {
             show_bookmarks_bar: false,
             corner_radius: "soft".to_string(),
             font_size: "medium".to_string(),
+            font_family: default_font_family(),
             new_tab_background: "default".to_string(),
             new_tab_bg_color: "#141414".to_string(),
             zoom_level: 1.0,
@@ -178,6 +185,9 @@ pub struct NewTabSettings {
     /// Base64 data URL for uploaded wallpaper (wallpaper_source == "upload")
     #[serde(default)]
     pub wallpaper_data: String,
+    /// Custom font color hex override (empty = use theme default)
+    #[serde(default)]
+    pub font_color: String,
 }
 
 impl Default for NewTabSettings {
@@ -193,6 +203,7 @@ impl Default for NewTabSettings {
             wallpaper_url: String::new(),
             wallpaper_color: default_wallpaper_color(),
             wallpaper_data: String::new(),
+            font_color: String::new(),
         }
     }
 }

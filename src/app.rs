@@ -2059,6 +2059,14 @@ fn handle_save_settings(
                 state.settings.appearance.show_bookmarks_bar = v;
             }
         }
+        "font_family" => {
+            if let Some(v) = value.as_str() {
+                state.settings.appearance.font_family = match v {
+                    "segoe" | "aptos" | "rounded" | "serif" | "mono" => v.to_string(),
+                    _ => "system".to_string(),
+                };
+            }
+        }
         "search_suggestions" => {
             if let Some(v) = value.as_bool() {
                 state.settings.search.suggestions_enabled = v;
@@ -2131,6 +2139,11 @@ fn handle_save_settings(
         "new_tab_wallpaper_data" => {
             if let Some(v) = value.as_str() {
                 state.settings.new_tab.wallpaper_data = v.to_string();
+            }
+        }
+        "new_tab_font_color" => {
+            if let Some(v) = value.as_str() {
+                state.settings.new_tab.font_color = v.to_string();
             }
         }
         "region" => {

@@ -31,7 +31,7 @@ pub fn chrome_html() -> String {
   --border-subtle:#1e1e1e;
   --text:#e8e8e8;
   --text-muted:#888888;
-  --text-dim:#484848;
+  --text-dim:#8a8a8a;
   /* Blue-purple accent — matches the Ventus logo gradient */
   --accent:#6366f1;
   --accent-hover:#7c7ef8;
@@ -92,16 +92,16 @@ pub fn chrome_html() -> String {
   --nt-shortcut-icon-bg:rgba(255,255,255,0.16);
   --nt-shortcut-shadow:0 16px 44px rgba(0,0,0,0.18),inset 0 1px 0 rgba(255,255,255,0.10);
   --nt-clock-muted:rgba(255,255,255,0.64);
-  --nt-hero-text:#0f1018;
-  --nt-hero-soft:rgba(15,16,24,0.84);
-  --nt-clock-text-shadow:0 2px 10px rgba(255,255,255,0.78),0 18px 56px rgba(255,255,255,0.44);
-  --nt-caption-text-shadow:0 2px 8px rgba(255,255,255,0.80),0 10px 30px rgba(255,255,255,0.46);
-  --nt-label-text-shadow:0 1px 2px rgba(255,255,255,0.68);
+  --nt-hero-text:#f0f0f0;
+  --nt-hero-soft:rgba(240,240,240,0.84);
+  --nt-clock-text-shadow:0 2px 10px rgba(0,0,0,0.58),0 18px 56px rgba(0,0,0,0.34);
+  --nt-caption-text-shadow:0 2px 8px rgba(0,0,0,0.52),0 10px 30px rgba(0,0,0,0.30);
+  --nt-label-text-shadow:0 1px 2px rgba(0,0,0,0.44);
   --nt-shortcut-hover-bg:rgba(255,255,255,0.14);
-  --nt-top-readable-bg:rgba(255,255,255,0.30);
-  --nt-top-readable-bg-hover:rgba(255,255,255,0.42);
-  --nt-top-readable-border:rgba(255,255,255,0.30);
-  --nt-top-icon-filter:drop-shadow(0 1px 2px rgba(255,255,255,0.72));
+  --nt-top-readable-bg:rgba(18,18,18,0.46);
+  --nt-top-readable-bg-hover:rgba(255,255,255,0.11);
+  --nt-top-readable-divider:rgba(255,255,255,0.12);
+  --nt-top-icon-filter:none;
   --scrollbar-w:4px;
   /* chrome shell */
   --chrome-bg:#141414;
@@ -213,22 +213,23 @@ pub fn chrome_html() -> String {
   --nt-shortcut-icon-bg:rgba(255,255,255,0.70);
   --nt-shortcut-shadow:0 14px 36px rgba(30,40,100,0.10),inset 0 1px 0 rgba(255,255,255,0.62);
   --nt-clock-muted:rgba(26,27,46,0.62);
-  --nt-hero-text:#ffffff;
-  --nt-hero-soft:rgba(255,255,255,0.90);
-  --nt-clock-text-shadow:0 2px 10px rgba(0,0,0,0.74),0 18px 56px rgba(0,0,0,0.52);
-  --nt-caption-text-shadow:0 2px 8px rgba(0,0,0,0.72),0 10px 30px rgba(0,0,0,0.46);
-  --nt-label-text-shadow:0 1px 2px rgba(0,0,0,0.68);
+  --nt-hero-text:#1a1b2e;
+  --nt-hero-soft:rgba(26,27,46,0.84);
+  --nt-clock-text-shadow:0 2px 10px rgba(255,255,255,0.68),0 18px 56px rgba(255,255,255,0.38);
+  --nt-caption-text-shadow:0 2px 8px rgba(255,255,255,0.62),0 10px 30px rgba(255,255,255,0.32);
+  --nt-label-text-shadow:0 1px 2px rgba(255,255,255,0.52);
   --nt-shortcut-hover-bg:rgba(255,255,255,0.18);
-  --nt-top-readable-bg:rgba(0,0,0,0.24);
-  --nt-top-readable-bg-hover:rgba(0,0,0,0.32);
-  --nt-top-readable-border:rgba(255,255,255,0.22);
-  --nt-top-icon-filter:drop-shadow(0 1px 2px rgba(0,0,0,0.58));
+  --nt-top-readable-bg:rgba(255,255,255,0.72);
+  --nt-top-readable-bg-hover:rgba(85,87,232,0.10);
+  --nt-top-readable-divider:rgba(26,27,46,0.11);
+  --nt-top-icon-filter:none;
   --nt-news-empty:linear-gradient(135deg,rgba(255,255,255,0.92),rgba(238,240,253,0.86));
   --nt-news-empty-overlay:radial-gradient(circle at top left,rgba(85,87,232,0.13),transparent 42%),linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.28));
 }
 
 html,body{height:100%;overflow:hidden;user-select:none;-webkit-user-select:none;background:transparent}
 body{font-family:var(--font);background:transparent;color:var(--text);font-size:13px;line-height:1.5}
+button,input,select,textarea{font-family:var(--font)}
 
 /* scrollbar */
 ::-webkit-scrollbar{width:var(--scrollbar-w)}
@@ -424,6 +425,13 @@ body{font-family:var(--font);background:transparent;color:var(--text);font-size:
   to{--load-angle:360deg}
 }
 #address-bar .favicon{width:14px;height:14px;flex-shrink:0;border-radius:2px}
+#active-loading-icon svg{overflow:visible}
+#active-loading-icon .ld-ring{animation:ld-pulse 1.6s ease-in-out infinite}
+#active-loading-icon .ld-arc{animation:ld-spin .9s linear infinite;transform-origin:center}
+#active-loading-icon .ld-dot{animation:ld-orbit .9s linear infinite;transform-origin:7px 7px}
+@keyframes ld-spin{to{transform:rotate(360deg)}}
+@keyframes ld-orbit{to{transform:rotate(360deg)}}
+@keyframes ld-pulse{0%,100%{opacity:.22;transform:scale(1)}50%{opacity:.12;transform:scale(.88)}}
 /* small icon buttons inside the address bar pill */
 #address-bar .ab-icon-btn{
   width:22px;height:22px;border-radius:6px;
@@ -1573,11 +1581,12 @@ body{font-family:var(--font);background:transparent;color:var(--text);font-size:
 .newtab-top{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:36px}
 .newtab-brand{display:flex;align-items:center;gap:10px;color:var(--nt-hero-text);font-size:12px;font-weight:500;text-shadow:var(--nt-label-text-shadow)}
 .newtab-logo{width:28px;height:28px;object-fit:contain;filter:drop-shadow(0 8px 18px rgba(0,0,0,0.28))}
-.newtab-top-actions{display:flex;align-items:center;gap:8px}
-.newtab-settings-btn{width:36px;height:36px;border-radius:999px;border:1px solid var(--nt-top-readable-border);background:var(--nt-top-readable-bg);color:var(--nt-hero-text);display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:var(--nt-pill-shadow);backdrop-filter:saturate(180%) blur(18px);transition:transform var(--transition),border-color var(--transition),background var(--transition),color var(--transition)}
+.newtab-top-actions{display:flex;align-items:center;gap:2px;padding:4px;border-radius:999px;background:var(--nt-top-readable-bg);box-shadow:none;backdrop-filter:saturate(180%) blur(18px)}
+.newtab-settings-btn{width:30px;height:30px;border-radius:999px;border:0;background:transparent;color:var(--nt-hero-text);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:transform var(--transition),background var(--transition),color var(--transition)}
 .newtab-settings-btn svg{filter:var(--nt-top-icon-filter)}
-.newtab-settings-btn:hover{border-color:var(--nt-focus-ring);background:var(--nt-top-readable-bg-hover);color:var(--nt-hero-text);transform:translateY(-1px)}
-.newtab-date{font-size:12px;font-weight:500;color:var(--nt-hero-text);text-shadow:var(--nt-label-text-shadow);padding:8px 12px;border:1px solid var(--nt-top-readable-border);border-radius:999px;background:var(--nt-top-readable-bg);box-shadow:var(--nt-pill-shadow);backdrop-filter:saturate(180%) blur(18px)}
+.newtab-settings-btn:hover{background:var(--nt-top-readable-bg-hover);color:var(--nt-hero-text);transform:translateY(-1px)}
+.newtab-settings-btn:focus-visible{outline:2px solid var(--nt-focus-ring);outline-offset:2px}
+.newtab-date{height:30px;display:flex;align-items:center;font-size:12px;font-weight:600;color:var(--nt-hero-text);text-shadow:none;white-space:nowrap;padding:0 12px 0 10px;margin-right:2px;border-right:1px solid var(--nt-top-readable-divider)}
 .newtab-hero{display:flex;flex-direction:column;align-items:center;gap:14px;padding-top:clamp(18px,8vh,98px);filter:drop-shadow(var(--nt-hero-shadow))}
 .newtab-search-wrap{
   width:min(650px,100%);
@@ -1612,7 +1621,7 @@ body{font-family:var(--font);background:transparent;color:var(--text);font-size:
   border-color:var(--nt-glass-border);
   backdrop-filter:saturate(180%) blur(24px);
 }
-.newtab-greeting{font-size:14px;line-height:1.3;font-weight:500;color:var(--nt-hero-soft);text-align:center;letter-spacing:0;max-width:calc(100% - 48px);text-shadow:var(--nt-caption-text-shadow);overflow-wrap:anywhere}
+.newtab-greeting{font-size:14px;line-height:1.3;font-weight:500;color:var(--nt-hero-soft);text-align:center;letter-spacing:0;max-width:calc(100% - 48px);text-shadow:none;overflow-wrap:anywhere}
 .newtab-sub{display:none}
 .newtab-shortcuts{display:grid;grid-template-columns:repeat(8,minmax(56px,1fr));gap:12px;width:min(650px,100%);margin:2px auto 0}
 .newtab-shortcut{
@@ -1630,7 +1639,7 @@ body{font-family:var(--font);background:transparent;color:var(--text);font-size:
   color:var(--nt-white);overflow:hidden;
 }
 .newtab-shortcut-icon img{width:21px;height:21px;object-fit:contain;display:block}
-.newtab-shortcut-label{font-size:10px;font-weight:500;color:var(--nt-hero-text);text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:100%;text-shadow:var(--nt-label-text-shadow)}
+.newtab-shortcut-label{font-size:12px;font-weight:500;color:var(--nt-hero-text);text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:100%;text-shadow:0 1px 2px rgba(0,0,0,0.18)}
 .newtab-feed{display:flex;flex-direction:column;gap:14px;margin-top:auto;padding-top:clamp(12px,4vh,42px);min-width:0}
 .newtab-feed-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .newtab-feed-title{font-size:15px;font-weight:800;color:var(--nt-white)}
@@ -1677,7 +1686,7 @@ body{font-family:var(--font);background:transparent;color:var(--text);font-size:
 #newtab-clock{
   font-family:'Segoe UI Variable Display','SF Pro Display',-apple-system,BlinkMacSystemFont,var(--font);
   font-size:clamp(72px,8vw,128px);font-weight:200;letter-spacing:-0.07em;line-height:.9;
-  color:var(--nt-hero-text);text-shadow:var(--nt-clock-text-shadow);
+  color:var(--nt-hero-text);text-shadow:none;
   font-variant-numeric:tabular-nums;display:block;text-align:center;
   font-feature-settings:'tnum' 1;
   user-select:none;
@@ -1686,6 +1695,7 @@ body{font-family:var(--font);background:transparent;color:var(--text);font-size:
 #newtab-placeholder.nt-clock-rounded #newtab-clock{font-family:'SF Pro Rounded','Aptos Rounded','Segoe UI Variable Display',var(--font);font-weight:300;letter-spacing:-0.055em}
 #newtab-placeholder.nt-clock-mono #newtab-clock{font-family:'SF Mono','Cascadia Code','Consolas',monospace;font-weight:300;letter-spacing:-0.08em;font-feature-settings:'tnum' 1,'zero' 1}
 #newtab-placeholder.nt-clock-serif #newtab-clock{font-family:'New York','Iowan Old Style','Georgia',serif;font-weight:400;letter-spacing:-0.055em}
+html:not([data-browser-font="system"]) #newtab-placeholder #newtab-clock{font-family:var(--font)}
 #newtab-placeholder.nt-theme-minimal .newtab-shell{justify-content:center;align-items:center;gap:0}
 #newtab-placeholder.nt-theme-minimal .newtab-top{display:none}
 #newtab-placeholder.nt-theme-minimal .newtab-feed{display:none!important}
@@ -1716,6 +1726,11 @@ body{font-family:var(--font);background:transparent;color:var(--text);font-size:
 #newtab-placeholder.nt-theme-horizon .newtab-feed{display:none!important}
 [data-theme="light"] #newtab-placeholder:not(.nt-hide-background){
   --nt-scrim:linear-gradient(rgba(8,10,18,0.16),rgba(8,10,18,0.22));
+}
+#newtab-placeholder.nt-bg-solid,
+[data-theme="light"] #newtab-placeholder.nt-bg-solid{
+  --nt-scrim:linear-gradient(transparent,transparent);
+  --nt-vignette:linear-gradient(transparent,transparent);
 }
 /* ── Light mode: opaque search bar over dark wallpapers ──── */
 [data-theme="light"] #newtab-placeholder .newtab-search{
@@ -2621,7 +2636,7 @@ svg{display:block;flex-shrink:0}
     </span>
     <img id="active-favicon" class="favicon" style="display:none" src="" alt="">
     <span id="active-loading-icon" class="favicon" style="display:none">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 0 20"/></svg>
+      <svg width="14" height="14" viewBox="0 0 14 14"><circle class="ld-ring" cx="7" cy="7" r="5.5" fill="none" stroke="currentColor" stroke-width="1.4" opacity=".22"/><circle class="ld-arc" cx="7" cy="7" r="5.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="10 24"/><circle class="ld-dot" cx="7" cy="1.5" r="1.3" fill="currentColor"/></svg>
     </span>
     <input id="url-input" type="text" placeholder="Search or enter a URL"
       onkeydown="handleUrlKey(event)"
@@ -3158,6 +3173,17 @@ svg{display:block;flex-shrink:0}
           </div>
         </div>
         <div class="settings-group">
+          <label>Browser font</label>
+          <select class="settings-select" id="set-font-family" onchange="setFontFamily(this.value)">
+            <option value="system">System</option>
+            <option value="segoe">Segoe UI</option>
+            <option value="aptos">Aptos</option>
+            <option value="rounded">Rounded</option>
+            <option value="serif">Serif</option>
+            <option value="mono">Mono</option>
+          </select>
+        </div>
+        <div class="settings-group">
           <label>Sidebar mode</label>
           <select class="settings-select" id="set-sidebar-mode" onchange="saveSetting('sidebar_mode',this.value)">
             <option value="expanded">Expanded</option>
@@ -3312,6 +3338,18 @@ svg{display:block;flex-shrink:0}
               oninput="saveSetting('new_tab_wallpaper_color',this.value);initWallpaper(window.__ntState||{})"
               style="width:40px;height:32px;border:none;background:none;cursor:pointer;padding:0;border-radius:6px">
             <span id="nt-wp-color-label" style="font-size:12px;color:var(--text-muted)">#141414</span>
+          </div>
+        </div>
+
+        <!-- Font color -->
+        <div class="settings-group">
+          <label>Font color</label>
+          <div style="display:flex;align-items:center;gap:10px">
+            <input type="color" id="nt-font-color-input" value="#f0f0f0"
+              oninput="saveSetting('new_tab_font_color',this.value);applyNewtabSettings()"
+              style="width:40px;height:32px;border:none;background:none;cursor:pointer;padding:0;border-radius:6px">
+            <span id="nt-font-color-label" style="font-size:12px;color:var(--text-muted)">Default</span>
+            <button class="settings-btn-sm" onclick="resetFontColor()" style="margin-left:auto">Reset</button>
           </div>
         </div>
 
@@ -4182,6 +4220,7 @@ function render() {
   applyAiSidebar();
   if (state.ai_open) renderAiSidebar();
   applyTheme();
+  applyFontFamily();
   applySidebarMode();
   if (document.getElementById('settings-overlay').classList.contains('open')) {
     populateSettingsPanel();
@@ -4602,6 +4641,7 @@ function applyNewtabSettings() {
   root.classList.toggle('nt-hide-background', !bg);
   root.classList.toggle('nt-hide-search', nt.show_search === false);
   root.classList.toggle('nt-hide-shortcuts', nt.show_quick_links === false);
+  root.classList.toggle('nt-bg-solid', bg && nt.wallpaper_source === 'color');
   root.classList.toggle('nt-feed-headlines', layout === 'headlines');
   root.classList.toggle('nt-feed-compact', layout === 'compact');
   ['nt-theme-minimal','nt-theme-focus','nt-theme-horizon','nt-theme-informative'].forEach(c => root.classList.remove(c));
@@ -4609,6 +4649,14 @@ function applyNewtabSettings() {
   root.classList.add('nt-theme-' + theme);
   ['nt-clock-sf','nt-clock-rounded','nt-clock-mono','nt-clock-serif'].forEach(c => root.classList.remove(c));
   root.classList.add('nt-clock-' + clockStyle(nt.clock_style));
+  const customFontColor = customNewtabFontColor(nt.font_color);
+  if (customFontColor) {
+    root.style.setProperty('--nt-hero-text', customFontColor);
+    root.style.setProperty('--nt-white', customFontColor);
+  } else {
+    root.style.removeProperty('--nt-hero-text');
+    root.style.removeProperty('--nt-white');
+  }
   initWallpaper(nt);
 }
 
@@ -4718,14 +4766,80 @@ function renderBookmarkIcon() {
   document.getElementById('bm-icon-filled').style.display = state.is_bookmarked ? 'block' : 'none';
 }
 
-function applyTheme() {
+const BROWSER_FONT_STACKS = {
+  system: "'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif",
+  segoe: "'Segoe UI Variable Text','Segoe UI',system-ui,sans-serif",
+  aptos: "'Aptos','Segoe UI',system-ui,sans-serif",
+  rounded: "'SF Pro Rounded','Aptos Rounded','Segoe UI Variable Text','Segoe UI',system-ui,sans-serif",
+  serif: "'Iowan Old Style','Georgia','Times New Roman',serif",
+  mono: "'Cascadia Code','SF Mono','Consolas','Liberation Mono',monospace"
+};
+
+function fontFamilyKey(value) {
+  return Object.prototype.hasOwnProperty.call(BROWSER_FONT_STACKS, value) ? value : 'system';
+}
+
+function effectiveTheme() {
   const theme = state.settings && state.settings.appearance && state.settings.appearance.theme;
-  if (!theme || theme === 'System') {
+  const key = String(theme || 'system').toLowerCase();
+  if (!key || key === 'system') {
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
-  } else {
-    document.documentElement.setAttribute('data-theme', theme.toLowerCase());
+    return prefersDark ? 'dark' : 'light';
   }
+  return key === 'light' ? 'light' : 'dark';
+}
+
+function defaultNewtabFontColor() {
+  return effectiveTheme() === 'dark' ? '#f0f0f0' : '#1a1b2e';
+}
+
+function normalizeHexColor(value) {
+  const text = String(value || '').trim().toLowerCase();
+  const m = text.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (!m) return text;
+  const h = m[1].toLowerCase();
+  return h.length === 3 ? '#' + h.split('').map(ch => ch + ch).join('') : '#' + h;
+}
+
+function isAutoNewtabFontColor(value) {
+  const c = normalizeHexColor(value);
+  return !c || ['#f0f0f0','#1a1b2e','#ffffff','#000000','#0f1018'].includes(c);
+}
+
+function customNewtabFontColor(value) {
+  return isAutoNewtabFontColor(value) ? '' : normalizeHexColor(value);
+}
+
+function clearAutoNewtabFontColorOverride() {
+  const nt = state.settings && state.settings.new_tab;
+  if (!nt || !nt.font_color || !isAutoNewtabFontColor(nt.font_color)) return;
+  nt.font_color = '';
+  send('SaveSettings', {key: 'new_tab_font_color', value: ''});
+}
+
+function applyTheme() {
+  document.documentElement.setAttribute('data-theme', effectiveTheme());
+}
+
+function applyFontFamily() {
+  const app = (state.settings && state.settings.appearance) || {};
+  const key = fontFamilyKey(app.font_family || 'system');
+  const stack = BROWSER_FONT_STACKS[key];
+  document.documentElement.dataset.browserFont = key;
+  document.documentElement.style.setProperty('--font', stack);
+  if (document.body) document.body.style.fontFamily = stack;
+  const appEl = document.getElementById('app');
+  if (appEl) appEl.style.fontFamily = stack;
+}
+
+function setFontFamily(value) {
+  const key = fontFamilyKey(value);
+  if (!state.settings) state.settings = {};
+  if (!state.settings.appearance) state.settings.appearance = {};
+  state.settings.appearance.font_family = key;
+  applyFontFamily();
+  setSelectValue('set-font-family', key);
+  send('SaveSettings', {key: 'font_family', value: key});
 }
 
 function applySidebarMode() {
@@ -5264,6 +5378,7 @@ function populateSettingsPanel() {
   document.querySelectorAll('.theme-card').forEach(c => c.classList.remove('selected'));
   const tc = document.getElementById('theme-' + themeKey);
   if (tc) tc.classList.add('selected');
+  setSelectValue('set-font-family', fontFamilyKey(app.font_family || 'system'));
   setToggleEl('toggle-show-bookmarks-bar', !!app.show_bookmarks_bar);
   setToggleEl('toggle-show-url', app.show_tab_url !== false);
   setToggleEl('toggle-suggestions', searchSuggestionsEnabled());
@@ -5314,6 +5429,12 @@ function syncNewtabSettingsUI() {
   });
   const src = nt.wallpaper_source || 'nature';
   syncWallpaperSourceUI(src, nt);
+  const fc = customNewtabFontColor(nt.font_color);
+  const fcInput = document.getElementById('nt-font-color-input');
+  const fcLabel = document.getElementById('nt-font-color-label');
+  const autoColor = defaultNewtabFontColor();
+  if (fcInput) fcInput.value = fc || autoColor;
+  if (fcLabel) fcLabel.textContent = fc || `Auto (${autoColor})`;
 }
 
 function setSelectValue(id, value) {
@@ -5887,6 +6008,13 @@ function setClockStyle(style) {
   const next = clockStyle(style);
   saveSetting('new_tab_clock_style', next);
   if (state.settings && state.settings.new_tab) state.settings.new_tab.clock_style = next;
+  applyNewtabSettings();
+  syncNewtabSettingsUI();
+}
+
+function resetFontColor() {
+  saveSetting('new_tab_font_color', '');
+  if (state.settings && state.settings.new_tab) state.settings.new_tab.font_color = '';
   applyNewtabSettings();
   syncNewtabSettingsUI();
 }
@@ -6826,9 +6954,14 @@ function setTheme(t) {
   document.querySelectorAll('.theme-card').forEach(c => c.classList.remove('selected'));
   const el = document.getElementById('theme-' + t);
   if (el) el.classList.add('selected');
-  document.documentElement.setAttribute('data-theme', t === 'system'
-    ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
-    : t);
+  if (!state.settings) state.settings = {};
+  if (!state.settings.appearance) state.settings.appearance = {};
+  if (!state.settings.new_tab) state.settings.new_tab = {};
+  state.settings.appearance.theme = t;
+  clearAutoNewtabFontColorOverride();
+  applyTheme();
+  applyNewtabSettings();
+  syncNewtabSettingsUI();
   send('SaveSettings', {key: 'theme', value: t});
 }
 function checkForUpdate() {
@@ -8758,6 +8891,17 @@ function openReleaseLink(e) {
 // ============================================================
 // INIT
 // ============================================================
+const themeMedia = window.matchMedia('(prefers-color-scheme: dark)');
+function handleSystemThemeChange() {
+  const key = String(state.settings && state.settings.appearance && state.settings.appearance.theme || 'system').toLowerCase();
+  if (key && key !== 'system') return;
+  clearAutoNewtabFontColorOverride();
+  applyTheme();
+  applyNewtabSettings();
+  syncNewtabSettingsUI();
+}
+if (themeMedia.addEventListener) themeMedia.addEventListener('change', handleSystemThemeChange);
+else if (themeMedia.addListener) themeMedia.addListener(handleSystemThemeChange);
 updateGreeting();
 updateNewtabDate();
 if (window.__neura_pending_state) {
