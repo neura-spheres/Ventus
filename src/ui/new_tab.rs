@@ -15,7 +15,7 @@ pub fn new_tab_html() -> String {
   --font:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
 }
 [data-theme="light"]{
-  --bg:#f7f8ff;--text:#1a1b2e;--text-muted:#5c6082;--text-dim:#9298ba;
+  --bg:#f7f8ff;--text:#1a1b2e;--text-muted:#5c6082;--text-dim:#7a7fa0;
   --accent:#5557e8;--border:#d1d5f0;--bg-elevated:#ffffff;--bg-hover:#eef0fd;
   --accent-dim:rgba(85,87,232,0.10);--accent-glow:rgba(85,87,232,0.22);
 }
@@ -49,8 +49,8 @@ body{display:flex;flex-direction:column;align-items:center;justify-content:cente
 .shortcuts{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;max-width:560px}
 .shortcut{
   display:flex;flex-direction:column;align-items:center;gap:6px;
-  padding:12px 14px;border-radius:12px;background:var(--bg-elevated);
-  border:1px solid var(--border);cursor:pointer;width:80px;
+  padding:12px 14px;border-radius:12px;background:transparent;
+  border:1px solid transparent;cursor:pointer;width:80px;
   transition:transform 0.15s,border-color 0.2s,box-shadow 0.2s;text-decoration:none;
 }
 .shortcut:hover{transform:translateY(-3px);border-color:var(--accent);box-shadow:0 4px 16px var(--accent-dim)}
