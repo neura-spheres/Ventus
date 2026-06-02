@@ -9,6 +9,9 @@ pub enum ChromeCommand {
     NavigateFromOverlay {
         url: String,
     },
+    ContinueHttp {
+        url: String,
+    },
     Back,
     Forward,
     Reload,
@@ -215,6 +218,16 @@ pub enum AppEvent {
         tab_id: String,
         url: String,
         watch: u64,
+    },
+    ContentNavigationFailed {
+        tab_id: String,
+        url: String,
+        status: i32,
+    },
+    HttpsUpgradeFailed {
+        tab_id: String,
+        https_url: String,
+        http_url: String,
     },
     ContentMetadata {
         tab_id: String,

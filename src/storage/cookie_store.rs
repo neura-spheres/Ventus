@@ -1,49 +1,26 @@
-//! Isolated, self-contained SQLite cookie store.
-//!
-//! Uses a *dedicated* database file (`cookie_store.db`) that is completely
-//! separate from the main application database.  This means cookie persistence
-//! is unaffected even if the main database has problems, migrations fail, or
-//! the app crashes mid-write.
-//!
-//! Lifecycle
-//! ---------
-//! * `open(data_dir)` — open (or create) the store.
-//! * `load_all(conn)` — called once at startup to get cookies to restore.
-//! * `save(conn, cookies)` — upsert batch received from the WebView2 callback.
-//! * `purge_expired(conn)` — housekeeping; call after each save.
-//!
-//! The store intentionally holds *plain-text* cookie values.  WebView2
-//! handles DPAPI/AES encryption for the live browser profile; we only need
-//! the unencrypted form so we can inject cookies back through the
-//! `ICoreWebView2CookieManager` API on the next startup.
-
+use crate::storage::crypto;
 use anyhow::Result;
 use rusqlite::{params, Connection};
 use std::path::Path;
 
-/// One cookie as read from / written to WebView2's CookieManager.
 #[derive(Debug, Clone)]
 pub struct CookieRecord {
-    /// Cookie name, e.g. `SID`
     pub name: String,
-    /// Plain-text value
     pub value: String,
-    /// Domain, e.g. `.google.com` or `mail.google.com`
     pub domain: String,
-    /// Path, e.g. `/`
     pub path: String,
-    /// Unix seconds (f64).  `-1.0` = session cookie (no hard expiry).
     pub expires: f64,
     pub is_secure: bool,
     pub is_http_only: bool,
-    /// `"None"`, `"Lax"`, or `"Strict"`
     pub same_site: String,
 }
 
-/// Open (or create) the isolated cookie-store database and ensure the schema
-/// exists.  Calling this function on a path that already has a valid database
-/// is a no-op — it's safe to call on every startup.
-pub fn open(data_dir: &Path) -> Result<Connection> {
+pub struct CookieStore {
+    conn: Connection,
+    key: [u8; 32],
+}
+
+pub fn open(data_dir: &Path) -> Result<CookieStore> {
     let path = data_dir.join("cookie_store.db");
     let conn = Connection::open(&path)?;
     conn.execute_batch(
@@ -68,18 +45,18 @@ pub fn open(data_dir: &Path) -> Result<Connection> {
          CREATE INDEX IF NOT EXISTS idx_cookies_domain
              ON cookies (domain);",
     )?;
-    Ok(conn)
+    Ok(CookieStore {
+        conn,
+        key: crypto::store_key(data_dir)?,
+    })
 }
 
-/// Upsert all cookies in `cookies` into the store.
-/// Session cookies (`expires == -1`) are included so the browser can restore
-/// a previous session even after an abnormal shutdown.
-pub fn save(conn: &Connection, cookies: &[CookieRecord]) -> Result<()> {
+pub fn save(store: &CookieStore, cookies: &[CookieRecord]) -> Result<()> {
     if cookies.is_empty() {
         return Ok(());
     }
     let now = chrono::Utc::now().timestamp();
-    let mut stmt = conn.prepare_cached(
+    let mut stmt = store.conn.prepare_cached(
         "INSERT INTO cookies
              (domain, path, name, value, expires,
               is_secure, is_http_only, same_site, saved_at)
@@ -94,11 +71,12 @@ pub fn save(conn: &Connection, cookies: &[CookieRecord]) -> Result<()> {
     )?;
 
     for c in cookies {
+        let value = crypto::encrypt_text(&store.key, &c.value)?;
         stmt.execute(params![
             &c.domain,
             &c.path,
             &c.name,
-            &c.value,
+            &value,
             c.expires,
             c.is_secure as i32,
             c.is_http_only as i32,
@@ -109,12 +87,9 @@ pub fn save(conn: &Connection, cookies: &[CookieRecord]) -> Result<()> {
     Ok(())
 }
 
-/// Load all non-expired cookies from the store.
-/// Cookies with `expires == -1` (session cookies) are always returned.
-/// Cookies whose hard expiry has already passed are excluded automatically.
-pub fn load_all(conn: &Connection) -> Result<Vec<CookieRecord>> {
+pub fn load_all(store: &CookieStore) -> Result<Vec<CookieRecord>> {
     let now_secs = chrono::Utc::now().timestamp() as f64;
-    let mut stmt = conn.prepare(
+    let mut stmt = store.conn.prepare(
         "SELECT domain, path, name, value, expires,
                 is_secure, is_http_only, same_site
          FROM cookies
@@ -122,11 +97,12 @@ pub fn load_all(conn: &Connection) -> Result<Vec<CookieRecord>> {
          ORDER BY domain, path, name",
     )?;
     let rows = stmt.query_map(params![now_secs], |row| {
+        let value: String = row.get(3)?;
         Ok(CookieRecord {
             domain: row.get(0)?,
             path: row.get(1)?,
             name: row.get(2)?,
-            value: row.get(3)?,
+            value: crypto::decrypt_text(&store.key, &value).unwrap_or_default(),
             expires: row.get(4)?,
             is_secure: row.get::<_, i32>(5)? != 0,
             is_http_only: row.get::<_, i32>(6)? != 0,
@@ -137,21 +113,18 @@ pub fn load_all(conn: &Connection) -> Result<Vec<CookieRecord>> {
         .map_err(Into::into)
 }
 
-/// Delete cookies that expired more than 24 hours ago to keep the DB small.
-/// Returns the number of rows deleted.
-pub fn purge_expired(conn: &Connection) -> Result<usize> {
-    // Keep a 24 h grace window so we don't delete anything that might still
-    // be valid due to clock skew or a short background task delay.
+pub fn purge_expired(store: &CookieStore) -> Result<usize> {
     let cutoff = (chrono::Utc::now().timestamp() as f64) - 86_400.0;
-    let n = conn.execute(
+    let n = store.conn.execute(
         "DELETE FROM cookies WHERE expires > 0 AND expires < ?1",
         params![cutoff],
     )?;
     Ok(n)
 }
 
-/// Return the number of cookies currently in the store.
-pub fn count(conn: &Connection) -> usize {
-    conn.query_row("SELECT COUNT(*) FROM cookies", [], |r| r.get::<_, i64>(0))
+pub fn count(store: &CookieStore) -> usize {
+    store
+        .conn
+        .query_row("SELECT COUNT(*) FROM cookies", [], |r| r.get::<_, i64>(0))
         .unwrap_or(0) as usize
 }

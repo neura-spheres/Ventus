@@ -288,10 +288,18 @@ impl SecureDnsMode {
 pub struct PrivacySettings {
     pub disable_history: bool,
     pub do_not_track: bool,
+    #[serde(default = "default_true")]
     pub https_only: bool,
     #[serde(default = "default_true")]
+    pub block_third_party_cookies: bool,
+    #[serde(default = "default_true")]
+    pub storage_partitioning: bool,
+    #[serde(default = "default_true")]
+    pub fingerprint_protection: bool,
+    #[serde(default = "default_true")]
+    pub strict_permissions: bool,
+    #[serde(default = "default_true")]
     pub ad_blocker_enabled: bool,
-    /// Hostnames where the ad blocker is disabled (user-added exceptions).
     #[serde(default)]
     pub ad_blocker_exceptions: Vec<String>,
     pub secure_dns_enabled: bool,
@@ -305,7 +313,11 @@ impl Default for PrivacySettings {
         Self {
             disable_history: false,
             do_not_track: false,
-            https_only: false,
+            https_only: true,
+            block_third_party_cookies: true,
+            storage_partitioning: true,
+            fingerprint_protection: true,
+            strict_permissions: true,
             ad_blocker_enabled: true,
             ad_blocker_exceptions: Vec::new(),
             secure_dns_enabled: false,
@@ -460,6 +472,11 @@ mod tests {
         assert_eq!(settings.downloads.default_folder, "");
         assert!(settings.downloads.ask_where_to_save);
         assert!(settings.search.suggestions_enabled);
+        assert!(settings.privacy.https_only);
+        assert!(settings.privacy.block_third_party_cookies);
+        assert!(settings.privacy.storage_partitioning);
+        assert!(settings.privacy.fingerprint_protection);
+        assert!(settings.privacy.strict_permissions);
         assert!(!settings.privacy.secure_dns_enabled);
         assert_eq!(
             settings.privacy.secure_dns_provider,

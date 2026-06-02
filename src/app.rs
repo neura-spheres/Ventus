@@ -38,6 +38,7 @@ pub struct AppState {
     pub pending_update_version: Option<String>,
     pub content_fullscreen: bool,
     pub pending_nav_urls: HashMap<String, String>,
+    pub https_upgrades: HashMap<String, String>,
     pub load_recoveries: HashMap<String, u8>,
     pub spotlight_open: bool,
     pub zoom_levels: HashMap<String, f64>,
@@ -85,6 +86,7 @@ impl AppState {
             pending_update_version: None,
             content_fullscreen: false,
             pending_nav_urls: HashMap::new(),
+            https_upgrades: HashMap::new(),
             load_recoveries: HashMap::new(),
             spotlight_open: false,
             zoom_levels: HashMap::new(),
@@ -203,7 +205,7 @@ pub enum TabAction {
         tab_id: String,
         url: String,
     },
-    ApplySecureDns,
+    ApplyWebSecurity,
     DownloadUpdate(String),
     SetFullscreen(bool),
     ContentScriptOnTab {
@@ -219,6 +221,9 @@ pub fn handle_chrome_command(
 ) -> Option<TabAction> {
     match cmd {
         ChromeCommand::Navigate { url } => navigate_current_tab(url, state, chrome),
+        ChromeCommand::ContinueHttp { url } => {
+            navigate_current_tab_with_policy(url, state, chrome, false)
+        }
         ChromeCommand::NavigateFromOverlay { url } => {
             state.chrome_overlay_open = false;
             state.suggestion_overlay_rect = None;
@@ -227,6 +232,9 @@ pub fn handle_chrome_command(
         ChromeCommand::Back => {
             if let Some(tab_id) = state.tab_manager.active_tab_id.clone() {
                 if let Some(url) = state.tab_manager.go_back(&tab_id) {
+                    let raw_url = url;
+                    let url = secure_nav_url(&raw_url, state);
+                    track_https_upgrade(state, &tab_id, &raw_url, &url);
                     clear_transient_chrome(state, chrome);
                     if finish_internal_nav(&tab_id, &url, state, chrome) {
                         return Some(TabAction::ContentNavigate(url));
@@ -242,6 +250,9 @@ pub fn handle_chrome_command(
         ChromeCommand::Forward => {
             if let Some(tab_id) = state.tab_manager.active_tab_id.clone() {
                 if let Some(url) = state.tab_manager.go_forward(&tab_id) {
+                    let raw_url = url;
+                    let url = secure_nav_url(&raw_url, state);
+                    track_https_upgrade(state, &tab_id, &raw_url, &url);
                     clear_transient_chrome(state, chrome);
                     if finish_internal_nav(&tab_id, &url, state, chrome) {
                         return Some(TabAction::ContentNavigate(url));
@@ -441,9 +452,17 @@ pub fn handle_chrome_command(
             let should_close_overlay = key == "onboarding_done";
             let needs_layout = key == "sidebar_mode" || key == "show_bookmarks_bar";
             let ad_blocker_toggled = key == "ad_blocker_enabled";
-            let secure_dns_changed = key.starts_with("secure_dns_");
-            let secure_dns_before = if secure_dns_changed {
-                Some(secure_dns_signature(&state.settings))
+            let security_changed = key.starts_with("secure_dns_")
+                || matches!(
+                    key.as_str(),
+                    "https_only"
+                        | "block_third_party_cookies"
+                        | "storage_partitioning"
+                        | "fingerprint_protection"
+                        | "strict_permissions"
+                );
+            let security_before = if security_changed {
+                Some(web_security_signature(&state.settings))
             } else {
                 None
             };
@@ -464,16 +483,16 @@ pub fn handle_chrome_command(
             if needs_layout {
                 return Some(TabAction::SyncViews);
             }
-            if secure_dns_changed && secure_dns_valid {
-                let secure_dns_after = secure_dns_signature(&state.settings);
-                if secure_dns_before
+            if security_changed && secure_dns_valid {
+                let security_after = web_security_signature(&state.settings);
+                if security_before
                     .as_ref()
-                    .map_or(true, |before| before != &secure_dns_after)
+                    .map_or(true, |before| before != &security_after)
                 {
                     let _ = chrome.evaluate_script(
-                        "window.__neura && window.__neura.showSuccess('Applying Secure DNS...')",
+                        "window.__neura && window.__neura.showSuccess('Applying privacy changes...')",
                     );
-                    return Some(TabAction::ApplySecureDns);
+                    return Some(TabAction::ApplyWebSecurity);
                 }
             }
             if ad_blocker_toggled {
@@ -877,6 +896,7 @@ fn finish_internal_nav(tab_id: &str, url: &str, state: &mut AppState, chrome: &W
         return false;
     }
     state.pending_nav_urls.remove(tab_id);
+    clear_https_upgrades(state, tab_id);
     state.load_recoveries.remove(&load_key(tab_id, url));
     state.tab_manager.set_tab_loading(tab_id, false);
     let _ = chrome.evaluate_script("window.__neura && window.__neura.finishLoadProgress()");
@@ -891,9 +911,20 @@ fn clear_loading_favicon(state: &mut AppState, tab_id: &str) {
 }
 
 fn navigate_current_tab(url: String, state: &mut AppState, chrome: &WebView) -> Option<TabAction> {
+    navigate_current_tab_with_policy(url, state, chrome, state.settings.privacy.https_only)
+}
+
+fn navigate_current_tab_with_policy(
+    url: String,
+    state: &mut AppState,
+    chrome: &WebView,
+    https_only: bool,
+) -> Option<TabAction> {
     if let Some(tab_id) = state.tab_manager.active_tab_id.clone() {
         clear_transient_chrome(state, chrome);
-        let resolved_url = resolve_navigation_url(&url, state);
+        let raw_url = resolve_navigation_url_with_policy(&url, state, false);
+        let resolved_url = secure_nav_url_with_policy(&raw_url, https_only);
+        track_https_upgrade(state, &tab_id, &raw_url, &resolved_url);
         state.tab_manager.visit_tab(&tab_id, &resolved_url, "");
         if finish_internal_nav(&tab_id, &resolved_url, state, chrome) {
             return Some(TabAction::ContentNavigate(resolved_url));
@@ -913,7 +944,9 @@ fn navigate_current_tab(url: String, state: &mut AppState, chrome: &WebView) -> 
 
 fn reload_current_tab(state: &mut AppState, chrome: &WebView) -> Option<TabAction> {
     let tab_id = state.tab_manager.active_tab_id.clone()?;
-    let url = state.tab_manager.get_tab(&tab_id)?.url.clone();
+    let raw_url = state.tab_manager.get_tab(&tab_id)?.url.clone();
+    let url = secure_nav_url(&raw_url, state);
+    track_https_upgrade(state, &tab_id, &raw_url, &url);
     if url.starts_with("neura://") || url.trim().is_empty() {
         return None;
     }
@@ -1004,10 +1037,102 @@ fn can_accept_redirect(state: &AppState, tab_id: &str, url: &str) -> bool {
         .unwrap_or(false)
 }
 
-fn secure_dns_signature(settings: &AppSettings) -> (Option<String>, SecureDnsMode) {
+fn recover_loading_tab(
+    tab_id: String,
+    url: String,
+    failed: bool,
+    state: &mut AppState,
+    chrome: &WebView,
+) -> Option<TabAction> {
+    let Some(tab) = state.tab_manager.get_tab(&tab_id) else {
+        return None;
+    };
+    if tab.status != crate::browser::tab::TabStatus::Loading {
+        return None;
+    }
+    if url.starts_with("neura://") || url.trim().is_empty() {
+        return None;
+    }
+    let recover_url = if !tab.url.is_empty() && !same_nav(&tab.url, &url) {
+        tab.url.clone()
+    } else {
+        url
+    };
+    let key = load_key(&tab_id, &recover_url);
+    let tries = state.load_recoveries.get(&key).copied().unwrap_or(0);
+    if failed && tries == 0 {
+        state.load_recoveries.insert(key, 1);
+        return Some(TabAction::ReloadContent {
+            tab_id,
+            url: recover_url,
+        });
+    }
+    if failed && tries == 1 {
+        state.load_recoveries.insert(key, 2);
+        return Some(TabAction::RebuildContent {
+            tab_id,
+            url: recover_url,
+        });
+    }
+    if !failed && tries == 0 {
+        state.load_recoveries.insert(key, 1);
+        return Some(TabAction::NudgeContent {
+            tab_id,
+            url: recover_url,
+        });
+    }
+    if !failed && tries == 1 {
+        state.load_recoveries.insert(key, 2);
+        return Some(TabAction::ReloadContent {
+            tab_id,
+            url: recover_url,
+        });
+    }
+    if !failed && tries == 2 {
+        state.load_recoveries.insert(key, 3);
+        return Some(TabAction::RebuildContent {
+            tab_id,
+            url: recover_url,
+        });
+    }
+    stop_failed_load(state, chrome, &tab_id, &key);
+    None
+}
+
+fn stop_failed_load(state: &mut AppState, chrome: &WebView, tab_id: &str, key: &str) {
+    state.load_recoveries.remove(key);
+    state.pending_nav_urls.remove(tab_id);
+    clear_https_upgrades(state, tab_id);
+    state.tab_manager.set_tab_loading(tab_id, false);
+    if state.tab_manager.active_tab_id.as_deref() != Some(tab_id) {
+        state.push_state_to_chrome(chrome);
+        return;
+    }
+    let active = state
+        .tab_manager
+        .active_tab()
+        .map(|t| (t.can_go_back, t.can_go_forward));
+    if let Some((back, fwd)) = active {
+        let _ = chrome.evaluate_script(&format!(
+            "window.__neura && window.__neura.updateNavState({},{},false)",
+            back, fwd
+        ));
+    }
+    let _ = chrome.evaluate_script("window.__neura && window.__neura.finishLoadProgress()");
+    state.push_state_to_chrome(chrome);
+}
+
+fn web_security_signature(
+    settings: &AppSettings,
+) -> (Option<String>, SecureDnsMode, bool, bool, bool, bool, bool) {
     (
         settings.privacy.secure_dns_endpoint(),
         settings.privacy.secure_dns_mode.clone(),
+        settings.privacy.https_only,
+        settings.privacy.block_third_party_cookies,
+        settings.privacy.storage_partitioning,
+        settings.privacy.fingerprint_protection,
+        settings.privacy.strict_permissions,
     )
 }
 
@@ -1173,6 +1298,7 @@ pub fn handle_app_event_inner(
             if let Some(tab) = state.tab_manager.get_tab(&tab_id) {
                 state.load_recoveries.remove(&load_key(&tab_id, &tab.url));
             }
+            clear_https_upgrades(state, &tab_id);
             state.tab_manager.set_tab_loading(&tab_id, false);
             if state.tab_manager.active_tab_id.as_deref() == Some(tab_id.as_str()) {
                 let active = state
@@ -1231,6 +1357,7 @@ pub fn handle_app_event_inner(
                 }
                 state.pending_nav_urls.remove(&tab_id);
                 state.load_recoveries.remove(&load_key(&tab_id, &clean_url));
+                clear_https_upgrades(state, &tab_id);
                 state.tab_manager.set_tab_loading(&tab_id, false);
                 if state.tab_manager.active_tab_id.as_deref() == Some(tab_id.as_str()) {
                     let active = state
@@ -1255,61 +1382,46 @@ pub fn handle_app_event_inner(
             None
         }
         AppEvent::ContentLoadStalled { tab_id, url, .. } => {
-            let Some(tab) = state.tab_manager.get_tab(&tab_id) else {
+            recover_loading_tab(tab_id, url, false, state, chrome)
+        }
+        AppEvent::ContentNavigationFailed {
+            tab_id,
+            url,
+            status,
+        } => {
+            tracing::debug!("navigation failed for {} with status {}", url, status);
+            let key = load_key(&tab_id, &url);
+            if state.settings.privacy.https_only && state.https_upgrades.contains_key(&key) {
+                return None;
+            }
+            recover_loading_tab(tab_id, url, true, state, chrome)
+        }
+        AppEvent::HttpsUpgradeFailed {
+            tab_id,
+            https_url,
+            http_url,
+        } => {
+            if !state.settings.privacy.https_only {
+                return None;
+            }
+            if !https_url.starts_with("https://") || !http_url.starts_with("http://") {
+                return None;
+            }
+            let key = load_key(&tab_id, &https_url);
+            let Some(upgraded_url) = state.https_upgrades.remove(&key) else {
                 return None;
             };
-            if tab.status != crate::browser::tab::TabStatus::Loading {
+            if !same_nav(&upgraded_url, &http_url) {
                 return None;
             }
-            if url.starts_with("neura://") || url.trim().is_empty() {
-                return None;
-            }
-            let recover_url = if !tab.url.is_empty() && tab.url != url {
-                tab.url.clone()
-            } else {
-                url.clone()
-            };
-            let key = load_key(&tab_id, &recover_url);
-            let tries = state.load_recoveries.get(&key).copied().unwrap_or(0);
-            if tries == 0 {
-                state.load_recoveries.insert(key, tries + 1);
-                return Some(TabAction::NudgeContent {
-                    tab_id,
-                    url: recover_url,
-                });
-            }
-            if tries < 3 {
-                state.load_recoveries.insert(key, tries + 1);
-                return Some(TabAction::ReloadContent {
-                    tab_id,
-                    url: recover_url,
-                });
-            }
-            if tries == 3 {
-                state.load_recoveries.insert(key, tries + 1);
-                return Some(TabAction::RebuildContent {
-                    tab_id,
-                    url: recover_url,
-                });
-            }
-            state.load_recoveries.remove(&key);
+            let url = http_warning_url(&https_url, &upgraded_url);
+            state.tab_manager.visit_tab(&tab_id, &url, "HTTPS warning");
+            state.pending_nav_urls.remove(&tab_id);
+            state.load_recoveries.remove(&load_key(&tab_id, &https_url));
             state.tab_manager.set_tab_loading(&tab_id, false);
-            if state.tab_manager.active_tab_id.as_deref() == Some(tab_id.as_str()) {
-                let active = state
-                    .tab_manager
-                    .active_tab()
-                    .map(|t| (t.can_go_back, t.can_go_forward));
-                if let Some((back, fwd)) = active {
-                    let _ = chrome.evaluate_script(&format!(
-                        "window.__neura && window.__neura.updateNavState({},{},false)",
-                        back, fwd
-                    ));
-                }
-                let _ =
-                    chrome.evaluate_script("window.__neura && window.__neura.finishLoadProgress()");
-            }
+            let _ = chrome.evaluate_script("window.__neura && window.__neura.finishLoadProgress()");
             state.push_state_to_chrome(chrome);
-            None
+            Some(TabAction::ContentNavigate(url))
         }
         AppEvent::ContentMetadata {
             tab_id,
@@ -1640,6 +1752,32 @@ pub(crate) fn load_key(tab_id: &str, url: &str) -> String {
     format!("{}\n{}", tab_id, url)
 }
 
+fn clear_https_upgrades(state: &mut AppState, tab_id: &str) {
+    let prefix = format!("{}\n", tab_id);
+    state
+        .https_upgrades
+        .retain(|key, _| !key.starts_with(&prefix));
+}
+
+fn track_https_upgrade(state: &mut AppState, tab_id: &str, before: &str, after: &str) {
+    clear_https_upgrades(state, tab_id);
+    if before == after {
+        return;
+    }
+    let Ok(a) = url::Url::parse(before) else {
+        return;
+    };
+    let Ok(b) = url::Url::parse(after) else {
+        return;
+    };
+    if a.scheme() != "http" || b.scheme() != "https" {
+        return;
+    }
+    state
+        .https_upgrades
+        .insert(load_key(tab_id, after), before.to_string());
+}
+
 #[cfg(test)]
 mod tests {
     use super::{favicon_for_url, load_key, normalize_homepage, should_record_replace_as_visit};
@@ -1784,6 +1922,31 @@ fn handle_save_settings(
                 state.settings.privacy.ad_blocker_enabled = v;
                 state.ad_block_engine.set_enabled(v);
                 let _ = settings_store::set(&state.conn, "app_settings", &state.settings);
+            }
+        }
+        "https_only" => {
+            if let Some(v) = value.as_bool() {
+                state.settings.privacy.https_only = v;
+            }
+        }
+        "block_third_party_cookies" => {
+            if let Some(v) = value.as_bool() {
+                state.settings.privacy.block_third_party_cookies = v;
+            }
+        }
+        "storage_partitioning" => {
+            if let Some(v) = value.as_bool() {
+                state.settings.privacy.storage_partitioning = v;
+            }
+        }
+        "fingerprint_protection" => {
+            if let Some(v) = value.as_bool() {
+                state.settings.privacy.fingerprint_protection = v;
+            }
+        }
+        "strict_permissions" => {
+            if let Some(v) = value.as_bool() {
+                state.settings.privacy.strict_permissions = v;
             }
         }
         "ad_blocker_exceptions" => {
@@ -1996,18 +2159,66 @@ fn get_search_url(state: &AppState) -> String {
 }
 
 fn resolve_navigation_url(input: &str, state: &AppState) -> String {
+    resolve_navigation_url_with_policy(input, state, state.settings.privacy.https_only)
+}
+
+fn resolve_navigation_url_with_policy(input: &str, state: &AppState, https_only: bool) -> String {
     if state.settings.search.site_shortcuts_enabled {
         if let Ok(engines) = repositories::list_search_engines(&state.conn) {
             if let Some((_, url)) = crate::browser::search_engine::SearchEngine::resolve_shortcut(
                 input.trim(),
                 &engines,
             ) {
-                return url;
+                return secure_nav_url_with_policy(&url, https_only);
             }
         }
     }
     let search_url = get_search_url(state);
-    crate::browser::navigation::resolve_input(input, &search_url).url
+    let url = crate::browser::navigation::resolve_input(input, &search_url).url;
+    secure_nav_url_with_policy(&url, https_only)
+}
+
+fn secure_nav_url(url: &str, state: &AppState) -> String {
+    secure_nav_url_with_policy(url, state.settings.privacy.https_only)
+}
+
+fn secure_nav_url_with_policy(url: &str, https_only: bool) -> String {
+    if !https_only {
+        return url.to_string();
+    }
+    let Ok(mut parsed) = url::Url::parse(url) else {
+        return url.to_string();
+    };
+    if parsed.scheme() != "http" {
+        return url.to_string();
+    }
+    if is_local_http_host(parsed.host_str()) {
+        return url.to_string();
+    }
+    if parsed.set_scheme("https").is_err() {
+        return url.to_string();
+    }
+    parsed.to_string()
+}
+
+fn is_local_http_host(host: Option<&str>) -> bool {
+    let Some(host) = host else {
+        return false;
+    };
+    let host = host.trim_matches(['[', ']']).to_ascii_lowercase();
+    matches!(host.as_str(), "localhost" | "127.0.0.1" | "0.0.0.0" | "::1")
+}
+
+fn http_warning_url(https_url: &str, http_url: &str) -> String {
+    format!(
+        "neura://http-warning?https={}&target={}",
+        query_encode(https_url),
+        query_encode(http_url)
+    )
+}
+
+fn query_encode(value: &str) -> String {
+    url::form_urlencoded::byte_serialize(value.as_bytes()).collect()
 }
 
 pub fn normalize_homepage(input: &str) -> String {

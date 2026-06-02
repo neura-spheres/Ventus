@@ -15,7 +15,7 @@ use std::{
     collections::{HashMap, HashSet},
     sync::{
         atomic::{AtomicBool, AtomicIsize, AtomicUsize, Ordering},
-        Arc,
+        Arc, Mutex,
     },
     time::{Duration, Instant},
 };
@@ -66,7 +66,7 @@ const SC_DEVTOOLS: usize = 20;
 const SC_INCOGNITO: usize = 21;
 const SC_TAB_1: usize = 22;
 const SC_TAB_9: usize = 30;
-const LOAD_STALL_AFTER: u64 = 30;
+const LOAD_STALL_AFTER: u64 = 12;
 const TAB_SLEEP_REFRESH_AFTER: Duration = Duration::from_secs(5 * 60);
 const TAB_KEEPALIVE_EVERY: Duration = Duration::from_secs(45);
 const WEBVIEW_PROFILE_RELEASE_TIMEOUT: Duration = Duration::from_secs(5);
@@ -104,6 +104,7 @@ fn main() {
 
     let data_dir = utils::platform::data_dir();
     std::fs::create_dir_all(&data_dir).expect("create data dir");
+    encrypt_app_storage(&data_dir);
 
     let conn = database::open(&data_dir.join("neura.db")).expect("open db");
     migrations::run(&conn).expect("migrations");
@@ -431,6 +432,7 @@ fn main() {
     // doesn't exist or is locked by a stale process, so we pre-create it here.
     let webview_data_dir = data_dir.join("webview_data");
     std::fs::create_dir_all(&webview_data_dir).expect("create WebView2 profile");
+    encrypt_app_storage(&webview_data_dir);
     #[cfg(windows)]
     sync_webview_secure_dns_prefs(&webview_data_dir, &state.settings);
     // Wrapped in Option so we can explicitly drop it before TAO calls process::exit().
@@ -449,6 +451,7 @@ fn main() {
     };
     std::fs::remove_dir_all(&incognito_data_dir).ok();
     std::fs::create_dir_all(&incognito_data_dir).ok();
+    encrypt_app_storage(&incognito_data_dir);
     #[cfg(windows)]
     sync_webview_secure_dns_prefs(&incognito_data_dir, &state.settings);
     let mut incognito_web_context = Some(wry::WebContext::new(Some(incognito_data_dir.clone())));
@@ -493,6 +496,9 @@ fn main() {
             tab_zoom(&state, &first_tab_id),
             &browser_args,
             first_ad_script,
+            state.settings.privacy.fingerprint_protection,
+            state.settings.privacy.strict_permissions,
+            state.settings.privacy.https_only,
             !load_first_later,
         )
         .expect("build first content webview");
@@ -870,6 +876,9 @@ fn main() {
                     tab_zoom(&state, &tab_id),
                     &browser_args,
                     ad_script,
+                    state.settings.privacy.fingerprint_protection,
+                    state.settings.privacy.strict_permissions,
+                    state.settings.privacy.https_only,
                     !defer_load,
                 ) {
                     Ok(wv) => {
@@ -943,6 +952,12 @@ fn main() {
                             browser::cookie_manager::trigger_save(wv, cookie_tx.clone());
                         }
                     }
+                }
+                if let AppEvent::ContentNavigationFailed { tab_id, url, .. } = &app_event {
+                    load_watches.remove(&app::load_key(
+                        tab_id,
+                        &crate::utils::url::clean_tracking_url(url),
+                    ));
                 }
                 if let AppEvent::ContentLoadStart { tab_id, url } = &app_event {
                     watch_load(
@@ -1097,6 +1112,9 @@ fn main() {
                                     tab_zoom(&state, &tab_id),
                                     &browser_args,
                                     ad_script,
+                                    state.settings.privacy.fingerprint_protection,
+                                    state.settings.privacy.strict_permissions,
+                                    state.settings.privacy.https_only,
                                     !defer_load,
                                 ) {
                                     Ok(wv) => {
@@ -1205,6 +1223,9 @@ fn main() {
                                                 tab_zoom(&state, &active_id),
                                                 &browser_args,
                                                 ad_script,
+                                                state.settings.privacy.fingerprint_protection,
+                                                state.settings.privacy.strict_permissions,
+                                                state.settings.privacy.https_only,
                                                 !defer_load,
                                             ) {
                                                 #[cfg(windows)]
@@ -1350,6 +1371,9 @@ fn main() {
                                         tab_zoom(&state, id),
                                         &browser_args,
                                         ad_script,
+                                        state.settings.privacy.fingerprint_protection,
+                                        state.settings.privacy.strict_permissions,
+                                        state.settings.privacy.https_only,
                                         !defer_load,
                                     ) {
                                         Ok(wv) => {
@@ -1464,6 +1488,9 @@ fn main() {
                                     tab_zoom(&state, &tab_id),
                                     &browser_args,
                                     ad_script,
+                                    state.settings.privacy.fingerprint_protection,
+                                    state.settings.privacy.strict_permissions,
+                                    state.settings.privacy.https_only,
                                     !defer_load,
                                 ) {
                                     Ok(wv) => {
@@ -1578,6 +1605,9 @@ fn main() {
                                     tab_zoom(&state, &tab_id),
                                     &browser_args,
                                     ad_script,
+                                    state.settings.privacy.fingerprint_protection,
+                                    state.settings.privacy.strict_permissions,
+                                    state.settings.privacy.https_only,
                                     !load_later,
                                 ) {
                                     Ok(wv) => {
@@ -1653,6 +1683,9 @@ fn main() {
                                 tab_zoom(&state, &tab_id),
                                 &browser_args,
                                 ad_script,
+                                state.settings.privacy.fingerprint_protection,
+                                state.settings.privacy.strict_permissions,
+                                state.settings.privacy.https_only,
                                 !defer_load,
                             ) {
                                 Ok(wv) => {
@@ -1692,7 +1725,7 @@ fn main() {
                                 Err(e) => tracing::error!("rebuild content view: {}", e),
                             }
                         }
-                        TabAction::ApplySecureDns => {
+                        TabAction::ApplyWebSecurity => {
                             browser_args = webview_args(&state.settings);
                             #[cfg(windows)]
                             {
@@ -1728,7 +1761,7 @@ fn main() {
                                     WEBVIEW_PROFILE_RELEASE_TIMEOUT,
                                 ) {
                                     tracing::warn!(
-                                        "secure_dns: timed out waiting for WebView2 profile release"
+                                        "privacy: timed out waiting for WebView2 profile release"
                                     );
                                 }
                             }
@@ -1737,6 +1770,8 @@ fn main() {
 
                             std::fs::create_dir_all(&webview_data_dir).ok();
                             std::fs::create_dir_all(&incognito_data_dir).ok();
+                            encrypt_app_storage(&webview_data_dir);
+                            encrypt_app_storage(&incognito_data_dir);
                             #[cfg(windows)]
                             {
                                 sync_webview_secure_dns_prefs(&webview_data_dir, &state.settings);
@@ -1786,6 +1821,9 @@ fn main() {
                                         tab_zoom(&state, &tab_id),
                                         &browser_args,
                                         ad_script,
+                                        state.settings.privacy.fingerprint_protection,
+                                        state.settings.privacy.strict_permissions,
+                                        state.settings.privacy.https_only,
                                         true,
                                     ) {
                                         Ok(wv) => {
@@ -2495,6 +2533,198 @@ fn attach_process_failed_handler(
 }
 
 #[cfg(windows)]
+fn attach_permission_handler(wv: &WebView) {
+    use webview2_com::{
+        Microsoft::Web::WebView2::Win32::{
+            ICoreWebView2, COREWEBVIEW2_PERMISSION_KIND_CAMERA,
+            COREWEBVIEW2_PERMISSION_KIND_CLIPBOARD_READ, COREWEBVIEW2_PERMISSION_KIND_GEOLOCATION,
+            COREWEBVIEW2_PERMISSION_KIND_LOCAL_FONTS, COREWEBVIEW2_PERMISSION_KIND_MICROPHONE,
+            COREWEBVIEW2_PERMISSION_KIND_OTHER_SENSORS, COREWEBVIEW2_PERMISSION_STATE_DENY,
+        },
+        PermissionRequestedEventHandler,
+    };
+
+    let controller = wv.controller();
+    let webview: ICoreWebView2 = unsafe {
+        match controller.CoreWebView2() {
+            Ok(wv) => wv,
+            Err(_) => return,
+        }
+    };
+
+    let handler = PermissionRequestedEventHandler::create(Box::new(move |_sender, args| {
+        let Some(args) = args else {
+            return Ok(());
+        };
+        unsafe {
+            let mut kind = Default::default();
+            args.PermissionKind(&mut kind)?;
+            if kind == COREWEBVIEW2_PERMISSION_KIND_CAMERA
+                || kind == COREWEBVIEW2_PERMISSION_KIND_MICROPHONE
+                || kind == COREWEBVIEW2_PERMISSION_KIND_GEOLOCATION
+                || kind == COREWEBVIEW2_PERMISSION_KIND_CLIPBOARD_READ
+                || kind == COREWEBVIEW2_PERMISSION_KIND_OTHER_SENSORS
+                || kind == COREWEBVIEW2_PERMISSION_KIND_LOCAL_FONTS
+            {
+                args.SetState(COREWEBVIEW2_PERMISSION_STATE_DENY)?;
+            }
+        }
+        Ok(())
+    }));
+
+    let mut token = Default::default();
+    unsafe {
+        let _ = webview.add_PermissionRequested(&handler, &mut token);
+    }
+}
+
+#[cfg(windows)]
+fn attach_navigation_failure_handler(
+    wv: &WebView,
+    proxy: tao::event_loop::EventLoopProxy<AppEvent>,
+    tab_id: String,
+) {
+    use webview2_com::{
+        Microsoft::Web::WebView2::Win32::ICoreWebView2, NavigationCompletedEventHandler,
+        NavigationStartingEventHandler,
+    };
+    use wv2core::PWSTR;
+
+    let controller = wv.controller();
+    let webview: ICoreWebView2 = unsafe {
+        match controller.CoreWebView2() {
+            Ok(wv) => wv,
+            Err(_) => return,
+        }
+    };
+
+    let navs = Arc::new(Mutex::new(HashMap::<u64, String>::new()));
+    let navs_start = Arc::clone(&navs);
+    let start_handler = NavigationStartingEventHandler::create(Box::new(move |_sender, args| {
+        let Some(args) = args else {
+            return Ok(());
+        };
+        unsafe {
+            let mut id = 0u64;
+            let _ = args.NavigationId(&mut id);
+            let mut ptr = PWSTR::null();
+            args.Uri(&mut ptr)?;
+            let url = take_pwstr(ptr);
+            if id == 0 || !is_recoverable_nav_url(&url) {
+                return Ok(());
+            }
+            if let Ok(mut map) = navs_start.lock() {
+                map.insert(id, url);
+            }
+        }
+        Ok(())
+    }));
+    let mut start_token = Default::default();
+    unsafe {
+        let _ = webview.add_NavigationStarting(&start_handler, &mut start_token);
+    }
+
+    let navs_done = Arc::clone(&navs);
+    let handler = NavigationCompletedEventHandler::create(Box::new(move |sender, args| {
+        let Some(sender) = sender else {
+            return Ok(());
+        };
+        let Some(args) = args else {
+            return Ok(());
+        };
+        unsafe {
+            let mut ok = Default::default();
+            args.IsSuccess(&mut ok)?;
+            let mut id = 0u64;
+            let _ = args.NavigationId(&mut id);
+            let url = navs_done
+                .lock()
+                .ok()
+                .and_then(|mut map| map.remove(&id))
+                .filter(|u| !u.trim().is_empty())
+                .unwrap_or_else(|| webview_source(&sender));
+            if ok.as_bool() {
+                return Ok(());
+            }
+            if !is_recoverable_nav_url(&url) {
+                return Ok(());
+            }
+            let mut status = Default::default();
+            let _ = args.WebErrorStatus(&mut status);
+            let _ = proxy.send_event(AppEvent::ContentNavigationFailed {
+                tab_id: tab_id.clone(),
+                url: url.clone(),
+                status: status.0,
+            });
+            if let Some(http_url) = https_to_http(&url) {
+                let _ = proxy.send_event(AppEvent::HttpsUpgradeFailed {
+                    tab_id: tab_id.clone(),
+                    https_url: url,
+                    http_url,
+                });
+            }
+        }
+        Ok(())
+    }));
+
+    let mut token = Default::default();
+    unsafe {
+        let _ = webview.add_NavigationCompleted(&handler, &mut token);
+    }
+}
+
+#[cfg(windows)]
+unsafe fn webview_source(
+    webview: &webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2,
+) -> String {
+    let mut ptr = wv2core::PWSTR::null();
+    if webview.Source(&mut ptr).is_err() {
+        return String::new();
+    }
+    take_pwstr(ptr)
+}
+
+fn is_recoverable_nav_url(url: &str) -> bool {
+    url.starts_with("http://") || url.starts_with("https://") || url.starts_with("file://")
+}
+
+#[cfg(windows)]
+unsafe fn take_pwstr(ptr: wv2core::PWSTR) -> String {
+    if ptr.is_null() {
+        return String::new();
+    }
+    let s = ptr.to_string().unwrap_or_default();
+    windows::Win32::System::Com::CoTaskMemFree(Some(ptr.0 as *const _));
+    s
+}
+
+fn https_to_http(url: &str) -> Option<String> {
+    let mut parsed = url::Url::parse(url).ok()?;
+    if parsed.scheme() != "https" {
+        return None;
+    }
+    parsed.set_scheme("http").ok()?;
+    Some(parsed.to_string())
+}
+
+fn https_nav_url(url: &str) -> Option<String> {
+    let mut parsed = url::Url::parse(url).ok()?;
+    if parsed.scheme() != "http" || is_local_http_host(parsed.host_str()) {
+        return None;
+    }
+    parsed.set_scheme("https").ok()?;
+    Some(parsed.to_string())
+}
+
+fn is_local_http_host(host: Option<&str>) -> bool {
+    let Some(host) = host else {
+        return false;
+    };
+    let host = host.trim_matches(['[', ']']).to_ascii_lowercase();
+    matches!(host.as_str(), "localhost" | "127.0.0.1" | "0.0.0.0" | "::1")
+}
+
+#[cfg(windows)]
 fn attach_accelerators(wv: &WebView, proxy: tao::event_loop::EventLoopProxy<AppEvent>) {
     use webview2_com::{
         AcceleratorKeyPressedEventHandler,
@@ -2562,6 +2792,9 @@ fn build_content_webview(
     global_zoom: f64,
     browser_args: &str,
     ad_block_script: String,
+    fingerprint: bool,
+    strict: bool,
+    https_only: bool,
     load_now: bool,
 ) -> anyhow::Result<WebView> {
     let is_neura = url.starts_with("neura://");
@@ -2580,6 +2813,8 @@ fn build_content_webview(
         .with_initialization_script(&content_initialization_script(
             global_zoom,
             &ad_block_script,
+            fingerprint,
+            strict,
         ));
     #[cfg(windows)]
     let builder = builder
@@ -2760,6 +2995,13 @@ fn build_content_webview(
             let proxy_nav = proxy.clone();
             let tab_id_nav = tab_id.to_string();
             move |url| {
+                if https_only {
+                    if https_nav_url(&url).is_some() {
+                        let _ =
+                            proxy_nav.send_event(AppEvent::Chrome(ChromeCommand::Navigate { url }));
+                        return false;
+                    }
+                }
                 if !url.trim().is_empty() && url != "about:blank" {
                     let _ = proxy_nav.send_event(AppEvent::ContentLoadStart {
                         tab_id: tab_id_nav.clone(),
@@ -2866,7 +3108,13 @@ fn build_content_webview(
     #[cfg(windows)]
     attach_fullscreen_handler(&wv, proxy.clone());
     #[cfg(windows)]
-    attach_process_failed_handler(&wv, proxy.clone(), tab_id.to_string());
+    {
+        attach_process_failed_handler(&wv, proxy.clone(), tab_id.to_string());
+        attach_navigation_failure_handler(&wv, proxy.clone(), tab_id.to_string());
+        if strict {
+            attach_permission_handler(&wv);
+        }
+    }
 
     Ok(wv)
 }
@@ -2897,9 +3145,15 @@ fn download_prefs_from_settings(settings: &config::AppSettings) -> DownloadPrefs
 }
 
 fn webview_args(settings: &config::AppSettings) -> String {
+    let disable_features = vec![
+        "msWebOOUI".to_string(),
+        "msPdfOOUI".to_string(),
+        "msSmartScreenProtection".to_string(),
+        "SleepingTabs".to_string(),
+        "AutoDiscardTabs".to_string(),
+    ];
+    let mut enable_features = Vec::new();
     let mut args = vec![
-        "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,SleepingTabs,AutoDiscardTabs"
-            .to_string(),
         "--disable-backgrounding-occluded-windows".to_string(),
         "--disable-renderer-backgrounding".to_string(),
         "--disable-background-timer-throttling".to_string(),
@@ -2907,17 +3161,23 @@ fn webview_args(settings: &config::AppSettings) -> String {
         "--disk-cache-size=1073741824".to_string(),
         "--media-cache-size=536870912".to_string(),
     ];
+    if settings.privacy.block_third_party_cookies {
+        args.push("--webview-force-disable-3pcs".to_string());
+    }
     if let Some(url) = settings.privacy.secure_dns_endpoint() {
         args.push("--enable-async-dns".to_string());
-        args.push(format!(
-            "--enable-features={}",
-            doh_feature_arg(&url, &settings.privacy.secure_dns_mode)
-        ));
+        enable_features.push(doh_feature_arg(&url, &settings.privacy.secure_dns_mode));
         args.push(format!(
             "--dns-over-https-mode={}",
             settings.privacy.secure_dns_mode.as_arg()
         ));
         args.push(format!("--dns-over-https-templates={}", url));
+    }
+    if !disable_features.is_empty() {
+        args.push(format!("--disable-features={}", disable_features.join(",")));
+    }
+    if !enable_features.is_empty() {
+        args.push(format!("--enable-features={}", enable_features.join(",")));
     }
     args.join(" ")
 }
@@ -2958,6 +3218,7 @@ fn write_webview_secure_dns_prefs(
         Err(err) => return Err(err.into()),
     };
     apply_secure_dns_local_state(&mut local_state, settings);
+    apply_webview_privacy_local_state(&mut local_state, settings);
     std::fs::write(local_state_path, serde_json::to_vec(&local_state)?)?;
     Ok(())
 }
@@ -2990,6 +3251,27 @@ fn apply_secure_dns_local_state(
 
     let async_dns = json_object_child(local_state, "async_dns");
     async_dns.insert("enabled".into(), serde_json::Value::Bool(enabled));
+}
+
+fn apply_webview_privacy_local_state(
+    local_state: &mut serde_json::Value,
+    settings: &config::AppSettings,
+) {
+    let profile = json_object_child(local_state, "profile");
+    profile.insert(
+        "block_third_party_cookies".into(),
+        serde_json::Value::Bool(settings.privacy.block_third_party_cookies),
+    );
+    profile.insert(
+        "cookie_controls_mode".into(),
+        serde_json::Value::Number(serde_json::Number::from(
+            if settings.privacy.block_third_party_cookies {
+                1
+            } else {
+                0
+            },
+        )),
+    );
 }
 
 fn json_object_child<'a>(
@@ -3049,6 +3331,25 @@ fn load_settings(conn: &rusqlite::Connection) -> config::AppSettings {
     settings
 }
 
+#[cfg(windows)]
+fn encrypt_app_storage(path: &std::path::Path) {
+    use std::os::windows::ffi::OsStrExt;
+    use windows::{core::PCWSTR, Win32::Storage::FileSystem::EncryptFileW};
+
+    let mut wide: Vec<u16> = path.as_os_str().encode_wide().collect();
+    wide.push(0);
+    if let Err(err) = unsafe { EncryptFileW(PCWSTR(wide.as_ptr())) } {
+        tracing::debug!(
+            "storage encryption unavailable for {}: {}",
+            path.display(),
+            err
+        );
+    }
+}
+
+#[cfg(not(windows))]
+fn encrypt_app_storage(_path: &std::path::Path) {}
+
 fn unique_download_path(download_dir: &std::path::Path, filename: &str) -> std::path::PathBuf {
     let clean_name = if filename.trim().is_empty() {
         "download"
@@ -3080,13 +3381,18 @@ fn unique_download_path(download_dir: &std::path::Path, filename: &str) -> std::
     download_dir.join(clean_name)
 }
 
-fn content_initialization_script(_global_zoom: f64, ad_block_script: &str) -> String {
-    // Ad block script runs first so fetch/XHR are intercepted before any page code.
+fn content_initialization_script(
+    _global_zoom: f64,
+    ad_block_script: &str,
+    fingerprint: bool,
+    strict: bool,
+) -> String {
     let ad_prefix = if ad_block_script.is_empty() {
         String::new()
     } else {
         format!("{}\n", ad_block_script)
     };
+    let privacy_prefix = privacy_initialization_script(fingerprint, strict);
     let script = r#"
 (() => {
   let isTop = false;
@@ -3429,7 +3735,123 @@ fn content_initialization_script(_global_zoom: f64, ad_block_script: &str) -> St
   }
 })();
 "#;
-    format!("{ad_prefix}{script}")
+    format!("{ad_prefix}{privacy_prefix}{script}")
+}
+
+fn privacy_initialization_script(fingerprint: bool, strict: bool) -> String {
+    let fingerprint_script = if fingerprint {
+        r#"
+(() => {
+  if (window.__neuraPrivacyFp) return;
+  window.__neuraPrivacyFp = true;
+  const noise = data => {
+    if (!data || !data.length) return;
+    const step = Math.max(4, Math.floor(data.length / 64));
+    for (let i = 0; i < data.length; i += step) {
+      const n = ((Math.random() * 3) | 0) - 1;
+      data[i] = (data[i] + n + 256) & 255;
+      if (i + 1 < data.length) data[i + 1] = (data[i + 1] - n + 256) & 255;
+    }
+  };
+  const noiseImage = img => {
+    try { if (img && img.data) noise(img.data); } catch (_) {}
+    return img;
+  };
+  const cloneCanvas = canvas => {
+    const c = document.createElement('canvas');
+    c.width = canvas.width;
+    c.height = canvas.height;
+    const ctx = c.getContext('2d', {willReadFrequently:true});
+    if (!ctx) return null;
+    ctx.drawImage(canvas, 0, 0);
+    try {
+      const img = ctx.getImageData(0, 0, c.width, c.height);
+      noiseImage(img);
+      ctx.putImageData(img, 0, 0);
+    } catch (_) {
+      return null;
+    }
+    return c;
+  };
+  const patch = (obj, name, fn) => {
+    try {
+      const orig = obj && obj[name];
+      if (typeof orig !== 'function' || orig.__neuraPatched) return;
+      const wrapped = fn(orig);
+      wrapped.__neuraPatched = true;
+      Object.defineProperty(obj, name, {value: wrapped, configurable:true, writable:true});
+    } catch (_) {}
+  };
+  patch(window.CanvasRenderingContext2D && window.CanvasRenderingContext2D.prototype, 'getImageData', orig => function() {
+    return noiseImage(orig.apply(this, arguments));
+  });
+  patch(window.HTMLCanvasElement && window.HTMLCanvasElement.prototype, 'toDataURL', orig => function() {
+    const c = cloneCanvas(this);
+    return orig.apply(c || this, arguments);
+  });
+  patch(window.HTMLCanvasElement && window.HTMLCanvasElement.prototype, 'toBlob', orig => function() {
+    const c = cloneCanvas(this);
+    return orig.apply(c || this, arguments);
+  });
+  const patchGl = proto => {
+    if (!proto) return;
+    patch(proto, 'readPixels', orig => function() {
+      const result = orig.apply(this, arguments);
+      const pixels = arguments[6];
+      if (pixels && typeof pixels.length === 'number') noise(pixels);
+      return result;
+    });
+    patch(proto, 'getParameter', orig => function(p) {
+      if (p === 37445) return 'Ventus GPU';
+      if (p === 37446) return 'Ventus Renderer';
+      return orig.apply(this, arguments);
+    });
+  };
+  patchGl(window.WebGLRenderingContext && WebGLRenderingContext.prototype);
+  patchGl(window.WebGL2RenderingContext && WebGL2RenderingContext.prototype);
+})();
+"#
+    } else {
+        ""
+    };
+    let strict_script = if strict {
+        r#"
+(() => {
+  if (window.__neuraPrivacyPerms) return;
+  window.__neuraPrivacyPerms = true;
+  const blocked = () => Promise.reject(new DOMException('Blocked by Ventus strict permissions', 'NotAllowedError'));
+  try {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition = function(_, err) {
+        if (typeof err === 'function') setTimeout(() => err({code:1, message:'Blocked by Ventus strict permissions'}), 0);
+      };
+      navigator.geolocation.watchPosition = function(_, err) {
+        if (typeof err === 'function') setTimeout(() => err({code:1, message:'Blocked by Ventus strict permissions'}), 0);
+        return 0;
+      };
+      navigator.geolocation.clearWatch = function() {};
+    }
+  } catch (_) {}
+  try {
+    if (navigator.mediaDevices) {
+      navigator.mediaDevices.getUserMedia = blocked;
+      navigator.mediaDevices.enumerateDevices = () => Promise.resolve([]);
+    }
+  } catch (_) {}
+  try {
+    if (navigator.clipboard) {
+      navigator.clipboard.read = blocked;
+      navigator.clipboard.readText = blocked;
+      navigator.clipboard.write = blocked;
+      navigator.clipboard.writeText = blocked;
+    }
+  } catch (_) {}
+})();
+"#
+    } else {
+        ""
+    };
+    format!("{fingerprint_script}{strict_script}")
 }
 
 fn slim_feed_articles(json: &serde_json::Value) -> serde_json::Value {
@@ -5558,9 +5980,10 @@ mod webview_arg_tests {
         settings.privacy.secure_dns_enabled = true;
         let args = webview_args(&settings);
         assert!(args.contains("--enable-async-dns"));
-        assert!(args.contains(
-            "--enable-features=DnsOverHttps:Fallback/false/Templates/https%3A%2F%2Fcloudflare-dns.com%2Fdns-query"
-        ));
+        assert!(args.contains(&doh_feature_arg(
+            config::CLOUDFLARE_DOH,
+            &config::SecureDnsMode::Secure
+        )));
         assert!(args.contains("--dns-over-https-mode=secure"));
         assert!(args.contains("--dns-over-https-templates=https://cloudflare-dns.com/dns-query"));
     }
@@ -5571,9 +5994,10 @@ mod webview_arg_tests {
         settings.privacy.secure_dns_enabled = true;
         settings.privacy.secure_dns_mode = config::SecureDnsMode::Automatic;
         let args = webview_args(&settings);
-        assert!(args.contains(
-            "--enable-features=DnsOverHttps:Fallback/true/Templates/https%3A%2F%2Fcloudflare-dns.com%2Fdns-query"
-        ));
+        assert!(args.contains(&doh_feature_arg(
+            config::CLOUDFLARE_DOH,
+            &config::SecureDnsMode::Automatic
+        )));
         assert!(args.contains("--dns-over-https-mode=automatic"));
     }
 
@@ -5587,10 +6011,7 @@ mod webview_arg_tests {
             let args = webview_args(&settings);
 
             assert!(args.contains("--enable-async-dns"));
-            assert!(args.contains(&format!(
-                "--enable-features={}",
-                doh_feature_arg(endpoint, &config::SecureDnsMode::Secure)
-            )));
+            assert!(args.contains(&doh_feature_arg(endpoint, &config::SecureDnsMode::Secure)));
             assert!(args.contains("--dns-over-https-mode=secure"));
             assert!(args.contains(&format!("--dns-over-https-templates={endpoint}")));
         }

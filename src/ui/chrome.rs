@@ -1523,6 +1523,15 @@ body{font-family:var(--font);background:transparent;color:var(--text);font-size:
   overflow-y:auto;
   isolation:isolate;
 }
+#http-warning-placeholder{position:absolute;top:0;right:0;bottom:0;left:calc(var(--sidebar-w) + var(--frame-side-w,5px));display:none;align-items:center;justify-content:center;padding:32px clamp(18px,4.4vw,56px) 36px;background:#310707;color:#fff;z-index:7;pointer-events:auto;box-sizing:border-box}
+.http-warning-shell{width:min(720px,100%);display:flex;flex-direction:column;gap:18px}
+.http-warning-mark{width:58px;height:58px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#ef4444;color:#fff;font-size:30px;font-weight:900;box-shadow:0 18px 50px rgba(0,0,0,.35)}
+.http-warning-title{font-size:32px;line-height:1.08;font-weight:850;letter-spacing:0;color:#fff}
+.http-warning-copy{font-size:15px;line-height:1.6;color:rgba(255,255,255,.78);max-width:620px}
+.http-warning-url{padding:12px 14px;border:1px solid rgba(255,255,255,.18);background:rgba(0,0,0,.22);border-radius:8px;font-size:13px;color:rgba(255,255,255,.82);overflow-wrap:anywhere}
+.http-warning-actions{display:flex;gap:10px;flex-wrap:wrap}
+.http-warning-btn{height:38px;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.10);color:#fff;border-radius:8px;padding:0 14px;font-family:var(--font);font-size:13px;font-weight:800;cursor:pointer}
+.http-warning-btn.primary{background:#fff;color:#310707;border-color:#fff}
 #newtab-bg{
   display:none;
 }
@@ -2480,43 +2489,31 @@ body{font-family:var(--font);background:transparent;color:var(--text);font-size:
 }
 #apps-placeholder::-webkit-scrollbar{width:10px}
 #apps-placeholder::-webkit-scrollbar-thumb{background:var(--border);border-radius:8px;border:3px solid var(--bg)}
-.apps-wrap{width:min(1180px,100%);margin:0 auto;padding:0 clamp(20px,4vw,64px) 80px;box-sizing:border-box}
-.apps-hero{position:relative;padding:clamp(40px,7vh,86px) 0 20px}
-.apps-hero::before{content:"";position:absolute;inset:-30% -20% auto -20%;height:320px;background:radial-gradient(60% 80% at 28% 0,rgba(99,102,241,0.22),transparent 70%),radial-gradient(50% 70% at 82% 0,rgba(139,92,246,0.18),transparent 70%);pointer-events:none;z-index:-1}
-.apps-eyebrow{font-size:12px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:var(--accent-hover);margin-bottom:10px}
-.apps-title{font-size:clamp(40px,6vw,66px);font-weight:800;letter-spacing:-0.045em;line-height:1.02;margin:0}
-.apps-tagline{font-size:clamp(15px,1.6vw,19px);color:var(--text-muted);margin:12px 0 0;max-width:520px;line-height:1.45}
-.apps-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:26px}
-.apps-chip{font-size:13px;font-weight:600;padding:8px 16px;border-radius:999px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-muted);cursor:pointer;transition:transform 0.16s ease,color 0.16s ease,background 0.16s ease,border-color 0.16s ease;white-space:nowrap}
-.apps-chip:hover{color:var(--text);border-color:var(--text-dim);transform:translateY(-1px)}
+/* App-icon tile surface — kept light in both themes so favicons stay legible,
+   tuned separately for dark/light so the grid reads as real app icons. */
+#apps-placeholder{--app-tile-bg:#f1f2f6;--app-tile-border:rgba(0,0,0,0.06);--app-tile-shadow:0 4px 14px rgba(0,0,0,0.34),0 1px 2px rgba(0,0,0,0.28)}
+[data-theme="light"] #apps-placeholder{--app-tile-bg:#ffffff;--app-tile-border:rgba(20,24,60,0.07);--app-tile-shadow:0 4px 14px rgba(40,50,110,0.10),0 1px 2px rgba(40,50,110,0.06)}
+.apps-wrap{width:min(1040px,100%);margin:0 auto;padding:0 clamp(24px,5vw,72px) 100px;box-sizing:border-box}
+.apps-hero{padding:clamp(48px,9vh,104px) 0 4px}
+.apps-title{font-size:clamp(32px,4.5vw,48px);font-weight:680;letter-spacing:-0.035em;line-height:1.04;margin:0}
+.apps-tagline{font-size:16px;color:var(--text-muted);margin:12px 0 0;max-width:460px;line-height:1.5;font-weight:450}
+.apps-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:28px;position:sticky;top:0;padding:16px 0 14px;background:linear-gradient(var(--bg) 80%,transparent);z-index:5}
+.apps-chip{font-size:13px;font-weight:550;padding:7px 15px;border-radius:980px;border:1px solid var(--border-subtle);background:transparent;color:var(--text-muted);cursor:pointer;transition:color 0.18s ease,background 0.18s ease,border-color 0.18s ease;white-space:nowrap}
+.apps-chip:hover{color:var(--text);background:var(--bg-hover)}
 .apps-chip.active{background:var(--text);color:var(--bg);border-color:var(--text)}
-.apps-featured{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px;margin-top:14px}
-.feat-card{position:relative;border-radius:24px;padding:26px;min-height:186px;display:flex;flex-direction:column;justify-content:space-between;cursor:pointer;overflow:hidden;color:#fff;background:var(--g,linear-gradient(135deg,#6366f1,#8b5cf6));box-shadow:0 18px 50px rgba(0,0,0,0.32);transition:transform 0.22s cubic-bezier(0.2,0,0.2,1),box-shadow 0.22s ease}
-.feat-card::after{content:"";position:absolute;inset:0;background:radial-gradient(120% 80% at 100% 0,rgba(255,255,255,0.22),transparent 55%);pointer-events:none}
-.feat-card:hover{transform:translateY(-4px);box-shadow:0 28px 70px rgba(0,0,0,0.42)}
-.feat-kicker{font-size:11px;font-weight:800;letter-spacing:0.12em;text-transform:uppercase;opacity:0.85}
-.feat-name{font-size:25px;font-weight:800;letter-spacing:-0.03em;margin-top:6px}
-.feat-sub{font-size:14px;opacity:0.92;margin-top:7px;max-width:84%;line-height:1.42}
-.feat-bottom{display:flex;align-items:center;justify-content:space-between;position:relative;z-index:1}
-.feat-open{font-size:13px;font-weight:700;padding:9px 22px;border-radius:999px;background:rgba(255,255,255,0.94);color:#111}
-.feat-icon{width:56px;height:56px;border-radius:15px;background:rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;overflow:hidden}
-.feat-icon img{width:60%;height:60%;object-fit:contain}
-.apps-section{margin-top:42px}
-.apps-section-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:16px}
-.apps-section-title{font-size:23px;font-weight:750;letter-spacing:-0.03em}
-.apps-section-sub{font-size:13px;color:var(--text-dim);font-weight:500;white-space:nowrap}
-.apps-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
-.app-card{display:flex;align-items:center;gap:14px;padding:14px;border-radius:18px;background:var(--bg-card);border:1px solid var(--border-subtle);cursor:pointer;transition:transform 0.16s ease,background 0.16s ease,border-color 0.16s ease}
-.app-card:hover{background:var(--bg-hover);border-color:var(--border);transform:translateY(-2px)}
-.app-icon{width:54px;height:54px;border-radius:14px;flex-shrink:0;position:relative;background:var(--g,linear-gradient(135deg,#6366f1,#8b5cf6));display:flex;align-items:center;justify-content:center;box-shadow:0 6px 16px rgba(0,0,0,0.28),inset 0 1px 0 rgba(255,255,255,0.25);overflow:hidden}
-.app-icon img{width:58%;height:58%;object-fit:contain;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.25))}
-.app-icon-letter{position:absolute;font-size:22px;font-weight:800;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,0.3)}
-.app-meta{min-width:0;flex:1}
-.app-name{font-size:15px;font-weight:650;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.app-sub{font-size:12.5px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
-.app-open{flex-shrink:0;font-size:12px;font-weight:700;color:var(--accent-hover);background:var(--accent-dim);padding:7px 15px;border-radius:999px;transition:background 0.16s ease,color 0.16s ease}
-.app-card:hover .app-open{background:var(--accent);color:#fff}
-.apps-foot{margin-top:54px;padding-top:24px;border-top:1px solid var(--border-subtle);text-align:center;color:var(--text-dim);font-size:12.5px}
+.apps-section{margin-top:44px}
+.apps-section:first-of-type{margin-top:20px}
+.apps-section-title{font-size:12px;font-weight:640;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-dim);margin-bottom:18px}
+.apps-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:6px}
+.app-tile{display:flex;flex-direction:column;align-items:center;gap:11px;padding:18px 6px 14px;border-radius:20px;cursor:pointer;border:1px solid transparent;transition:background 0.16s ease,border-color 0.16s ease,transform 0.12s ease}
+.app-tile:hover{background:var(--bg-card);border-color:var(--border-subtle)}
+.app-tile:hover .app-icon{transform:translateY(-2px)}
+.app-tile:active{transform:scale(0.97)}
+.app-icon{width:58px;height:58px;border-radius:16px;flex-shrink:0;position:relative;background:var(--app-tile-bg);border:1px solid var(--app-tile-border);display:flex;align-items:center;justify-content:center;box-shadow:var(--app-tile-shadow);overflow:hidden;transition:transform 0.18s cubic-bezier(0.2,0,0.2,1)}
+.app-icon img{width:56%;height:56%;object-fit:contain}
+.app-icon-letter{position:absolute;inset:0;display:none;align-items:center;justify-content:center;font-size:24px;font-weight:680;color:#fff;background:var(--g,linear-gradient(135deg,#6366f1,#8b5cf6))}
+.app-name{font-size:12.5px;font-weight:500;color:var(--text);text-align:center;line-height:1.25;max-width:100%;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.apps-foot{margin-top:64px;padding-top:26px;border-top:1px solid var(--border-subtle);text-align:center;color:var(--text-dim);font-size:12.5px}
 
 svg{display:block;flex-shrink:0}
 </style>
@@ -2891,6 +2888,18 @@ svg{display:block;flex-shrink:0}
           </div>
         </div>
         <div class="newtab-feed-main" id="newtab-feed-main"></div>
+      </div>
+    </div>
+  </div>
+  <div id="http-warning-placeholder">
+    <div class="http-warning-shell">
+      <div class="http-warning-mark">!</div>
+      <div class="http-warning-title">This site is not available over HTTPS</div>
+      <div class="http-warning-copy">Ventus upgraded this page to HTTPS first. You can keep browsing safely somewhere else, or continue to the unencrypted HTTP version.</div>
+      <div class="http-warning-url" id="http-warning-url"></div>
+      <div class="http-warning-actions">
+        <button class="http-warning-btn primary" onclick="send('Navigate',{url:'neura://newtab'})">Go back</button>
+        <button class="http-warning-btn" onclick="continueHttpWarning()">Continue to HTTP</button>
       </div>
     </div>
   </div>
@@ -3391,6 +3400,34 @@ svg{display:block;flex-shrink:0}
         </div>
         <div class="settings-toggle">
           <div class="settings-toggle-info">
+            <div class="toggle-title">HTTPS-only mode</div>
+            <div class="toggle-desc">Upgrade normal HTTP pages to HTTPS before loading.</div>
+          </div>
+          <div class="toggle-switch on" id="toggle-https-only" onclick="toggleSetting('https_only')"></div>
+        </div>
+        <div class="settings-toggle">
+          <div class="settings-toggle-info">
+            <div class="toggle-title">Partitioned storage</div>
+            <div class="toggle-desc">Split third-party storage and cache by the site you visit.</div>
+          </div>
+          <div class="toggle-switch on" id="toggle-storage-partitioning" onclick="toggleSetting('storage_partitioning')"></div>
+        </div>
+        <div class="settings-toggle">
+          <div class="settings-toggle-info">
+            <div class="toggle-title">Anti-fingerprinting</div>
+            <div class="toggle-desc">Add tiny read-time noise to Canvas and WebGL fingerprints.</div>
+          </div>
+          <div class="toggle-switch on" id="toggle-fingerprint-protection" onclick="toggleSetting('fingerprint_protection')"></div>
+        </div>
+        <div class="settings-toggle">
+          <div class="settings-toggle-info">
+            <div class="toggle-title">Strict site permissions</div>
+            <div class="toggle-desc">Block camera, mic, location, and clipboard requests by default.</div>
+          </div>
+          <div class="toggle-switch on" id="toggle-strict-permissions" onclick="toggleSetting('strict_permissions')"></div>
+        </div>
+        <div class="settings-toggle">
+          <div class="settings-toggle-info">
             <div class="toggle-title">Save browsing history</div>
             <div class="toggle-desc">Track pages you visit locally on this device</div>
           </div>
@@ -3408,7 +3445,7 @@ svg{display:block;flex-shrink:0}
             <div class="toggle-title">Block third-party cookies</div>
             <div class="toggle-desc">Limit tracking from websites you did not visit directly</div>
           </div>
-          <div class="toggle-switch on" id="toggle-cookies" onclick="toggleSetting('block_third_party')"></div>
+          <div class="toggle-switch on" id="toggle-block-third-party-cookies" onclick="toggleSetting('block_third_party_cookies')"></div>
         </div>
       </div>
 
@@ -3932,6 +3969,7 @@ window.__neura = {
     updateLockIcon(url);
     document.title = title || 'Ventus';
     checkNewtabPlaceholder(url);
+    checkHttpWarningPlaceholder(url);
     checkAppsPlaceholder(url);
   },
   setDownloadActive(active) {
@@ -4418,6 +4456,7 @@ function renderAddressBar() {
   }
   updateLockIcon(tab.url);
   checkNewtabPlaceholder(tab.url);
+  checkHttpWarningPlaceholder(tab.url);
   checkAppsPlaceholder(tab.url);
   renderBookmarkIcon();
 }
@@ -5072,6 +5111,10 @@ function rememberSetting(key, value) {
     state.settings.privacy[key] = value;
     syncSecureDnsSettingsUI();
   }
+  if (['https_only','block_third_party_cookies','storage_partitioning','fingerprint_protection','strict_permissions'].includes(key)) {
+    if (!state.settings.privacy) state.settings.privacy = {};
+    state.settings.privacy[key] = value;
+  }
   if (key === 'download_path') {
     if (!state.settings.downloads) state.settings.downloads = {};
     state.settings.downloads.default_folder = value;
@@ -5129,6 +5172,11 @@ function populateSettingsPanel() {
   setToggleEl('toggle-trending', trendingEnabled());
   setToggleEl('toggle-history', !priv.disable_history);
   setToggleEl('toggle-ad-blocker-enabled', priv.ad_blocker_enabled !== false);
+  setToggleEl('toggle-https-only', priv.https_only !== false);
+  setToggleEl('toggle-block-third-party-cookies', priv.block_third_party_cookies !== false);
+  setToggleEl('toggle-storage-partitioning', priv.storage_partitioning !== false);
+  setToggleEl('toggle-fingerprint-protection', priv.fingerprint_protection !== false);
+  setToggleEl('toggle-strict-permissions', priv.strict_permissions !== false);
   setToggleEl('toggle-secure-dns-enabled', !!priv.secure_dns_enabled);
   setSelectValue('set-secure-dns-provider', priv.secure_dns_provider || 'cloudflare');
   setSelectValue('set-secure-dns-mode', priv.secure_dns_mode || 'secure');
@@ -5486,6 +5534,32 @@ function checkNewtabPlaceholder(url) {
     requestNeuraFeed(false);
   }
 }
+function httpWarningData(url) {
+  if (!url || !url.startsWith('neura://http-warning')) return null;
+  try {
+    const u = new URL(url);
+    const target = u.searchParams.get('target') || '';
+    const https = u.searchParams.get('https') || '';
+    if (!target.startsWith('http://')) return null;
+    return {target, https};
+  } catch (_) {
+    return null;
+  }
+}
+function checkHttpWarningPlaceholder(url) {
+  const root = document.getElementById('http-warning-placeholder');
+  if (!root) return;
+  const data = httpWarningData(url);
+  root.style.display = data ? 'flex' : 'none';
+  const label = document.getElementById('http-warning-url');
+  if (label) label.textContent = data ? data.target : '';
+}
+function continueHttpWarning() {
+  const tab = state.tabs && state.tabs.find(t => t.id === state.active_tab_id);
+  const data = httpWarningData(tab ? tab.url : state.active_url);
+  if (!data) return;
+  send('ContinueHttp', {url: data.target});
+}
 const APP_SECTIONS = [
   {id:'neura', title:'Made by Neura Spheres', sub:'Our own apps', items:[
     {n:'Neura Finance',u:'https://finance.neuraspheres.com',s:'Markets, portfolio, and your money',g:'linear-gradient(135deg,#10b981,#06b6d4)'},
@@ -5529,12 +5603,6 @@ const APP_SECTIONS = [
   ]},
 ];
 
-const APPS_FEATURED = [
-  {n:'Neura Finance',u:'https://finance.neuraspheres.com',s:'Track markets, build your portfolio, and stay on top of your money.',g:'linear-gradient(135deg,#0ea5e9,#10b981)',k:'Featured'},
-  {n:'Neura Waves',u:'https://waves.neuraspheres.com',s:'Ambient soundscapes to focus, relax, and flow.',g:'linear-gradient(135deg,#8b5cf6,#ec4899)',k:'New'},
-  {n:'Chainews',u:'https://chainew.vercel.app/',s:'The fastest way to follow crypto and on-chain news.',g:'linear-gradient(135deg,#f59e0b,#ef4444)',k:'Trending'},
-];
-
 let appsFilter = 'all';
 
 function checkAppsPlaceholder(url) {
@@ -5552,18 +5620,15 @@ function renderAppsPage() {
   const chipHtml = chips.map(c =>
     `<button class="apps-chip${appsFilter===c.id?' active':''}" onclick="setAppsFilter('${c.id}')">${escHtml(c.label)}</button>`
   ).join('');
-  const featHtml = appsFilter === 'all' ? `<div class="apps-featured">${APPS_FEATURED.map(featCard).join('')}</div>` : '';
   const secHtml = APP_SECTIONS.filter(s => appsFilter === 'all' || appsFilter === s.id).map(sectionHtml).join('');
   root.innerHTML = `<div class="apps-wrap">
     <div class="apps-hero">
-      <div class="apps-eyebrow">Neura Store</div>
       <h1 class="apps-title">Apps</h1>
-      <p class="apps-tagline">Hand-picked web apps, ready to open in Ventus. No install, just click.</p>
-      <div class="apps-chips">${chipHtml}</div>
+      <p class="apps-tagline">A library of web apps, ready to open in Ventus.</p>
     </div>
-    ${featHtml}
+    <div class="apps-chips">${chipHtml}</div>
     ${secHtml}
-    <div class="apps-foot">More apps coming soon. Built with care by Neura Spheres.</div>
+    <div class="apps-foot">Built by Neura Spheres</div>
   </div>`;
 }
 
@@ -5578,24 +5643,15 @@ function appIconUrl(u) {
   return shortcutIconUrl(shortcutDomain(u));
 }
 
-function appIconHtml(it) {
-  const letter = escHtml((it.n || '?').trim().charAt(0).toUpperCase());
-  return `<div class="app-icon" style="--g:${it.g}"><img src="${appIconUrl(it.u)}" alt="" onerror="this.style.display='none';this.parentElement.querySelector('.app-icon-letter').style.display='block'"><span class="app-icon-letter" style="display:none">${letter}</span></div>`;
-}
-
-function featCard(it) {
-  return `<div class="feat-card" style="--g:${it.g}" onclick="openApp('${escAttr(it.u)}')">
-    <div><div class="feat-kicker">${escHtml(it.k||'Featured')}</div><div class="feat-name">${escHtml(it.n)}</div><div class="feat-sub">${escHtml(it.s)}</div></div>
-    <div class="feat-bottom"><span class="feat-open">Open</span><div class="feat-icon"><img src="${appIconUrl(it.u)}" alt="" onerror="this.style.display='none'"></div></div>
-  </div>`;
-}
-
 function sectionHtml(s) {
-  return `<div class="apps-section"><div class="apps-section-head"><div class="apps-section-title">${escHtml(s.title)}</div><div class="apps-section-sub">${escHtml(s.sub||'')}</div></div><div class="apps-grid">${s.items.map(appCard).join('')}</div></div>`;
+  return `<div class="apps-section"><div class="apps-section-title">${escHtml(s.title)}</div><div class="apps-grid">${s.items.map(appTile).join('')}</div></div>`;
 }
 
-function appCard(it) {
-  return `<div class="app-card" onclick="openApp('${escAttr(it.u)}')">${appIconHtml(it)}<div class="app-meta"><div class="app-name">${escHtml(it.n)}</div><div class="app-sub">${escHtml(it.s||'')}</div></div><span class="app-open">Open</span></div>`;
+function appTile(it) {
+  const letter = escHtml((it.n || '?').trim().charAt(0).toUpperCase());
+  return `<div class="app-tile" onclick="openApp('${escAttr(it.u)}')" title="${escAttr(it.s || it.n)}">` +
+    `<div class="app-icon" style="--g:${it.g}"><img src="${appIconUrl(it.u)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="app-icon-letter">${letter}</span></div>` +
+    `<div class="app-name">${escHtml(it.n)}</div></div>`;
 }
 
 function openApp(u) {
@@ -6622,6 +6678,11 @@ function toggleSetting(key) {
     if (!state.settings.privacy) state.settings.privacy = {};
     state.settings.privacy.secure_dns_enabled = val;
     syncSecureDnsSettingsUI();
+  }
+  if (['https_only','block_third_party_cookies','storage_partitioning','fingerprint_protection','strict_permissions'].includes(key)) {
+    if (!state.settings) state.settings = {};
+    if (!state.settings.privacy) state.settings.privacy = {};
+    state.settings.privacy[key] = val;
   }
   if (key.startsWith('new_tab_')) {
     if (!state.settings) state.settings = {};
