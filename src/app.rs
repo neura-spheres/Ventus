@@ -646,11 +646,17 @@ pub fn handle_chrome_command(
         ChromeCommand::OpenFile { path } => {
             #[cfg(windows)]
             {
+                use std::os::windows::process::CommandExt;
+                // GUI apps have no console to inherit, so spawning cmd.exe makes Windows
+                // allocate a fresh console window that flashes on screen. CREATE_NO_WINDOW
+                // suppresses it — same flag the updater uses for its cmd invocation.
+                const CREATE_NO_WINDOW: u32 = 0x0800_0000;
                 // Strip the Zone.Identifier ADS so Windows doesn't show the "trusted source"
                 // security prompt — same operation as the "Unblock" checkbox in file Properties.
                 let _ = std::fs::remove_file(format!("{}:Zone.Identifier", path));
                 let _ = std::process::Command::new("cmd")
                     .args(["/c", "start", "", &path])
+                    .creation_flags(CREATE_NO_WINDOW)
                     .spawn();
             }
             #[cfg(target_os = "macos")]

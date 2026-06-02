@@ -7999,12 +7999,15 @@ function renderDownloadPanel() {
 
 // Event delegation for download panel buttons (Open, Folder, Delete)
 document.getElementById('download-panel').addEventListener('click', e => {
+  // stopPropagation so these clicks don't also bubble to the document-level
+  // handleDelegatedListClick, which handles the same data-open-file-path /
+  // data-reveal-file-path attributes and would otherwise fire the action twice.
   const openBtn = e.target.closest('[data-open-file-path]');
-  if (openBtn) { send('OpenFile', {path: openBtn.dataset.openFilePath}); return; }
+  if (openBtn) { e.stopPropagation(); send('OpenFile', {path: openBtn.dataset.openFilePath}); return; }
   const revBtn = e.target.closest('[data-reveal-file-path]');
-  if (revBtn) { send('RevealFile', {path: revBtn.dataset.revealFilePath}); return; }
+  if (revBtn) { e.stopPropagation(); send('RevealFile', {path: revBtn.dataset.revealFilePath}); return; }
   const delBtn = e.target.closest('[data-del-dl-id]');
-  if (delBtn) { send('DeleteDownload', {id: delBtn.dataset.delDlId}); return; }
+  if (delBtn) { e.stopPropagation(); send('DeleteDownload', {id: delBtn.dataset.delDlId}); return; }
 });
 
 // Close download panel on click outside (also on Escape — handled in keydown)
