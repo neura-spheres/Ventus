@@ -1743,11 +1743,37 @@ body{font-family:var(--font);background:transparent;color:var(--text);font-size:
 .update-modal-close:hover{background:var(--soft-btn-bg-hover);color:var(--text)}
 .update-modal-body{padding:0 22px 20px}
 .update-modal-notes{
-  display:none;max-height:220px;overflow-y:auto;padding:13px 14px;border-radius:16px;
+  display:none;border-radius:16px;overflow:hidden;
   background:var(--modal-bg-2);border:1px solid var(--modal-border);
-  color:var(--text-muted);font-size:12px;line-height:1.6;white-space:pre-wrap;
 }
 .update-modal-notes.visible{display:block}
+.rn-head{display:flex;align-items:center;gap:8px;padding:11px 16px 10px;border-bottom:1px solid var(--modal-border)}
+.rn-head-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0}
+.rn-head-label{font-size:10.5px;font-weight:680;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-dim)}
+.rn-body{max-height:248px;overflow-y:auto;padding:14px 16px 16px;color:var(--text-muted);font-size:12.5px;line-height:1.62;overscroll-behavior:contain}
+.rn-body::-webkit-scrollbar{width:8px}
+.rn-body::-webkit-scrollbar-thumb{background:var(--border);border-radius:6px;border:2px solid var(--modal-bg-2)}
+.rn-body::-webkit-scrollbar-thumb:hover{background:var(--text-dim)}
+.rn-body>*:first-child{margin-top:0}
+.rn-body>*:last-child{margin-bottom:0}
+.rn-h{color:var(--text);font-weight:680;letter-spacing:-0.012em;line-height:1.32;margin:16px 0 7px}
+.rn-h1{font-size:15.5px}
+.rn-h2{font-size:13.5px}
+.rn-h3{font-size:12.5px}
+.rn-h4,.rn-h5,.rn-h6{font-size:12px;color:var(--text-muted)}
+.rn-body p{margin:0 0 9px}
+.rn-body ul,.rn-body ol{margin:0 0 10px;padding-left:18px}
+.rn-body li{margin:3px 0;padding-left:3px}
+.rn-body li::marker{color:var(--text-dim)}
+.rn-body a{color:var(--accent);text-decoration:none;font-weight:550;cursor:pointer}
+.rn-body a:hover{text-decoration:underline}
+.rn-body code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;background:var(--soft-btn-bg);padding:1.5px 5px;border-radius:6px;color:var(--text)}
+.rn-body strong{color:var(--text);font-weight:680}
+.rn-body em{font-style:italic}
+.rn-body del{opacity:0.55}
+.rn-body hr{border:none;height:1px;background:var(--modal-border);margin:14px 0}
+.rn-body blockquote{margin:0 0 10px;padding:2px 0 2px 12px;border-left:2px solid var(--border);color:var(--text-dim)}
+.rn-empty{color:var(--text-dim);font-style:italic;margin:0}
 .update-modal-progress{display:none;margin-top:4px}
 .update-modal-progress.visible{display:block}
 .update-modal-track{height:5px;background:var(--border);border-radius:999px;overflow:hidden}
@@ -2487,33 +2513,29 @@ body{font-family:var(--font);background:transparent;color:var(--text);font-size:
   display:none;overflow-x:hidden;overflow-y:auto;
   background:var(--bg);color:var(--text);isolation:isolate;
 }
-#apps-placeholder::-webkit-scrollbar{width:10px}
-#apps-placeholder::-webkit-scrollbar-thumb{background:var(--border);border-radius:8px;border:3px solid var(--bg)}
-/* App-icon tile surface — kept light in both themes so favicons stay legible,
-   tuned separately for dark/light so the grid reads as real app icons. */
-#apps-placeholder{--app-tile-bg:#f1f2f6;--app-tile-border:rgba(0,0,0,0.06);--app-tile-shadow:0 4px 14px rgba(0,0,0,0.34),0 1px 2px rgba(0,0,0,0.28)}
-[data-theme="light"] #apps-placeholder{--app-tile-bg:#ffffff;--app-tile-border:rgba(20,24,60,0.07);--app-tile-shadow:0 4px 14px rgba(40,50,110,0.10),0 1px 2px rgba(40,50,110,0.06)}
-.apps-wrap{width:min(1040px,100%);margin:0 auto;padding:0 clamp(24px,5vw,72px) 100px;box-sizing:border-box}
-.apps-hero{padding:clamp(48px,9vh,104px) 0 4px}
-.apps-title{font-size:clamp(32px,4.5vw,48px);font-weight:680;letter-spacing:-0.035em;line-height:1.04;margin:0}
-.apps-tagline{font-size:16px;color:var(--text-muted);margin:12px 0 0;max-width:460px;line-height:1.5;font-weight:450}
-.apps-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:28px;position:sticky;top:0;padding:16px 0 14px;background:linear-gradient(var(--bg) 80%,transparent);z-index:5}
-.apps-chip{font-size:13px;font-weight:550;padding:7px 15px;border-radius:980px;border:1px solid var(--border-subtle);background:transparent;color:var(--text-muted);cursor:pointer;transition:color 0.18s ease,background 0.18s ease,border-color 0.18s ease;white-space:nowrap}
-.apps-chip:hover{color:var(--text);background:var(--bg-hover)}
-.apps-chip.active{background:var(--text);color:var(--bg);border-color:var(--text)}
-.apps-section{margin-top:44px}
-.apps-section:first-of-type{margin-top:20px}
-.apps-section-title{font-size:12px;font-weight:640;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-dim);margin-bottom:18px}
-.apps-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:6px}
-.app-tile{display:flex;flex-direction:column;align-items:center;gap:11px;padding:18px 6px 14px;border-radius:20px;cursor:pointer;border:1px solid transparent;transition:background 0.16s ease,border-color 0.16s ease,transform 0.12s ease}
-.app-tile:hover{background:var(--bg-card);border-color:var(--border-subtle)}
-.app-tile:hover .app-icon{transform:translateY(-2px)}
-.app-tile:active{transform:scale(0.97)}
-.app-icon{width:58px;height:58px;border-radius:16px;flex-shrink:0;position:relative;background:var(--app-tile-bg);border:1px solid var(--app-tile-border);display:flex;align-items:center;justify-content:center;box-shadow:var(--app-tile-shadow);overflow:hidden;transition:transform 0.18s cubic-bezier(0.2,0,0.2,1)}
-.app-icon img{width:56%;height:56%;object-fit:contain}
-.app-icon-letter{position:absolute;inset:0;display:none;align-items:center;justify-content:center;font-size:24px;font-weight:680;color:#fff;background:var(--g,linear-gradient(135deg,#6366f1,#8b5cf6))}
-.app-name{font-size:12.5px;font-weight:500;color:var(--text);text-align:center;line-height:1.25;max-width:100%;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
-.apps-foot{margin-top:64px;padding-top:26px;border-top:1px solid var(--border-subtle);text-align:center;color:var(--text-dim);font-size:12.5px}
+#apps-placeholder::-webkit-scrollbar{width:8px}
+#apps-placeholder::-webkit-scrollbar-thumb{background:var(--border);border-radius:6px;border:2px solid var(--bg)}
+#apps-placeholder{--app-icon-bg:#f4f4f6;--app-icon-border:rgba(0,0,0,0.07)}
+[data-theme="light"] #apps-placeholder{--app-icon-bg:#fff;--app-icon-border:rgba(0,0,0,0.09)}
+.apps-wrap{max-width:960px;margin:0 auto;padding:0 clamp(20px,5vw,64px) 80px;box-sizing:border-box}
+.apps-page-header{padding:clamp(28px,5vh,48px) 0 20px}
+.apps-page-title{font-size:20px;font-weight:600;letter-spacing:-0.025em;margin:0;line-height:1}
+.apps-tabs{display:flex;gap:2px;flex-wrap:wrap;position:sticky;top:0;z-index:5;padding:10px 0 8px;background:linear-gradient(var(--bg) 82%,transparent)}
+.apps-tab{font-size:13px;font-weight:500;padding:5px 13px;border-radius:980px;border:none;background:transparent;color:var(--text-muted);cursor:pointer;transition:color 0.14s,background 0.14s;white-space:nowrap;-webkit-font-smoothing:antialiased}
+.apps-tab:hover{color:var(--text);background:var(--bg-hover)}
+.apps-tab.active{background:var(--accent);color:#fff}
+.apps-section{margin-bottom:36px}
+.apps-section-head{display:flex;align-items:center;gap:7px;padding-bottom:10px;border-bottom:1px solid var(--border-subtle);margin-bottom:12px}
+.apps-section-name{font-size:13px;font-weight:600;letter-spacing:-0.01em;color:var(--text)}
+.apps-section-count{font-size:11.5px;color:var(--text-dim);font-weight:400}
+.apps-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:2px}
+.app-tile{display:flex;flex-direction:column;align-items:center;gap:8px;padding:14px 6px 12px;border-radius:14px;cursor:pointer;transition:transform 0.14s cubic-bezier(0.34,1.56,0.64,1),background 0.12s;-webkit-font-smoothing:antialiased}
+.app-tile:hover{background:var(--bg-hover);transform:scale(1.05)}
+.app-tile:active{transform:scale(0.94);background:var(--bg-hover)}
+.app-icon{width:60px;height:60px;border-radius:13px;flex-shrink:0;position:relative;background:var(--app-icon-bg);border:1px solid var(--app-icon-border);display:flex;align-items:center;justify-content:center;overflow:hidden}
+.app-icon img{width:66%;height:66%;object-fit:contain}
+.app-icon-letter{position:absolute;inset:0;display:none;align-items:center;justify-content:center;font-size:25px;font-weight:600;color:#fff;background:var(--g,linear-gradient(135deg,#6366f1,#8b5cf6))}
+.app-name{font-size:11.5px;font-weight:500;color:var(--text-muted);text-align:center;line-height:1.3;max-width:100%;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 
 svg{display:block;flex-shrink:0}
 </style>
@@ -3720,7 +3742,10 @@ svg{display:block;flex-shrink:0}
       </button>
     </div>
     <div class="update-modal-body">
-      <div class="update-modal-notes" id="update-modal-notes"></div>
+      <div class="update-modal-notes" id="update-modal-notes">
+        <div class="rn-head"><span class="rn-head-dot"></span><span class="rn-head-label">What's new</span></div>
+        <div class="rn-body" id="update-modal-notes-body"></div>
+      </div>
       <div class="update-modal-progress" id="update-modal-progress">
         <div class="update-modal-track"><div class="update-modal-bar" id="update-modal-bar"></div></div>
         <div class="update-modal-progress-label" id="update-modal-progress-label"></div>
@@ -5641,19 +5666,15 @@ function checkAppsPlaceholder(url) {
 function renderAppsPage() {
   const root = document.getElementById('apps-placeholder');
   if (!root) return;
-  const chips = [{id:'all',label:'All'}].concat(APP_SECTIONS.map(s => ({id:s.id, label:s.title})));
-  const chipHtml = chips.map(c =>
-    `<button class="apps-chip${appsFilter===c.id?' active':''}" onclick="setAppsFilter('${c.id}')">${escHtml(c.label)}</button>`
+  const tabs = [{id:'all',label:'All'}].concat(APP_SECTIONS.map(s => ({id:s.id, label:s.title})));
+  const tabHtml = tabs.map(t =>
+    `<button class="apps-tab${appsFilter===t.id?' active':''}" onclick="setAppsFilter('${t.id}')">${escHtml(t.label)}</button>`
   ).join('');
   const secHtml = APP_SECTIONS.filter(s => appsFilter === 'all' || appsFilter === s.id).map(sectionHtml).join('');
   root.innerHTML = `<div class="apps-wrap">
-    <div class="apps-hero">
-      <h1 class="apps-title">Apps</h1>
-      <p class="apps-tagline">A library of web apps, ready to open in Ventus.</p>
-    </div>
-    <div class="apps-chips">${chipHtml}</div>
+    <div class="apps-page-header"><h1 class="apps-page-title">Apps</h1></div>
+    <div class="apps-tabs">${tabHtml}</div>
     ${secHtml}
-    <div class="apps-foot">Built by Neura Spheres</div>
   </div>`;
 }
 
@@ -5669,7 +5690,7 @@ function appIconUrl(u) {
 }
 
 function sectionHtml(s) {
-  return `<div class="apps-section"><div class="apps-section-title">${escHtml(s.title)}</div><div class="apps-grid">${s.items.map(appTile).join('')}</div></div>`;
+  return `<div class="apps-section"><div class="apps-section-head"><span class="apps-section-name">${escHtml(s.title)}</span><span class="apps-section-count">${s.items.length}</span></div><div class="apps-grid">${s.items.map(appTile).join('')}</div></div>`;
 }
 
 function appTile(it) {
@@ -7562,7 +7583,16 @@ function showUpdateModal(data) {
   if (title) title.textContent = copy.title;
   if (sub) sub.textContent = copy.sub;
   if (notes) {
-    notes.textContent = status === 'available' ? ((data && data.notes) || 'No release notes for this update.') : '';
+    const body = document.getElementById('update-modal-notes-body');
+    if (body) {
+      if (status === 'available') {
+        const md = (data && data.notes || '').trim();
+        body.innerHTML = md ? renderReleaseNotes(md) : '<p class="rn-empty">No release notes for this version.</p>';
+        body.scrollTop = 0;
+      } else {
+        body.innerHTML = '';
+      }
+    }
     notes.classList.toggle('visible', status === 'available');
   }
   if (status === 'available') __updateModalVersion = (data && data.version) || null;
@@ -7590,7 +7620,12 @@ function syncUpdateModalClip() {
   requestAnimationFrame(() => {
     if (!modal.classList.contains('open')) return;
     const rect = panel.getBoundingClientRect();
-    send('SuggestionOverlay', {visible:true, x:rect.left - 14, y:rect.top - 14, width:rect.width + 28, height:rect.height + 28});
+    // The panel shadow (--modal-shadow) is an 80px blur offset 32px down, so it
+    // reaches far past the panel edges. Pad the chrome clip enough to contain the
+    // full shadow falloff (less on top, more below from the offset), otherwise it
+    // gets sliced at a hard rectangular edge.
+    const padX = 100, padTop = 72, padBottom = 136;
+    send('SuggestionOverlay', {visible:true, x:rect.left - padX, y:rect.top - padTop, width:rect.width + padX * 2, height:rect.height + padTop + padBottom});
   });
 }
 function showUpdateToast(version, notes) {
@@ -8541,6 +8576,57 @@ function escHtml(str) {
 }
 function escAttr(str) {
   return escHtml(str);
+}
+
+// Minimal GitHub-flavored Markdown renderer for release notes. Remote content,
+// so every line is HTML-escaped before any formatting is applied; only http(s)
+// and mailto links are linkified, and they open via the OpenInNewTab IPC (no
+// inline JS with the URL baked in).
+function renderReleaseNotes(src) {
+  if (!src) return '';
+  const inl = (t) => {
+    t = escHtml(t);
+    t = t.replace(/`([^`]+)`/g, (m, c) => '<code>' + c + '</code>');
+    t = t.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    t = t.replace(/~~([^~]+)~~/g, '<del>$1</del>');
+    t = t.replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>');
+    t = t.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+|mailto:[^\s)]+)\)/g,
+      (m, txt, url) => '<a data-rn-url="' + url + '" onclick="openReleaseLink(event)">' + txt + '</a>');
+    t = t.replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g,
+      (m, pre, url) => pre + '<a data-rn-url="' + url + '" onclick="openReleaseLink(event)">' + url + '</a>');
+    return t;
+  };
+  const lines = String(src).replace(/\r\n?/g, '\n').split('\n');
+  let html = '', list = null, quote = false, para = [];
+  const flushP = () => { if (para.length) { html += '<p>' + para.join('<br>') + '</p>'; para = []; } };
+  const endL = () => { if (list) { html += '</' + list + '>'; list = null; } };
+  const endQ = () => { if (quote) { html += '</blockquote>'; quote = false; } };
+  for (const raw of lines) {
+    const line = raw.replace(/\s+$/, '');
+    const tr = line.trim();
+    if (!tr) { flushP(); endL(); endQ(); continue; }
+    if (/^([-*_])\1{2,}$/.test(tr)) { flushP(); endL(); endQ(); html += '<hr>'; continue; }
+    const h = tr.match(/^(#{1,6})\s+(.*)$/);
+    if (h) { flushP(); endL(); endQ(); const l = h[1].length; html += '<h' + l + ' class="rn-h rn-h' + l + '">' + inl(h[2]) + '</h' + l + '>'; continue; }
+    const q = line.match(/^>\s?(.*)$/);
+    if (q) { flushP(); endL(); if (!quote) { html += '<blockquote>'; quote = true; } html += inl(q[1]) + '<br>'; continue; }
+    endQ();
+    const ul = line.match(/^\s*[-*+]\s+(.*)$/);
+    if (ul) { flushP(); if (list !== 'ul') { endL(); html += '<ul>'; list = 'ul'; } html += '<li>' + inl(ul[1]) + '</li>'; continue; }
+    const ol = line.match(/^\s*\d+[.)]\s+(.*)$/);
+    if (ol) { flushP(); if (list !== 'ol') { endL(); html += '<ol>'; list = 'ol'; } html += '<li>' + inl(ol[1]) + '</li>'; continue; }
+    endL();
+    para.push(inl(line));
+  }
+  flushP(); endL(); endQ();
+  return html;
+}
+function openReleaseLink(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  const el = e.currentTarget;
+  const url = el && el.dataset ? el.dataset.rnUrl : '';
+  if (url) send('OpenInNewTab', {url});
 }
 
 // ============================================================
