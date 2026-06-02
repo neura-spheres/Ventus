@@ -1037,7 +1037,7 @@ fn main() {
                     if persist_session {
                         save_session(&state);
                     }
-                    if matches!(action, TabAction::SyncClipOnly) {
+                    if matches!(action, TabAction::SyncClipOnly | TabAction::SyncSidebarClip) {
                         let layout = AppLayout::calculate(
                             layout_size(&window, &state),
                             window.scale_factor(),
@@ -1046,7 +1046,11 @@ fn main() {
                         );
                         sync_chrome_clip(chrome_hwnd, &state, layout);
                         #[cfg(windows)]
-                        sync_content_z_order(&content_views, chrome_hwnd, &state);
+                        sync_content_clip(&content_views, &state, layout);
+                        #[cfg(windows)]
+                        if matches!(action, TabAction::SyncClipOnly) {
+                            sync_content_z_order(&content_views, chrome_hwnd, &state, true);
+                        }
                         return;
                     }
 
@@ -1066,7 +1070,7 @@ fn main() {
                     );
 
                     match action {
-                        TabAction::SyncClipOnly => unreachable!(),
+                        TabAction::SyncClipOnly | TabAction::SyncSidebarClip => unreachable!(),
                         TabAction::Create { tab_id, url } => {
                             if !url.starts_with("neura://") {
                                 let is_incog = state.tab_manager.tab_is_incognito(&tab_id);
@@ -1162,14 +1166,6 @@ fn main() {
                             );
                         }
                         TabAction::SyncViews => {
-                            apply_layout(
-                                &chrome,
-                                chrome_hwnd,
-                                &content_views,
-                                &state,
-                                &layout_config,
-                                &window,
-                            );
                             if let Some(active_id) = state.tab_manager.active_tab_id.clone() {
                                 if !content_views.contains_key(&active_id) {
                                     if let Some(tab) = state.tab_manager.get_tab(&active_id) {
@@ -1406,7 +1402,7 @@ fn main() {
                                 if active {
                                     let _ = wv.set_visible(false);
                                     let _ = wv.set_visible(true);
-                                    let _ = wv.set_bounds(layout.content);
+                                    set_content_bounds(wv, layout.content);
                                     let _ = wv.focus();
                                     #[cfg(windows)]
                                     if let Some(&hwnd) = content_hwnds.get(&tab_id) {
@@ -1913,7 +1909,7 @@ fn main() {
                             inactive_tabs.insert(id.clone(), now);
                         }
                         #[cfg(windows)]
-                        sync_content_z_order(&content_views, chrome_hwnd, &state);
+                        sync_content_z_order(&content_views, chrome_hwnd, &state, true);
                         if let Some(ref id) = current_active {
                             let asleep = inactive_tabs
                                 .remove(id)
@@ -3534,11 +3530,8 @@ impl AppLayout {
             crate::config::SidebarMode::Compact
         );
         let min_content_w = config.min_content_w as f64;
-        let sidebar_css_w = if is_auto_hide && state.sidebar_pinned {
-            // Pinned: sidebar is solid — push content to the right
-            (config.sidebar_expanded_w as f64).min((logical_w - min_content_w).max(0.0))
-        } else if is_auto_hide {
-            0.0 // hover-only overlay — content stays full width
+        let sidebar_css_w = if is_auto_hide {
+            0.0
         } else if is_compact || state.sidebar_collapsed {
             config.sidebar_collapsed_w as f64
         } else {
@@ -3563,30 +3556,16 @@ impl AppLayout {
         let toolbar_css_h = ((config.toolbar_h + bm_bar_extra) as f64).min(logical_h.max(1.0));
         let sidebar_w = logical_to_physical(sidebar_css_w, scale);
 
-        // Thin frame strips rendered by chrome, matching the toolbar color.
-        // Left: sidebar trigger in auto-hide mode + decorative border in all modes.
-        // Right: decorative border separating content from the window edge / AI panel.
-        // Bottom: decorative border below content.
         const FRAME_LOGICAL: f64 = 5.0;
         let frame_side = logical_to_physical(FRAME_LOGICAL, scale);
         let frame_bottom = logical_to_physical(FRAME_LOGICAL, scale);
 
-        // clip_sidebar_w: how many pixels from the left chrome's clip region covers.
-        // Includes the visible sidebar (if any) PLUS the left frame strip.
-        // When auto-hide floating (not pinned): sidebar area covers the frame, so just sidebar_expanded_w.
-        // When auto-hide pinned: content is pushed right of the sidebar, frame sits between — include both.
-        // When auto-hide closed: only the left frame strip.
-        // Non-auto-hide: sidebar + left frame.
         let clip_sidebar_w = if is_auto_hide {
             let exp_w = logical_to_physical(config.sidebar_expanded_w as f64, scale);
             if state.sidebar_auto_hide_open {
-                if state.sidebar_pinned {
-                    exp_w + frame_side // sidebar + frame both visible
-                } else {
-                    exp_w // floating: sidebar overlays frame area, clip = sidebar width
-                }
+                exp_w
             } else {
-                frame_side // closed: just the left frame strip
+                frame_side
             }
         } else {
             sidebar_w + frame_side
@@ -3595,16 +3574,8 @@ impl AppLayout {
         let toolbar_h = logical_to_physical(toolbar_css_h, scale);
         let ai_w = logical_to_physical(ai_css_w, scale).min(size.width);
 
-        // Content offset: how far content starts from the window left edge.
-        // Auto-hide pinned → after sidebar + frame; auto-hide floating/closed → after frame only.
-        // Non-auto-hide → after sidebar + frame.
         let content_offset = if is_auto_hide {
-            if state.sidebar_pinned {
-                logical_to_physical(config.sidebar_expanded_w as f64, scale).min(size.width)
-                    + frame_side
-            } else {
-                frame_side
-            }
+            frame_side
         } else {
             sidebar_w + frame_side
         };
@@ -3808,7 +3779,9 @@ fn apply_layout(
     sync_chrome(chrome, chrome_hwnd, state, layout);
     sync_content_views(content_views, state, layout);
     #[cfg(windows)]
-    sync_content_z_order(content_views, chrome_hwnd, state);
+    sync_content_clip(content_views, state, layout);
+    #[cfg(windows)]
+    sync_content_z_order(content_views, chrome_hwnd, state, true);
 }
 
 fn layout_size(window: &tao::window::Window, state: &AppState) -> PhysicalSize<u32> {
@@ -4215,7 +4188,7 @@ fn sync_content_views(
 
     for (id, wv) in content_views {
         if id == active_id && !active_is_neura_page {
-            let _ = wv.set_bounds(layout.content);
+            set_content_bounds(wv, layout.content);
             let _ = wv.set_visible(true);
             let _ = wv.evaluate_script(&format!(
                 "window.__neuraContentFullscreen={}",
@@ -4225,6 +4198,49 @@ fn sync_content_views(
             let _ = wv.set_visible(false);
         }
     }
+}
+
+fn set_content_bounds(wv: &WebView, rect: Rect) {
+    #[cfg(windows)]
+    if set_content_bounds_win(wv, rect).is_ok() {
+        return;
+    }
+
+    let _ = wv.set_bounds(rect);
+}
+
+#[cfg(windows)]
+fn set_content_bounds_win(wv: &WebView, rect: Rect) -> anyhow::Result<()> {
+    use windows::Win32::{
+        Foundation::HWND,
+        UI::WindowsAndMessaging::{SetWindowPos, SWP_NOACTIVATE, SWP_NOZORDER},
+    };
+    use wv2win::Win32::Foundation::RECT;
+
+    let width = rect.width.max(1) as i32;
+    let height = rect.height.max(1) as i32;
+    unsafe {
+        wv.controller().SetBounds(RECT {
+            left: 0,
+            top: 0,
+            right: width,
+            bottom: height,
+        })?;
+        let Some(hwnd) = webview_hwnd(wv) else {
+            anyhow::bail!("missing webview hwnd");
+        };
+        SetWindowPos(
+            HWND(hwnd),
+            HWND(0),
+            rect.x,
+            rect.y,
+            width,
+            height,
+            SWP_NOACTIVATE | SWP_NOZORDER,
+        )?;
+        let _ = wv.controller().NotifyParentWindowPositionChanged();
+    }
+    Ok(())
 }
 
 fn sync_chrome(chrome: &WebView, chrome_hwnd: Option<isize>, state: &AppState, layout: AppLayout) {
@@ -4293,6 +4309,7 @@ fn sync_content_z_order(
     content_views: &HashMap<String, WebView>,
     chrome_hwnd: Option<isize>,
     state: &AppState,
+    repaint: bool,
 ) {
     if chrome_needs_top(state) {
         if let Some(chrome) = chrome_hwnd {
@@ -4311,7 +4328,9 @@ fn sync_content_z_order(
         return;
     };
     bring_hwnd_to_top(hwnd);
-    repaint_content_webview(hwnd);
+    if repaint {
+        repaint_content_webview(hwnd);
+    }
 }
 
 fn chrome_owns_content(state: &AppState) -> bool {
@@ -4325,9 +4344,44 @@ fn chrome_owns_content(state: &AppState) -> bool {
 }
 
 fn chrome_needs_top(state: &AppState) -> bool {
-    chrome_owns_content(state)
-        || state.suggestion_overlay_rect.is_some()
-        || (state.sidebar_auto_hide_open && !state.sidebar_pinned)
+    chrome_owns_content(state) || state.suggestion_overlay_rect.is_some()
+}
+
+#[cfg(windows)]
+fn sync_content_clip(
+    content_views: &HashMap<String, WebView>,
+    state: &AppState,
+    layout: AppLayout,
+) {
+    let Some(id) = state.tab_manager.active_tab_id.as_deref() else {
+        return;
+    };
+    let Some(wv) = content_views.get(id) else {
+        return;
+    };
+    let Some(hwnd) = webview_hwnd(wv) else {
+        return;
+    };
+    let cut = content_cut_w(state, layout);
+    set_content_clip_region(hwnd, layout.content.width, layout.content.height, cut);
+}
+
+#[cfg(windows)]
+fn content_cut_w(state: &AppState, layout: AppLayout) -> u32 {
+    if state.content_fullscreen || !state.sidebar_auto_hide_open {
+        return 0;
+    }
+    if !matches!(
+        state.settings.appearance.sidebar_mode,
+        crate::config::SidebarMode::AutoHide
+    ) {
+        return 0;
+    }
+    let left = layout.content.x.max(0) as u32;
+    layout
+        .clip_sidebar_w
+        .saturating_sub(left)
+        .min(layout.content.width)
 }
 
 #[cfg(windows)]
@@ -4520,6 +4574,26 @@ fn set_chrome_clip_region(
         };
         let region = create_region(spec);
         let _ = SetWindowRgn(HWND(hwnd), region, false);
+    }
+}
+
+#[cfg(windows)]
+fn set_content_clip_region(hwnd: isize, width: u32, height: u32, cut_w: u32) {
+    use windows::Win32::{
+        Foundation::HWND,
+        Graphics::Gdi::{CombineRgn, CreateRectRgn, DeleteObject, SetWindowRgn, HRGN, RGN_DIFF},
+    };
+
+    unsafe {
+        if cut_w == 0 {
+            let _ = SetWindowRgn(HWND(hwnd), HRGN(0), false);
+            return;
+        }
+        let full = CreateRectRgn(0, 0, width.max(1) as i32, height.max(1) as i32);
+        let cut = CreateRectRgn(0, 0, cut_w.min(width).max(1) as i32, height.max(1) as i32);
+        let _ = CombineRgn(full, full, cut, RGN_DIFF);
+        let _ = DeleteObject(cut);
+        let _ = SetWindowRgn(HWND(hwnd), full, false);
     }
 }
 

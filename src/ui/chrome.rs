@@ -278,7 +278,7 @@ body{font-family:var(--font);background:transparent;color:var(--text);font-size:
   border-right:1px solid var(--chrome-border);
   overflow:hidden;z-index:150;
   transform:translateX(-240px);
-  transition:transform 0.2s cubic-bezier(0.4,0,0.2,1),box-shadow 0.2s ease,width 0.2s ease;
+  transition:transform 0.2s cubic-bezier(0.4,0,0.2,1),box-shadow 0.2s ease;
   will-change:transform;
 }
 #sidebar::after{
@@ -2472,6 +2472,52 @@ body{font-family:var(--font);background:transparent;color:var(--text);font-size:
 }
 #content-loading.visible{opacity:1}
 
+#apps-placeholder{
+  position:absolute;top:0;right:0;bottom:0;
+  left:calc(var(--sidebar-w) + var(--frame-side-w,5px));
+  display:none;overflow-x:hidden;overflow-y:auto;
+  background:var(--bg);color:var(--text);isolation:isolate;
+}
+#apps-placeholder::-webkit-scrollbar{width:10px}
+#apps-placeholder::-webkit-scrollbar-thumb{background:var(--border);border-radius:8px;border:3px solid var(--bg)}
+.apps-wrap{width:min(1180px,100%);margin:0 auto;padding:0 clamp(20px,4vw,64px) 80px;box-sizing:border-box}
+.apps-hero{position:relative;padding:clamp(40px,7vh,86px) 0 20px}
+.apps-hero::before{content:"";position:absolute;inset:-30% -20% auto -20%;height:320px;background:radial-gradient(60% 80% at 28% 0,rgba(99,102,241,0.22),transparent 70%),radial-gradient(50% 70% at 82% 0,rgba(139,92,246,0.18),transparent 70%);pointer-events:none;z-index:-1}
+.apps-eyebrow{font-size:12px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:var(--accent-hover);margin-bottom:10px}
+.apps-title{font-size:clamp(40px,6vw,66px);font-weight:800;letter-spacing:-0.045em;line-height:1.02;margin:0}
+.apps-tagline{font-size:clamp(15px,1.6vw,19px);color:var(--text-muted);margin:12px 0 0;max-width:520px;line-height:1.45}
+.apps-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:26px}
+.apps-chip{font-size:13px;font-weight:600;padding:8px 16px;border-radius:999px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-muted);cursor:pointer;transition:transform 0.16s ease,color 0.16s ease,background 0.16s ease,border-color 0.16s ease;white-space:nowrap}
+.apps-chip:hover{color:var(--text);border-color:var(--text-dim);transform:translateY(-1px)}
+.apps-chip.active{background:var(--text);color:var(--bg);border-color:var(--text)}
+.apps-featured{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px;margin-top:14px}
+.feat-card{position:relative;border-radius:24px;padding:26px;min-height:186px;display:flex;flex-direction:column;justify-content:space-between;cursor:pointer;overflow:hidden;color:#fff;background:var(--g,linear-gradient(135deg,#6366f1,#8b5cf6));box-shadow:0 18px 50px rgba(0,0,0,0.32);transition:transform 0.22s cubic-bezier(0.2,0,0.2,1),box-shadow 0.22s ease}
+.feat-card::after{content:"";position:absolute;inset:0;background:radial-gradient(120% 80% at 100% 0,rgba(255,255,255,0.22),transparent 55%);pointer-events:none}
+.feat-card:hover{transform:translateY(-4px);box-shadow:0 28px 70px rgba(0,0,0,0.42)}
+.feat-kicker{font-size:11px;font-weight:800;letter-spacing:0.12em;text-transform:uppercase;opacity:0.85}
+.feat-name{font-size:25px;font-weight:800;letter-spacing:-0.03em;margin-top:6px}
+.feat-sub{font-size:14px;opacity:0.92;margin-top:7px;max-width:84%;line-height:1.42}
+.feat-bottom{display:flex;align-items:center;justify-content:space-between;position:relative;z-index:1}
+.feat-open{font-size:13px;font-weight:700;padding:9px 22px;border-radius:999px;background:rgba(255,255,255,0.94);color:#111}
+.feat-icon{width:56px;height:56px;border-radius:15px;background:rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;overflow:hidden}
+.feat-icon img{width:60%;height:60%;object-fit:contain}
+.apps-section{margin-top:42px}
+.apps-section-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:16px}
+.apps-section-title{font-size:23px;font-weight:750;letter-spacing:-0.03em}
+.apps-section-sub{font-size:13px;color:var(--text-dim);font-weight:500;white-space:nowrap}
+.apps-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.app-card{display:flex;align-items:center;gap:14px;padding:14px;border-radius:18px;background:var(--bg-card);border:1px solid var(--border-subtle);cursor:pointer;transition:transform 0.16s ease,background 0.16s ease,border-color 0.16s ease}
+.app-card:hover{background:var(--bg-hover);border-color:var(--border);transform:translateY(-2px)}
+.app-icon{width:54px;height:54px;border-radius:14px;flex-shrink:0;position:relative;background:var(--g,linear-gradient(135deg,#6366f1,#8b5cf6));display:flex;align-items:center;justify-content:center;box-shadow:0 6px 16px rgba(0,0,0,0.28),inset 0 1px 0 rgba(255,255,255,0.25);overflow:hidden}
+.app-icon img{width:58%;height:58%;object-fit:contain;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.25))}
+.app-icon-letter{position:absolute;font-size:22px;font-weight:800;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,0.3)}
+.app-meta{min-width:0;flex:1}
+.app-name{font-size:15px;font-weight:650;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.app-sub{font-size:12.5px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.app-open{flex-shrink:0;font-size:12px;font-weight:700;color:var(--accent-hover);background:var(--accent-dim);padding:7px 15px;border-radius:999px;transition:background 0.16s ease,color 0.16s ease}
+.app-card:hover .app-open{background:var(--accent);color:#fff}
+.apps-foot{margin-top:54px;padding-top:24px;border-top:1px solid var(--border-subtle);text-align:center;color:var(--text-dim);font-size:12.5px}
+
 svg{display:block;flex-shrink:0}
 </style>
 </head>
@@ -2810,6 +2856,9 @@ svg{display:block;flex-shrink:0}
         </div>
         <div class="newtab-top-actions">
           <div class="newtab-date" id="newtab-date">Today</div>
+          <button class="newtab-settings-btn" onclick="send('Navigate',{url:'neura://apps'})" title="Apps">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.6"/><rect x="14" y="3" width="7" height="7" rx="1.6"/><rect x="3" y="14" width="7" height="7" rx="1.6"/><rect x="14" y="14" width="7" height="7" rx="1.6"/></svg>
+          </button>
           <button class="newtab-settings-btn" onclick="openSettings('newtab')" title="New tab settings">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z"/><path d="M19.4 15a1.8 1.8 0 0 0 .36 1.98l.06.06a2.15 2.15 0 1 1-3.04 3.04l-.06-.06a1.8 1.8 0 0 0-1.98-.36 1.8 1.8 0 0 0-1.09 1.65V21.5a2.15 2.15 0 1 1-4.3 0v-.09A1.8 1.8 0 0 0 8.26 19.8a1.8 1.8 0 0 0-1.98.36l-.06.06a2.15 2.15 0 1 1-3.04-3.04l.06-.06A1.8 1.8 0 0 0 3.6 15a1.8 1.8 0 0 0-1.65-1.09H1.86a2.15 2.15 0 1 1 0-4.3h.09A1.8 1.8 0 0 0 3.6 8.52a1.8 1.8 0 0 0-.36-1.98l-.06-.06a2.15 2.15 0 1 1 3.04-3.04l.06.06a1.8 1.8 0 0 0 1.98.36 1.8 1.8 0 0 0 1.09-1.65V2.12a2.15 2.15 0 1 1 4.3 0v.09a1.8 1.8 0 0 0 1.09 1.65 1.8 1.8 0 0 0 1.98-.36l.06-.06a2.15 2.15 0 1 1 3.04 3.04l-.06.06a1.8 1.8 0 0 0-.36 1.98 1.8 1.8 0 0 0 1.65 1.09h.09a2.15 2.15 0 1 1 0 4.3h-.09A1.8 1.8 0 0 0 19.4 15Z"/></svg>
           </button>
@@ -2845,6 +2894,7 @@ svg{display:block;flex-shrink:0}
       </div>
     </div>
   </div>
+  <div id="apps-placeholder"></div>
   <div id="content-loading">
     <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
   </div>
@@ -3882,6 +3932,7 @@ window.__neura = {
     updateLockIcon(url);
     document.title = title || 'Ventus';
     checkNewtabPlaceholder(url);
+    checkAppsPlaceholder(url);
   },
   setDownloadActive(active) {
     const btn = document.getElementById('btn-more');
@@ -4367,6 +4418,7 @@ function renderAddressBar() {
   }
   updateLockIcon(tab.url);
   checkNewtabPlaceholder(tab.url);
+  checkAppsPlaceholder(tab.url);
   renderBookmarkIcon();
 }
 
@@ -4918,11 +4970,13 @@ function scheduleSidebarPin() {
 
 function _doHideSidebar() {
   clearSidebarPinTimer();
+  const wasPinned = sidebarPinned;
   sidebarPeeking = false;
   sidebarPinned  = false;
   document.getElementById('app').classList.remove('sidebar-floating-open');
   _syncSidebarBtnState();
   clearSidebarClipTimer();
+  if (wasPinned) send('SidebarPeek', {visible: true, pinned: false});
   sidebarClipTimer = setTimeout(() => {
     sidebarClipTimer = null;
     if (!sidebarPeeking) send('SidebarPeek', {visible: false, pinned: false});
@@ -5432,6 +5486,122 @@ function checkNewtabPlaceholder(url) {
     requestNeuraFeed(false);
   }
 }
+const APP_SECTIONS = [
+  {id:'neura', title:'Made by Neura Spheres', sub:'Our own apps', items:[
+    {n:'Neura Finance',u:'https://finance.neuraspheres.com',s:'Markets, portfolio, and your money',g:'linear-gradient(135deg,#10b981,#06b6d4)'},
+    {n:'Neura Feed',u:'https://feed.neuraspheres.com',s:'Your daily news, curated',g:'linear-gradient(135deg,#6366f1,#8b5cf6)'},
+    {n:'Neura Waves',u:'https://waves.neuraspheres.com',s:'Music and ambient soundscapes',g:'linear-gradient(135deg,#8b5cf6,#ec4899)'},
+  ]},
+  {id:'creators', title:'From creators', sub:'Built by the community', items:[
+    {n:'TM Kokomi',u:'https://kokomi-six.vercel.app/',s:'A TM creation',g:'linear-gradient(135deg,#f472b6,#fb7185)'},
+    {n:'Chainews',u:'https://chainew.vercel.app/',s:'Crypto news, fast',g:'linear-gradient(135deg,#f59e0b,#ef4444)'},
+  ]},
+  {id:'google', title:'Google', sub:'Everything Google', items:[
+    {n:'Search',u:'https://www.google.com',s:'Search the web',g:'linear-gradient(135deg,#4285F4,#34A853)'},
+    {n:'Gmail',u:'https://mail.google.com',s:'Email by Google',g:'linear-gradient(135deg,#EA4335,#FBBC05)'},
+    {n:'Drive',u:'https://drive.google.com',s:'Cloud storage',g:'linear-gradient(135deg,#1FA463,#FFCF63)'},
+    {n:'Docs',u:'https://docs.google.com',s:'Documents',g:'linear-gradient(135deg,#4285F4,#1A73E8)'},
+    {n:'Sheets',u:'https://sheets.google.com',s:'Spreadsheets',g:'linear-gradient(135deg,#0F9D58,#34A853)'},
+    {n:'YouTube',u:'https://www.youtube.com',s:'Videos and music',g:'linear-gradient(135deg,#FF0000,#CC0000)'},
+    {n:'Maps',u:'https://maps.google.com',s:'Maps and directions',g:'linear-gradient(135deg,#34A853,#4285F4)'},
+    {n:'Calendar',u:'https://calendar.google.com',s:'Schedule and events',g:'linear-gradient(135deg,#4285F4,#1A73E8)'},
+    {n:'Photos',u:'https://photos.google.com',s:'Photos and albums',g:'linear-gradient(135deg,#EA4335,#4285F4)'},
+    {n:'Meet',u:'https://meet.google.com',s:'Video calls',g:'linear-gradient(135deg,#00897B,#34A853)'},
+    {n:'Translate',u:'https://translate.google.com',s:'Translate languages',g:'linear-gradient(135deg,#4285F4,#1A73E8)'},
+    {n:'Gemini',u:'https://gemini.google.com',s:'Google AI',g:'linear-gradient(135deg,#4285F4,#8b5cf6)'},
+  ]},
+  {id:'microsoft', title:'Microsoft', sub:'Microsoft on the web', items:[
+    {n:'Microsoft 365',u:'https://www.office.com',s:'Office apps online',g:'linear-gradient(135deg,#D83B01,#EA3E23)'},
+    {n:'Outlook',u:'https://outlook.live.com',s:'Email and calendar',g:'linear-gradient(135deg,#0078D4,#28A8EA)'},
+    {n:'OneDrive',u:'https://onedrive.live.com',s:'Cloud storage',g:'linear-gradient(135deg,#0364B8,#0F78D4)'},
+    {n:'Teams',u:'https://teams.microsoft.com',s:'Chat and meetings',g:'linear-gradient(135deg,#6264A7,#4B53BC)'},
+    {n:'Copilot',u:'https://copilot.microsoft.com',s:'Microsoft AI',g:'linear-gradient(135deg,#0078D4,#8b5cf6)'},
+    {n:'Bing',u:'https://www.bing.com',s:'Search engine',g:'linear-gradient(135deg,#008373,#00A88E)'},
+    {n:'Xbox',u:'https://www.xbox.com',s:'Games and cloud play',g:'linear-gradient(135deg,#107C10,#0E700E)'},
+    {n:'LinkedIn',u:'https://www.linkedin.com',s:'Professional network',g:'linear-gradient(135deg,#0A66C2,#0077B5)'},
+  ]},
+  {id:'meta', title:'Meta', sub:'Meta apps', items:[
+    {n:'Facebook',u:'https://www.facebook.com',s:'Connect with people',g:'linear-gradient(135deg,#1877F2,#0A5BD3)'},
+    {n:'Instagram',u:'https://www.instagram.com',s:'Photos and reels',g:'linear-gradient(135deg,#F58529,#DD2A7B 55%,#8134AF)'},
+    {n:'WhatsApp',u:'https://web.whatsapp.com',s:'Messaging',g:'linear-gradient(135deg,#25D366,#128C7E)'},
+    {n:'Messenger',u:'https://www.messenger.com',s:'Chat with friends',g:'linear-gradient(135deg,#00B2FF,#006AFF)'},
+    {n:'Threads',u:'https://www.threads.net',s:'Text conversations',g:'linear-gradient(135deg,#3a3a3a,#000000)'},
+  ]},
+];
+
+const APPS_FEATURED = [
+  {n:'Neura Finance',u:'https://finance.neuraspheres.com',s:'Track markets, build your portfolio, and stay on top of your money.',g:'linear-gradient(135deg,#0ea5e9,#10b981)',k:'Featured'},
+  {n:'Neura Waves',u:'https://waves.neuraspheres.com',s:'Ambient soundscapes to focus, relax, and flow.',g:'linear-gradient(135deg,#8b5cf6,#ec4899)',k:'New'},
+  {n:'Chainews',u:'https://chainew.vercel.app/',s:'The fastest way to follow crypto and on-chain news.',g:'linear-gradient(135deg,#f59e0b,#ef4444)',k:'Trending'},
+];
+
+let appsFilter = 'all';
+
+function checkAppsPlaceholder(url) {
+  const root = document.getElementById('apps-placeholder');
+  if (!root) return;
+  const show = url === 'neura://apps';
+  root.style.display = show ? 'block' : 'none';
+  if (show) renderAppsPage();
+}
+
+function renderAppsPage() {
+  const root = document.getElementById('apps-placeholder');
+  if (!root) return;
+  const chips = [{id:'all',label:'All'}].concat(APP_SECTIONS.map(s => ({id:s.id, label:s.title})));
+  const chipHtml = chips.map(c =>
+    `<button class="apps-chip${appsFilter===c.id?' active':''}" onclick="setAppsFilter('${c.id}')">${escHtml(c.label)}</button>`
+  ).join('');
+  const featHtml = appsFilter === 'all' ? `<div class="apps-featured">${APPS_FEATURED.map(featCard).join('')}</div>` : '';
+  const secHtml = APP_SECTIONS.filter(s => appsFilter === 'all' || appsFilter === s.id).map(sectionHtml).join('');
+  root.innerHTML = `<div class="apps-wrap">
+    <div class="apps-hero">
+      <div class="apps-eyebrow">Neura Store</div>
+      <h1 class="apps-title">Apps</h1>
+      <p class="apps-tagline">Hand-picked web apps, ready to open in Ventus. No install, just click.</p>
+      <div class="apps-chips">${chipHtml}</div>
+    </div>
+    ${featHtml}
+    ${secHtml}
+    <div class="apps-foot">More apps coming soon. Built with care by Neura Spheres.</div>
+  </div>`;
+}
+
+function setAppsFilter(id) {
+  appsFilter = id;
+  renderAppsPage();
+  const root = document.getElementById('apps-placeholder');
+  if (root) root.scrollTop = 0;
+}
+
+function appIconUrl(u) {
+  return shortcutIconUrl(shortcutDomain(u));
+}
+
+function appIconHtml(it) {
+  const letter = escHtml((it.n || '?').trim().charAt(0).toUpperCase());
+  return `<div class="app-icon" style="--g:${it.g}"><img src="${appIconUrl(it.u)}" alt="" onerror="this.style.display='none';this.parentElement.querySelector('.app-icon-letter').style.display='block'"><span class="app-icon-letter" style="display:none">${letter}</span></div>`;
+}
+
+function featCard(it) {
+  return `<div class="feat-card" style="--g:${it.g}" onclick="openApp('${escAttr(it.u)}')">
+    <div><div class="feat-kicker">${escHtml(it.k||'Featured')}</div><div class="feat-name">${escHtml(it.n)}</div><div class="feat-sub">${escHtml(it.s)}</div></div>
+    <div class="feat-bottom"><span class="feat-open">Open</span><div class="feat-icon"><img src="${appIconUrl(it.u)}" alt="" onerror="this.style.display='none'"></div></div>
+  </div>`;
+}
+
+function sectionHtml(s) {
+  return `<div class="apps-section"><div class="apps-section-head"><div class="apps-section-title">${escHtml(s.title)}</div><div class="apps-section-sub">${escHtml(s.sub||'')}</div></div><div class="apps-grid">${s.items.map(appCard).join('')}</div></div>`;
+}
+
+function appCard(it) {
+  return `<div class="app-card" onclick="openApp('${escAttr(it.u)}')">${appIconHtml(it)}<div class="app-meta"><div class="app-name">${escHtml(it.n)}</div><div class="app-sub">${escHtml(it.s||'')}</div></div><span class="app-open">Open</span></div>`;
+}
+
+function openApp(u) {
+  send('Navigate', {url: u});
+}
+
 function handleNewtabKey(e) {
   if (handleSuggestionKey(e, 'newtab')) return;
   if (e.key === 'Enter') {

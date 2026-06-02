@@ -82,6 +82,7 @@ impl Tab {
         match self.url.as_str() {
             "neura://newtab" => "New Tab",
             "neura://settings" => "Settings",
+            "neura://apps" => "Apps",
             url => url,
         }
     }

@@ -174,9 +174,8 @@ pub enum TabAction {
     Remove(String),
     RemoveMany(Vec<String>),
     SyncViews,
-    /// Only update the chrome clip region — do not touch content WebView bounds.
-    /// Used for auto-hide sidebar peek so the content page is completely undisturbed.
     SyncClipOnly,
+    SyncSidebarClip,
     ContentScript(String),
     SetZoom(f64),
     SetZoomFor {
@@ -662,15 +661,9 @@ pub fn handle_chrome_command(
             None
         }
         ChromeCommand::SidebarPeek { visible, pinned } => {
-            let was_pinned = state.sidebar_pinned;
             state.sidebar_auto_hide_open = visible;
             state.sidebar_pinned = visible && pinned;
-            // Pin state change affects content width — need full layout sync
-            if state.sidebar_pinned != was_pinned {
-                Some(TabAction::SyncViews)
-            } else {
-                Some(TabAction::SyncClipOnly)
-            }
+            Some(TabAction::SyncSidebarClip)
         }
         ChromeCommand::SidebarAutoClose => {
             // Skip when pinned — pinned sidebar is solid and stays open
@@ -1268,45 +1261,38 @@ pub fn handle_app_event_inner(
             if tab.status != crate::browser::tab::TabStatus::Loading {
                 return None;
             }
-            // Skip stalls on internal or empty URLs — they can never be stuck in a
-            // meaningful way and any watch for them is a spurious leftover.
             if url.starts_with("neura://") || url.trim().is_empty() {
                 return None;
             }
-            // If the current tab URL differs from the stall URL it means a redirect
-            // occurred while the 30-second timer was in flight: `ContentMetadata`
-            // updated `tab.url` to the final destination before the timer fired.
-            // Previously we returned None here, leaving the spinner running forever.
-            // Instead, recover against the *current* URL so we reload the real page
-            // rather than the pre-redirect URL (which would just loop back again).
             let recover_url = if !tab.url.is_empty() && tab.url != url {
                 tab.url.clone()
             } else {
                 url.clone()
             };
             let key = load_key(&tab_id, &recover_url);
-            let tries = state.load_recoveries.entry(key).or_insert(0);
-            if *tries == 0 {
-                *tries += 1;
+            let tries = state.load_recoveries.get(&key).copied().unwrap_or(0);
+            if tries == 0 {
+                state.load_recoveries.insert(key, tries + 1);
                 return Some(TabAction::NudgeContent {
                     tab_id,
                     url: recover_url,
                 });
             }
-            if *tries < 3 {
-                *tries += 1;
+            if tries < 3 {
+                state.load_recoveries.insert(key, tries + 1);
                 return Some(TabAction::ReloadContent {
                     tab_id,
                     url: recover_url,
                 });
             }
-            // After 2 reload attempts, stop and let the user decide.
-            // RebuildContent is intentionally not used here: it destroys the WebView2
-            // instance, which loses server-side sessions and in-memory auth tokens even
-            // though cookies persist — causing unexpected logouts.
-            state
-                .load_recoveries
-                .remove(&load_key(&tab_id, &recover_url));
+            if tries == 3 {
+                state.load_recoveries.insert(key, tries + 1);
+                return Some(TabAction::RebuildContent {
+                    tab_id,
+                    url: recover_url,
+                });
+            }
+            state.load_recoveries.remove(&key);
             state.tab_manager.set_tab_loading(&tab_id, false);
             if state.tab_manager.active_tab_id.as_deref() == Some(tab_id.as_str()) {
                 let active = state
