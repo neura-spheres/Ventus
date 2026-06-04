@@ -343,4 +343,20 @@ pub enum AppEvent {
         tab_id: String,
         fatal: bool,
     },
+    /// A sized popup (OAuth, share, payment) was requested. The main loop drains the
+    /// pending-popup queue and builds a Ventus-wrapped window for each.
+    CreatePopupWindow,
+    /// Close a wrapped popup window (its close button, or JS window.close()).
+    PopupClose {
+        id: u64,
+    },
+    /// Begin moving a wrapped popup window (top-bar drag).
+    PopupDrag {
+        id: u64,
+    },
+    /// The popup's content navigated; update its top-bar origin display.
+    PopupUrlChanged {
+        id: u64,
+        url: String,
+    },
 }

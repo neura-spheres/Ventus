@@ -66,7 +66,7 @@ const SC_DEVTOOLS: usize = 20;
 const SC_INCOGNITO: usize = 21;
 const SC_TAB_1: usize = 22;
 const SC_TAB_9: usize = 30;
-const LOAD_STALL_AFTER: u64 = 12;
+const LOAD_STALL_AFTER: u64 = 8;
 const TAB_SLEEP_REFRESH_AFTER: Duration = Duration::from_secs(5 * 60);
 const TAB_KEEPALIVE_EVERY: Duration = Duration::from_secs(45);
 const WEBVIEW_PROFILE_RELEASE_TIMEOUT: Duration = Duration::from_secs(5);
@@ -457,6 +457,8 @@ fn main() {
     let mut incognito_web_context = Some(wry::WebContext::new(Some(incognito_data_dir.clone())));
 
     let mut content_views: HashMap<String, WebView> = HashMap::new();
+    let mut popups: HashMap<u64, PopupWindow> = HashMap::new();
+    let mut next_popup_id: u64 = 1;
     let mut content_hwnds: HashMap<String, isize> = HashMap::new();
     let mut load_watches: HashMap<String, u64> = HashMap::new();
     let mut load_watch_next = 0u64;
@@ -577,8 +579,9 @@ fn main() {
     let mut custom_maximized = false;
     // Periodic proactive cookie snapshot (backs up cookies even between navigations).
     let mut cookie_save_at = Instant::now() + COOKIE_SAVE_EVERY;
-    event_loop.run(move |event, _, control_flow| {
+    event_loop.run(move |event, elwt, control_flow| {
         *control_flow = ControlFlow::Wait;
+        let _ = &elwt;
 
         match event {
             Event::UserEvent(AppEvent::ChromeReady) => {
@@ -796,6 +799,7 @@ fn main() {
                     save_session(&state);
                 }
                 save_open_cookies(&content_views, &state, &data_dir);
+                popups.clear();
                 shutdown_webview2(
                     crash_sentinel.as_deref(),
                     &mut content_views,
@@ -804,6 +808,60 @@ fn main() {
                     &mut incognito_web_context,
                 );
                 *control_flow = ControlFlow::Exit;
+            }
+
+            Event::UserEvent(AppEvent::CreatePopupWindow) => {
+                #[cfg(windows)]
+                {
+                    let pendings: Vec<PendingPopup> =
+                        PENDING_POPUPS.with(|q| q.borrow_mut().drain(..).collect());
+                    for pending in pendings {
+                        let id = next_popup_id;
+                        next_popup_id = next_popup_id.wrapping_add(1).max(1);
+                        let web_ctx = if pending.incognito {
+                            incognito_web_context.as_mut().unwrap()
+                        } else {
+                            content_web_context.as_mut().unwrap()
+                        };
+                        let popup = spawn_popup_window(
+                            elwt,
+                            &window,
+                            &pending,
+                            id,
+                            proxy_main.clone(),
+                            web_ctx,
+                            &browser_args,
+                        );
+                        unsafe {
+                            let _ = pending.deferral.Complete();
+                        }
+                        if let Some(p) = popup {
+                            p.window.set_visible(true);
+                            popups.insert(id, p);
+                        }
+                    }
+                }
+            }
+
+            Event::UserEvent(AppEvent::PopupClose { id }) => {
+                popups.remove(&id);
+            }
+
+            Event::UserEvent(AppEvent::PopupDrag { id }) => {
+                if let Some(p) = popups.get(&id) {
+                    let _ = p.window.drag_window();
+                }
+            }
+
+            Event::UserEvent(AppEvent::PopupUrlChanged { id, url }) => {
+                if let Some(p) = popups.get(&id) {
+                    let (host, secure) = popup_origin(&url);
+                    let host_js = serde_json::to_string(&host).unwrap_or_default();
+                    let _ = p.bar.evaluate_script(&format!(
+                        "window.__popup&&window.__popup.setOrigin({},{})",
+                        host_js, secure
+                    ));
+                }
             }
 
             Event::UserEvent(AppEvent::Shortcut { code }) => {
@@ -969,49 +1027,6 @@ fn main() {
                         crate::utils::url::clean_tracking_url(url),
                     );
                 }
-                if let AppEvent::ContentLoadProgress {
-                    tab_id,
-                    url,
-                    progress,
-                } = &app_event
-                {
-                    if *progress > 0.0
-                        && *progress < 0.92
-                        && state
-                            .tab_manager
-                            .get_tab(tab_id)
-                            .map(|tab| tab.status == crate::browser::tab::TabStatus::Loading)
-                            .unwrap_or(false)
-                    {
-                        watch_load(
-                            &rt,
-                            &proxy_main,
-                            &mut load_watches,
-                            &mut load_watch_next,
-                            tab_id.clone(),
-                            crate::utils::url::clean_tracking_url(url),
-                        );
-                    }
-                }
-                if let AppEvent::ContentMetadata { tab_id, url, .. }
-                | AppEvent::ContentNav { tab_id, url, .. } = &app_event
-                {
-                    if state
-                        .tab_manager
-                        .get_tab(tab_id)
-                        .map(|tab| tab.status == crate::browser::tab::TabStatus::Loading)
-                        .unwrap_or(false)
-                    {
-                        watch_load(
-                            &rt,
-                            &proxy_main,
-                            &mut load_watches,
-                            &mut load_watch_next,
-                            tab_id.clone(),
-                            crate::utils::url::clean_tracking_url(url),
-                        );
-                    }
-                }
                 let persist_session = should_save_session(&app_event);
                 let is_save_settings = matches!(
                     &app_event,
@@ -1084,6 +1099,7 @@ fn main() {
                         &layout_config,
                     );
 
+                    let focus_spotlight = matches!(action, TabAction::FocusSpotlight);
                     match action {
                         TabAction::SyncClipOnly | TabAction::SyncSidebarClip => unreachable!(),
                         TabAction::Create { tab_id, url } => {
@@ -1183,7 +1199,7 @@ fn main() {
                                 &window,
                             );
                         }
-                        TabAction::SyncViews => {
+                        TabAction::SyncViews | TabAction::FocusSpotlight => {
                             if let Some(active_id) = state.tab_manager.active_tab_id.clone() {
                                 if !content_views.contains_key(&active_id) {
                                     if let Some(tab) = state.tab_manager.get_tab(&active_id) {
@@ -1280,6 +1296,12 @@ fn main() {
                                     .map(|w| w.is_incognito)
                                     .unwrap_or(false);
                                 set_screenshot_protection(window.hwnd() as isize, is_incog);
+                            }
+                            if focus_spotlight {
+                                let _ = chrome.focus();
+                                let _ = chrome.evaluate_script(
+                                    "window.__neura&&window.__neura.focusSpotlight&&window.__neura.focusSpotlight()",
+                                );
                             }
                         }
                         TabAction::ContentScript(js) => {
@@ -2068,6 +2090,30 @@ fn main() {
                 }
             }
 
+            // All events for a wrapped popup window are handled here so they never reach the
+            // main-window arms below (a popup close must not exit the app).
+            Event::WindowEvent {
+                window_id, event, ..
+            } if popups.values().any(|p| p.window.id() == window_id) => {
+                match event {
+                    WindowEvent::CloseRequested => {
+                        if let Some(id) = popups
+                            .iter()
+                            .find(|(_, p)| p.window.id() == window_id)
+                            .map(|(id, _)| *id)
+                        {
+                            popups.remove(&id);
+                        }
+                    }
+                    WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. } => {
+                        if let Some(p) = popups.values().find(|p| p.window.id() == window_id) {
+                            layout_popup(p);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
             Event::WindowEvent {
                 event:
                     WindowEvent::KeyboardInput {
@@ -2154,6 +2200,7 @@ fn main() {
                     save_session(&state);
                 }
                 save_open_cookies(&content_views, &state, &data_dir);
+                popups.clear();
                 shutdown_webview2(
                     crash_sentinel.as_deref(),
                     &mut content_views,
@@ -2673,6 +2720,351 @@ fn attach_navigation_failure_handler(
     }
 }
 
+// A new-window request (target=_blank link, window.open, ctrl/middle click) should become a
+// normal tab — NOT a bare popup OS window like WRY's default handler does. The exception is a
+// real popup: OAuth sign-in, share sheets, and payment dialogs call window.open with an
+// explicit width/height, which WebView2 reports via WindowFeatures.HasSize. Those we wrap in a
+// Ventus-styled window (preserving window.opener via SetNewWindow); everything else is a tab.
+#[cfg(windows)]
+fn attach_new_window_handler(
+    wv: &WebView,
+    proxy: tao::event_loop::EventLoopProxy<AppEvent>,
+    incognito: bool,
+) {
+    use webview2_com::{
+        Microsoft::Web::WebView2::Win32::ICoreWebView2, NewWindowRequestedEventHandler,
+    };
+    use wv2core::PWSTR;
+
+    let controller = wv.controller();
+    let webview: ICoreWebView2 = unsafe {
+        match controller.CoreWebView2() {
+            Ok(wv) => wv,
+            Err(_) => return,
+        }
+    };
+
+    let handler = NewWindowRequestedEventHandler::create(Box::new(move |_sender, args| {
+        let Some(args) = args else {
+            return Ok(());
+        };
+        unsafe {
+            let mut ptr = PWSTR::null();
+            args.Uri(&mut ptr)?;
+            let url = take_pwstr(ptr);
+
+            let mut sized: wv2win::Win32::Foundation::BOOL = Default::default();
+            let mut win_w = 0u32;
+            let mut win_h = 0u32;
+            if let Ok(features) = args.WindowFeatures() {
+                let _ = features.HasSize(&mut sized);
+                let _ = features.Width(&mut win_w);
+                let _ = features.Height(&mut win_h);
+            }
+
+            // Sized popup → wrap it. We take a deferral so the request stays pending while the
+            // main loop (which can create windows) builds the wrapper and hands our WebView
+            // back via SetNewWindow. If anything fails, the deferral completes without a new
+            // window and WebView2 falls back to its own popup — the opener never breaks.
+            if sized.as_bool() {
+                if let Ok(deferral) = args.GetDeferral() {
+                    PENDING_POPUPS.with(|q| {
+                        q.borrow_mut().push(PendingPopup {
+                            args: args.clone(),
+                            deferral,
+                            width: win_w,
+                            height: win_h,
+                            incognito,
+                        });
+                    });
+                    let _ = proxy.send_event(AppEvent::CreatePopupWindow);
+                }
+                return Ok(());
+            }
+
+            // Blank/about:blank with no url → "open blank then set location" pattern: leave it
+            // as a native popup so the opener keeps a real window reference.
+            let real_url = url.starts_with("http://") || url.starts_with("https://");
+            if !real_url {
+                return Ok(());
+            }
+
+            args.SetHandled(true)?;
+            let _ = proxy.send_event(AppEvent::Chrome(ChromeCommand::OpenInNewTab { url }));
+        }
+        Ok(())
+    }));
+
+    let mut token = Default::default();
+    unsafe {
+        let _ = webview.add_NewWindowRequested(&handler, &mut token);
+    }
+}
+
+// A wrapped popup window: a frameless Ventus-styled window with a slim top bar (origin +
+// close) above the popup content. Fields drop in declaration order, so the WebViews (children
+// of the window) are torn down before the window itself.
+struct PopupWindow {
+    content: WebView,
+    bar: WebView,
+    window: tao::window::Window,
+    bar_h: u32,
+}
+
+#[cfg(windows)]
+struct PendingPopup {
+    args: webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2NewWindowRequestedEventArgs,
+    deferral: webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Deferral,
+    width: u32,
+    height: u32,
+    incognito: bool,
+}
+
+// Queue of popups awaiting a wrapper window. The NewWindowRequested handler (a COM callback on
+// the UI thread) pushes here and wakes the event loop, which drains it on the same thread — so
+// the !Send COM objects never cross threads.
+#[cfg(windows)]
+thread_local! {
+    static PENDING_POPUPS: std::cell::RefCell<Vec<PendingPopup>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+#[cfg(windows)]
+fn spawn_popup_window(
+    elwt: &tao::event_loop::EventLoopWindowTarget<AppEvent>,
+    main_window: &tao::window::Window,
+    pending: &PendingPopup,
+    id: u64,
+    proxy: tao::event_loop::EventLoopProxy<AppEvent>,
+    web_context: &mut wry::WebContext,
+    browser_args: &str,
+) -> Option<PopupWindow> {
+    use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2;
+
+    let bar_h = 40u32;
+    let w = if pending.width >= 200 {
+        pending.width.min(1600)
+    } else {
+        480
+    };
+    let body_h = if pending.height >= 200 {
+        pending.height.min(1200)
+    } else {
+        600
+    };
+    let total_h = body_h + bar_h;
+
+    let window = WindowBuilder::new()
+        .with_title("Ventus")
+        .with_inner_size(LogicalSize::new(w, total_h))
+        .with_decorations(false)
+        .with_resizable(false)
+        .with_visible(false)
+        .build(elwt)
+        .ok()?;
+    center_popup(&window, main_window, w, total_h);
+    set_square_corners(&window);
+    set_window_background_dark(&window);
+
+    let size = window.inner_size();
+    let scale = window.scale_factor();
+    let bar_px = logical_to_physical(bar_h as f64, scale)
+        .min(size.height.saturating_sub(1).max(1))
+        .max(1);
+    let bar_rect = Rect {
+        x: 0,
+        y: 0,
+        width: size.width.max(1),
+        height: bar_px,
+    };
+    let content_rect = Rect {
+        x: 0,
+        y: bar_px as i32,
+        width: size.width.max(1),
+        height: size.height.saturating_sub(bar_px).max(1),
+    };
+
+    let content = build_popup_content_webview(
+        &window,
+        content_rect,
+        web_context,
+        pending.incognito,
+        browser_args,
+    )?;
+    let bar = build_popup_bar_webview(&window, bar_rect, web_context, proxy.clone(), id)?;
+
+    // SetNewWindow is the last fallible step: if it succeeds we keep everything, and if it
+    // fails both WebViews drop and the caller completes the deferral → default popup.
+    let ok = unsafe {
+        match content.controller().CoreWebView2() {
+            Ok(core) => {
+                let core: ICoreWebView2 = core;
+                pending.args.SetNewWindow(&core).is_ok()
+            }
+            Err(_) => false,
+        }
+    };
+    if !ok {
+        return None;
+    }
+
+    attach_popup_content_handlers(&content, id, proxy, pending.incognito);
+    Some(PopupWindow {
+        content,
+        bar,
+        window,
+        bar_h,
+    })
+}
+
+#[cfg(windows)]
+fn build_popup_content_webview(
+    window: &tao::window::Window,
+    rect: Rect,
+    web_context: &mut wry::WebContext,
+    incognito: bool,
+    browser_args: &str,
+) -> Option<WebView> {
+    // No URL and no init script: WebView2 navigates this WebView to the popup target itself
+    // once it is handed over via SetNewWindow. Same WebContext + browser args as the opener so
+    // the new-window handoff is accepted.
+    let builder = WebViewBuilder::new_as_child(window)
+        .with_bounds(rect)
+        .with_background_color((6, 7, 9, 255))
+        .with_incognito(incognito)
+        .with_browser_accelerator_keys(false)
+        .with_additional_browser_args(browser_args.to_string());
+    let wv = builder.with_web_context(web_context).build().ok()?;
+    let _ = wv.set_background_color((6, 7, 9, 255));
+    Some(wv)
+}
+
+#[cfg(windows)]
+fn build_popup_bar_webview(
+    window: &tao::window::Window,
+    rect: Rect,
+    web_context: &mut wry::WebContext,
+    proxy: tao::event_loop::EventLoopProxy<AppEvent>,
+    id: u64,
+) -> Option<WebView> {
+    let builder = WebViewBuilder::new_as_child(window)
+        .with_bounds(rect)
+        .with_background_color((12, 10, 9, 255))
+        .with_html(ui::popup::popup_chrome_html())
+        .with_browser_accelerator_keys(false)
+        .with_ipc_handler(move |req: wry::http::Request<String>| {
+            let Ok(v) = serde_json::from_str::<serde_json::Value>(req.body()) else {
+                return;
+            };
+            match v.get("cmd").and_then(|c| c.as_str()) {
+                Some("popup_close") => {
+                    let _ = proxy.send_event(AppEvent::PopupClose { id });
+                }
+                Some("popup_drag") => {
+                    let _ = proxy.send_event(AppEvent::PopupDrag { id });
+                }
+                _ => {}
+            }
+        });
+    builder.with_web_context(web_context).build().ok()
+}
+
+#[cfg(windows)]
+fn attach_popup_content_handlers(
+    content: &WebView,
+    id: u64,
+    proxy: tao::event_loop::EventLoopProxy<AppEvent>,
+    incognito: bool,
+) {
+    use webview2_com::{
+        Microsoft::Web::WebView2::Win32::ICoreWebView2, SourceChangedEventHandler,
+        WindowCloseRequestedEventHandler,
+    };
+
+    let webview: ICoreWebView2 = unsafe {
+        match content.controller().CoreWebView2() {
+            Ok(w) => w,
+            Err(_) => return,
+        }
+    };
+
+    let proxy_src = proxy.clone();
+    let src = SourceChangedEventHandler::create(Box::new(move |sender, _args| {
+        if let Some(sender) = sender {
+            let url = unsafe { webview_source(&sender) };
+            let _ = proxy_src.send_event(AppEvent::PopupUrlChanged { id, url });
+        }
+        Ok(())
+    }));
+    let mut t = Default::default();
+    unsafe {
+        let _ = webview.add_SourceChanged(&src, &mut t);
+    }
+
+    let proxy_close = proxy.clone();
+    let close = WindowCloseRequestedEventHandler::create(Box::new(move |_s, _a| {
+        let _ = proxy_close.send_event(AppEvent::PopupClose { id });
+        Ok(())
+    }));
+    let mut t2 = Default::default();
+    unsafe {
+        let _ = webview.add_WindowCloseRequested(&close, &mut t2);
+    }
+
+    // Nested new windows from inside the popup follow the same tab/popup rules.
+    attach_new_window_handler(content, proxy, incognito);
+}
+
+#[cfg(windows)]
+fn center_popup(popup: &tao::window::Window, main: &tao::window::Window, w: u32, h: u32) {
+    let Ok(main_pos) = main.outer_position() else {
+        return;
+    };
+    let main_size = main.outer_size();
+    let scale = main.scale_factor();
+    let pw = logical_to_physical(w as f64, scale) as i32;
+    let ph = logical_to_physical(h as f64, scale) as i32;
+    let x = main_pos.x + (main_size.width as i32 - pw) / 2;
+    let y = main_pos.y + (main_size.height as i32 - ph) / 2;
+    popup.set_outer_position(tao::dpi::PhysicalPosition::new(x.max(0), y.max(0)));
+}
+
+fn layout_popup(p: &PopupWindow) {
+    let size = p.window.inner_size();
+    let scale = p.window.scale_factor();
+    let bar_px = logical_to_physical(p.bar_h as f64, scale)
+        .min(size.height.saturating_sub(1).max(1))
+        .max(1);
+    set_content_bounds(
+        &p.bar,
+        Rect {
+            x: 0,
+            y: 0,
+            width: size.width.max(1),
+            height: bar_px,
+        },
+    );
+    set_content_bounds(
+        &p.content,
+        Rect {
+            x: 0,
+            y: bar_px as i32,
+            width: size.width.max(1),
+            height: size.height.saturating_sub(bar_px).max(1),
+        },
+    );
+}
+
+fn popup_origin(url: &str) -> (String, bool) {
+    match url::Url::parse(url) {
+        Ok(u) => (
+            u.host_str().unwrap_or_default().to_string(),
+            u.scheme() == "https",
+        ),
+        Err(_) => (String::new(), false),
+    }
+}
+
 #[cfg(windows)]
 unsafe fn webview_source(
     webview: &webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2,
@@ -2821,10 +3213,6 @@ fn build_content_webview(
         .with_browser_accelerator_keys(false)
         .with_additional_browser_args(browser_args.to_string());
     let builder = builder
-        .with_new_window_req_handler(move |url| {
-            let url = url.trim().to_ascii_lowercase();
-            url == "about:blank" || url.starts_with("http://") || url.starts_with("https://")
-        })
         .with_ipc_handler(move |req: wry::http::Request<String>| {
             let body = req.body();
             if let Ok(value) = serde_json::from_str::<serde_json::Value>(body) {
@@ -3009,7 +3397,7 @@ fn build_content_webview(
                         | ChromeCommand::ReopenTab                   // Ctrl+Shift+T
                         | ChromeCommand::OpenHistoryPanel            // Ctrl+H
                         | ChromeCommand::OpenDownloadsPanel          // Ctrl+J
-                        | ChromeCommand::ZoomDelta { .. }            // Ctrl+wheel zoom
+                        | ChromeCommand::ZoomDelta { .. } // Ctrl+wheel zoom
                 );
                 if allowed {
                     let _ = proxy_ipc.send_event(AppEvent::Chrome(cmd));
@@ -3138,6 +3526,7 @@ fn build_content_webview(
     {
         attach_process_failed_handler(&wv, proxy.clone(), tab_id.to_string());
         attach_navigation_failure_handler(&wv, proxy.clone(), tab_id.to_string());
+        attach_new_window_handler(&wv, proxy.clone(), incognito);
         if strict {
             attach_permission_handler(&wv);
         }
@@ -3603,6 +3992,45 @@ fn content_initialization_script(
     e.preventDefault();
     post({cmd:'open_in_new_tab', url: link.href});
   }, true);
+
+  // Drop a link dragged from outside (another browser, the desktop) → open a new tab.
+  // Bubble phase + defaultPrevented check so a page's own drop zone wins; editable targets
+  // keep native text-insert behavior; file drags are left to the page so uploads still work.
+  const dragHasLink = (dt) => {
+    if (!dt) return false;
+    const t = dt.types || [];
+    const has = (x) => Array.prototype.indexOf.call(t, x) !== -1;
+    if (has('Files')) return false;
+    return has('text/uri-list') || has('text/plain');
+  };
+  const dropTargetEditable = (el) => !!(el && el.closest && el.closest(
+    'input,textarea,select,[contenteditable=""],[contenteditable="true"]'
+  ));
+  const extractDropUrl = (dt) => {
+    if (!dt) return '';
+    try {
+      let u = (dt.getData('text/uri-list') || '').split('\n').find((l) => l && l[0] !== '#');
+      if (!u) u = dt.getData('text/plain') || '';
+      u = (u || '').trim();
+      if (/^https?:\/\//i.test(u)) return u;
+      if (/^[a-z0-9.-]+\.[a-z]{2,}([\/?#]|$)/i.test(u)) return u;
+    } catch (_) {}
+    return '';
+  };
+  window.addEventListener('dragover', function(e) {
+    if (e.defaultPrevented || dropTargetEditable(e.target)) return;
+    if (!dragHasLink(e.dataTransfer)) return;
+    e.preventDefault();
+    try { e.dataTransfer.dropEffect = 'copy'; } catch (_) {}
+  }, false);
+  window.addEventListener('drop', function(e) {
+    if (e.defaultPrevented || dropTargetEditable(e.target)) return;
+    const url = extractDropUrl(e.dataTransfer);
+    if (!url) return;
+    e.preventDefault();
+    post({cmd:'open_in_new_tab', url});
+  }, false);
+
   const fsChange = function() {
     post({cmd: 'content_fullscreen_change', active: !!document.fullscreenElement || !!document.webkitFullscreenElement});
   };

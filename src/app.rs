@@ -181,6 +181,7 @@ pub enum TabAction {
     Remove(String),
     RemoveMany(Vec<String>),
     SyncViews,
+    FocusSpotlight,
     SyncClipOnly,
     SyncSidebarClip,
     ContentScript(String),
@@ -844,11 +845,12 @@ pub fn handle_chrome_command(
             if state.spotlight_open {
                 state.spotlight_open = false;
                 let _ = chrome.evaluate_script("hideSpotlight()");
+                Some(TabAction::SyncViews)
             } else {
                 state.spotlight_open = true;
                 let _ = chrome.evaluate_script("spotlightOpen=false;showSpotlight()");
+                Some(TabAction::FocusSpotlight)
             }
-            Some(TabAction::SyncViews)
         }
         ChromeCommand::EndSpotlight => {
             state.spotlight_open = false;

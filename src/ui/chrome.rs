@@ -183,9 +183,9 @@ pub fn chrome_html() -> String {
   --sidebar-bottom-icon:rgba(26,27,46,0.66);
   --sidebar-bottom-icon-hover:rgba(26,27,46,0.9);
   --sidebar-bottom-icon-disabled:rgba(26,27,46,0.38);
-  --load-ring:rgba(255,255,255,0.92);
-  --load-ring-soft:rgba(255,255,255,0.44);
-  --load-ring-faint:rgba(255,255,255,0.20);
+  --load-ring:rgba(26,27,46,0.82);
+  --load-ring-soft:rgba(26,27,46,0.30);
+  --load-ring-faint:rgba(26,27,46,0.09);
   --nt-scrim:linear-gradient(rgba(18,18,18,0.10),rgba(18,18,18,0.10));
   --nt-vignette:linear-gradient(transparent,transparent);
   --nt-panel:rgba(255,255,255,0.72);
@@ -3988,6 +3988,7 @@ window.__neura = {
     if (frameSideW != null) root.style.setProperty('--frame-side-w', frameSideW + 'px');
     if (frameBottomH != null) root.style.setProperty('--frame-bottom-h', frameBottomH + 'px');
   },
+  focusSpotlight() { focusSpotlightSoon(); },
   appendAiChunk(text, done) {
     if (done && !text && !currentStreamEl) {
       finishAiBusy();
@@ -7026,10 +7027,22 @@ function showSpotlight() {
   spotlightOpen = true;
   document.getElementById('tab-spotlight-overlay').classList.add('open');
   renderTspSuggestions('');
-  setTimeout(() => {
-    const inp = document.getElementById('tsp-input');
-    if (inp) { inp.value = ''; inp.focus(); }
-  }, 30);
+  const inp = document.getElementById('tsp-input');
+  if (inp) inp.value = '';
+  focusSpotlightSoon();
+}
+
+function focusSpotlightInput() {
+  const inp = document.getElementById('tsp-input');
+  if (!inp) return;
+  inp.focus();
+}
+
+function focusSpotlightSoon() {
+  focusSpotlightInput();
+  requestAnimationFrame(focusSpotlightInput);
+  setTimeout(focusSpotlightInput, 30);
+  setTimeout(focusSpotlightInput, 90);
 }
 
 function openSpotlight() {
@@ -8783,6 +8796,43 @@ window.addEventListener('resize', () => {
   refreshSuggestionOverlayBounds();
   syncUpdateModalClip();
 }, {passive: true});
+
+// Drop a link dragged from outside onto the chrome (new tab page, toolbar, sidebar) → new tab.
+// Defers to editable fields (url bar, search, AI input) and ignores file drags.
+function dropDragHasLink(dt) {
+  if (!dt) return false;
+  const t = dt.types || [];
+  const has = (x) => Array.prototype.indexOf.call(t, x) !== -1;
+  if (has('Files')) return false;
+  return has('text/uri-list') || has('text/plain');
+}
+function dropTargetEditable(el) {
+  return !!(el && el.closest && el.closest('input,textarea,select,[contenteditable=""],[contenteditable="true"]'));
+}
+function extractDropUrl(dt) {
+  if (!dt) return '';
+  try {
+    let u = (dt.getData('text/uri-list') || '').split('\n').find((l) => l && l[0] !== '#');
+    if (!u) u = dt.getData('text/plain') || '';
+    u = (u || '').trim();
+    if (/^https?:\/\//i.test(u)) return u;
+    if (/^[a-z0-9.-]+\.[a-z]{2,}([\/?#]|$)/i.test(u)) return u;
+  } catch (_) {}
+  return '';
+}
+window.addEventListener('dragover', (e) => {
+  if (e.defaultPrevented || dropTargetEditable(e.target)) return;
+  if (!dropDragHasLink(e.dataTransfer)) return;
+  e.preventDefault();
+  try { e.dataTransfer.dropEffect = 'copy'; } catch (_) {}
+}, false);
+window.addEventListener('drop', (e) => {
+  if (e.defaultPrevented || dropTargetEditable(e.target)) return;
+  const url = extractDropUrl(e.dataTransfer);
+  if (!url) return;
+  e.preventDefault();
+  send('OpenInNewTab', {url});
+}, false);
 
 // ============================================================
 // UTILS
