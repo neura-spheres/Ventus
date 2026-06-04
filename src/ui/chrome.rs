@@ -410,6 +410,14 @@ button,input,select,textarea{font-family:var(--font)}
   transition:opacity 0.32s ease;
   z-index:0;
 }
+#address-bar.drag-over{border-color:var(--accent)!important;box-shadow:0 0 0 2px var(--accent-dim)!important}
+[data-nav-url][draggable="true"]{-webkit-user-drag:element}
+.dragging-url{opacity:0.45}
+.tab-item.dz-line,.bm-item.dz-line{box-shadow:inset 0 2px 0 0 var(--accent)}
+.tab-item.dz-line-end,.bm-item.dz-line-end{box-shadow:inset 0 -2px 0 0 var(--accent)}
+.bm-bar-item.dz-line{box-shadow:inset 2px 0 0 0 var(--accent)}
+.bm-bar-item.dz-line-end{box-shadow:inset -2px 0 0 0 var(--accent)}
+#sb-page.dz-save,#bookmarks-bar.dz-save,#bookmarks-list.dz-save{outline:2px dashed var(--accent);outline-offset:-2px;border-radius:8px}
 #address-bar.loading{border-color:transparent}
 #address-bar.loading::before{
   opacity:1;
@@ -4526,7 +4534,7 @@ function renderTabs() {
     const audioBtn = showAudioBtn
       ? `<button class="tab-audio-btn" onclick="muteTab(event,'${tab.id}')" title="${audioTitle}">${audioSvg}</button>`
       : '';
-    return `<div class="tab-item ${active} ${loading} ${pinned} ${audioPlaying} ${tabMuted}" onclick="switchTab('${tab.id}')" oncontextmenu="tabContextMenu(event,'${tab.id}')">
+    return `<div class="tab-item ${active} ${loading} ${pinned} ${audioPlaying} ${tabMuted}" draggable="true" data-reorder-id="${escAttr(tab.id)}" data-nav-url="${escAttr(tab.url)}" onclick="switchTab('${tab.id}')" oncontextmenu="tabContextMenu(event,'${tab.id}')">
       ${faviconEl}
       <div class="tab-info">
         <div class="tab-title">${escHtml(tab.title || 'New Tab')}</div>
@@ -4620,7 +4628,7 @@ function renderNewtabShortcuts() {
     return;
   }
   list.innerHTML = shortcuts.map(item => `
-    <button class="newtab-shortcut" data-nav-url="${escAttr(item.url)}">
+    <button class="newtab-shortcut" draggable="true" data-nav-url="${escAttr(item.url)}">
       <div class="newtab-shortcut-icon"><img src="${escAttr(shortcutIconUrl(item.domain || item.url))}" alt=""></div>
       <span class="newtab-shortcut-label">${escHtml(item.name)}</span>
     </button>
@@ -7908,7 +7916,7 @@ function renderBookmarks() {
     return;
   }
   list.innerHTML = bms.map(b => `
-    <div class="bm-item" data-nav-url="${escAttr(b.url)}">
+    <div class="bm-item" draggable="true" data-reorder-id="${escAttr(b.id)}" data-nav-url="${escAttr(b.url)}">
       <div class="bm-item-info">
         <div class="bm-item-title">${escHtml(b.title || b.url)}</div>
         <div class="bm-item-url">${escHtml(b.url)}</div>
@@ -7928,7 +7936,7 @@ function renderHistory() {
     return;
   }
   list.innerHTML = hist.map(h => `
-    <div class="hist-item" data-nav-url="${escAttr(h.url)}">
+    <div class="hist-item" draggable="true" data-nav-url="${escAttr(h.url)}">
       <div class="hist-item-info">
         <div class="hist-item-title">${escHtml(h.title || friendlySiteName(h.url, h.title))}</div>
         <div class="hist-item-url">${escHtml(siteDomain(h.url))}</div>
@@ -8315,7 +8323,7 @@ function renderBookmarksBar() {
     const icon = bookmarkIconUrl(b.url);
     const img = icon ? `<img class="bm-bar-icon" src="${escAttr(icon)}" alt="" onerror="this.style.display='none';this.nextElementSibling.classList.remove('hidden')">` : '';
     const fallback = `<span class="bm-bar-fallback ${icon ? 'hidden' : ''}">${escHtml(siteInitial(title))}</span>`;
-    return `<div class="bm-bar-item" title="${escAttr(tip)}" onclick="navigateToUrl('${escAttr(b.url)}')">
+    return `<div class="bm-bar-item" draggable="true" data-reorder-id="${escAttr(b.id)}" title="${escAttr(tip)}" data-nav-url="${escAttr(b.url)}" onclick="navigateToUrl('${escAttr(b.url)}')">
       ${img}${fallback}
       <span class="bm-bar-text">${escHtml(title.length > 24 ? title.slice(0,22)+'...' : title)}</span>
     </div>`;
@@ -8797,14 +8805,63 @@ window.addEventListener('resize', () => {
   syncUpdateModalClip();
 }, {passive: true});
 
-// Drop a link dragged from outside onto the chrome (new tab page, toolbar, sidebar) → new tab.
-// Defers to editable fields (url bar, search, AI input) and ignores file drags.
-function dropDragHasLink(dt) {
+// Middle-click anywhere in the chrome UI opens the target URL in a new tab.
+// Covers: bookmark bar, bookmarks panel, history panel, new-tab shortcuts,
+// downloads panel (re-opens the source URL), and omnibox suggestions.
+// Tab items get standard browser behaviour: middle-click closes the tab.
+// Clicking a button element (delete / close icons) is intentionally ignored.
+document.addEventListener('auxclick', function(e) {
+  if (e.button !== 1) return;
+  // Never intercept clicks on dedicated button elements (trash, X, etc.)
+  if (e.target.closest('button')) return;
+
+  // Tab items → close (standard browser middle-click-tab behaviour)
+  const tabItem = e.target.closest('.tab-item');
+  if (tabItem) {
+    e.preventDefault();
+    const onclick = tabItem.getAttribute('onclick') || '';
+    const m = onclick.match(/switchTab\('([^']+)'\)/);
+    if (m) send('CloseTab', {id: m[1]});
+    return;
+  }
+
+  // Omnibox suggestion items → open in new tab and close the panel
+  const sugg = e.target.closest('.suggestion-item');
+  if (sugg) {
+    const idx = parseInt(sugg.dataset.index, 10);
+    const item = activeSuggestions && activeSuggestions[idx];
+    if (item && item.url) {
+      e.preventDefault();
+      hideSuggestions();
+      send('OpenInNewTab', {url: item.url});
+    }
+    return;
+  }
+
+  // Everything else: walk up the DOM for data-nav-url
+  const el = e.target.closest('[data-nav-url]');
+  if (el) {
+    const url = el.dataset.navUrl;
+    if (url) {
+      e.preventDefault();
+      send('OpenInNewTab', {url});
+    }
+  }
+}, false);
+
+// ── Drag helpers ──────────────────────────────────────────────────────────────
+function dropHasUriList(dt) {
   if (!dt) return false;
   const t = dt.types || [];
-  const has = (x) => Array.prototype.indexOf.call(t, x) !== -1;
-  if (has('Files')) return false;
-  return has('text/uri-list') || has('text/plain');
+  if (Array.prototype.indexOf.call(t, 'Files') !== -1) return false;
+  return Array.prototype.indexOf.call(t, 'text/uri-list') !== -1;
+}
+function dropHasLink(dt) {
+  if (!dt) return false;
+  const t = dt.types || [];
+  if (Array.prototype.indexOf.call(t, 'Files') !== -1) return false;
+  return Array.prototype.indexOf.call(t, 'text/uri-list') !== -1
+    || Array.prototype.indexOf.call(t, 'text/plain') !== -1;
 }
 function dropTargetEditable(el) {
   return !!(el && el.closest && el.closest('input,textarea,select,[contenteditable=""],[contenteditable="true"]'));
@@ -8820,14 +8877,172 @@ function extractDropUrl(dt) {
   } catch (_) {}
   return '';
 }
-window.addEventListener('dragover', (e) => {
-  if (e.defaultPrevented || dropTargetEditable(e.target)) return;
-  if (!dropDragHasLink(e.dataTransfer)) return;
-  e.preventDefault();
-  try { e.dataTransfer.dropEffect = 'copy'; } catch (_) {}
+
+// ── Drag sources: any [data-nav-url][draggable] element ───────────────────────
+// dragKind classifies what is being dragged so drop zones can react: a tab and a bookmark
+// reorder within their own list; anything else is treated as a plain URL.
+let dragKind = null;   // 'tab' | 'bookmark' | 'url'
+let dragId = null;
+let dragPinned = false;
+let dragTitle = '';
+function clearAllDropFeedback() {
+  document.querySelectorAll('.dz-line,.dz-line-end').forEach((e) => e.classList.remove('dz-line','dz-line-end'));
+  document.querySelectorAll('.dz-save').forEach((e) => e.classList.remove('dz-save'));
+  document.querySelectorAll('.dragging-url').forEach((e) => e.classList.remove('dragging-url'));
+  const bar = document.getElementById('address-bar');
+  if (bar) bar.classList.remove('drag-over');
+}
+document.addEventListener('dragstart', function(e) {
+  if (e.target.closest('button')) { e.preventDefault(); return; }
+  const el = e.target.closest('[data-nav-url]');
+  if (!el) { e.preventDefault(); return; }
+  const url = el.dataset.navUrl;
+  if (!url || url.startsWith('neura://')) { e.preventDefault(); return; }
+  if (el.classList.contains('tab-item')) {
+    dragKind = 'tab'; dragId = el.dataset.reorderId; dragPinned = el.classList.contains('pinned');
+    const t = (state.tabs || []).find((x) => x.id === dragId);
+    dragTitle = (t && t.title) || '';
+  } else if (el.classList.contains('bm-item') || el.classList.contains('bm-bar-item')) {
+    dragKind = 'bookmark'; dragId = el.dataset.reorderId; dragPinned = false;
+    const lbl = el.querySelector('.bm-item-title,.bm-bar-text');
+    dragTitle = (lbl && lbl.textContent) || '';
+  } else {
+    dragKind = 'url'; dragId = null; dragPinned = false; dragTitle = '';
+  }
+  e.dataTransfer.effectAllowed = dragKind === 'url' ? 'copy' : 'copyMove';
+  e.dataTransfer.setData('text/uri-list', url);
+  e.dataTransfer.setData('text/plain', url);
+  el.classList.add('dragging-url');
 }, false);
-window.addEventListener('drop', (e) => {
-  if (e.defaultPrevented || dropTargetEditable(e.target)) return;
+document.addEventListener('dragend', function() {
+  clearAllDropFeedback();
+  dragKind = null; dragId = null; dragPinned = false; dragTitle = '';
+}, false);
+
+// Generic reorderable / droppable zone. Reorders when the drag source kind matches
+// cfg.reorderKind, otherwise treats the drop as an external URL (new tab / save bookmark).
+function setupDropZone(container, cfg) {
+  if (!container) return;
+  const visibleItems = () => [...container.querySelectorAll(cfg.item)].filter((it) => !it.classList.contains('dragging-url'));
+  const groupItems = () => visibleItems().filter((it) => !cfg.sameGroup || cfg.sameGroup(it));
+  const clearLines = () => {
+    container.querySelectorAll('.dz-line,.dz-line-end').forEach((e) => e.classList.remove('dz-line','dz-line-end'));
+    container.classList.remove('dz-save');
+  };
+  const computeBefore = (e) => {
+    for (const it of groupItems()) {
+      const r = it.getBoundingClientRect();
+      const mid = cfg.axis === 'x' ? r.left + r.width / 2 : r.top + r.height / 2;
+      const pos = cfg.axis === 'x' ? e.clientX : e.clientY;
+      if (pos < mid) return it;
+    }
+    return null;
+  };
+  container.addEventListener('dragover', function(e) {
+    if (e.defaultPrevented) return;
+    const reorder = dragKind === cfg.reorderKind && dragId;
+    const external = !reorder && dropHasLink(e.dataTransfer);
+    if (!reorder && !external) return;
+    e.preventDefault();
+    e.stopPropagation();
+    clearLines();
+    if (reorder) {
+      e.dataTransfer.dropEffect = 'move';
+      const before = computeBefore(e);
+      if (before) before.classList.add('dz-line');
+      else { const g = groupItems(); const last = g[g.length - 1]; if (last) last.classList.add('dz-line-end'); }
+    } else {
+      e.dataTransfer.dropEffect = 'copy';
+      container.classList.add('dz-save');
+    }
+  }, false);
+  container.addEventListener('dragleave', function(e) {
+    if (!container.contains(e.relatedTarget)) clearLines();
+  }, false);
+  container.addEventListener('drop', function(e) {
+    if (e.defaultPrevented) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const reorder = dragKind === cfg.reorderKind && dragId;
+    if (reorder) {
+      const before = computeBefore(e);
+      const beforeId = before ? before.dataset.reorderId : null;
+      clearLines();
+      cfg.onReorder(dragId, beforeId);
+    } else {
+      clearLines();
+      const url = extractDropUrl(e.dataTransfer);
+      if (url) cfg.onExternal(url);
+    }
+  }, false);
+}
+
+// ── Address bar: drop → paste URL, focus, open suggestions ───────────────────
+(function() {
+  const bar = document.getElementById('address-bar');
+  const inp = document.getElementById('url-input');
+  if (!bar || !inp) return;
+  bar.addEventListener('dragover', function(e) {
+    if (!dropHasLink(e.dataTransfer)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'copy';
+    bar.classList.add('drag-over');
+  }, false);
+  bar.addEventListener('dragleave', function(e) {
+    if (!bar.contains(e.relatedTarget)) bar.classList.remove('drag-over');
+  }, false);
+  bar.addEventListener('drop', function(e) {
+    const url = extractDropUrl(e.dataTransfer);
+    if (!url) return;
+    e.preventDefault();
+    e.stopPropagation();
+    bar.classList.remove('drag-over');
+    inp.value = url;
+    inp.focus();
+    inp.select();
+    inp.dispatchEvent(new Event('input', {bubbles: true}));
+  }, false);
+})();
+
+// ── Sidebar tab list: drop → open new tab ────────────────────────────────────
+// ── Drop zones: sidebar tab list (reorder/new tab) + bookmark areas (reorder/save) ──
+setupDropZone(document.getElementById('sb-page'), {
+  reorderKind: 'tab', item: '.tab-item', axis: 'y',
+  sameGroup: (it) => it.classList.contains('pinned') === dragPinned,
+  onReorder: (id, before) => send('MoveTab', {id, before}),
+  onExternal: (url) => send('OpenInNewTab', {url}),
+});
+setupDropZone(document.getElementById('bookmarks-bar'), {
+  reorderKind: 'bookmark', item: '.bm-bar-item', axis: 'x',
+  onReorder: (id, before) => send('MoveBookmark', {id, before}),
+  onExternal: (url) => send('BookmarkAddUrl', {url, title: dragTitle || ''}),
+});
+setupDropZone(document.getElementById('bookmarks-list'), {
+  reorderKind: 'bookmark', item: '.bm-item', axis: 'y',
+  onReorder: (id, before) => send('MoveBookmark', {id, before}),
+  onExternal: (url) => send('BookmarkAddUrl', {url, title: dragTitle || ''}),
+});
+
+// ── Global fallback: drop a URL anywhere in chrome → new tab ─────────────────
+// Skips editable elements unless the drag carries text/uri-list (URL drag, not
+// a text-selection drag) — those fall through to native text insert so users can
+// drop a URL into the AI input, search bar, or any settings field.
+window.addEventListener('dragover', function(e) {
+  if (e.defaultPrevented) return;
+  if (dropTargetEditable(e.target)) {
+    if (!dropHasUriList(e.dataTransfer)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    return;
+  }
+  if (!dropHasLink(e.dataTransfer)) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'copy';
+}, false);
+window.addEventListener('drop', function(e) {
+  if (e.defaultPrevented) return;
+  if (dropTargetEditable(e.target)) return; // let browser insert text/plain natively
   const url = extractDropUrl(e.dataTransfer);
   if (!url) return;
   e.preventDefault();

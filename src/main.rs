@@ -66,8 +66,7 @@ const SC_DEVTOOLS: usize = 20;
 const SC_INCOGNITO: usize = 21;
 const SC_TAB_1: usize = 22;
 const SC_TAB_9: usize = 30;
-const LOAD_STALL_AFTER: u64 = 8;
-const TAB_SLEEP_REFRESH_AFTER: Duration = Duration::from_secs(5 * 60);
+const LOAD_STALL_AFTER: u64 = 6;
 const TAB_KEEPALIVE_EVERY: Duration = Duration::from_secs(45);
 const WEBVIEW_PROFILE_RELEASE_TIMEOUT: Duration = Duration::from_secs(5);
 const WEBVIEW_PROFILE_RELEASE_POLL: u64 = 50;
@@ -240,6 +239,26 @@ fn main() {
     });
     let event_loop: EventLoop<AppEvent> = event_loop_builder.build();
     let proxy = event_loop.create_proxy();
+
+    // Check for updates immediately, in parallel with window + WebView2 creation (the slow part
+    // of startup). The GitHub round-trip usually finishes before the UI is ready, so the result
+    // is already waiting when ChromeReady flushes it into the bottom-right notification.
+    if !new_window {
+        let proxy_upd = proxy.clone();
+        let dismissed_ver = dismissed_update_version.clone();
+        rt.spawn(async move {
+            if let Ok(Some(info)) = updater::check_latest().await {
+                if dismissed_ver.as_deref() != Some(info.version.as_str()) {
+                    let _ = proxy_upd.send_event(AppEvent::UpdateCheckResult {
+                        available: true,
+                        version: info.version,
+                        notes: info.notes,
+                        download_url: info.download_url,
+                    });
+                }
+            }
+        });
+    }
 
     let win_w = settings.window_width;
     let win_h = settings.window_height;
@@ -463,7 +482,6 @@ fn main() {
     let mut load_watches: HashMap<String, u64> = HashMap::new();
     let mut load_watch_next = 0u64;
     let mut last_active_tab_id: Option<String> = state.tab_manager.active_tab_id.clone();
-    let mut inactive_tabs: HashMap<String, Instant> = HashMap::new();
     let mut keepalive_at = Instant::now() + TAB_KEEPALIVE_EVERY;
     let mut keepalive_pos = 0usize;
     let ubol_dir = ubol_dir();
@@ -474,8 +492,7 @@ fn main() {
 
     if !first_url.starts_with("neura://") {
         let first_is_incognito = state.tab_manager.tab_is_incognito(&first_tab_id);
-        clear_tab_favicon(&mut state, &first_tab_id);
-        state.tab_manager.set_tab_loading(&first_tab_id, true);
+        begin_native_load(&mut state, &chrome, &first_tab_id);
         let ctx = if first_is_incognito {
             incognito_web_context.as_mut().unwrap()
         } else {
@@ -599,21 +616,20 @@ fn main() {
                     keep_frameless(&window);
                     window.set_visible(true);
                 }
-                let proxy_upd = proxy_main.clone();
-                let dismissed_ver = dismissed_update_version.clone();
-                rt.spawn(async move {
-                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-                    if let Ok(Some(info)) = updater::check_latest().await {
-                        if dismissed_ver.as_deref() != Some(info.version.as_str()) {
-                            let _ = proxy_upd.send_event(AppEvent::UpdateCheckResult {
-                                available: true,
-                                version: info.version,
-                                notes: info.notes,
-                                download_url: info.download_url,
-                            });
-                        }
-                    }
-                });
+                // The startup update check may have finished before the UI existed (its
+                // setUpdateState call no-op'd against a missing window.__neura). Flush any
+                // pending result now so the bottom-right notification still appears.
+                if let (Some(version), Some(notes)) = (
+                    state.pending_update_version.clone(),
+                    state.pending_update_notes.clone(),
+                ) {
+                    let v = serde_json::to_string(&version).unwrap_or_default();
+                    let n = serde_json::to_string(&notes).unwrap_or_default();
+                    let _ = chrome.evaluate_script(&format!(
+                        "window.__neura && window.__neura.setUpdateState({{status:'available',version:{},notes:{}}})",
+                        v, n
+                    ));
+                }
             }
 
             Event::UserEvent(AppEvent::Chrome(ChromeCommand::CheckForUpdate)) => {
@@ -881,18 +897,27 @@ fn main() {
                 }
                 if !fatal {
                     if let Some(wv) = content_views.get(&tab_id) {
+                        let active = state.tab_manager.active_tab_id.as_deref()
+                            == Some(tab_id.as_str());
                         wake_content_webview(wv);
-                        let _ = wv.load_url(&url);
-                        clear_tab_favicon(&mut state, &tab_id);
-                        state.tab_manager.set_tab_loading(&tab_id, true);
-                        watch_load(
-                            &rt,
-                            &proxy_main,
-                            &mut load_watches,
-                            &mut load_watch_next,
-                            tab_id.clone(),
-                            url,
-                        );
+                        if active {
+                            let _ = wv.focus();
+                            if state
+                                .tab_manager
+                                .get_tab(&tab_id)
+                                .map(|tab| tab.status == crate::browser::tab::TabStatus::Loading)
+                                .unwrap_or(false)
+                            {
+                                watch_load(
+                                    &rt,
+                                    &proxy_main,
+                                    &mut load_watches,
+                                    &mut load_watch_next,
+                                    tab_id.clone(),
+                                    url,
+                                );
+                            }
+                        }
                         apply_layout(
                             &chrome,
                             chrome_hwnd,
@@ -903,6 +928,13 @@ fn main() {
                         );
                         return;
                     }
+                }
+                if state.tab_manager.active_tab_id.as_deref() != Some(tab_id.as_str()) {
+                    content_views.remove(&tab_id);
+                    content_hwnds.remove(&tab_id);
+                    clear_load_watches(&mut load_watches, &tab_id);
+                    state.load_progress.remove(&tab_id);
+                    return;
                 }
                 content_views.remove(&tab_id);
                 content_hwnds.remove(&tab_id);
@@ -954,8 +986,7 @@ fn main() {
                                 let _ = wv.load_url(&url);
                             }
                         }
-                        clear_tab_favicon(&mut state, &tab_id);
-                        state.tab_manager.set_tab_loading(&tab_id, true);
+                        begin_native_load(&mut state, &chrome, &tab_id);
                         watch_load(
                             &rt,
                             &proxy_main,
@@ -1570,14 +1601,9 @@ fn main() {
                                 wake_content_webview(wv);
                                 let _ = wv.focus();
                                 let _ = wv.zoom(tab_zoom(&state, &tab_id));
-                                let stale = inactive_tabs
-                                    .remove(&tab_id)
-                                    .map(|at| at.elapsed() >= TAB_SLEEP_REFRESH_AFTER)
-                                    .unwrap_or(false);
                                 let restored = restored_tabs.remove(&tab_id);
-                                if stale || restored {
-                                    clear_tab_favicon(&mut state, &tab_id);
-                                    state.tab_manager.set_tab_loading(&tab_id, true);
+                                if restored {
+                                    begin_native_load(&mut state, &chrome, &tab_id);
                                     state.load_recoveries.remove(&app::load_key(&tab_id, &url));
                                     let _ = wv.load_url(&url);
                                     state.push_state_to_chrome(&chrome);
@@ -1642,8 +1668,7 @@ fn main() {
                                             &mut cookies_restored,
                                         );
                                         content_views.insert(tab_id.clone(), wv);
-                                        clear_tab_favicon(&mut state, &tab_id);
-                                        state.tab_manager.set_tab_loading(&tab_id, true);
+                                        begin_native_load(&mut state, &chrome, &tab_id);
                                         state.push_state_to_chrome(&chrome);
                                         state.load_recoveries.remove(&app::load_key(&tab_id, &url));
                                         watch_load(
@@ -1770,7 +1795,6 @@ fn main() {
                             content_views.clear();
                             content_hwnds.clear();
                             load_watches.clear();
-                            inactive_tabs.clear();
                             drop(content_web_context.take());
                             drop(incognito_web_context.take());
                             #[cfg(windows)]
@@ -1819,8 +1843,7 @@ fn main() {
                                 });
                             if let Some((tab_id, url)) = active_content {
                                 if !url.starts_with("neura://") {
-                                    clear_tab_favicon(&mut state, &tab_id);
-                                    state.tab_manager.set_tab_loading(&tab_id, true);
+                                    begin_native_load(&mut state, &chrome, &tab_id);
                                     state.load_recoveries.remove(&app::load_key(&tab_id, &url));
                                     state.push_state_to_chrome(&chrome);
 
@@ -1964,23 +1987,15 @@ fn main() {
                     }
                     let current_active = state.tab_manager.active_tab_id.clone();
                     if current_active != last_active_tab_id {
-                        let now = Instant::now();
-                        if let Some(id) = last_active_tab_id.as_ref() {
-                            inactive_tabs.insert(id.clone(), now);
-                        }
                         #[cfg(windows)]
                         sync_content_z_order(&content_views, chrome_hwnd, &state, true);
                         if let Some(ref id) = current_active {
-                            let asleep = inactive_tabs
-                                .remove(id)
-                                .map(|at| at.elapsed() >= TAB_SLEEP_REFRESH_AFTER)
-                                .unwrap_or(false);
                             let restored = restored_tabs.remove(id);
                             if let Some(wv) = content_views.get(id) {
                                 wake_content_webview(wv);
                                 let _ = wv.focus();
                             }
-                            if asleep || restored {
+                            if restored {
                                 let url = state
                                     .tab_manager
                                     .get_tab(id)
@@ -1988,8 +2003,7 @@ fn main() {
                                     .unwrap_or_default();
                                 if !url.trim().is_empty() && !url.starts_with("neura://") {
                                     if let Some(wv) = content_views.get(id) {
-                                        clear_tab_favicon(&mut state, id);
-                                        state.tab_manager.set_tab_loading(id, true);
+                                        begin_native_load(&mut state, &chrome, id);
                                         state.load_recoveries.remove(&app::load_key(id, &url));
                                         let _ = wv.load_url(&url);
                                         state.push_state_to_chrome(&chrome);
@@ -2626,7 +2640,7 @@ fn attach_permission_handler(wv: &WebView) {
 }
 
 #[cfg(windows)]
-fn attach_navigation_failure_handler(
+fn attach_navigation_handler(
     wv: &WebView,
     proxy: tao::event_loop::EventLoopProxy<AppEvent>,
     tab_id: String,
@@ -2684,13 +2698,25 @@ fn attach_navigation_failure_handler(
             args.IsSuccess(&mut ok)?;
             let mut id = 0u64;
             let _ = args.NavigationId(&mut id);
-            let url = navs_done
+            let start_url = navs_done
                 .lock()
                 .ok()
                 .and_then(|mut map| map.remove(&id))
                 .filter(|u| !u.trim().is_empty())
-                .unwrap_or_else(|| webview_source(&sender));
+                .unwrap_or_default();
+            let source = webview_source(&sender);
+            let url = if is_recoverable_nav_url(&source) {
+                source
+            } else {
+                start_url
+            };
             if ok.as_bool() {
+                if is_recoverable_nav_url(&url) {
+                    let _ = proxy.send_event(AppEvent::ContentLoadEnd {
+                        tab_id: tab_id.clone(),
+                        url,
+                    });
+                }
                 return Ok(());
             }
             if !is_recoverable_nav_url(&url) {
@@ -3397,7 +3423,8 @@ fn build_content_webview(
                         | ChromeCommand::ReopenTab                   // Ctrl+Shift+T
                         | ChromeCommand::OpenHistoryPanel            // Ctrl+H
                         | ChromeCommand::OpenDownloadsPanel          // Ctrl+J
-                        | ChromeCommand::ZoomDelta { .. } // Ctrl+wheel zoom
+                        | ChromeCommand::ZoomDelta { .. }            // Ctrl+wheel zoom
+                        | ChromeCommand::DragEdgePeek // left-edge dwell while dragging
                 );
                 if allowed {
                     let _ = proxy_ipc.send_event(AppEvent::Chrome(cmd));
@@ -3525,7 +3552,7 @@ fn build_content_webview(
     #[cfg(windows)]
     {
         attach_process_failed_handler(&wv, proxy.clone(), tab_id.to_string());
-        attach_navigation_failure_handler(&wv, proxy.clone(), tab_id.to_string());
+        attach_navigation_handler(&wv, proxy.clone(), tab_id.to_string());
         attach_new_window_handler(&wv, proxy.clone(), incognito);
         if strict {
             attach_permission_handler(&wv);
@@ -3544,6 +3571,15 @@ fn wake_content_webview(wv: &WebView) {
 fn clear_tab_favicon(state: &mut AppState, tab_id: &str) {
     if let Some(tab) = state.tab_manager.tabs.iter_mut().find(|t| t.id == tab_id) {
         tab.favicon = None;
+    }
+}
+
+fn begin_native_load(state: &mut AppState, chrome: &WebView, tab_id: &str) {
+    clear_tab_favicon(state, tab_id);
+    state.tab_manager.set_tab_loading(tab_id, true);
+    state.load_progress.insert(tab_id.to_string(), 0.0);
+    if state.tab_manager.active_tab_id.as_deref() == Some(tab_id) {
+        let _ = chrome.evaluate_script("window.__neura && window.__neura.startLoadProgress()");
     }
 }
 
@@ -3977,21 +4013,6 @@ fn content_initialization_script(
   window.addEventListener('popstate', () => { sendLocationChange(true); });
   setTimeout(sendMetadata, 1200);
 
-  document.addEventListener('auxclick', function(e) {
-    if (e.button !== 1) return;
-    const link = e.target && e.target.closest ? e.target.closest('a[href]') : null;
-    if (!link || !link.href) return;
-    e.preventDefault();
-    post({cmd:'open_in_new_tab', url: link.href});
-  }, true);
-  document.addEventListener('click', function(e) {
-    const link = e.target && e.target.closest ? e.target.closest('a[href]') : null;
-    if (!link || !link.href) return;
-    const target = (link.target || '').toLowerCase();
-    if (target !== '_blank' && !e.ctrlKey && !e.metaKey) return;
-    e.preventDefault();
-    post({cmd:'open_in_new_tab', url: link.href});
-  }, true);
 
   // Drop a link dragged from outside (another browser, the desktop) → open a new tab.
   // Bubble phase + defaultPrevented check so a page's own drop zone wins; editable targets
@@ -4017,18 +4038,34 @@ fn content_initialization_script(
     } catch (_) {}
     return '';
   };
+  let __edgeTimer = 0;
+  const __clearEdgeTimer = () => { if (__edgeTimer) { clearTimeout(__edgeTimer); __edgeTimer = 0; } };
   window.addEventListener('dragover', function(e) {
-    if (e.defaultPrevented || dropTargetEditable(e.target)) return;
-    if (!dragHasLink(e.dataTransfer)) return;
+    if (e.defaultPrevented || dropTargetEditable(e.target)) { __clearEdgeTimer(); return; }
+    if (!dragHasLink(e.dataTransfer)) { __clearEdgeTimer(); return; }
     e.preventDefault();
     try { e.dataTransfer.dropEffect = 'copy'; } catch (_) {}
+    // Dwell at the left window edge for 2s during a drag → open the auto-hide sidebar so the
+    // user can drop the link onto it. Rust ignores this unless the sidebar is auto-hide + closed.
+    if (e.clientX <= 24) {
+      if (!__edgeTimer) {
+        __edgeTimer = setTimeout(function() { __edgeTimer = 0; post({cmd:'drag_edge_peek'}); }, 2000);
+      }
+    } else {
+      __clearEdgeTimer();
+    }
   }, false);
   window.addEventListener('drop', function(e) {
+    __clearEdgeTimer();
     if (e.defaultPrevented || dropTargetEditable(e.target)) return;
     const url = extractDropUrl(e.dataTransfer);
     if (!url) return;
     e.preventDefault();
     post({cmd:'open_in_new_tab', url});
+  }, false);
+  window.addEventListener('dragend', function() {
+    __clearEdgeTimer();
+    post({cmd:'sidebar_auto_close'});
   }, false);
 
   const fsChange = function() {
@@ -4526,6 +4563,7 @@ fn watch_load(
     let url = crate::utils::url::clean_tracking_url(&url);
     *next = next.wrapping_add(1).max(1);
     let watch = *next;
+    clear_load_watches(watches, &tab_id);
     watches.insert(app::load_key(&tab_id, &url), watch);
     rt.spawn(async move {
         tokio::time::sleep(std::time::Duration::from_secs(LOAD_STALL_AFTER)).await;

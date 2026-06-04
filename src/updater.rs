@@ -23,10 +23,14 @@ pub async fn check_latest() -> Result<Option<ReleaseInfo>> {
 
     let resp: serde_json::Value = reqwest::Client::builder()
         .user_agent(USER_AGENT)
+        .connect_timeout(std::time::Duration::from_secs(6))
+        .timeout(std::time::Duration::from_secs(12))
         .build()?
         .get(&url)
+        .header("Accept", "application/vnd.github+json")
         .send()
         .await?
+        .error_for_status()?
         .json()
         .await?;
 

@@ -371,6 +371,7 @@ pub struct Bookmark {
     pub url: String,
     pub title: String,
     pub folder_id: Option<String>,
+    pub position: i32,
     pub created_at: i64,
 }
 
@@ -382,21 +383,51 @@ pub fn add_bookmark(
 ) -> Result<Bookmark> {
     let id = Uuid::new_v4().to_string();
     let now = chrono::Utc::now().timestamp_millis();
+    // New bookmarks go to the top of the list (smallest position).
+    let position: i32 = conn
+        .query_row(
+            "SELECT COALESCE(MIN(position), 0) - 1 FROM bookmarks",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
     conn.execute(
-        "INSERT INTO bookmarks(id, url, title, folder_id, position, created_at) VALUES(?1,?2,?3,?4,0,?5)",
-        params![id, url, title, folder_id, now],
+        "INSERT INTO bookmarks(id, url, title, folder_id, position, created_at) VALUES(?1,?2,?3,?4,?5,?6)",
+        params![id, url, title, folder_id, position, now],
     )?;
     Ok(Bookmark {
         id,
         url: url.to_string(),
         title: title.to_string(),
         folder_id: folder_id.map(String::from),
+        position,
         created_at: now,
     })
 }
 
 pub fn remove_bookmark_by_url(conn: &Connection, url: &str) -> Result<()> {
     conn.execute("DELETE FROM bookmarks WHERE url = ?1", [url])?;
+    Ok(())
+}
+
+/// Reorder a bookmark to sit before `before_id` (or at the end when None). Rewrites every
+/// bookmark's position to a normalized 0..N sequence reflecting the new order.
+pub fn move_bookmark(conn: &Connection, id: &str, before_id: Option<&str>) -> Result<()> {
+    let mut ids: Vec<String> = list_bookmarks(conn)?.into_iter().map(|b| b.id).collect();
+    let Some(from) = ids.iter().position(|b| b == id) else {
+        return Ok(());
+    };
+    let moved = ids.remove(from);
+    let insert_at = before_id
+        .and_then(|bid| ids.iter().position(|b| b == bid))
+        .unwrap_or(ids.len());
+    ids.insert(insert_at, moved);
+    for (pos, bid) in ids.iter().enumerate() {
+        conn.execute(
+            "UPDATE bookmarks SET position = ?1 WHERE id = ?2",
+            params![pos as i32, bid],
+        )?;
+    }
     Ok(())
 }
 
@@ -411,7 +442,7 @@ pub fn is_bookmarked(conn: &Connection, url: &str) -> Result<bool> {
 
 pub fn list_bookmarks(conn: &Connection) -> Result<Vec<Bookmark>> {
     let mut stmt = conn.prepare(
-        "SELECT id, url, title, folder_id, created_at FROM bookmarks ORDER BY created_at DESC",
+        "SELECT id, url, title, folder_id, position, created_at FROM bookmarks ORDER BY position ASC, created_at DESC",
     )?;
     let rows = stmt.query_map([], |row| {
         Ok(Bookmark {
@@ -419,7 +450,8 @@ pub fn list_bookmarks(conn: &Connection) -> Result<Vec<Bookmark>> {
             url: row.get(1)?,
             title: row.get(2)?,
             folder_id: row.get(3)?,
-            created_at: row.get(4)?,
+            position: row.get(4)?,
+            created_at: row.get(5)?,
         })
     })?;
     Ok(rows.collect::<rusqlite::Result<_>>()?)
@@ -428,7 +460,7 @@ pub fn list_bookmarks(conn: &Connection) -> Result<Vec<Bookmark>> {
 pub fn search_bookmarks(conn: &Connection, q: &str) -> Result<Vec<Bookmark>> {
     let pattern = format!("%{}%", q);
     let mut stmt = conn.prepare(
-        "SELECT id, url, title, folder_id, created_at FROM bookmarks WHERE title LIKE ?1 OR url LIKE ?1 ORDER BY created_at DESC LIMIT 50"
+        "SELECT id, url, title, folder_id, position, created_at FROM bookmarks WHERE title LIKE ?1 OR url LIKE ?1 ORDER BY position ASC, created_at DESC LIMIT 50"
     )?;
     let rows = stmt.query_map([&pattern], |row| {
         Ok(Bookmark {
@@ -436,7 +468,8 @@ pub fn search_bookmarks(conn: &Connection, q: &str) -> Result<Vec<Bookmark>> {
             url: row.get(1)?,
             title: row.get(2)?,
             folder_id: row.get(3)?,
-            created_at: row.get(4)?,
+            position: row.get(4)?,
+            created_at: row.get(5)?,
         })
     })?;
     Ok(rows.collect::<rusqlite::Result<_>>()?)

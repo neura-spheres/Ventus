@@ -29,6 +29,13 @@ pub enum ChromeCommand {
     UnpinTab {
         id: String,
     },
+    /// Reorder a tab in the sidebar list. `before` is the id of the tab to insert ahead of,
+    /// or None to move it to the end of its group.
+    MoveTab {
+        id: String,
+        #[serde(default)]
+        before: Option<String>,
+    },
     NewWorkspace {
         name: String,
         #[serde(default)]
@@ -67,6 +74,18 @@ pub enum ChromeCommand {
     },
     AiClearChat,
     BookmarkAdd,
+    /// Save a bookmark from a dropped link (drag-to-bookmark).
+    BookmarkAddUrl {
+        url: String,
+        #[serde(default)]
+        title: String,
+    },
+    /// Reorder a bookmark. `before` is the id of the bookmark to insert ahead of, or None for end.
+    MoveBookmark {
+        id: String,
+        #[serde(default)]
+        before: Option<String>,
+    },
     BookmarkRemove {
         url: String,
     },
@@ -117,6 +136,9 @@ pub enum ChromeCommand {
         pinned: bool,
     },
     SidebarAutoClose,
+    /// Cursor dwelled at the left window edge during a drag — open the auto-hide sidebar so
+    /// the user can drop onto it.
+    DragEdgePeek,
     /// During the auto-hide sidebar's slide animation, JS streams the sidebar's
     /// live right-edge position (CSS px) so Rust can size the chrome clip column
     /// and content cut to track it exactly — preventing the dark window background

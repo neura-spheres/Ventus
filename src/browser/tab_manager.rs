@@ -208,6 +208,20 @@ impl TabManager {
         }
     }
 
+    /// Move `id` to sit right before `before` in the tab list (or to the end of its workspace
+    /// when `before` is None / not found). The display sorts pinned tabs first, so reordering
+    /// stays within a tab's own pinned/regular group.
+    pub fn move_tab(&mut self, id: &str, before: Option<&str>) {
+        let Some(from) = self.tabs.iter().position(|t| t.id == id) else {
+            return;
+        };
+        let tab = self.tabs.remove(from);
+        let insert_at = before
+            .and_then(|bid| self.tabs.iter().position(|t| t.id == bid))
+            .unwrap_or(self.tabs.len());
+        self.tabs.insert(insert_at, tab);
+    }
+
     pub fn visit_tab(&mut self, id: &str, url: &str, title: &str) {
         if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == id) {
             if tab.url != url {
