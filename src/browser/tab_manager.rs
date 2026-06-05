@@ -202,6 +202,19 @@ impl TabManager {
         self.closed_tab_urls.pop_front()
     }
 
+    pub fn sleep_tab(&mut self, id: &str) {
+        if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == id) {
+            tab.sleeping = true;
+        }
+    }
+
+    pub fn wake_tab(&mut self, id: &str) {
+        if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == id) {
+            tab.sleeping = false;
+            tab.last_active_at = chrono::Utc::now().timestamp_millis();
+        }
+    }
+
     pub fn pin_tab(&mut self, id: &str, pinned: bool) {
         if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == id) {
             tab.pinned = pinned;

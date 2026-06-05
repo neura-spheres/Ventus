@@ -66,15 +66,19 @@ const SC_DEVTOOLS: usize = 20;
 const SC_INCOGNITO: usize = 21;
 const SC_TAB_1: usize = 22;
 const SC_TAB_9: usize = 30;
-const LOAD_STALL_AFTER: u64 = 6;
+const LOAD_STALL_AFTER: u64 = 4;
 const TAB_KEEPALIVE_EVERY: Duration = Duration::from_secs(45);
+const TAB_SLEEP_CHECK_EVERY: Duration = Duration::from_secs(60);
 const WEBVIEW_PROFILE_RELEASE_TIMEOUT: Duration = Duration::from_secs(5);
 const WEBVIEW_PROFILE_RELEASE_POLL: u64 = 50;
+#[cfg(windows)]
+const APP_ID: &str = "NeuraSpheres.Ventus";
 /// How often to take a proactive cookie snapshot (in addition to the
 /// per-navigation save triggered by ContentLoadEnd events).
 const COOKIE_SAVE_EVERY: Duration = Duration::from_secs(5 * 60);
 
 fn main() {
+    set_app_id();
     utils::logging::init();
     tracing::info!("Ventus starting");
 
@@ -87,22 +91,29 @@ fn main() {
         while let Some(arg) = args.next() {
             match arg.as_str() {
                 "--new-window" => new_window = true,
-                "--url" => cli_url = args.next(),
+                "--url" => {
+                    if let Some(url) = args.next() {
+                        cli_url = Some(normalize_launch_url(&url));
+                    }
+                }
                 "--wait-for-pid" => wait_for_pid = args.next().and_then(|pid| pid.parse().ok()),
                 "--restore-session" => restore_session = true,
+                _ if cli_url.is_none() => {
+                    cli_url = launch_url(&arg);
+                }
                 _ => {}
             }
         }
     }
 
     wait_for_relaunch_parent(wait_for_pid);
-    let _instance = claim_instance(new_window);
+    let data_dir = utils::platform::data_dir();
+    std::fs::create_dir_all(&data_dir).expect("create data dir");
+    let _instance = claim_instance(new_window, cli_url.as_deref(), &data_dir);
 
     let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
     let _guard = rt.enter();
 
-    let data_dir = utils::platform::data_dir();
-    std::fs::create_dir_all(&data_dir).expect("create data dir");
     encrypt_app_storage(&data_dir);
 
     let conn = database::open(&data_dir.join("neura.db")).expect("open db");
@@ -239,6 +250,11 @@ fn main() {
     });
     let event_loop: EventLoop<AppEvent> = event_loop_builder.build();
     let proxy = event_loop.create_proxy();
+    let _url_server = if new_window {
+        None
+    } else {
+        start_url_server(&data_dir, proxy.clone())
+    };
 
     // Check for updates immediately, in parallel with window + WebView2 creation (the slow part
     // of startup). The GitHub round-trip usually finishes before the UI is ready, so the result
@@ -484,6 +500,7 @@ fn main() {
     let mut last_active_tab_id: Option<String> = state.tab_manager.active_tab_id.clone();
     let mut keepalive_at = Instant::now() + TAB_KEEPALIVE_EVERY;
     let mut keepalive_pos = 0usize;
+    let mut sleep_check_at = Instant::now() + TAB_SLEEP_CHECK_EVERY;
     let ubol_dir = ubol_dir();
     let mut ubol_done = false;
     let mut ubol_enabled: Option<bool> = None;
@@ -498,10 +515,7 @@ fn main() {
         } else {
             content_web_context.as_mut().unwrap()
         };
-        let defer_first_load =
-            should_restore_startup_cookies(first_is_incognito, cookies_restored, &startup_cookies);
         let _ = restored_tabs.remove(&first_tab_id);
-        let load_first_later = defer_first_load;
         let first_ad_script = state.ad_block_engine.init_script().to_string();
         let first_wv = build_content_webview(
             &window,
@@ -518,7 +532,7 @@ fn main() {
             state.settings.privacy.fingerprint_protection,
             state.settings.privacy.strict_permissions,
             state.settings.privacy.https_only,
-            !load_first_later,
+            false,
         )
         .expect("build first content webview");
         #[cfg(windows)]
@@ -532,18 +546,7 @@ fn main() {
                 &mut cookies_restored,
             );
         }
-        if load_first_later {
-            first_load_after_layout = Some((first_tab_id.clone(), first_url.clone()));
-        } else {
-            watch_load(
-                &rt,
-                &proxy,
-                &mut load_watches,
-                &mut load_watch_next,
-                first_tab_id.clone(),
-                first_url.clone(),
-            );
-        }
+        first_load_after_layout = Some((first_tab_id.clone(), first_url.clone()));
         #[cfg(windows)]
         track_content_hwnd(first_hwnd, &first_tab_id, &mut content_hwnds);
         sync_active_ubol(
@@ -952,8 +955,6 @@ fn main() {
                     content_web_context.as_mut().unwrap()
                 };
                 let ad_script = state.ad_block_engine.init_script().to_string();
-                let defer_load =
-                    should_restore_startup_cookies(is_incog, cookies_restored, &startup_cookies);
                 match build_content_webview(
                     &window,
                     &tab_id,
@@ -969,7 +970,7 @@ fn main() {
                     state.settings.privacy.fingerprint_protection,
                     state.settings.privacy.strict_permissions,
                     state.settings.privacy.https_only,
-                    !defer_load,
+                    false,
                 ) {
                     Ok(wv) => {
                         #[cfg(windows)]
@@ -981,20 +982,7 @@ fn main() {
                             &mut cookies_restored,
                         );
                         content_views.insert(tab_id.clone(), wv);
-                        if defer_load {
-                            if let Some(wv) = content_views.get(&tab_id) {
-                                let _ = wv.load_url(&url);
-                            }
-                        }
                         begin_native_load(&mut state, &chrome, &tab_id);
-                        watch_load(
-                            &rt,
-                            &proxy_main,
-                            &mut load_watches,
-                            &mut load_watch_next,
-                            tab_id.clone(),
-                            url,
-                        );
                         #[cfg(windows)]
                         track_content_hwnd(hwnd, &tab_id, &mut content_hwnds);
                         apply_layout(
@@ -1004,6 +992,17 @@ fn main() {
                             &state,
                             &layout_config,
                             &window,
+                        );
+                        if let Some(wv) = content_views.get(&tab_id) {
+                            let _ = wv.load_url(&url);
+                        }
+                        watch_load(
+                            &rt,
+                            &proxy_main,
+                            &mut load_watches,
+                            &mut load_watch_next,
+                            tab_id.clone(),
+                            url,
                         );
                     }
                     Err(e) => tracing::error!("recover content process: {}", e),
@@ -1142,11 +1141,6 @@ fn main() {
                                     content_web_context.as_mut().unwrap()
                                 };
                                 let ad_script = state.ad_block_engine.init_script().to_string();
-                                let defer_load = should_restore_startup_cookies(
-                                    is_incog,
-                                    cookies_restored,
-                                    &startup_cookies,
-                                );
                                 match build_content_webview(
                                     &window,
                                     &tab_id,
@@ -1162,7 +1156,7 @@ fn main() {
                                     state.settings.privacy.fingerprint_protection,
                                     state.settings.privacy.strict_permissions,
                                     state.settings.privacy.https_only,
-                                    !defer_load,
+                                    false,
                                 ) {
                                     Ok(wv) => {
                                         #[cfg(windows)]
@@ -1174,19 +1168,6 @@ fn main() {
                                             &mut cookies_restored,
                                         );
                                         content_views.insert(tab_id.clone(), wv);
-                                        if defer_load {
-                                            if let Some(wv) = content_views.get(&tab_id) {
-                                                let _ = wv.load_url(&url);
-                                            }
-                                        }
-                                        watch_load(
-                                            &rt,
-                                            &proxy_main,
-                                            &mut load_watches,
-                                            &mut load_watch_next,
-                                            tab_id.clone(),
-                                            url.clone(),
-                                        );
                                         #[cfg(windows)]
                                         track_content_hwnd(hwnd, &tab_id, &mut content_hwnds);
                                         apply_layout(
@@ -1196,6 +1177,17 @@ fn main() {
                                             &state,
                                             &layout_config,
                                             &window,
+                                        );
+                                        if let Some(wv) = content_views.get(&tab_id) {
+                                            let _ = wv.load_url(&url);
+                                        }
+                                        watch_load(
+                                            &rt,
+                                            &proxy_main,
+                                            &mut load_watches,
+                                            &mut load_watch_next,
+                                            tab_id.clone(),
+                                            url.clone(),
                                         );
                                     }
                                     Err(e) => tracing::error!("create content view: {}", e),
@@ -1252,11 +1244,6 @@ fn main() {
                                             };
                                             let ad_script =
                                                 state.ad_block_engine.init_script().to_string();
-                                            let defer_load = should_restore_startup_cookies(
-                                                is_incog,
-                                                cookies_restored,
-                                                &startup_cookies,
-                                            );
                                             let _ = restored_tabs.remove(&active_id);
                                             if let Ok(wv) = build_content_webview(
                                                 &window,
@@ -1273,7 +1260,7 @@ fn main() {
                                                 state.settings.privacy.fingerprint_protection,
                                                 state.settings.privacy.strict_permissions,
                                                 state.settings.privacy.https_only,
-                                                !defer_load,
+                                                false,
                                             ) {
                                                 #[cfg(windows)]
                                                 let hwnd = webview_hwnd(&wv);
@@ -1284,20 +1271,6 @@ fn main() {
                                                     &mut cookies_restored,
                                                 );
                                                 content_views.insert(active_id.clone(), wv);
-                                                if defer_load {
-                                                    if let Some(wv) = content_views.get(&active_id)
-                                                    {
-                                                        let _ = wv.load_url(&url);
-                                                    }
-                                                }
-                                                watch_load(
-                                                    &rt,
-                                                    &proxy_main,
-                                                    &mut load_watches,
-                                                    &mut load_watch_next,
-                                                    active_id.clone(),
-                                                    url.clone(),
-                                                );
                                                 #[cfg(windows)]
                                                 track_content_hwnd(
                                                     hwnd,
@@ -1311,6 +1284,17 @@ fn main() {
                                                     &state,
                                                     &layout_config,
                                                     &window,
+                                                );
+                                                if let Some(wv) = content_views.get(&active_id) {
+                                                    let _ = wv.load_url(&url);
+                                                }
+                                                watch_load(
+                                                    &rt,
+                                                    &proxy_main,
+                                                    &mut load_watches,
+                                                    &mut load_watch_next,
+                                                    active_id.clone(),
+                                                    url.clone(),
                                                 );
                                             }
                                         }
@@ -1407,11 +1391,6 @@ fn main() {
                                         content_web_context.as_mut().unwrap()
                                     };
                                     let ad_script = state.ad_block_engine.init_script().to_string();
-                                    let defer_load = should_restore_startup_cookies(
-                                        is_incog,
-                                        cookies_restored,
-                                        &startup_cookies,
-                                    );
                                     match build_content_webview(
                                         &window,
                                         id,
@@ -1427,7 +1406,7 @@ fn main() {
                                         state.settings.privacy.fingerprint_protection,
                                         state.settings.privacy.strict_permissions,
                                         state.settings.privacy.https_only,
-                                        !defer_load,
+                                        false,
                                     ) {
                                         Ok(wv) => {
                                             #[cfg(windows)]
@@ -1439,19 +1418,6 @@ fn main() {
                                                 &mut cookies_restored,
                                             );
                                             content_views.insert(id.clone(), wv);
-                                            if defer_load {
-                                                if let Some(wv) = content_views.get(id) {
-                                                    let _ = wv.load_url(&url);
-                                                }
-                                            }
-                                            watch_load(
-                                                &rt,
-                                                &proxy_main,
-                                                &mut load_watches,
-                                                &mut load_watch_next,
-                                                id.clone(),
-                                                url.clone(),
-                                            );
                                             #[cfg(windows)]
                                             track_content_hwnd(hwnd, id, &mut content_hwnds);
                                             apply_layout(
@@ -1461,6 +1427,17 @@ fn main() {
                                                 &state,
                                                 &layout_config,
                                                 &window,
+                                            );
+                                            if let Some(wv) = content_views.get(id) {
+                                                let _ = wv.load_url(&url);
+                                            }
+                                            watch_load(
+                                                &rt,
+                                                &proxy_main,
+                                                &mut load_watches,
+                                                &mut load_watch_next,
+                                                id.clone(),
+                                                url.clone(),
                                             );
                                         }
                                         Err(e) => tracing::error!(
@@ -1524,11 +1501,6 @@ fn main() {
                                     content_web_context.as_mut().unwrap()
                                 };
                                 let ad_script = state.ad_block_engine.init_script().to_string();
-                                let defer_load = should_restore_startup_cookies(
-                                    is_incog,
-                                    cookies_restored,
-                                    &startup_cookies,
-                                );
                                 match build_content_webview(
                                     &window,
                                     &tab_id,
@@ -1544,7 +1516,7 @@ fn main() {
                                     state.settings.privacy.fingerprint_protection,
                                     state.settings.privacy.strict_permissions,
                                     state.settings.privacy.https_only,
-                                    !defer_load,
+                                    false,
                                 ) {
                                     Ok(wv) => {
                                         #[cfg(windows)]
@@ -1556,19 +1528,6 @@ fn main() {
                                             &mut cookies_restored,
                                         );
                                         content_views.insert(tab_id.clone(), wv);
-                                        if defer_load {
-                                            if let Some(wv) = content_views.get(&tab_id) {
-                                                let _ = wv.load_url(&url);
-                                            }
-                                        }
-                                        watch_load(
-                                            &rt,
-                                            &proxy_main,
-                                            &mut load_watches,
-                                            &mut load_watch_next,
-                                            tab_id.clone(),
-                                            url.clone(),
-                                        );
                                         #[cfg(windows)]
                                         track_content_hwnd(hwnd, &tab_id, &mut content_hwnds);
                                         apply_layout(
@@ -1578,6 +1537,17 @@ fn main() {
                                             &state,
                                             &layout_config,
                                             &window,
+                                        );
+                                        if let Some(wv) = content_views.get(&tab_id) {
+                                            let _ = wv.load_url(&url);
+                                        }
+                                        watch_load(
+                                            &rt,
+                                            &proxy_main,
+                                            &mut load_watches,
+                                            &mut load_watch_next,
+                                            tab_id.clone(),
+                                            url.clone(),
                                         );
                                     }
                                     Err(e) => tracing::error!("reload content view: {}", e),
@@ -1598,24 +1568,11 @@ fn main() {
                                 &window,
                             );
                             if let Some(wv) = content_views.get(&tab_id) {
-                                wake_content_webview(wv);
+                                state.tab_manager.wake_tab(&tab_id);
                                 let _ = wv.focus();
                                 let _ = wv.zoom(tab_zoom(&state, &tab_id));
-                                let restored = restored_tabs.remove(&tab_id);
-                                if restored {
-                                    begin_native_load(&mut state, &chrome, &tab_id);
-                                    state.load_recoveries.remove(&app::load_key(&tab_id, &url));
-                                    let _ = wv.load_url(&url);
-                                    state.push_state_to_chrome(&chrome);
-                                    watch_load(
-                                        &rt,
-                                        &proxy_main,
-                                        &mut load_watches,
-                                        &mut load_watch_next,
-                                        tab_id.clone(),
-                                        url.clone(),
-                                    );
-                                } else if loading {
+                                let _ = restored_tabs.remove(&tab_id);
+                                if loading {
                                     state.load_recoveries.remove(&app::load_key(&tab_id, &url));
                                     watch_load(
                                         &rt,
@@ -1634,13 +1591,7 @@ fn main() {
                                     content_web_context.as_mut().unwrap()
                                 };
                                 let ad_script = state.ad_block_engine.init_script().to_string();
-                                let defer_load = should_restore_startup_cookies(
-                                    is_incog,
-                                    cookies_restored,
-                                    &startup_cookies,
-                                );
                                 let _ = restored_tabs.remove(&tab_id);
-                                let load_later = defer_load;
                                 match build_content_webview(
                                     &window,
                                     &tab_id,
@@ -1656,7 +1607,7 @@ fn main() {
                                     state.settings.privacy.fingerprint_protection,
                                     state.settings.privacy.strict_permissions,
                                     state.settings.privacy.https_only,
-                                    !load_later,
+                                    false,
                                 ) {
                                     Ok(wv) => {
                                         #[cfg(windows)]
@@ -1668,17 +1619,10 @@ fn main() {
                                             &mut cookies_restored,
                                         );
                                         content_views.insert(tab_id.clone(), wv);
+                                        state.tab_manager.wake_tab(&tab_id);
                                         begin_native_load(&mut state, &chrome, &tab_id);
                                         state.push_state_to_chrome(&chrome);
                                         state.load_recoveries.remove(&app::load_key(&tab_id, &url));
-                                        watch_load(
-                                            &rt,
-                                            &proxy_main,
-                                            &mut load_watches,
-                                            &mut load_watch_next,
-                                            tab_id.clone(),
-                                            url.clone(),
-                                        );
                                         #[cfg(windows)]
                                         track_content_hwnd(hwnd, &tab_id, &mut content_hwnds);
                                         apply_layout(
@@ -1692,11 +1636,17 @@ fn main() {
                                         if let Some(wv) = content_views.get(&tab_id) {
                                             let _ = wv.focus();
                                         }
-                                        if load_later {
-                                            if let Some(wv) = content_views.get(&tab_id) {
-                                                let _ = wv.load_url(&url);
-                                            }
+                                        if let Some(wv) = content_views.get(&tab_id) {
+                                            let _ = wv.load_url(&url);
                                         }
+                                        watch_load(
+                                            &rt,
+                                            &proxy_main,
+                                            &mut load_watches,
+                                            &mut load_watch_next,
+                                            tab_id.clone(),
+                                            url.clone(),
+                                        );
                                     }
                                     Err(e) => tracing::error!("activate content view: {}", e),
                                 }
@@ -1713,11 +1663,6 @@ fn main() {
                                 content_web_context.as_mut().unwrap()
                             };
                             let ad_script = state.ad_block_engine.init_script().to_string();
-                            let defer_load = should_restore_startup_cookies(
-                                is_incog,
-                                cookies_restored,
-                                &startup_cookies,
-                            );
                             match build_content_webview(
                                 &window,
                                 &tab_id,
@@ -1733,7 +1678,7 @@ fn main() {
                                 state.settings.privacy.fingerprint_protection,
                                 state.settings.privacy.strict_permissions,
                                 state.settings.privacy.https_only,
-                                !defer_load,
+                                false,
                             ) {
                                 Ok(wv) => {
                                     #[cfg(windows)]
@@ -1745,19 +1690,6 @@ fn main() {
                                         &mut cookies_restored,
                                     );
                                     content_views.insert(tab_id.clone(), wv);
-                                    if defer_load {
-                                        if let Some(wv) = content_views.get(&tab_id) {
-                                            let _ = wv.load_url(&url);
-                                        }
-                                    }
-                                    watch_load(
-                                        &rt,
-                                        &proxy_main,
-                                        &mut load_watches,
-                                        &mut load_watch_next,
-                                        tab_id.clone(),
-                                        url.clone(),
-                                    );
                                     #[cfg(windows)]
                                     track_content_hwnd(hwnd, &tab_id, &mut content_hwnds);
                                     apply_layout(
@@ -1767,6 +1699,17 @@ fn main() {
                                         &state,
                                         &layout_config,
                                         &window,
+                                    );
+                                    if let Some(wv) = content_views.get(&tab_id) {
+                                        let _ = wv.load_url(&url);
+                                    }
+                                    watch_load(
+                                        &rt,
+                                        &proxy_main,
+                                        &mut load_watches,
+                                        &mut load_watch_next,
+                                        tab_id.clone(),
+                                        url.clone(),
                                     );
                                 }
                                 Err(e) => tracing::error!("rebuild content view: {}", e),
@@ -1869,12 +1812,26 @@ fn main() {
                                         state.settings.privacy.fingerprint_protection,
                                         state.settings.privacy.strict_permissions,
                                         state.settings.privacy.https_only,
-                                        true,
+                                        false,
                                     ) {
                                         Ok(wv) => {
                                             #[cfg(windows)]
                                             let hwnd = webview_hwnd(&wv);
                                             content_views.insert(tab_id.clone(), wv);
+                                            #[cfg(windows)]
+                                            track_content_hwnd(hwnd, &tab_id, &mut content_hwnds);
+                                            apply_layout(
+                                                &chrome,
+                                                chrome_hwnd,
+                                                &content_views,
+                                                &state,
+                                                &layout_config,
+                                                &window,
+                                            );
+                                            if let Some(wv) = content_views.get(&tab_id) {
+                                                let _ = wv.focus();
+                                                let _ = wv.load_url(&url);
+                                            }
                                             watch_load(
                                                 &rt,
                                                 &proxy_main,
@@ -1883,11 +1840,6 @@ fn main() {
                                                 tab_id.clone(),
                                                 url.clone(),
                                             );
-                                            #[cfg(windows)]
-                                            track_content_hwnd(hwnd, &tab_id, &mut content_hwnds);
-                                            if let Some(wv) = content_views.get(&tab_id) {
-                                                let _ = wv.focus();
-                                            }
                                         }
                                         Err(e) => {
                                             tracing::error!("apply secure DNS content rebuild: {}", e)
@@ -1990,32 +1942,25 @@ fn main() {
                         #[cfg(windows)]
                         sync_content_z_order(&content_views, chrome_hwnd, &state, true);
                         if let Some(ref id) = current_active {
-                            let restored = restored_tabs.remove(id);
+                            let _ = restored_tabs.remove(id);
                             if let Some(wv) = content_views.get(id) {
-                                wake_content_webview(wv);
                                 let _ = wv.focus();
                             }
-                            if restored {
-                                let url = state
-                                    .tab_manager
-                                    .get_tab(id)
-                                    .map(|tab| tab.url.clone())
-                                    .unwrap_or_default();
-                                if !url.trim().is_empty() && !url.starts_with("neura://") {
-                                    if let Some(wv) = content_views.get(id) {
-                                        begin_native_load(&mut state, &chrome, id);
-                                        state.load_recoveries.remove(&app::load_key(id, &url));
-                                        let _ = wv.load_url(&url);
-                                        state.push_state_to_chrome(&chrome);
-                                        watch_load(
-                                            &rt,
-                                            &proxy_main,
-                                            &mut load_watches,
-                                            &mut load_watch_next,
-                                            id.clone(),
-                                            url,
-                                        );
-                                    }
+                            if let Some(tab) = state.tab_manager.get_tab(id) {
+                                let url = tab.url.clone();
+                                if tab.status == crate::browser::tab::TabStatus::Loading
+                                    && !url.trim().is_empty()
+                                    && !url.starts_with("neura://")
+                                {
+                                    state.load_recoveries.remove(&app::load_key(id, &url));
+                                    watch_load(
+                                        &rt,
+                                        &proxy_main,
+                                        &mut load_watches,
+                                        &mut load_watch_next,
+                                        id.clone(),
+                                        url,
+                                    );
                                 }
                             }
                             #[cfg(windows)]
@@ -2087,6 +2032,43 @@ fn main() {
                         keepalive_pos = keepalive_pos.wrapping_add(1);
                     }
                     keepalive_at = Instant::now() + TAB_KEEPALIVE_EVERY;
+                }
+                if Instant::now() >= sleep_check_at {
+                    sleep_check_at = Instant::now() + TAB_SLEEP_CHECK_EVERY;
+                    let now_ms = chrono::Utc::now().timestamp_millis();
+                    let free_mb = available_memory_mb();
+                    let threshold_ms = sleep_threshold_ms(free_mb) as i64;
+                    let active = state.tab_manager.active_tab_id.clone().unwrap_or_default();
+                    let to_sleep: Vec<String> = state
+                        .tab_manager
+                        .tabs
+                        .iter()
+                        .filter(|t| {
+                            t.id != active
+                                && !t.is_neura_page()
+                                && !t.sleeping
+                                && !t.is_audio_playing
+                                && content_views.contains_key(&t.id)
+                                && (now_ms - t.last_active_at) >= threshold_ms
+                        })
+                        .map(|t| t.id.clone())
+                        .collect();
+                    for id in to_sleep {
+                        content_views.remove(&id);
+                        content_hwnds.remove(&id);
+                        clear_load_watches(&mut load_watches, &id);
+                        state.tab_manager.sleep_tab(&id);
+                        tracing::debug!(
+                            "tab_sleep: sleeping tab {} (free_mb={}, threshold={}min)",
+                            id,
+                            free_mb,
+                            threshold_ms / 60_000
+                        );
+                    }
+                    let had_sleepers = state.tab_manager.tabs.iter().any(|t| t.sleeping);
+                    if had_sleepers {
+                        state.push_state_to_chrome(&chrome);
+                    }
                 }
                 // Periodic proactive cookie snapshot.  Complements per-navigation saves
                 // so cookies written by background JS (e.g. Google token refresh) are
@@ -2230,8 +2212,104 @@ fn main() {
     });
 }
 
+struct UrlServer {
+    path: std::path::PathBuf,
+    _thread: std::thread::JoinHandle<()>,
+}
+
+impl Drop for UrlServer {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+    }
+}
+
 #[cfg(windows)]
-fn claim_instance(new_window: bool) -> windows::Win32::Foundation::HANDLE {
+fn set_app_id() {
+    let id: Vec<u16> = APP_ID.encode_utf16().chain(std::iter::once(0)).collect();
+    let _ = unsafe {
+        windows::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID(windows::core::PCWSTR(
+            id.as_ptr(),
+        ))
+    };
+}
+
+#[cfg(not(windows))]
+fn set_app_id() {}
+
+fn normalize_launch_url(url: &str) -> String {
+    launch_url(url).unwrap_or_else(|| url.trim().to_string())
+}
+
+fn launch_url(url: &str) -> Option<String> {
+    let url = url.trim();
+    if url.is_empty() {
+        return None;
+    }
+    if url.starts_with("http://")
+        || url.starts_with("https://")
+        || url.starts_with("file://")
+        || url.starts_with("neura://")
+    {
+        return Some(url.to_string());
+    }
+    let path = std::path::Path::new(url);
+    if path.is_absolute() && path.exists() {
+        if let Ok(file_url) = url::Url::from_file_path(path) {
+            return Some(file_url.to_string());
+        }
+    }
+    None
+}
+
+fn url_server_path(data_dir: &std::path::Path) -> std::path::PathBuf {
+    data_dir.join("url-server.txt")
+}
+
+#[cfg(windows)]
+fn start_url_server(
+    data_dir: &std::path::Path,
+    proxy: tao::event_loop::EventLoopProxy<AppEvent>,
+) -> Option<UrlServer> {
+    let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).ok()?;
+    let addr = listener.local_addr().ok()?;
+    let path = url_server_path(data_dir);
+    std::fs::write(&path, addr.to_string()).ok()?;
+    let thread = std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(stream) = stream else {
+                continue;
+            };
+            let mut s = String::new();
+            let mut stream = std::io::Read::take(stream, 8192);
+            if std::io::Read::read_to_string(&mut stream, &mut s).is_err() {
+                continue;
+            }
+            let Some(url) = launch_url(&s) else {
+                continue;
+            };
+            let _ = proxy.send_event(AppEvent::Chrome(ChromeCommand::OpenInNewTab { url }));
+        }
+    });
+    Some(UrlServer {
+        path,
+        _thread: thread,
+    })
+}
+
+#[cfg(not(windows))]
+fn start_url_server(
+    _data_dir: &std::path::Path,
+    _proxy: tao::event_loop::EventLoopProxy<AppEvent>,
+) -> Option<UrlServer> {
+    None
+}
+
+#[cfg(windows)]
+fn claim_instance(
+    new_window: bool,
+    url: Option<&str>,
+    data_dir: &std::path::Path,
+) -> windows::Win32::Foundation::HANDLE {
     use windows::Win32::Foundation::HANDLE;
     // Secondary windows skip the single-instance guard — they share the same profile.
     if new_window {
@@ -2247,13 +2325,44 @@ fn claim_instance(new_window: bool) -> windows::Win32::Foundation::HANDLE {
         unsafe { CreateMutexW(None, true, w!("Local\\VentusProfileLock")) }.unwrap_or(HANDLE(0));
     if !handle.is_invalid() && unsafe { GetLastError() } == ERROR_ALREADY_EXISTS {
         tracing::warn!("Ventus is already running");
+        if let Some(url) = url.and_then(launch_url) {
+            if !send_launch_url(data_dir, &url) {
+                if let Ok(exe) = std::env::current_exe() {
+                    let _ = std::process::Command::new(exe)
+                        .arg("--new-window")
+                        .arg("--url")
+                        .arg(url)
+                        .spawn();
+                }
+            }
+        }
         std::process::exit(0);
     }
     handle
 }
 
 #[cfg(not(windows))]
-fn claim_instance(_new_window: bool) {}
+fn claim_instance(_new_window: bool, _url: Option<&str>, _data_dir: &std::path::Path) {}
+
+#[cfg(windows)]
+fn send_launch_url(data_dir: &std::path::Path, url: &str) -> bool {
+    for _ in 0..20 {
+        if let Ok(addr) = std::fs::read_to_string(url_server_path(data_dir)) {
+            if let Ok(addr) = addr.trim().parse::<std::net::SocketAddr>() {
+                if let Ok(mut stream) =
+                    std::net::TcpStream::connect_timeout(&addr, Duration::from_millis(200))
+                {
+                    if std::io::Write::write_all(&mut stream, url.as_bytes()).is_ok() {
+                        let _ = stream.shutdown(std::net::Shutdown::Write);
+                        return true;
+                    }
+                }
+            }
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    false
+}
 
 #[cfg(windows)]
 fn wait_for_relaunch_parent(pid: Option<u32>) {
@@ -5117,15 +5226,13 @@ fn sync_content_views(
         .unwrap_or(false);
 
     for (id, wv) in content_views {
+        set_content_bounds(wv, layout.content);
+        let _ = wv.set_visible(true);
         if id == active_id && !active_is_neura_page {
-            set_content_bounds(wv, layout.content);
-            let _ = wv.set_visible(true);
             let _ = wv.evaluate_script(&format!(
                 "window.__neuraContentFullscreen={}",
                 state.content_fullscreen
             ));
-        } else {
-            let _ = wv.set_visible(false);
         }
     }
 }
@@ -6975,5 +7082,47 @@ async fn fetch_duckduckgo_instant(query: &str) -> Option<String> {
         None
     } else {
         Some(parts.join("\n\n"))
+    }
+}
+
+/// Returns available physical memory in MB. Falls back to u64::MAX so the
+/// sleep threshold stays at its maximum when the value cannot be read.
+#[cfg(windows)]
+fn available_memory_mb() -> u64 {
+    use windows::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
+    let mut ms = MEMORYSTATUSEX {
+        dwLength: std::mem::size_of::<MEMORYSTATUSEX>() as u32,
+        ..Default::default()
+    };
+    unsafe {
+        if GlobalMemoryStatusEx(&mut ms).is_ok() {
+            return ms.ullAvailPhys / 1024 / 1024;
+        }
+    }
+    u64::MAX
+}
+
+#[cfg(not(windows))]
+fn available_memory_mb() -> u64 {
+    u64::MAX
+}
+
+/// How long a background tab must be idle before it is eligible to sleep,
+/// based on how much free RAM is currently available.
+///
+/// | Free RAM   | Threshold |
+/// |------------|-----------|
+/// | > 4 GB     | 30 min    |
+/// | 2 – 4 GB   | 15 min    |
+/// | 1 – 2 GB   | 8 min     |
+/// | 512 MB – 1 GB | 4 min  |
+/// | < 512 MB   | 2 min     |
+fn sleep_threshold_ms(free_mb: u64) -> u64 {
+    match free_mb {
+        m if m > 4096 => 30 * 60 * 1000,
+        m if m > 2048 => 15 * 60 * 1000,
+        m if m > 1024 =>  8 * 60 * 1000,
+        m if m >  512 =>  4 * 60 * 1000,
+        _             =>  2 * 60 * 1000,
     }
 }

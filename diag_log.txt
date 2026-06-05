@@ -1,0 +1,3 @@
+[2m2026-06-05T07:31:27.936722Z[0m [32m INFO[0m [2mventus[0m[2m:[0m Ventus starting
+[2m2026-06-05T07:31:27.976049Z[0m [32m INFO[0m [2mventus[0m[2m:[0m cookie_store: WebView2 profile found, skipping startup restore
+[2m2026-06-05T07:31:28.950319Z[0m [33m WARN[0m [2mventus[0m[2m:[0m previous session ended without clean shutdown — waiting for WebView2 to release profile lock

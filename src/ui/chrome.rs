@@ -607,6 +607,12 @@ button,input,select,textarea{font-family:var(--font)}
   50%{transform:scale(1.2);opacity:.75}
 }
 .tab-item.audio-playing .tab-audio-btn svg{animation:speaker-pulse 1.6s ease-in-out infinite}
+.tab-sleep-icon{
+  width:14px;height:14px;flex-shrink:0;
+  color:var(--text-dim);opacity:0.55;
+}
+.tab-item.sleeping .tab-info{opacity:0.55}
+.tab-item.sleeping .tab-favicon{opacity:0.45}
 
 @media (max-width: 900px) {
   #toolbar{gap:2px;padding:0 4px}
@@ -4521,6 +4527,7 @@ function renderTabs() {
     const pinned = tab.pinned ? 'pinned' : '';
     const audioPlaying = tab.is_audio_playing ? 'audio-playing' : '';
     const tabMuted = tab.is_muted ? 'tab-muted' : '';
+    const sleeping = tab.sleeping ? 'sleeping' : '';
     const icon = tabIconUrl(tab);
     const fallback = tabFallbackIcon(loading, !!icon);
     const faviconEl = icon
@@ -4534,13 +4541,16 @@ function renderTabs() {
     const audioBtn = showAudioBtn
       ? `<button class="tab-audio-btn" onclick="muteTab(event,'${tab.id}')" title="${audioTitle}">${audioSvg}</button>`
       : '';
-    return `<div class="tab-item ${active} ${loading} ${pinned} ${audioPlaying} ${tabMuted}" draggable="true" data-reorder-id="${escAttr(tab.id)}" data-nav-url="${escAttr(tab.url)}" onclick="switchTab('${tab.id}')" oncontextmenu="tabContextMenu(event,'${tab.id}')">
+    const sleepIcon = tab.sleeping
+      ? `<svg class="tab-sleep-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" title="Tab is sleeping — click to wake"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`
+      : '';
+    return `<div class="tab-item ${active} ${loading} ${pinned} ${audioPlaying} ${tabMuted} ${sleeping}" draggable="true" data-reorder-id="${escAttr(tab.id)}" data-nav-url="${escAttr(tab.url)}" onclick="switchTab('${tab.id}')" oncontextmenu="tabContextMenu(event,'${tab.id}')">
       ${faviconEl}
       <div class="tab-info">
         <div class="tab-title">${escHtml(tab.title || 'New Tab')}</div>
         <div class="tab-url">${escHtml(formatDisplayUrl(tab.url))}</div>
       </div>
-      ${audioBtn}
+      ${tab.sleeping ? sleepIcon : audioBtn}
       <button class="tab-close" onclick="closeTab(event,'${tab.id}')" title="Close tab">
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
       </button>
@@ -8473,7 +8483,10 @@ function handleDelegatedListClick(e) {
     return;
   }
   const nav = e.target.closest('[data-nav-url]');
-  if (nav) {
+  // Elements that carry their own onclick (sidebar tab items, bookmark-bar
+  // items) handle clicks themselves — `data-nav-url` on them exists only as a
+  // drag source. Navigating here too would reload a tab on every switch.
+  if (nav && !nav.hasAttribute('onclick')) {
     e.preventDefault();
     navigateToUrl(nav.dataset.navUrl);
   }

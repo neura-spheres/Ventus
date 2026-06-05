@@ -34,6 +34,7 @@ pub struct Tab {
     pub last_active_at: i64,
     pub is_audio_playing: bool,
     pub is_muted: bool,
+    pub sleeping: bool,
 }
 
 impl Tab {
@@ -63,6 +64,7 @@ impl Tab {
             last_active_at: now,
             is_audio_playing: false,
             is_muted: false,
+            sleeping: false,
         }
     }
 
