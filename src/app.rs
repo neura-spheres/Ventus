@@ -38,12 +38,14 @@ pub struct AppState {
     /// they follow the sidebar's animated edge. `None` = no animation in progress.
     pub sidebar_clip_w_override: Option<f64>,
     pub suggestion_overlay_rect: Option<ChromeClipRect>,
+    pub content_cover_open: bool,
     pub pending_update_url: Option<String>,
     pub pending_update_version: Option<String>,
     pub pending_update_notes: Option<String>,
     pub content_fullscreen: bool,
     pub pending_nav_urls: HashMap<String, String>,
     pub https_upgrades: HashMap<String, String>,
+    pub native_loads: HashMap<String, String>,
     pub load_recoveries: HashMap<String, u8>,
     /// Highest load progress (0.0-1.0) seen for each tab's current load. Reset when a new
     /// load starts. Used to avoid reloading a page that has already rendered content but is
@@ -92,12 +94,14 @@ impl AppState {
             sidebar_pinned: false,
             sidebar_clip_w_override: None,
             suggestion_overlay_rect: None,
+            content_cover_open: false,
             pending_update_url: None,
             pending_update_version: None,
             pending_update_notes: None,
             content_fullscreen: false,
             pending_nav_urls: HashMap::new(),
             https_upgrades: HashMap::new(),
+            native_loads: HashMap::new(),
             load_recoveries: HashMap::new(),
             load_progress: HashMap::new(),
             spotlight_open: false,
@@ -117,6 +121,19 @@ impl AppState {
             "window.__neura && window.__neura.setState({})",
             json
         ));
+    }
+
+    pub fn set_content_cover(&mut self, chrome: &WebView, visible: bool) {
+        if self.content_cover_open == visible {
+            return;
+        }
+        self.content_cover_open = visible;
+        let js = if visible {
+            "window.__neura&&window.__neura.showContentLoading&&window.__neura.showContentLoading()"
+        } else {
+            "window.__neura&&window.__neura.hideContentLoading&&window.__neura.hideContentLoading()"
+        };
+        let _ = chrome.evaluate_script(js);
     }
 
     pub fn push_newtab_wallpaper_to_chrome(&self, chrome: &WebView) {
@@ -302,6 +319,7 @@ pub fn handle_chrome_command(
         ChromeCommand::CloseTab { id } => {
             state.tab_manager.close_tab(&id);
             state.load_progress.remove(&id);
+            state.native_loads.remove(&id);
             state.push_state_to_chrome(chrome);
             Some(TabAction::Remove(id))
         }
@@ -381,6 +399,10 @@ pub fn handle_chrome_command(
                 .collect();
             if !state.tab_manager.delete_workspace(&id) {
                 return None;
+            }
+            for tab_id in &tab_ids {
+                state.load_progress.remove(tab_id);
+                state.native_loads.remove(tab_id);
             }
             state.push_state_to_chrome(chrome);
             Some(TabAction::RemoveMany(tab_ids))
@@ -711,6 +733,15 @@ pub fn handle_chrome_command(
             None
         }
         ChromeCommand::OpenFile { path } => {
+            if let Some(url) = pdf_file_url(&path) {
+                let tab_id;
+                {
+                    let tab = state.tab_manager.new_tab(Some(&url));
+                    tab_id = tab.id.clone();
+                }
+                state.push_state_to_chrome(chrome);
+                return Some(TabAction::Create { tab_id, url });
+            }
             #[cfg(windows)]
             {
                 use std::os::windows::process::CommandExt;
@@ -1003,6 +1034,7 @@ fn finish_internal_nav(tab_id: &str, url: &str, state: &mut AppState, chrome: &W
     }
     state.pending_nav_urls.remove(tab_id);
     clear_https_upgrades(state, tab_id);
+    state.native_loads.remove(tab_id);
     state.load_recoveries.remove(&load_key(tab_id, url));
     state.load_progress.remove(tab_id);
     state.tab_manager.set_tab_loading(tab_id, false);
@@ -1181,16 +1213,10 @@ fn recover_loading_tab(
     let pct = state.load_progress.get(&tab_id).copied().unwrap_or(0.0);
     let tries = state.load_recoveries.get(&key).copied().unwrap_or(0);
     if !active {
-        stop_failed_load(state, chrome, &tab_id, &key);
-        return None;
+        return stop_failed_load(state, chrome, &tab_id, &key);
     }
-    if !failed && pct >= 0.92 {
-        stop_failed_load(state, chrome, &tab_id, &key);
-        return None;
-    }
-    if !failed && tries > 0 && pct >= 0.72 {
-        stop_failed_load(state, chrome, &tab_id, &key);
-        return None;
+    if !failed && pct >= 0.72 {
+        return stop_failed_load(state, chrome, &tab_id, &key);
     }
     if failed && tries == 0 {
         state.load_recoveries.insert(key, 1);
@@ -1231,19 +1257,24 @@ fn recover_loading_tab(
             url: recover_url,
         });
     }
-    stop_failed_load(state, chrome, &tab_id, &key);
-    None
+    stop_failed_load(state, chrome, &tab_id, &key)
 }
 
-fn stop_failed_load(state: &mut AppState, chrome: &WebView, tab_id: &str, key: &str) {
+fn stop_failed_load(
+    state: &mut AppState,
+    chrome: &WebView,
+    tab_id: &str,
+    key: &str,
+) -> Option<TabAction> {
     state.load_recoveries.remove(key);
     state.pending_nav_urls.remove(tab_id);
+    state.native_loads.remove(tab_id);
     state.load_progress.remove(tab_id);
     clear_https_upgrades(state, tab_id);
     state.tab_manager.set_tab_loading(tab_id, false);
     if state.tab_manager.active_tab_id.as_deref() != Some(tab_id) {
         state.push_state_to_chrome(chrome);
-        return;
+        return None;
     }
     let active = state
         .tab_manager
@@ -1256,7 +1287,9 @@ fn stop_failed_load(state: &mut AppState, chrome: &WebView, tab_id: &str, key: &
         ));
     }
     let _ = chrome.evaluate_script("window.__neura && window.__neura.finishLoadProgress()");
+    state.set_content_cover(chrome, false);
     state.push_state_to_chrome(chrome);
+    Some(TabAction::SyncViews)
 }
 
 fn web_security_signature(
@@ -1350,7 +1383,11 @@ pub fn handle_app_event_inner(
             state.push_state_to_chrome(chrome);
             None
         }
-        AppEvent::ContentLoadStart { tab_id, url } => {
+        AppEvent::ContentLoadStart {
+            tab_id,
+            url,
+            native,
+        } => {
             let clean_url = crate::utils::url::clean_tracking_url(&url);
             let track_url = !clean_url.trim().is_empty()
                 && clean_url != "about:blank"
@@ -1365,6 +1402,11 @@ pub fn handle_app_event_inner(
                 .get_tab(&tab_id)
                 .map(|tab| tab.status == crate::browser::tab::TabStatus::Loading)
                 .unwrap_or(false);
+            if let Some(expected) = state.pending_nav_urls.get(&tab_id) {
+                if !same_nav(expected, &clean_url) {
+                    return None;
+                }
+            }
             let same_doc = track_url
                 && !cur.is_empty()
                 && cur != clean_url
@@ -1383,6 +1425,9 @@ pub fn handle_app_event_inner(
                     .pending_nav_urls
                     .insert(tab_id.clone(), clean_url.clone());
                 state.tab_manager.visit_tab(&tab_id, &clean_url, "");
+            }
+            if native && track_url {
+                state.native_loads.insert(tab_id.clone(), clean_url.clone());
             }
             clear_loading_favicon(state, &tab_id);
             state.tab_manager.set_tab_loading(&tab_id, true);
@@ -1409,9 +1454,22 @@ pub fn handle_app_event_inner(
             state.push_state_to_chrome(chrome);
             None
         }
-        AppEvent::ContentLoadEnd { tab_id, url } => {
+        AppEvent::ContentLoadEnd {
+            tab_id,
+            url,
+            start_url,
+        } => {
             let clean_url = crate::utils::url::clean_tracking_url(&url);
+            let clean_start = crate::utils::url::clean_tracking_url(&start_url);
+            if let Some(expected) = state.native_loads.get(&tab_id) {
+                if !clean_start.trim().is_empty() && !same_nav(expected, &clean_start) {
+                    return None;
+                }
+            }
             if let Some(expected) = state.pending_nav_urls.get(&tab_id) {
+                if !clean_start.trim().is_empty() && !same_nav(expected, &clean_start) {
+                    return None;
+                }
                 if !same_nav(expected, &clean_url) {
                     if !can_accept_redirect(state, &tab_id, &clean_url) {
                         return None;
@@ -1439,6 +1497,7 @@ pub fn handle_app_event_inner(
             if let Some(tab) = state.tab_manager.get_tab(&tab_id) {
                 state.load_recoveries.remove(&load_key(&tab_id, &tab.url));
             }
+            state.native_loads.remove(&tab_id);
             state.load_progress.remove(&tab_id);
             clear_https_upgrades(state, &tab_id);
             state.tab_manager.set_tab_loading(&tab_id, false);
@@ -1467,6 +1526,18 @@ pub fn handle_app_event_inner(
             url,
             progress,
         } => {
+            let clean_url = crate::utils::url::clean_tracking_url(&url);
+            if let Some(expected) = state.pending_nav_urls.get(&tab_id) {
+                if clean_url.trim().is_empty() || !same_nav(expected, &clean_url) {
+                    return None;
+                }
+            }
+            let native = state.native_loads.get(&tab_id).cloned();
+            if let Some(expected) = native.as_deref() {
+                if clean_url.trim().is_empty() || !same_nav(expected, &clean_url) {
+                    return None;
+                }
+            }
             let tracked = state.load_progress.entry(tab_id.clone()).or_insert(0.0);
             *tracked = tracked.max(progress);
             let is_loading = state
@@ -1480,7 +1551,6 @@ pub fn handle_app_event_inner(
                     progress.clamp(0.0, 1.0)
                 ));
             }
-            let clean_url = crate::utils::url::clean_tracking_url(&url);
             let done = progress >= 0.92
                 && !clean_url.trim().is_empty()
                 && clean_url != "about:blank"
@@ -1500,6 +1570,7 @@ pub fn handle_app_event_inner(
                         .replace_tab_nav(&tab_id, &clean_url, &clean_url);
                 }
                 state.pending_nav_urls.remove(&tab_id);
+                state.native_loads.remove(&tab_id);
                 state.load_recoveries.remove(&load_key(&tab_id, &clean_url));
                 state.load_progress.remove(&tab_id);
                 clear_https_upgrades(state, &tab_id);
@@ -1535,11 +1606,18 @@ pub fn handle_app_event_inner(
             status,
         } => {
             tracing::debug!("navigation failed for {} with status {}", url, status);
-            let key = load_key(&tab_id, &url);
+            let clean_url = crate::utils::url::clean_tracking_url(&url);
+            if let Some(expected) = state.pending_nav_urls.get(&tab_id) {
+                if !same_nav(expected, &clean_url) {
+                    return None;
+                }
+            }
+            let key = load_key(&tab_id, &clean_url);
             if state.settings.privacy.https_only && state.https_upgrades.contains_key(&key) {
                 return None;
             }
-            recover_loading_tab(tab_id, url, true, state, chrome)
+            state.native_loads.remove(&tab_id);
+            recover_loading_tab(tab_id, clean_url, true, state, chrome)
         }
         AppEvent::HttpsUpgradeFailed {
             tab_id,
@@ -1562,6 +1640,7 @@ pub fn handle_app_event_inner(
             let url = http_warning_url(&https_url, &upgraded_url);
             state.tab_manager.visit_tab(&tab_id, &url, "HTTPS warning");
             state.pending_nav_urls.remove(&tab_id);
+            state.native_loads.remove(&tab_id);
             state.load_recoveries.remove(&load_key(&tab_id, &https_url));
             state.load_progress.remove(&tab_id);
             state.tab_manager.set_tab_loading(&tab_id, false);
@@ -1587,16 +1666,23 @@ pub fn handle_app_event_inner(
             } else {
                 title
             };
-            let pending = match take_pending(state, &tab_id, &clean_url) {
-                PendingNav::Match => true,
-                PendingNav::None => false,
-                PendingNav::Stale => {
-                    if !can_accept_redirect(state, &tab_id, &clean_url) {
-                        return None;
+            let native = state.native_loads.get(&tab_id).cloned();
+            if let Some(expected) = native.as_deref() {
+                if !same_nav(expected, &clean_url) {
+                    return None;
+                }
+            }
+            let pending = match state.pending_nav_urls.get(&tab_id).cloned() {
+                Some(expected) if same_nav(&expected, &clean_url) => {
+                    if native.is_none() {
+                        state.pending_nav_urls.remove(&tab_id);
                     }
-                    state.pending_nav_urls.remove(&tab_id);
                     true
                 }
+                Some(_) => {
+                    return None;
+                }
+                None => false,
             };
             let record_replace = replace
                 && state
@@ -2359,6 +2445,26 @@ fn secure_nav_url_with_policy(url: &str, https_only: bool) -> String {
         return url.to_string();
     }
     parsed.to_string()
+}
+
+fn pdf_file_url(path: &str) -> Option<String> {
+    let path = path.trim().trim_matches('"');
+    if path.is_empty() {
+        return None;
+    }
+    let path = std::path::PathBuf::from(path);
+    let is_pdf = path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| ext.eq_ignore_ascii_case("pdf"))
+        .unwrap_or(false);
+    if !is_pdf || !path.exists() {
+        return None;
+    }
+    let path = path.canonicalize().unwrap_or(path);
+    url::Url::from_file_path(path)
+        .ok()
+        .map(|url| url.to_string())
 }
 
 fn is_local_http_host(host: Option<&str>) -> bool {

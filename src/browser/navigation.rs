@@ -31,6 +31,13 @@ pub fn resolve_input(input: &str, search_engine_url: &str) -> NavigationResult {
         }
     }
 
+    if let Some(url) = file_url(trimmed) {
+        return NavigationResult {
+            url,
+            is_search: false,
+        };
+    }
+
     if !trimmed.contains(' ') && trimmed.contains('.') {
         let with_scheme = format!("https://{}", trimmed);
         if Url::parse(&with_scheme).is_ok() {
@@ -57,6 +64,18 @@ pub fn resolve_input(input: &str, search_engine_url: &str) -> NavigationResult {
         url: search_url,
         is_search: true,
     }
+}
+
+fn file_url(input: &str) -> Option<String> {
+    let input = input.trim().trim_matches('"');
+    if input.is_empty() {
+        return None;
+    }
+    let path = std::path::PathBuf::from(input);
+    if !path.is_absolute() || !path.exists() {
+        return None;
+    }
+    Url::from_file_path(path).ok().map(|url| url.to_string())
 }
 
 fn urlencoding_encode(input: &str) -> String {

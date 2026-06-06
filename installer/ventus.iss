@@ -1,5 +1,5 @@
 #ifndef MyAppVersion
-  #define MyAppVersion "1.0.12"
+  #define MyAppVersion "1.0.13"
 #endif
 
 #define MyAppName      "Ventus"
@@ -52,6 +52,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 [Files]
 Source: "..\target\release\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\assets\extensions\ubol\*"; DestDir: "{app}\assets\extensions\ubol"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "MicrosoftEdgeWebview2Setup.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Comment: "Focused desktop browser with AI built in"; AppUserModelID: "{#MyAumid}"
@@ -109,7 +110,5 @@ Root: HKA; Subkey: "Software\Classes\{#MyHttpsProgID}\DefaultIcon"; ValueType: s
 Root: HKA; Subkey: "Software\Classes\{#MyHttpsProgID}\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""--url"" ""%1"""
 
 [Run]
+Filename: "{tmp}\MicrosoftEdgeWebview2Setup.exe"; Parameters: "/silent /install"; StatusMsg: "Checking WebView2 Runtime..."; Flags: waituntilterminated runhidden
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
-
-[Code]
-// WebView2 check removed - can be re-added with proper Inno Setup syntax if needed

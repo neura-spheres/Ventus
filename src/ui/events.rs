@@ -234,10 +234,12 @@ pub enum AppEvent {
     ContentLoadStart {
         tab_id: String,
         url: String,
+        native: bool,
     },
     ContentLoadEnd {
         tab_id: String,
         url: String,
+        start_url: String,
     },
     ContentLoadProgress {
         tab_id: String,

@@ -2577,10 +2577,9 @@ html:not([data-browser-font="system"]) #newtab-placeholder #newtab-clock{font-fa
 #content-loading{
   position:absolute;inset:0;
   display:flex;align-items:center;justify-content:center;
-  background:var(--bg);z-index:10;pointer-events:none;opacity:0;
-  transition:opacity 0.2s;
+  background:var(--bg-elevated);z-index:10;pointer-events:none;opacity:0;visibility:hidden;
 }
-#content-loading.visible{opacity:1}
+#content-loading.visible{opacity:1;visibility:visible}
 
 #apps-placeholder{
   position:absolute;top:0;right:0;bottom:0;
@@ -3001,9 +3000,7 @@ svg{display:block;flex-shrink:0}
     </div>
   </div>
   <div id="apps-placeholder"></div>
-  <div id="content-loading">
-    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-  </div>
+  <div id="content-loading"></div>
 </div>
 
 <!-- AI SIDEBAR -->
@@ -4085,6 +4082,8 @@ window.__neura = {
   startLoadProgress() { startLoadProgress(); },
   setLoadProgress(progress) { setLoadProgress(progress); },
   finishLoadProgress() { finishLoadProgress(); },
+  showContentLoading() { setContentLoading(true); },
+  hideContentLoading() { setContentLoading(false); },
   setUrl(url, title) {
     const input = document.getElementById('url-input');
     if (document.activeElement !== input) {
@@ -5509,6 +5508,11 @@ function setText(id, value) {
 function setToggleEl(id, on) {
   const el = document.getElementById(id) || document.getElementById('toggle-' + id.replace(/_/g,'-'));
   if (el) el.classList.toggle('on', !!on);
+}
+
+function setContentLoading(visible) {
+  const el = document.getElementById('content-loading');
+  if (el) el.classList.toggle('visible', !!visible);
 }
 
 function startLoadProgress() {
@@ -7969,6 +7973,7 @@ function renderDownloads() {
   list.innerHTML = dls.slice().reverse().map(d => {
     const isDone = d.status === 'complete';
     const isFail = d.status === 'failed';
+    const isPdf = isPdfFile(d.local_path || d.filename);
     const statusColor = isDone ? 'var(--success)' : isFail ? 'var(--danger)' : 'var(--text-muted)';
     const pct = (d.total_bytes && d.total_bytes > 0)
       ? Math.round((d.received_bytes / d.total_bytes) * 100)
@@ -7982,7 +7987,7 @@ function renderDownloads() {
       ? `<div class="dl-item-progress"><div class="dl-item-progress-bar" style="width:${pct}%"></div></div>`
       : '';
     const actionBtns = isDone && d.local_path ? `
-      <button class="dl-action-btn" title="Open file" data-open-file-path="${escAttr(d.local_path)}">
+      <button class="dl-action-btn" title="${isPdf ? 'Read PDF' : 'Open file'}" data-open-file-path="${escAttr(d.local_path)}">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5z"/><polyline points="14 2 14 8 20 8"/></svg>
       </button>
       <button class="dl-action-btn" title="Show in folder" data-reveal-file-path="${escAttr(d.local_path)}">
@@ -8170,6 +8175,10 @@ function closeDownloadPanel() {
   send('SuggestionOverlay', {visible:false, x:0, y:0, width:0, height:0});
 }
 
+function isPdfFile(name) {
+  return /\.pdf(?:$|[?#])/i.test(String(name || '').trim());
+}
+
 function dlFileTypeClass(filename) {
   const ext = (filename || '').split('.').pop().toLowerCase();
   if (['jpg','jpeg','png','gif','webp','svg','avif','ico','bmp'].includes(ext)) return 'ft-img';
@@ -8205,6 +8214,7 @@ function renderDownloadPanel() {
     const isDone = d.status === 'complete';
     const isFail = d.status === 'failed';
     const isActive = !isDone && !isFail;
+    const isPdf = isPdfFile(d.local_path || d.filename);
     const pct = (d.total_bytes && d.total_bytes > 0)
       ? Math.round((d.received_bytes / d.total_bytes) * 100)
       : null;
@@ -8222,7 +8232,7 @@ function renderDownloadPanel() {
       ? `<span class="dl-spin"></span>`
       : `<span style="font-size:9px;font-weight:800;letter-spacing:0.03em">${dlFileTypeIcon(ftClass)}</span>`;
     const actionsHtml = `
-      ${isDone && d.local_path ? `<button class="dl-pi-btn" data-open-file-path="${escAttr(d.local_path)}">Open</button>
+      ${isDone && d.local_path ? `<button class="dl-pi-btn" data-open-file-path="${escAttr(d.local_path)}">${isPdf ? 'Read' : 'Open'}</button>
       <button class="dl-pi-btn" data-reveal-file-path="${escAttr(d.local_path)}">Show</button>` : ''}
       ${!isActive ? `<button class="dl-pi-btn danger" data-del-dl-id="${escAttr(d.id)}" title="Remove">✕</button>` : ''}`;
     return `<div class="dl-panel-item">

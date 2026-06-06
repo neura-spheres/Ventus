@@ -410,7 +410,7 @@ fn main() {
     let chrome_builder = chrome_builder
         .with_browser_accelerator_keys(false)
         .with_additional_browser_args(browser_args.clone());
-    let chrome = chrome_builder
+    let chrome = match chrome_builder
         .with_html(chrome_html())
         .with_ipc_handler(move |req: wry::http::Request<String>| {
             let body = req.body();
@@ -427,7 +427,17 @@ fn main() {
             }
         })
         .build()
-        .expect("build chrome webview");
+    {
+        Ok(chrome) => chrome,
+        Err(e) => {
+            tracing::error!("build chrome webview: {}", e);
+            show_startup_error(&format!(
+                "Ventus could not start because WebView2 is missing or broken.\n\nRun the installer again, or install Microsoft Edge WebView2 Runtime from Microsoft.\n\n{}",
+                e
+            ));
+            return;
+        }
+    };
     #[cfg(windows)]
     let chrome_hwnd = webview_hwnd(&chrome);
     #[cfg(not(windows))]
@@ -517,7 +527,7 @@ fn main() {
         };
         let _ = restored_tabs.remove(&first_tab_id);
         let first_ad_script = state.ad_block_engine.init_script().to_string();
-        let first_wv = build_content_webview(
+        match build_content_webview(
             &window,
             &first_tab_id,
             &first_url,
@@ -533,30 +543,40 @@ fn main() {
             state.settings.privacy.strict_permissions,
             state.settings.privacy.https_only,
             false,
-        )
-        .expect("build first content webview");
-        #[cfg(windows)]
-        let first_hwnd = webview_hwnd(&first_wv);
-        content_views.insert(first_tab_id.clone(), first_wv);
-        if let Some(wv) = content_views.get(&first_tab_id) {
-            restore_startup_cookies(
-                wv,
-                first_is_incognito,
-                &startup_cookies,
-                &mut cookies_restored,
-            );
-        }
-        first_load_after_layout = Some((first_tab_id.clone(), first_url.clone()));
-        #[cfg(windows)]
-        track_content_hwnd(first_hwnd, &first_tab_id, &mut content_hwnds);
-        sync_active_ubol(
-            &content_views,
-            &state,
-            ubol_dir.as_deref(),
-            &mut ubol_done,
-            &mut ubol_enabled,
-            &mut ubol_tab,
-        );
+        ) {
+            Ok(first_wv) => {
+                #[cfg(windows)]
+                let first_hwnd = webview_hwnd(&first_wv);
+                content_views.insert(first_tab_id.clone(), first_wv);
+                if let Some(wv) = content_views.get(&first_tab_id) {
+                    restore_startup_cookies(
+                        wv,
+                        first_is_incognito,
+                        &startup_cookies,
+                        &mut cookies_restored,
+                    );
+                }
+                first_load_after_layout = Some((first_tab_id.clone(), first_url.clone()));
+                #[cfg(windows)]
+                track_content_hwnd(first_hwnd, &first_tab_id, &mut content_hwnds);
+                sync_active_ubol(
+                    &content_views,
+                    &state,
+                    ubol_dir.as_deref(),
+                    &mut ubol_done,
+                    &mut ubol_enabled,
+                    &mut ubol_tab,
+                );
+            }
+            Err(e) => {
+                tracing::error!("build first content webview: {}", e);
+                if let Some(tab) = state.tab_manager.get_tab_mut(&first_tab_id) {
+                    tab.url = browser::tab::Tab::new_tab_url().to_string();
+                    tab.title = "New Tab".to_string();
+                    tab.status = browser::tab::TabStatus::Complete;
+                }
+            }
+        };
     }
     apply_layout(
         &chrome,
@@ -591,7 +611,9 @@ fn main() {
     }
 
     let proxy_main = proxy.clone();
-    let mut chrome_shown = false;
+    let mut chrome_shown = true;
+    keep_frameless(&window);
+    window.set_visible(true);
     let mut last_fullscreen_toggle: Option<Instant> = None;
     let mut sync_fullscreen_layout = false;
     let mut fullscreen_restore_maximized: Option<bool> = None;
@@ -609,6 +631,11 @@ fn main() {
                 let _ = chrome
                     .evaluate_script(&format!("window.__neura&&window.__neura.setState({})", js));
                 state.push_newtab_wallpaper_to_chrome(&chrome);
+                if state.content_cover_open {
+                    let _ = chrome.evaluate_script(
+                        "window.__neura&&window.__neura.showContentLoading&&window.__neura.showContentLoading()",
+                    );
+                }
                 if !onboarding_done {
                     let _ = chrome.evaluate_script(
                         "setTimeout(()=>window.__neura&&window.__neura.showOnboarding(),100)",
@@ -1031,7 +1058,7 @@ fn main() {
                     }
                     load_watches.remove(&key);
                 }
-                if let AppEvent::ContentLoadEnd { tab_id, url } = &app_event {
+                if let AppEvent::ContentLoadEnd { tab_id, url, .. } = &app_event {
                     clear_load_watches(&mut load_watches, tab_id);
                     // Snapshot cookies after each page load into our isolated store.
                     // Skip internal pages and incognito tabs (they never share cookies).
@@ -1047,15 +1074,22 @@ fn main() {
                         &crate::utils::url::clean_tracking_url(url),
                     ));
                 }
-                if let AppEvent::ContentLoadStart { tab_id, url } = &app_event {
-                    watch_load(
-                        &rt,
-                        &proxy_main,
-                        &mut load_watches,
-                        &mut load_watch_next,
-                        tab_id.clone(),
-                        crate::utils::url::clean_tracking_url(url),
-                    );
+                if let AppEvent::ContentLoadStart {
+                    tab_id,
+                    url,
+                    native,
+                } = &app_event
+                {
+                    if *native {
+                        watch_load(
+                            &rt,
+                            &proxy_main,
+                            &mut load_watches,
+                            &mut load_watch_next,
+                            tab_id.clone(),
+                            crate::utils::url::clean_tracking_url(url),
+                        );
+                    }
                 }
                 let persist_session = should_save_session(&app_event);
                 let is_save_settings = matches!(
@@ -1108,12 +1142,15 @@ fn main() {
                         #[cfg(windows)]
                         sync_content_clip(&content_views, &state, layout);
                         #[cfg(windows)]
-                        if matches!(action, TabAction::SyncClipOnly) {
-                            sync_content_z_order(&content_views, chrome_hwnd, &state, true);
+                        {
+                            let repaint = matches!(action, TabAction::SyncClipOnly);
+                            sync_content_z_order(&content_views, chrome_hwnd, &state, repaint);
                         }
                         return;
                     }
 
+                    let cover = action_content_cover(&action, &state, &content_views);
+                    state.set_content_cover(&chrome, cover);
                     apply_layout(
                         &chrome,
                         chrome_hwnd,
@@ -2047,6 +2084,7 @@ fn main() {
                             t.id != active
                                 && !t.is_neura_page()
                                 && !t.sleeping
+                                && t.status != crate::browser::tab::TabStatus::Loading
                                 && !t.is_audio_playing
                                 && content_views.contains_key(&t.id)
                                 && (now_ms - t.last_active_at) >= threshold_ms
@@ -2235,6 +2273,28 @@ fn set_app_id() {
 
 #[cfg(not(windows))]
 fn set_app_id() {}
+
+#[cfg(windows)]
+fn show_startup_error(msg: &str) {
+    use windows::core::PCWSTR;
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONERROR, MB_OK};
+    let title: Vec<u16> = "Ventus".encode_utf16().chain(std::iter::once(0)).collect();
+    let msg: Vec<u16> = msg.encode_utf16().chain(std::iter::once(0)).collect();
+    unsafe {
+        MessageBoxW(
+            HWND(0),
+            PCWSTR(msg.as_ptr()),
+            PCWSTR(title.as_ptr()),
+            MB_OK | MB_ICONERROR,
+        );
+    }
+}
+
+#[cfg(not(windows))]
+fn show_startup_error(msg: &str) {
+    eprintln!("{msg}");
+}
 
 fn normalize_launch_url(url: &str) -> String {
     launch_url(url).unwrap_or_else(|| url.trim().to_string())
@@ -2817,12 +2877,13 @@ fn attach_navigation_handler(
             let url = if is_recoverable_nav_url(&source) {
                 source
             } else {
-                start_url
+                start_url.clone()
             };
             if ok.as_bool() {
                 if is_recoverable_nav_url(&url) {
                     let _ = proxy.send_event(AppEvent::ContentLoadEnd {
                         tab_id: tab_id.clone(),
+                        start_url,
                         url,
                     });
                 }
@@ -3423,6 +3484,7 @@ fn build_content_webview(
                         let _ = proxy_ipc.send_event(AppEvent::ContentLoadStart {
                             tab_id: tab_id_ipc.clone(),
                             url,
+                            native: false,
                         });
                     }
                     return;
@@ -3557,6 +3619,7 @@ fn build_content_webview(
                     let _ = proxy_nav.send_event(AppEvent::ContentLoadStart {
                         tab_id: tab_id_nav.clone(),
                         url: url.clone(),
+                        native: true,
                     });
                 }
                 true
@@ -3572,6 +3635,7 @@ fn build_content_webview(
                 let _ = proxy_load.send_event(AppEvent::ContentLoadStart {
                     tab_id: tab_id_str.clone(),
                     url: nav_url,
+                    native: true,
                 });
             }
             wry::PageLoadEvent::Finished => {
@@ -3580,15 +3644,21 @@ fn build_content_webview(
                 } else {
                     loaded_url
                 };
-                let _ = proxy_load.send_event(AppEvent::ContentNav {
-                    tab_id: tab_id_str.clone(),
-                    url: nav_url.clone(),
-                    title: String::new(),
-                });
-                let _ = proxy_load.send_event(AppEvent::ContentLoadEnd {
-                    tab_id: tab_id_str.clone(),
-                    url: nav_url,
-                });
+                #[cfg(windows)]
+                let _ = nav_url;
+                #[cfg(not(windows))]
+                {
+                    let _ = proxy_load.send_event(AppEvent::ContentNav {
+                        tab_id: tab_id_str.clone(),
+                        url: nav_url.clone(),
+                        title: String::new(),
+                    });
+                    let _ = proxy_load.send_event(AppEvent::ContentLoadEnd {
+                        tab_id: tab_id_str.clone(),
+                        start_url: nav_url.clone(),
+                        url: nav_url,
+                    });
+                }
             }
         })
         .with_download_started_handler(move |url: String, path: &mut std::path::PathBuf| {
@@ -3688,6 +3758,7 @@ fn begin_native_load(state: &mut AppState, chrome: &WebView, tab_id: &str) {
     state.tab_manager.set_tab_loading(tab_id, true);
     state.load_progress.insert(tab_id.to_string(), 0.0);
     if state.tab_manager.active_tab_id.as_deref() == Some(tab_id) {
+        state.set_content_cover(chrome, true);
         let _ = chrome.evaluate_script("window.__neura && window.__neura.startLoadProgress()");
     }
 }
@@ -3712,6 +3783,7 @@ fn webview_args(settings: &config::AppSettings) -> String {
         "msSmartScreenProtection".to_string(),
         "SleepingTabs".to_string(),
         "AutoDiscardTabs".to_string(),
+        "CalculateNativeWinOcclusion".to_string(),
     ];
     let mut enable_features = Vec::new();
     let mut args = vec![
@@ -4493,7 +4565,6 @@ struct AppLayout {
     window_w: u32,
     window_h: u32,
     scale_factor: f64,
-    sidebar_w: u32,
     clip_sidebar_w: u32,
     toolbar_h: u32,
     ai_w: u32,
@@ -4524,7 +4595,6 @@ impl AppLayout {
                 window_w: size.width.max(1),
                 window_h: size.height.max(1),
                 scale_factor: scale,
-                sidebar_w: 0,
                 clip_sidebar_w: 0,
                 toolbar_h: 0,
                 ai_w: 0,
@@ -4635,7 +4705,6 @@ impl AppLayout {
             window_w: size.width.max(1),
             window_h: size.height.max(1),
             scale_factor: scale,
-            sidebar_w,
             clip_sidebar_w,
             toolbar_h,
             ai_w,
@@ -4815,12 +4884,48 @@ fn apply_layout(
         state,
         config,
     );
-    sync_chrome(chrome, chrome_hwnd, state, layout);
     sync_content_views(content_views, state, layout);
     #[cfg(windows)]
     sync_content_clip(content_views, state, layout);
+    sync_chrome(chrome, chrome_hwnd, state, layout);
     #[cfg(windows)]
     sync_content_z_order(content_views, chrome_hwnd, state, true);
+}
+
+fn action_content_cover(
+    action: &TabAction,
+    state: &AppState,
+    content_views: &HashMap<String, WebView>,
+) -> bool {
+    match action {
+        TabAction::Create { url, .. } => !url.starts_with("neura://"),
+        TabAction::ContentNavigate(url) => {
+            if url.starts_with("neura://") {
+                return false;
+            }
+            let Some(id) = state.tab_manager.active_tab_id.as_deref() else {
+                return false;
+            };
+            !content_views.contains_key(id)
+        }
+        TabAction::ActivateContent { tab_id, .. } => !content_views.contains_key(tab_id),
+        TabAction::ReloadContent { tab_id, .. } => {
+            state.tab_manager.active_tab_id.as_deref() == Some(tab_id.as_str())
+                && !content_views.contains_key(tab_id)
+        }
+        TabAction::RebuildContent { tab_id, .. } => {
+            state.tab_manager.active_tab_id.as_deref() == Some(tab_id.as_str())
+        }
+        _ => state.content_cover_open && active_tab_loading(state),
+    }
+}
+
+fn active_tab_loading(state: &AppState) -> bool {
+    state
+        .tab_manager
+        .active_tab()
+        .map(|tab| tab.status == crate::browser::tab::TabStatus::Loading)
+        .unwrap_or(false)
 }
 
 fn layout_size(window: &tao::window::Window, state: &AppState) -> PhysicalSize<u32> {
@@ -5225,14 +5330,29 @@ fn sync_content_views(
         .map(|tab| tab.is_neura_page())
         .unwrap_or(false);
 
-    for (id, wv) in content_views {
-        set_content_bounds(wv, layout.content);
-        let _ = wv.set_visible(true);
-        if id == active_id && !active_is_neura_page {
+    if !active_is_neura_page {
+        if let Some(wv) = content_views.get(active_id) {
+            set_content_bounds(wv, layout.content);
+            let _ = wv.set_visible(true);
             let _ = wv.evaluate_script(&format!(
                 "window.__neuraContentFullscreen={}",
                 state.content_fullscreen
             ));
+        }
+    }
+
+    for (id, wv) in content_views {
+        if id == active_id {
+            continue;
+        }
+        set_content_bounds(wv, layout.content);
+        let _ = wv.set_visible(false);
+    }
+
+    if active_is_neura_page {
+        if let Some(wv) = content_views.get(active_id) {
+            set_content_bounds(wv, layout.content);
+            let _ = wv.set_visible(false);
         }
     }
 }
@@ -5373,6 +5493,7 @@ fn sync_content_z_order(
 fn chrome_owns_content(state: &AppState) -> bool {
     state.chrome_overlay_open
         || state.spotlight_open
+        || state.content_cover_open
         || state
             .tab_manager
             .active_tab()
@@ -5381,7 +5502,10 @@ fn chrome_owns_content(state: &AppState) -> bool {
 }
 
 fn chrome_needs_top(state: &AppState) -> bool {
-    chrome_owns_content(state) || state.suggestion_overlay_rect.is_some()
+    chrome_owns_content(state)
+        || state.suggestion_overlay_rect.is_some()
+        || state.ai_sidebar_open
+        || state.sidebar_auto_hide_open
 }
 
 #[cfg(windows)]
@@ -7121,8 +7245,8 @@ fn sleep_threshold_ms(free_mb: u64) -> u64 {
     match free_mb {
         m if m > 4096 => 30 * 60 * 1000,
         m if m > 2048 => 15 * 60 * 1000,
-        m if m > 1024 =>  8 * 60 * 1000,
-        m if m >  512 =>  4 * 60 * 1000,
-        _             =>  2 * 60 * 1000,
+        m if m > 1024 => 8 * 60 * 1000,
+        m if m > 512 => 4 * 60 * 1000,
+        _ => 2 * 60 * 1000,
     }
 }

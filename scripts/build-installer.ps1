@@ -27,6 +27,14 @@ if ($Debug) {
 if (-not (Test-Path $exeSource)) { Write-Error "$exeSource not found"; exit 1 }
 Write-Host "Binary: $exeSource ($([Math]::Round((Get-Item $exeSource).Length / 1MB, 1)) MB)"
 
+$webview2 = "installer\MicrosoftEdgeWebview2Setup.exe"
+if (-not (Test-Path $webview2)) {
+    Write-Host "Downloading WebView2 bootstrapper..."
+    Invoke-WebRequest -Uri "https://go.microsoft.com/fwlink/p/?LinkId=2124703" -OutFile $webview2 -UseBasicParsing
+}
+if (-not (Test-Path $webview2)) { Write-Error "$webview2 not found"; exit 1 }
+Write-Host "WebView2 bootstrapper: $webview2 ($([Math]::Round((Get-Item $webview2).Length / 1MB, 1)) MB)"
+
 # Locate Inno Setup
 $isccPaths = @(
     "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
