@@ -1,5 +1,5 @@
 #ifndef MyAppVersion
-  #define MyAppVersion "1.0.13"
+  #define MyAppVersion "1.0.15"
 #endif
 
 #define MyAppName      "Ventus"
@@ -110,5 +110,23 @@ Root: HKA; Subkey: "Software\Classes\{#MyHttpsProgID}\DefaultIcon"; ValueType: s
 Root: HKA; Subkey: "Software\Classes\{#MyHttpsProgID}\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""--url"" ""%1"""
 
 [Run]
-Filename: "{tmp}\MicrosoftEdgeWebview2Setup.exe"; Parameters: "/silent /install"; StatusMsg: "Checking WebView2 Runtime..."; Flags: waituntilterminated runhidden
+Filename: "{tmp}\MicrosoftEdgeWebview2Setup.exe"; Parameters: "/silent /install"; StatusMsg: "Checking WebView2 Runtime..."; Flags: waituntilterminated runhidden; Check: NeedsWebView2
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+
+[Code]
+function HasWebView2Key(RootKey: Integer; Subkey: String): Boolean;
+var
+  Ver: String;
+begin
+  Result := RegQueryStringValue(RootKey, Subkey, 'pv', Ver) and (Ver <> '');
+end;
+
+function NeedsWebView2(): Boolean;
+begin
+  Result := not (
+    HasWebView2Key(HKLM, 'SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9C2A7C5}') or
+    HasWebView2Key(HKCU, 'SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9C2A7C5}') or
+    HasWebView2Key(HKLM, 'SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9C2A7C5}') or
+    HasWebView2Key(HKCU, 'SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9C2A7C5}')
+  );
+end;

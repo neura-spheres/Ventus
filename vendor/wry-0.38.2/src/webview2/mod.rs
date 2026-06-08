@@ -128,7 +128,8 @@ impl InnerWebView {
 
     let drop_handler = attributes.drag_drop_handler.take();
 
-    let env = Self::create_environment(&web_context, pl_attrs.clone(), &attributes)?;
+    let mut web_context = web_context;
+    let env = Self::create_environment(&mut web_context, pl_attrs.clone(), &attributes)?;
     let controller = Self::create_controller(hwnd, &env, attributes.incognito)?;
     let webview = Self::init_webview(
       parent,
@@ -243,10 +244,20 @@ impl InnerWebView {
 
   #[inline]
   fn create_environment(
-    web_context: &Option<&mut WebContext>,
+    web_context: &mut Option<&mut WebContext>,
     pl_attrs: super::PlatformSpecificWebViewAttributes,
     attributes: &WebViewAttributes,
   ) -> Result<ICoreWebView2Environment> {
+    // Reuse the environment already created for this context. Creating a new
+    // CoreWebView2Environment per WebView against the same user-data folder is unsupported
+    // by WebView2 and causes random navigation/render failures; the supported model is a
+    // single environment shared by many controllers. See `WebContextImpl::env`.
+    if let Some(context) = web_context.as_deref() {
+      if let Some(env) = context.os.env.clone() {
+        return Ok(env);
+      }
+    }
+
     let data_directory = web_context
       .as_deref()
       .and_then(|context| context.data_directory())
@@ -324,7 +335,14 @@ impl InnerWebView {
       }),
     )?;
 
-    rx.recv()?.map_err(Into::into)
+    let env: ICoreWebView2Environment = rx.recv()??;
+
+    // Cache it on the context so every subsequent WebView reuses this one environment.
+    if let Some(context) = web_context.as_deref_mut() {
+      context.os.env = Some(env.clone());
+    }
+
+    Ok(env)
   }
 
   #[inline]

@@ -1883,6 +1883,42 @@ html:not([data-browser-font="system"]) #newtab-placeholder #newtab-clock{font-fa
 .tab-search-item .ts-title{font-size:12px;font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tab-search-item .ts-url{font-size:11px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
+#find-bar{
+  position:fixed;
+  top:calc(var(--top-chrome-h) + 10px);
+  right:calc(var(--ai-w) + var(--frame-side-w,5px) + 12px);
+  width:clamp(290px,calc(100vw - var(--sidebar-w) - var(--ai-w) - 34px),430px);
+  height:42px;
+  display:none;align-items:center;gap:6px;
+  padding:6px 7px 6px 10px;
+  background:var(--modal-bg);
+  border:1px solid var(--modal-border);
+  border-radius:12px;
+  box-shadow:var(--modal-shadow);
+  z-index:360;
+}
+#find-bar.open{display:flex}
+#find-bar.no-results{border-color:var(--danger)}
+#find-input{
+  min-width:0;flex:1;height:28px;
+  background:transparent;border:none;outline:none;
+  color:var(--text);font-size:13px;font-family:var(--font);
+}
+#find-input::placeholder{color:var(--text-muted)}
+#find-count{
+  min-width:46px;text-align:right;
+  color:var(--text-muted);font-size:12px;
+  font-variant-numeric:tabular-nums;
+}
+.find-btn{
+  width:28px;height:28px;border:none;border-radius:8px;
+  background:transparent;color:var(--text-muted);
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;transition:background var(--transition),color var(--transition);
+}
+.find-btn:hover{background:var(--bg-hover);color:var(--text)}
+.find-btn:disabled{opacity:.35;cursor:default}
+
 /* download badge lives on #btn-more — see #more-btn-badge CSS above */
 
 /* ── Download panel ─────────────────────────────────────────────────────────── */
@@ -2692,6 +2728,20 @@ svg{display:block;flex-shrink:0}
 <div id="bookmarks-bar"></div>
 </div>
 <div id="url-suggestions" class="suggestions-panel"></div>
+<div id="find-bar">
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-muted)"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+  <input id="find-input" type="text" placeholder="Find in page" autocomplete="off" spellcheck="false" oninput="queueFind()" onkeydown="handleFindKey(event)">
+  <span id="find-count"></span>
+  <button class="find-btn" id="find-prev" onclick="findPrev()" title="Previous">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>
+  </button>
+  <button class="find-btn" id="find-next" onclick="findNext()" title="Next">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+  </button>
+  <button class="find-btn" onclick="closeFindBar(true)" title="Close">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+  </button>
+</div>
 
 <!-- DOWNLOAD PANEL -->
 <div id="download-panel">
@@ -2747,6 +2797,11 @@ svg{display:block;flex-shrink:0}
     <span class="more-item-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>
     <span class="more-item-label">Downloads</span>
     <span class="more-item-kbd">Ctrl+J</span>
+  </button>
+  <button class="more-item" onclick="closeMoreMenu();openFindBar()" role="menuitem">
+    <span class="more-item-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span>
+    <span class="more-item-label">Find in page</span>
+    <span class="more-item-kbd">Ctrl+F</span>
   </button>
   <div class="more-sep"></div>
   <div class="more-zoom-row">
@@ -3587,6 +3642,10 @@ svg{display:block;flex-shrink:0}
             <div style="font-size:12px;font-weight:600;color:var(--text)">Ctrl+K</div>
           </div>
           <div style="padding:8px;border-radius:var(--radius-sm);background:var(--bg)">
+            <div style="font-size:11px;color:var(--text-muted)">Find in page</div>
+            <div style="font-size:12px;font-weight:600;color:var(--text)">Ctrl+F</div>
+          </div>
+          <div style="padding:8px;border-radius:var(--radius-sm);background:var(--bg)">
             <div style="font-size:11px;color:var(--text-muted)">AI sidebar</div>
             <div style="font-size:12px;font-weight:600;color:var(--text)">Ctrl+Shift+A</div>
           </div>
@@ -3947,6 +4006,13 @@ let activeSuggestionTarget = null;
 let activeSuggestionIndex = -1;
 let editingWorkspaceId = null;
 let deletingWorkspaceId = null;
+let findOpen = false;
+let findQuery = '';
+let findTotal = 0;
+let findIndex = 0;
+let findTimer = 0;
+let findLastTabId = null;
+let findLastUrl = '';
 let selectedWsEmoji = '📁';
 let selectedWsColor = '#8b5cf6';
 let wsColorManual = false;
@@ -3981,7 +4047,12 @@ const _RATES_TTL = 3600_000; // 1 hour
 
 window.__neura = {
   setState(s) {
+    const prevTab = state.active_tab_id;
+    const prevUrl = state.active_url;
     state = {...state, ...s};
+    const tabChanged = Object.prototype.hasOwnProperty.call(s, 'active_tab_id') && s.active_tab_id !== prevTab;
+    const urlChanged = Object.prototype.hasOwnProperty.call(s, 'active_url') && s.active_url !== prevUrl;
+    if (findOpen && (tabChanged || urlChanged)) closeFindBar(true, prevTab || findLastTabId);
     render();
   },
   setNewtabWallpaperData(d) {
@@ -4085,6 +4156,9 @@ window.__neura = {
   showContentLoading() { setContentLoading(true); },
   hideContentLoading() { setContentLoading(false); },
   setUrl(url, title) {
+    if (findOpen && url !== state.active_url) closeFindBar(true, findLastTabId || state.active_tab_id);
+    state.active_url = url;
+    state.active_title = title || url;
     const input = document.getElementById('url-input');
     if (document.activeElement !== input) {
       input.value = formatDisplayUrl(url);
@@ -4094,6 +4168,9 @@ window.__neura = {
     checkNewtabPlaceholder(url);
     checkHttpWarningPlaceholder(url);
     checkAppsPlaceholder(url);
+  },
+  setFindResult(result) {
+    applyFindResult(result || {});
   },
   setDownloadActive(active) {
     const btn = document.getElementById('btn-more');
@@ -4106,6 +4183,7 @@ window.__neura = {
   },
   clearTransientUi() {
     hideSuggestions();
+    if (findOpen) closeFindBar(true);
     const updateModal = document.getElementById('update-modal');
     if (updateModal && updateModal.classList.contains('open')) closeUpdateModal(false);
     ['settings-overlay','tab-search-modal','workspace-modal','workspace-delete-modal','context-menu','adblock-modal','adblock-backdrop','download-panel','model-modal','tab-spotlight-overlay','update-modal'].forEach(id => {
@@ -4121,6 +4199,14 @@ window.__neura = {
       spotlightOpen = false;
       tspExitAiMode();
     }
+    cancelSidebarHide();
+    clearSidebarClipTimer();
+    clearSidebarPinTimer();
+    sidebarPeeking = false;
+    sidebarPinned = false;
+    const app = document.getElementById('app');
+    if (app) app.classList.remove('sidebar-floating-open');
+    _syncSidebarBtnState();
   },
   closeSidebar() {
     // Called by Rust when content WebView detects cursor in the content area.
@@ -6282,6 +6368,10 @@ function refreshSuggestionOverlayBounds() {
   const workspaceModal = document.getElementById('workspace-modal');
   if (workspaceModal && workspaceModal.classList.contains('open')) {
     send('SuggestionOverlay', {visible:true, x:0, y:0, width:window.innerWidth, height:window.innerHeight});
+    return;
+  }
+  if (findOpen) {
+    syncFindOverlay();
     return;
   }
   if (!activeSuggestionTarget) return;
@@ -8777,6 +8867,131 @@ function toast(msg, type='info') {
   setTimeout(() => el.remove(), 3500);
 }
 
+function openFindBar() {
+  const bar = document.getElementById('find-bar');
+  const input = document.getElementById('find-input');
+  if (!bar || !input) return;
+  closeMoreMenu();
+  closeDownloadPanel();
+  hideSuggestions();
+  findOpen = true;
+  findLastTabId = state.active_tab_id;
+  findLastUrl = state.active_url || '';
+  bar.classList.add('open');
+  renderFindBar();
+  requestAnimationFrame(syncFindOverlay);
+  input.focus();
+  input.select();
+  setTimeout(() => { input.focus(); input.select(); }, 40);
+  if (input.value) runFind(true);
+}
+
+function closeFindBar(clear=true, tabId=null) {
+  clearTimeout(findTimer);
+  const id = tabId || findLastTabId || state.active_tab_id;
+  const bar = document.getElementById('find-bar');
+  const input = document.getElementById('find-input');
+  findOpen = false;
+  findQuery = '';
+  findTotal = 0;
+  findIndex = 0;
+  findLastTabId = null;
+  findLastUrl = '';
+  if (input) input.value = '';
+  if (bar) bar.classList.remove('open','no-results');
+  renderFindBar();
+  send('SuggestionOverlay', {visible:false, x:0, y:0, width:0, height:0});
+  if (clear && id) send('FindInPage', {tab_id: id, query: '', forward: true});
+}
+
+function queueFind() {
+  clearTimeout(findTimer);
+  const input = document.getElementById('find-input');
+  findQuery = input ? input.value : '';
+  findTotal = 0;
+  findIndex = 0;
+  renderFindBar();
+  findTimer = setTimeout(() => runFind(true), 80);
+}
+
+function runFind(forward=true) {
+  if (!findOpen) return;
+  const input = document.getElementById('find-input');
+  findQuery = input ? input.value : '';
+  findLastTabId = state.active_tab_id;
+  findLastUrl = state.active_url || '';
+  send('FindInPage', {
+    tab_id: findLastTabId,
+    query: findQuery,
+    forward: forward !== false
+  });
+}
+
+function findNext() {
+  runFind(true);
+}
+
+function findPrev() {
+  runFind(false);
+}
+
+function handleFindKey(e) {
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    e.stopPropagation();
+    closeFindBar(true);
+    return;
+  }
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    e.stopPropagation();
+    runFind(!e.shiftKey);
+    return;
+  }
+  const ctrl = e.ctrlKey || e.metaKey;
+  if (ctrl && e.key.toLowerCase() === 'f') {
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.select();
+  }
+}
+
+function applyFindResult(result) {
+  if (!findOpen) return;
+  const q = String(result.query || '');
+  if (q !== findQuery) return;
+  findTotal = Math.max(0, Number(result.total) || 0);
+  findIndex = Math.max(0, Number(result.index) || 0);
+  renderFindBar();
+}
+
+function renderFindBar() {
+  const bar = document.getElementById('find-bar');
+  const count = document.getElementById('find-count');
+  const prev = document.getElementById('find-prev');
+  const next = document.getElementById('find-next');
+  if (count) count.textContent = findQuery ? `${findIndex}/${findTotal}` : '';
+  if (bar) bar.classList.toggle('no-results', !!findQuery && findTotal === 0);
+  if (prev) prev.disabled = !findTotal;
+  if (next) next.disabled = !findTotal;
+}
+
+function syncFindOverlay() {
+  const bar = document.getElementById('find-bar');
+  if (!findOpen || !bar || !bar.classList.contains('open')) {
+    send('SuggestionOverlay', {visible:false, x:0, y:0, width:0, height:0});
+    return;
+  }
+  const rect = bar.getBoundingClientRect();
+  send('SuggestionOverlay', {
+    visible:true,
+    x:rect.left - 4,
+    y:rect.top - 4,
+    width:rect.width + 8,
+    height:rect.height + 8
+  });
+}
+
 // ============================================================
 // KEYBOARD SHORTCUTS
 // ============================================================
@@ -8791,6 +9006,7 @@ document.addEventListener('keydown', e => {
   else if (ctrl && e.key === 'w') { e.preventDefault(); if (state.active_tab_id) send('CloseTab', {id: state.active_tab_id}); }
   else if (ctrl && key === 'l') { e.preventDefault(); focusUrl(); }
   else if (ctrl && key === 'k') { e.preventDefault(); openTabSearch(); }
+  else if (ctrl && key === 'f') { e.preventDefault(); openFindBar(); }
   else if (ctrl && key === 'h') { e.preventDefault(); openSettings('history'); }
   else if (ctrl && key === 'j') { e.preventDefault(); openSettings('downloads'); }
   else if (ctrl && key === 'd') { e.preventDefault(); toggleBookmark(); }
@@ -8804,6 +9020,7 @@ document.addEventListener('keydown', e => {
   else if (ctrl && e.key === '0') { e.preventDefault(); zoomReset(); }
   else if (e.key === 'Escape') {
     if (spotlightOpen) closeSpotlight();
+    else if (findOpen) closeFindBar(true);
     else if (document.getElementById('workspace-delete-modal').classList.contains('open')) closeWorkspaceDeleteModal();
     else if (document.getElementById('workspace-modal').classList.contains('open')) closeWorkspaceModal();
     else if (document.getElementById('app').classList.contains('content-fullscreen')) { send('ToggleFullscreen'); }
@@ -8825,6 +9042,7 @@ document.addEventListener('keydown', e => {
 });
 window.addEventListener('resize', () => {
   refreshSuggestionOverlayBounds();
+  syncFindOverlay();
   syncUpdateModalClip();
 }, {passive: true});
 

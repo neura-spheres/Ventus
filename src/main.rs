@@ -1,4 +1,6 @@
 #![cfg_attr(windows, windows_subsystem = "windows")]
+#![deny(warnings)]
+#![allow(dead_code)]
 
 mod adblock;
 mod ai;
@@ -66,9 +68,19 @@ const SC_DEVTOOLS: usize = 20;
 const SC_INCOGNITO: usize = 21;
 const SC_TAB_1: usize = 22;
 const SC_TAB_9: usize = 30;
-const LOAD_STALL_AFTER: u64 = 4;
-const TAB_KEEPALIVE_EVERY: Duration = Duration::from_secs(45);
-const TAB_SLEEP_CHECK_EVERY: Duration = Duration::from_secs(60);
+const SC_FIND: usize = 31;
+// How long the active tab may sit in the "loading" state with no completion signal
+// before the recovery ladder begins (and the interval between successive recovery steps).
+// The recovery itself is now progress-aware — a page that has committed and is rendering
+// is never torn down (see `recover_loading_tab`), so this only governs how quickly a
+// genuinely wedged / black load is retried. 6s catches those promptly while still giving
+// an ordinary load room to commit first.
+const LOAD_STALL_AFTER: u64 = 6;
+const COVER_MAX_MS: u64 = 1000;
+const TAB_SLEEP_CHECK_EVERY: Duration = Duration::from_secs(20);
+const HEAL_CONTENT_EVERY: Duration = Duration::from_millis(750);
+const MAX_LIVE_WEBVIEWS: usize = 8;
+const SESSION_SAVE_DELAY: Duration = Duration::from_secs(3);
 const WEBVIEW_PROFILE_RELEASE_TIMEOUT: Duration = Duration::from_secs(5);
 const WEBVIEW_PROFILE_RELEASE_POLL: u64 = 50;
 #[cfg(windows)]
@@ -390,8 +402,25 @@ fn main() {
         .map(|t| t.url.clone())
         .unwrap_or_else(|| browser::tab::Tab::new_tab_url().to_string());
     let win_size = window.inner_size();
+    let webview_data_dir = data_dir.join("webview_data");
+    let chrome_data_dir = default_webview2_data_dir();
+    let crash_sentinel: Option<std::path::PathBuf> = if !new_window {
+        let p = data_dir.join("running.lock");
+        if p.exists() {
+            let mut roots = vec![webview_data_dir.as_path()];
+            if let Some(dir) = chrome_data_dir.as_deref() {
+                roots.push(dir);
+            }
+            tracing::warn!("previous session ended without clean shutdown");
+            wait_for_previous_instance(&p, &roots);
+        }
+        let _ = std::fs::write(&p, std::process::id().to_string().as_bytes());
+        Some(p)
+    } else {
+        None
+    };
     #[cfg(windows)]
-    if let Some(chrome_profile_dir) = default_webview2_data_dir() {
+    if let Some(chrome_profile_dir) = chrome_data_dir.as_ref() {
         sync_webview_secure_dns_prefs(&chrome_profile_dir, &state.settings);
     }
     let mut browser_args = webview_args(&state.settings);
@@ -446,36 +475,12 @@ fn main() {
     let initial_layout =
         AppLayout::calculate(win_size, window.scale_factor(), &state, &layout_config);
 
-    // Crash sentinel: if this file exists at startup, the previous run ended abnormally
-    // (crash, kill, power-loss) without cleanly releasing WebView2 resources.  The WebView2
-    // browser process (msedgewebview2.exe) may still be running and holding the profile lock.
-    // When WebView2 can't acquire the lock it silently falls back to ephemeral temp storage —
-    // every cookie and localStorage entry is lost for that session.
-    //
-    // We read the old PID from the sentinel file and wait for that process to actually exit
-    // (up to 3 s) rather than using a blind fixed sleep.  After the process is gone we add
-    // an extra 500 ms so WebView2's own post-exit cleanup (SQLite flush) can complete.
-    //
-    // Secondary (new window) instances skip the sentinel — the primary window owns it.
-    let crash_sentinel: Option<std::path::PathBuf> = if !new_window {
-        let p = data_dir.join("running.lock");
-        if p.exists() {
-            tracing::warn!("previous session ended without clean shutdown — waiting for WebView2 to release profile lock");
-            wait_for_previous_instance(&p);
-        }
-        let _ = std::fs::write(&p, std::process::id().to_string().as_bytes());
-        Some(p)
-    } else {
-        None
-    };
-
     // Shared WebContext: all content WebViews use the same data folder so
     // cookies, localStorage, and HTTP cache persist across restarts and are
     // shared between tabs (same as how a real browser works).
     // Ensure webview_data dir exists before handing it to WebView2.
     // WebView2 will fail silently and use a temp folder (losing cookies) if the path
     // doesn't exist or is locked by a stale process, so we pre-create it here.
-    let webview_data_dir = data_dir.join("webview_data");
     std::fs::create_dir_all(&webview_data_dir).expect("create WebView2 profile");
     encrypt_app_storage(&webview_data_dir);
     #[cfg(windows)]
@@ -507,10 +512,12 @@ fn main() {
     let mut content_hwnds: HashMap<String, isize> = HashMap::new();
     let mut load_watches: HashMap<String, u64> = HashMap::new();
     let mut load_watch_next = 0u64;
+    let mut cover_was_open = false;
+    let mut cover_watch_id = 0u64;
     let mut last_active_tab_id: Option<String> = state.tab_manager.active_tab_id.clone();
-    let mut keepalive_at = Instant::now() + TAB_KEEPALIVE_EVERY;
-    let mut keepalive_pos = 0usize;
     let mut sleep_check_at = Instant::now() + TAB_SLEEP_CHECK_EVERY;
+    let mut heal_content_at = Instant::now() + HEAL_CONTENT_EVERY;
+    let mut save_id = 0u64;
     let ubol_dir = ubol_dir();
     let mut ubol_done = false;
     let mut ubol_enabled: Option<bool> = None;
@@ -525,7 +532,6 @@ fn main() {
         } else {
             content_web_context.as_mut().unwrap()
         };
-        let _ = restored_tabs.remove(&first_tab_id);
         let first_ad_script = state.ad_block_engine.init_script().to_string();
         match build_content_webview(
             &window,
@@ -914,6 +920,13 @@ fn main() {
                 run_shortcut(code as usize, &proxy_main, &state);
             }
 
+            Event::UserEvent(AppEvent::SaveSession { id }) => {
+                if save_id == id {
+                    save_id = 0;
+                    save_session(&state);
+                }
+            }
+
             Event::UserEvent(AppEvent::ContentProcessFailed { tab_id, fatal }) => {
                 let url = state
                     .tab_manager
@@ -1036,6 +1049,20 @@ fn main() {
                 }
             }
 
+            Event::UserEvent(AppEvent::CoverWatchdog { id }) => {
+                if id == cover_watch_id && state.content_cover_open {
+                    state.set_content_cover(&chrome, false);
+                    apply_layout(
+                        &chrome,
+                        chrome_hwnd,
+                        &content_views,
+                        &state,
+                        &layout_config,
+                        &window,
+                    );
+                }
+            }
+
             Event::UserEvent(app_event) => {
                 if matches!(
                     &app_event,
@@ -1078,6 +1105,7 @@ fn main() {
                     tab_id,
                     url,
                     native,
+                    ..
                 } = &app_event
                 {
                     if *native {
@@ -1102,7 +1130,26 @@ fn main() {
                     AppEvent::ContentLoadProgress { tab_id, .. } => Some(tab_id.clone()),
                     _ => None,
                 };
+                let load_end_tab_id = match &app_event {
+                    AppEvent::ContentLoadEnd { tab_id, .. } => Some(tab_id.clone()),
+                    _ => None,
+                };
+                let defer_session = matches!(&app_event, AppEvent::ContentMetadata { .. });
+                let cover_before = state.content_cover_open;
                 let action_opt = handle_app_event_inner(app_event, &mut state, &chrome);
+                clear_stale_cover(&mut state, &chrome);
+                let cover_cleared = cover_before && !state.content_cover_open;
+                if let Some(tab_id) = load_end_tab_id {
+                    let done = state
+                        .tab_manager
+                        .get_tab(&tab_id)
+                        .map(|tab| tab.status == crate::browser::tab::TabStatus::Complete)
+                        .unwrap_or(false)
+                        && !state.native_loads.contains_key(&tab_id);
+                    if done {
+                        restored_tabs.remove(&tab_id);
+                    }
+                }
                 if let Some(tab_id) = progress_tab_id {
                     if state
                         .tab_manager
@@ -1129,7 +1176,12 @@ fn main() {
                         &mut ubol_tab,
                     );
                     if persist_session {
-                        save_session(&state);
+                        if defer_session {
+                            queue_session_save(&rt, &proxy_main, &mut save_id);
+                        } else {
+                            save_id = 0;
+                            save_session(&state);
+                        }
                     }
                     if matches!(action, TabAction::SyncClipOnly | TabAction::SyncSidebarClip) {
                         let layout = AppLayout::calculate(
@@ -1151,6 +1203,9 @@ fn main() {
 
                     let cover = action_content_cover(&action, &state, &content_views);
                     state.set_content_cover(&chrome, cover);
+                    if cover {
+                        arm_cover_watch(&rt, &proxy_main, &mut cover_watch_id);
+                    }
                     apply_layout(
                         &chrome,
                         chrome_hwnd,
@@ -1259,6 +1314,19 @@ fn main() {
                                 &window,
                             );
                         }
+                        TabAction::DropContent { tab_id } => {
+                            content_views.remove(&tab_id);
+                            content_hwnds.remove(&tab_id);
+                            clear_load_watches(&mut load_watches, &tab_id);
+                            apply_layout(
+                                &chrome,
+                                chrome_hwnd,
+                                &content_views,
+                                &state,
+                                &layout_config,
+                                &window,
+                            );
+                        }
                         TabAction::SyncViews | TabAction::FocusSpotlight => {
                             if let Some(active_id) = state.tab_manager.active_tab_id.clone() {
                                 if !content_views.contains_key(&active_id) {
@@ -1281,7 +1349,6 @@ fn main() {
                                             };
                                             let ad_script =
                                                 state.ad_block_engine.init_script().to_string();
-                                            let _ = restored_tabs.remove(&active_id);
                                             if let Ok(wv) = build_content_webview(
                                                 &window,
                                                 &active_id,
@@ -1366,6 +1433,37 @@ fn main() {
                         TabAction::ContentScriptOnTab { tab_id, js } => {
                             if let Some(wv) = content_views.get(&tab_id) {
                                 let _ = wv.evaluate_script(&js);
+                            }
+                        }
+                        TabAction::FindInPage {
+                            tab_id,
+                            query,
+                            forward,
+                        } => {
+                            let result = find_empty_result(&query);
+                            let Some(wv) = content_views.get(&tab_id) else {
+                                let _ = proxy_main.send_event(AppEvent::FindResult {
+                                    tab_id,
+                                    result,
+                                });
+                                return;
+                            };
+                            let js = find_page_script(&query, forward);
+                            let proxy_find = proxy_main.clone();
+                            let tab_id_cb = tab_id.clone();
+                            let failed = wv
+                                .evaluate_script_with_callback(&js, move |result| {
+                                    let _ = proxy_find.send_event(AppEvent::FindResult {
+                                        tab_id: tab_id_cb.clone(),
+                                        result,
+                                    });
+                                })
+                                .is_err();
+                            if failed {
+                                let _ = proxy_main.send_event(AppEvent::FindResult {
+                                    tab_id,
+                                    result,
+                                });
                             }
                         }
                         TabAction::SetZoom(level) => {
@@ -1605,11 +1703,37 @@ fn main() {
                                 &window,
                             );
                             if let Some(wv) = content_views.get(&tab_id) {
+                                let restored = restored_tabs.contains(&tab_id);
+                                let sleeping = state
+                                    .tab_manager
+                                    .get_tab(&tab_id)
+                                    .map(|tab| tab.sleeping)
+                                    .unwrap_or(false);
+                                let is_loading = state
+                                    .tab_manager
+                                    .get_tab(&tab_id)
+                                    .map(|tab| {
+                                        tab.status == crate::browser::tab::TabStatus::Loading
+                                    })
+                                    .unwrap_or(loading);
                                 state.tab_manager.wake_tab(&tab_id);
                                 let _ = wv.focus();
                                 let _ = wv.zoom(tab_zoom(&state, &tab_id));
-                                let _ = restored_tabs.remove(&tab_id);
-                                if loading {
+                                if (restored || sleeping) && !is_loading {
+                                    state.load_recoveries.remove(&app::load_key(&tab_id, &url));
+                                    begin_native_load(&mut state, &chrome, &tab_id);
+                                    state.push_state_to_chrome(&chrome);
+                                    wake_content_webview(wv);
+                                    let _ = wv.load_url(&url);
+                                    watch_load(
+                                        &rt,
+                                        &proxy_main,
+                                        &mut load_watches,
+                                        &mut load_watch_next,
+                                        tab_id.clone(),
+                                        url.clone(),
+                                    );
+                                } else if is_loading {
                                     state.load_recoveries.remove(&app::load_key(&tab_id, &url));
                                     watch_load(
                                         &rt,
@@ -1628,7 +1752,6 @@ fn main() {
                                     content_web_context.as_mut().unwrap()
                                 };
                                 let ad_script = state.ad_block_engine.init_script().to_string();
-                                let _ = restored_tabs.remove(&tab_id);
                                 match build_content_webview(
                                     &window,
                                     &tab_id,
@@ -1979,9 +2102,11 @@ fn main() {
                         #[cfg(windows)]
                         sync_content_z_order(&content_views, chrome_hwnd, &state, true);
                         if let Some(ref id) = current_active {
-                            let _ = restored_tabs.remove(id);
                             if let Some(wv) = content_views.get(id) {
-                                let _ = wv.focus();
+                                if !chrome_owns_content(&state) {
+                                    wake_content_webview(wv);
+                                    let _ = wv.focus();
+                                }
                             }
                             if let Some(tab) = state.tab_manager.get_tab(id) {
                                 let url = tab.url.clone();
@@ -2007,8 +2132,25 @@ fn main() {
                         }
                         last_active_tab_id = current_active;
                     }
-                } else if persist_session {
-                    save_session(&state);
+                } else {
+                    if persist_session {
+                        if defer_session {
+                            queue_session_save(&rt, &proxy_main, &mut save_id);
+                        } else {
+                            save_id = 0;
+                            save_session(&state);
+                        }
+                    }
+                    if cover_cleared {
+                        apply_layout(
+                            &chrome,
+                            chrome_hwnd,
+                            &content_views,
+                            &state,
+                            &layout_config,
+                            &window,
+                        );
+                    }
                 }
                 sync_active_ubol(
                     &content_views,
@@ -2021,6 +2163,32 @@ fn main() {
             }
 
             Event::MainEventsCleared => {
+                if clear_stale_cover(&mut state, &chrome) {
+                    apply_layout(
+                        &chrome,
+                        chrome_hwnd,
+                        &content_views,
+                        &state,
+                        &layout_config,
+                        &window,
+                    );
+                }
+                if state.content_cover_open && !cover_was_open {
+                    arm_cover_watch(&rt, &proxy_main, &mut cover_watch_id);
+                } else if !state.content_cover_open && cover_was_open {
+                    #[cfg(windows)]
+                    {
+                        let layout = AppLayout::calculate(
+                            layout_size(&window, &state),
+                            window.scale_factor(),
+                            &state,
+                            &layout_config,
+                        );
+                        nudge_active_content(&content_views, &content_hwnds, &state, layout);
+                    }
+                }
+                cover_was_open = state.content_cover_open;
+
                 let code = shortcut_msg.swap(SC_NONE, Ordering::SeqCst);
                 if code != SC_NONE {
                     run_shortcut(code, &proxy_main, &state);
@@ -2044,31 +2212,18 @@ fn main() {
                     );
                     sync_fullscreen_layout = false;
                 }
-                if Instant::now() >= keepalive_at {
-                    let active = state.tab_manager.active_tab_id.as_deref().unwrap_or("");
-                    let ids: Vec<String> = state
-                        .tab_manager
-                        .tabs
-                        .iter()
-                        .filter(|tab| tab.id != active)
-                        .filter(|tab| !tab.is_neura_page())
-                        .filter(|tab| content_views.contains_key(&tab.id))
-                        .map(|tab| tab.id.clone())
-                        .collect();
-                    if !ids.is_empty() {
-                        keepalive_pos %= ids.len();
-                        if let Some(id) = ids.get(keepalive_pos) {
-                            if let Some(wv) = content_views.get(id) {
-                                wake_content_webview(wv);
-                            }
-                            #[cfg(windows)]
-                            if let Some(&hwnd) = content_hwnds.get(id) {
-                                repaint_content_webview(hwnd);
-                            }
-                        }
-                        keepalive_pos = keepalive_pos.wrapping_add(1);
+                if Instant::now() >= heal_content_at {
+                    heal_content_at = Instant::now() + HEAL_CONTENT_EVERY;
+                    #[cfg(windows)]
+                    {
+                        let layout = AppLayout::calculate(
+                            layout_size(&window, &state),
+                            window.scale_factor(),
+                            &state,
+                            &layout_config,
+                        );
+                        heal_active_content(&content_views, &content_hwnds, &state, layout);
                     }
-                    keepalive_at = Instant::now() + TAB_KEEPALIVE_EVERY;
                 }
                 if Instant::now() >= sleep_check_at {
                     sleep_check_at = Instant::now() + TAB_SLEEP_CHECK_EVERY;
@@ -2076,7 +2231,7 @@ fn main() {
                     let free_mb = available_memory_mb();
                     let threshold_ms = sleep_threshold_ms(free_mb) as i64;
                     let active = state.tab_manager.active_tab_id.clone().unwrap_or_default();
-                    let to_sleep: Vec<String> = state
+                    let mut to_sleep: Vec<String> = state
                         .tab_manager
                         .tabs
                         .iter()
@@ -2091,6 +2246,28 @@ fn main() {
                         })
                         .map(|t| t.id.clone())
                         .collect();
+                    if content_views.len() > MAX_LIVE_WEBVIEWS {
+                        let need = content_views.len() - MAX_LIVE_WEBVIEWS;
+                        let mut extra: Vec<(String, i64)> = state
+                            .tab_manager
+                            .tabs
+                            .iter()
+                            .filter(|t| {
+                                t.id != active
+                                    && !t.is_neura_page()
+                                    && !t.sleeping
+                                    && t.status != crate::browser::tab::TabStatus::Loading
+                                    && !t.is_audio_playing
+                                    && content_views.contains_key(&t.id)
+                                    && !to_sleep.iter().any(|id| id == &t.id)
+                            })
+                            .map(|t| (t.id.clone(), t.last_active_at))
+                            .collect();
+                        extra.sort_by_key(|(_, last)| *last);
+                        to_sleep.extend(extra.into_iter().take(need).map(|(id, _)| id));
+                    }
+                    to_sleep.sort();
+                    to_sleep.dedup();
                     for id in to_sleep {
                         content_views.remove(&id);
                         content_hwnds.remove(&id);
@@ -2204,6 +2381,25 @@ fn main() {
                     &layout_config,
                     &window,
                 );
+            }
+
+            Event::WindowEvent {
+                event: WindowEvent::Focused(true),
+                ..
+            } => {
+                if chrome_owns_content(&state) {
+                    return;
+                }
+                if let Some(id) = state.tab_manager.active_tab_id.clone() {
+                    if let Some(wv) = content_views.get(&id) {
+                        wake_content_webview(wv);
+                        let _ = wv.focus();
+                    }
+                    #[cfg(windows)]
+                    if let Some(&hwnd) = content_hwnds.get(&id) {
+                        repaint_content_webview(hwnd);
+                    }
+                }
             }
 
             Event::WindowEvent {
@@ -2532,12 +2728,7 @@ async fn run_cookie_save_task(
     tracing::debug!("cookie_store save task: channel closed, exiting");
 }
 
-/// Wait for the previous Ventus instance (identified by PID in `sentinel`) to exit before
-/// we attempt to open the same WebView2 profile directory.  If the process is already gone
-/// the function returns immediately (plus a short 200 ms cleanup delay).  If it is still
-/// running we wait up to 3 s for it to exit, then add 500 ms for WebView2's own post-exit
-/// SQLite flush.  Falls back to a plain 800 ms sleep if the PID cannot be read or opened.
-fn wait_for_previous_instance(sentinel: &std::path::Path) {
+fn wait_for_previous_instance(sentinel: &std::path::Path, profiles: &[&std::path::Path]) {
     #[cfg(windows)]
     {
         use windows::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0};
@@ -2545,58 +2736,50 @@ fn wait_for_previous_instance(sentinel: &std::path::Path) {
             OpenProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE,
         };
 
-        // Read PID written at the previous startup.
         let old_pid: Option<u32> = std::fs::read_to_string(sentinel)
             .ok()
             .and_then(|s| s.trim().parse().ok());
 
         if let Some(pid) = old_pid {
-            // SAFETY: standard Win32 call; handle is checked before use.
             let handle = unsafe { OpenProcess(PROCESS_SYNCHRONIZE, false, pid) };
             match handle {
                 Ok(h) if !h.is_invalid() => {
                     tracing::debug!("waiting for previous Ventus PID {} to exit", pid);
-                    // Wait up to 3 s for the old process to finish releasing WebView2 resources.
                     let result = unsafe { WaitForSingleObject(h, 3000) };
                     unsafe {
                         let _ = CloseHandle(h);
                     }
                     if result == WAIT_OBJECT_0 {
-                        tracing::debug!(
-                            "previous instance exited; sleeping 500 ms for WebView2 cleanup"
+                        let _ = wait_for_webview_profiles_released(
+                            profiles,
+                            Duration::from_millis(500),
                         );
-                        std::thread::sleep(Duration::from_millis(500));
                     } else {
                         tracing::warn!(
                             "previous instance (PID {}) did not exit within 3 s; proceeding anyway",
                             pid
                         );
-                        std::thread::sleep(Duration::from_millis(500));
+                        let _ = wait_for_webview_profiles_released(
+                            profiles,
+                            Duration::from_millis(500),
+                        );
                     }
                     return;
                 }
-                // Process already gone — this is the crash/kill scenario.
-                // msedgewebview2.exe detects the host PID is gone and begins its own
-                // shutdown, but it still needs time to flush the cookie SQLite database
-                // and release the exclusive profile lock.  200 ms was reliably too short
-                // on every machine tested; 2 500 ms covers slow laptops under load while
-                // keeping the restart feel acceptable for what is already an abnormal exit.
                 _ => {
-                    tracing::debug!(
-                        "previous Ventus instance already gone; \
-                         waiting 2 500 ms for WebView2 profile lock to be released"
-                    );
-                    std::thread::sleep(Duration::from_millis(2_500));
+                    tracing::debug!("previous Ventus instance already gone");
+                    let _ =
+                        wait_for_webview_profiles_released(profiles, Duration::from_millis(2_500));
                     return;
                 }
             }
         }
-        // Fallback: PID couldn't be read — use a safe fixed sleep.
-        std::thread::sleep(Duration::from_millis(800));
+        let _ = wait_for_webview_profiles_released(profiles, Duration::from_millis(800));
     }
     #[cfg(not(windows))]
     {
         let _ = sentinel;
+        let _ = profiles;
         std::thread::sleep(Duration::from_millis(800));
     }
 }
@@ -2830,6 +3013,8 @@ fn attach_navigation_handler(
 
     let navs = Arc::new(Mutex::new(HashMap::<u64, String>::new()));
     let navs_start = Arc::clone(&navs);
+    let proxy_start = proxy.clone();
+    let tab_start = tab_id.clone();
     let start_handler = NavigationStartingEventHandler::create(Box::new(move |_sender, args| {
         let Some(args) = args else {
             return Ok(());
@@ -2844,8 +3029,15 @@ fn attach_navigation_handler(
                 return Ok(());
             }
             if let Ok(mut map) = navs_start.lock() {
-                map.insert(id, url);
+                map.insert(id, url.clone());
             }
+            tracing::info!(target: "ventus::nav", tab = %tab_start, nav_id = id, url = %url, "NavigationStarting");
+            let _ = proxy_start.send_event(AppEvent::ContentLoadStart {
+                tab_id: tab_start.clone(),
+                url,
+                native: true,
+                nav_id: id,
+            });
         }
         Ok(())
     }));
@@ -2881,11 +3073,15 @@ fn attach_navigation_handler(
             };
             if ok.as_bool() {
                 if is_recoverable_nav_url(&url) {
+                    tracing::info!(target: "ventus::nav", tab = %tab_id, nav_id = id, url = %url, "NavigationCompleted OK");
                     let _ = proxy.send_event(AppEvent::ContentLoadEnd {
                         tab_id: tab_id.clone(),
                         start_url,
                         url,
+                        nav_id: id,
                     });
+                } else {
+                    tracing::warn!(target: "ventus::nav", tab = %tab_id, nav_id = id, source = %url, "NavigationCompleted OK but non-recoverable URL (dropped)");
                 }
                 return Ok(());
             }
@@ -2894,10 +3090,12 @@ fn attach_navigation_handler(
             }
             let mut status = Default::default();
             let _ = args.WebErrorStatus(&mut status);
+            tracing::warn!(target: "ventus::nav", tab = %tab_id, nav_id = id, status = status.0, url = %url, "NavigationCompleted FAILED");
             let _ = proxy.send_event(AppEvent::ContentNavigationFailed {
                 tab_id: tab_id.clone(),
                 url: url.clone(),
                 status: status.0,
+                nav_id: id,
             });
             if let Some(http_url) = https_to_http(&url) {
                 let _ = proxy.send_event(AppEvent::HttpsUpgradeFailed {
@@ -3368,7 +3566,82 @@ fn attach_accelerators(wv: &WebView, proxy: tao::event_loop::EventLoopProxy<AppE
     }
 }
 
+/// Create a content WebView, retrying briefly when WebView2 reports the user-data profile
+/// is locked / in use (HRESULT 0x800700AA, ERROR_BUSY).
+///
+/// That error means a previous Ventus — or an orphaned `msedgewebview2.exe` child left by
+/// an unclean shutdown (crash, force-kill, or the old one-environment-per-tab behaviour) —
+/// has not yet released the `webview_data` profile lock. Without a retry the tab would have
+/// no WebView at all and sit permanently black with a spinning loader (the exact "loads
+/// forever" failure). The lock is transient: a stale WebView2 browser process exits once
+/// its host is gone, so a few short attempts recover cleanly. Only the failure path
+/// sleeps — a normal create returns on the first attempt with no delay. In practice this
+/// only ever matters for the FIRST content WebView (which creates the shared environment);
+/// later tabs reuse that environment and never touch the profile lock.
 fn build_content_webview(
+    window: &tao::window::Window,
+    tab_id: &str,
+    url: &str,
+    rect: Rect,
+    proxy: tao::event_loop::EventLoopProxy<AppEvent>,
+    web_context: &mut wry::WebContext,
+    incognito: bool,
+    download_dir: std::sync::Arc<std::sync::Mutex<DownloadPrefs>>,
+    global_zoom: f64,
+    browser_args: &str,
+    ad_block_script: String,
+    fingerprint: bool,
+    strict: bool,
+    https_only: bool,
+    load_now: bool,
+) -> anyhow::Result<WebView> {
+    const MAX_ATTEMPTS: u32 = 6;
+    let mut attempt = 0u32;
+    loop {
+        attempt += 1;
+        let result = build_content_webview_once(
+            window,
+            tab_id,
+            url,
+            rect,
+            proxy.clone(),
+            web_context,
+            incognito,
+            std::sync::Arc::clone(&download_dir),
+            global_zoom,
+            browser_args,
+            ad_block_script.clone(),
+            fingerprint,
+            strict,
+            https_only,
+            load_now,
+        );
+        match result {
+            Ok(wv) => {
+                if attempt > 1 {
+                    tracing::info!(target: "ventus::nav", tab = %tab_id, attempt, "content WebView created after retrying a busy profile lock");
+                }
+                return Ok(wv);
+            }
+            Err(e) if attempt < MAX_ATTEMPTS && is_profile_busy_error(&e) => {
+                tracing::warn!(target: "ventus::nav", tab = %tab_id, attempt, error = %e, "content WebView profile busy (locked); retrying");
+                std::thread::sleep(Duration::from_millis(600));
+            }
+            Err(e) => return Err(e),
+        }
+    }
+}
+
+/// True when a WebView2 build error is the transient "user-data profile is locked / in use"
+/// failure (ERROR_BUSY, 0x800700AA) that a short retry can clear.
+fn is_profile_busy_error(err: &anyhow::Error) -> bool {
+    let msg = err.to_string().to_lowercase();
+    msg.contains("0x800700aa")
+        || msg.contains("requested resource is in use")
+        || msg.contains("class not registered")
+}
+
+fn build_content_webview_once(
     window: &tao::window::Window,
     tab_id: &str,
     url: &str,
@@ -3387,10 +3660,12 @@ fn build_content_webview(
 ) -> anyhow::Result<WebView> {
     let is_neura = url.starts_with("neura://");
     let proxy_ipc = proxy.clone();
+    #[cfg(not(windows))]
     let proxy_load = proxy.clone();
     let proxy_dl_start = proxy.clone();
     let proxy_dl_complete = proxy.clone();
     let tab_id_ipc = tab_id.to_string();
+    #[cfg(not(windows))]
     let tab_id_str = tab_id.to_string();
     let dl_dir_arc = std::sync::Arc::clone(&download_dir);
 
@@ -3485,6 +3760,7 @@ fn build_content_webview(
                             tab_id: tab_id_ipc.clone(),
                             url,
                             native: false,
+                            nav_id: 0,
                         });
                     }
                     return;
@@ -3606,6 +3882,7 @@ fn build_content_webview(
         })
         .with_navigation_handler({
             let proxy_nav = proxy.clone();
+            #[cfg(not(windows))]
             let tab_id_nav = tab_id.to_string();
             move |url| {
                 if https_only {
@@ -3616,11 +3893,15 @@ fn build_content_webview(
                     }
                 }
                 if !url.trim().is_empty() && url != "about:blank" {
-                    let _ = proxy_nav.send_event(AppEvent::ContentLoadStart {
-                        tab_id: tab_id_nav.clone(),
-                        url: url.clone(),
-                        native: true,
-                    });
+                    #[cfg(not(windows))]
+                    {
+                        let _ = proxy_nav.send_event(AppEvent::ContentLoadStart {
+                            tab_id: tab_id_nav.clone(),
+                            url: url.clone(),
+                            native: true,
+                            nav_id: 0,
+                        });
+                    }
                 }
                 true
             }
@@ -3632,11 +3913,17 @@ fn build_content_webview(
                 } else {
                     loaded_url
                 };
-                let _ = proxy_load.send_event(AppEvent::ContentLoadStart {
-                    tab_id: tab_id_str.clone(),
-                    url: nav_url,
-                    native: true,
-                });
+                #[cfg(windows)]
+                let _ = nav_url;
+                #[cfg(not(windows))]
+                {
+                    let _ = proxy_load.send_event(AppEvent::ContentLoadStart {
+                        tab_id: tab_id_str.clone(),
+                        url: nav_url,
+                        native: true,
+                        nav_id: 0,
+                    });
+                }
             }
             wry::PageLoadEvent::Finished => {
                 let nav_url = if is_neura && !loaded_url.starts_with("http") {
@@ -3657,6 +3944,7 @@ fn build_content_webview(
                         tab_id: tab_id_str.clone(),
                         start_url: nav_url.clone(),
                         url: nav_url,
+                        nav_id: 0,
                     });
                 }
             }
@@ -3738,6 +4026,7 @@ fn build_content_webview(
         }
     }
 
+    tracing::info!(target: "ventus::nav", tab = %tab_id, url = %url, load_now, incognito, "content WebView built");
     Ok(wv)
 }
 
@@ -3755,6 +4044,8 @@ fn clear_tab_favicon(state: &mut AppState, tab_id: &str) {
 
 fn begin_native_load(state: &mut AppState, chrome: &WebView, tab_id: &str) {
     clear_tab_favicon(state, tab_id);
+    state.native_loads.remove(tab_id);
+    state.native_nav_ids.remove(tab_id);
     state.tab_manager.set_tab_loading(tab_id, true);
     state.load_progress.insert(tab_id.to_string(), 0.0);
     if state.tab_manager.active_tab_id.as_deref() == Some(tab_id) {
@@ -3777,9 +4068,12 @@ fn download_prefs_from_settings(settings: &config::AppSettings) -> DownloadPrefs
 }
 
 fn webview_args(settings: &config::AppSettings) -> String {
+    // NOTE: do NOT disable "msPdfOOUI" — on current WebView2 runtimes that makes the
+    // built-in PDF viewer render blank/stuck, breaking file:// PDF tabs (the "Read PDF"
+    // feature). Keeping it enabled also restores the PDF toolbar (zoom/print/download).
+    // "msWebOOUI" only governs web overlay UI (web capture/select) and is safe to disable.
     let disable_features = vec![
         "msWebOOUI".to_string(),
-        "msPdfOOUI".to_string(),
         "msSmartScreenProtection".to_string(),
         "SleepingTabs".to_string(),
         "AutoDiscardTabs".to_string(),
@@ -4040,6 +4334,192 @@ fn content_initialization_script(
     } catch (_) {}
   };
   if (!isTop) return;
+  const findApi = (() => {
+    let q = '';
+    let ranges = [];
+    let spans = [];
+    let idx = -1;
+    const sid = '__ventus_find_style';
+    const hn = 'ventus-find-match';
+    const an = 'ventus-find-active';
+    const addStyle = () => {
+      if (document.getElementById(sid)) return;
+      const el = document.createElement('style');
+      el.id = sid;
+      el.textContent = '::highlight(ventus-find-match){background:rgba(255,218,68,.72);color:inherit}::highlight(ventus-find-active){background:#ff9f1c;color:#111}.__ventus-find-match{background:rgba(255,218,68,.72);color:inherit;border-radius:2px}.__ventus-find-active{background:#ff9f1c!important;color:#111!important}';
+      (document.head || document.documentElement).appendChild(el);
+    };
+    const useRanges = () => !!(window.CSS && CSS.highlights && typeof Highlight !== 'undefined' && typeof Range !== 'undefined');
+    const clearRanges = () => {
+      try {
+        if (window.CSS && CSS.highlights) {
+          CSS.highlights.delete(hn);
+          CSS.highlights.delete(an);
+        }
+      } catch (_) {}
+      ranges = [];
+    };
+    const clearSpans = () => {
+      for (const span of spans) {
+        const p = span.parentNode;
+        if (!p) continue;
+        p.replaceChild(document.createTextNode(span.textContent || ''), span);
+        try { p.normalize(); } catch (_) {}
+      }
+      spans = [];
+    };
+    const clear = () => {
+      clearRanges();
+      clearSpans();
+      idx = -1;
+      try {
+        const sel = window.getSelection && window.getSelection();
+        if (sel) sel.removeAllRanges();
+      } catch (_) {}
+    };
+    const skip = (n) => {
+      if (!n || !n.nodeValue || !n.nodeValue.trim()) return true;
+      const p = n.parentElement;
+      if (!p) return true;
+      return !!p.closest('script,style,noscript,textarea,input,select,option,.__ventus-find-match');
+    };
+    const nodes = () => {
+      const root = document.body;
+      if (!root || !window.NodeFilter) return [];
+      const out = [];
+      const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+        acceptNode(n) {
+          return skip(n) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+        }
+      });
+      let n = w.nextNode();
+      while (n) {
+        out.push(n);
+        n = w.nextNode();
+      }
+      return out;
+    };
+    const matchRanges = (needle) => {
+      const out = [];
+      const low = needle.toLowerCase();
+      for (const n of nodes()) {
+        const text = n.nodeValue || '';
+        const hay = text.toLowerCase();
+        let at = hay.indexOf(low);
+        while (at >= 0) {
+          const r = document.createRange();
+          r.setStart(n, at);
+          r.setEnd(n, at + needle.length);
+          out.push(r);
+          at = hay.indexOf(low, at + needle.length);
+        }
+      }
+      return out;
+    };
+    const total = () => ranges.length || spans.length;
+    const next = (same, forward) => {
+      const n = total();
+      if (!n) return -1;
+      if (!same || idx < 0) return forward ? 0 : n - 1;
+      return (idx + (forward ? 1 : -1) + n) % n;
+    };
+    const res = (needle) => ({query: needle, total: total(), index: idx >= 0 ? idx + 1 : 0});
+    const rangeRect = (r) => {
+      const rect = r.getBoundingClientRect();
+      if (rect && (rect.width || rect.height)) return rect;
+      const rs = r.getClientRects();
+      return rs && rs.length ? rs[0] : null;
+    };
+    const showRange = () => {
+      if (idx < 0 || !ranges[idx]) return;
+      try {
+        const h = new Highlight();
+        h.add(ranges[idx]);
+        CSS.highlights.set(an, h);
+      } catch (_) {}
+      try {
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(ranges[idx]);
+      } catch (_) {}
+      const rect = rangeRect(ranges[idx]);
+      if (rect) window.scrollBy({top: rect.top - window.innerHeight * 0.35, left: rect.left - window.innerWidth * 0.35, behavior: 'smooth'});
+    };
+    const runRanges = (needle, forward) => {
+      ranges = matchRanges(needle);
+      try {
+        const h = new Highlight();
+        ranges.forEach(r => h.add(r));
+        CSS.highlights.set(hn, h);
+      } catch (_) {}
+      idx = next(false, forward);
+      showRange();
+      return res(needle);
+    };
+    const makeSpans = (needle) => {
+      const low = needle.toLowerCase();
+      for (const n of nodes()) {
+        const text = n.nodeValue || '';
+        const hay = text.toLowerCase();
+        let at = hay.indexOf(low);
+        if (at < 0) continue;
+        const frag = document.createDocumentFragment();
+        let last = 0;
+        while (at >= 0) {
+          if (at > last) frag.appendChild(document.createTextNode(text.slice(last, at)));
+          const span = document.createElement('span');
+          span.className = '__ventus-find-match';
+          span.textContent = text.slice(at, at + needle.length);
+          spans.push(span);
+          frag.appendChild(span);
+          last = at + needle.length;
+          at = hay.indexOf(low, last);
+        }
+        if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+        n.parentNode.replaceChild(frag, n);
+      }
+    };
+    const showSpan = () => {
+      spans.forEach(s => s.classList.remove('__ventus-find-active'));
+      if (idx < 0 || !spans[idx]) return;
+      const s = spans[idx];
+      s.classList.add('__ventus-find-active');
+      try { s.scrollIntoView({block: 'center', inline: 'nearest', behavior: 'smooth'}); } catch (_) {}
+      try {
+        const r = document.createRange();
+        r.selectNodeContents(s);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(r);
+      } catch (_) {}
+    };
+    const runSpans = (needle, forward) => {
+      makeSpans(needle);
+      idx = next(false, forward);
+      showSpan();
+      return res(needle);
+    };
+    const run = (value, forward) => {
+      const needle = String(value || '');
+      if (!needle) {
+        clear();
+        q = '';
+        return res('');
+      }
+      const same = needle === q && total() > 0;
+      if (same) {
+        idx = next(true, forward !== false);
+        if (ranges.length) showRange(); else showSpan();
+        return res(needle);
+      }
+      clear();
+      q = needle;
+      addStyle();
+      return useRanges() ? runRanges(needle, forward !== false) : runSpans(needle, forward !== false);
+    };
+    return {run, clear};
+  })();
+  window.__neuraFind = findApi;
   const sendProgress = (progress) => {
     if (isTop) post({cmd:'content_progress', progress, url: location.href});
   };
@@ -4749,6 +5229,20 @@ fn watch_load(
     });
 }
 
+fn arm_cover_watch(
+    rt: &tokio::runtime::Runtime,
+    proxy: &tao::event_loop::EventLoopProxy<AppEvent>,
+    id: &mut u64,
+) {
+    *id = id.wrapping_add(1).max(1);
+    let watch_id = *id;
+    let proxy = proxy.clone();
+    rt.spawn(async move {
+        tokio::time::sleep(Duration::from_millis(COVER_MAX_MS)).await;
+        let _ = proxy.send_event(AppEvent::CoverWatchdog { id: watch_id });
+    });
+}
+
 fn webview_cookie_db_exists(data_dir: &std::path::Path) -> bool {
     let base = data_dir.join("webview_data");
     [
@@ -4920,12 +5414,33 @@ fn action_content_cover(
     }
 }
 
+fn find_page_script(query: &str, forward: bool) -> String {
+    let q = serde_json::to_string(query).unwrap_or_else(|_| "\"\"".into());
+    let f = if forward { "true" } else { "false" };
+    format!(
+        "(()=>{{const q={};if(!window.__neuraFind)return {{query:q,total:0,index:0}};return window.__neuraFind.run(q,{})}})()",
+        q, f
+    )
+}
+
+fn find_empty_result(query: &str) -> String {
+    serde_json::json!({"query":query,"total":0,"index":0}).to_string()
+}
+
 fn active_tab_loading(state: &AppState) -> bool {
     state
         .tab_manager
         .active_tab()
         .map(|tab| tab.status == crate::browser::tab::TabStatus::Loading)
         .unwrap_or(false)
+}
+
+fn clear_stale_cover(state: &mut AppState, chrome: &WebView) -> bool {
+    if !state.content_cover_open || active_tab_loading(state) {
+        return false;
+    }
+    state.set_content_cover(chrome, false);
+    true
 }
 
 fn layout_size(window: &tao::window::Window, state: &AppState) -> PhysicalSize<u32> {
@@ -4996,6 +5511,7 @@ fn msg_shortcut(vk: u32, mods: usize, repeat: bool) -> usize {
             0x4e if shift => SC_INCOGNITO,
             0x4e => SC_NEW_WINDOW,
             0x57 => SC_CLOSE_TAB,
+            0x46 => SC_FIND,
             0x4c => SC_FOCUS_URL,
             0x4b => SC_TAB_SEARCH,
             0x48 if !shift => SC_HISTORY,
@@ -5033,6 +5549,7 @@ fn run_shortcut(code: usize, proxy: &tao::event_loop::EventLoopProxy<AppEvent>, 
             .active_tab_id
             .clone()
             .map(|id| ChromeCommand::CloseTab { id }),
+        SC_FIND => Some(ChromeCommand::OpenFindBar),
         SC_FOCUS_URL => Some(ChromeCommand::FocusAddressBar),
         SC_TAB_SEARCH => Some(ChromeCommand::OpenTabSearch),
         SC_HISTORY => Some(ChromeCommand::OpenHistoryPanel),
@@ -5502,10 +6019,7 @@ fn chrome_owns_content(state: &AppState) -> bool {
 }
 
 fn chrome_needs_top(state: &AppState) -> bool {
-    chrome_owns_content(state)
-        || state.suggestion_overlay_rect.is_some()
-        || state.ai_sidebar_open
-        || state.sidebar_auto_hide_open
+    chrome_owns_content(state) || state.suggestion_overlay_rect.is_some() || state.ai_sidebar_open
 }
 
 #[cfg(windows)]
@@ -5783,6 +6297,55 @@ fn repaint_content_webview(hwnd: isize) {
     }
 }
 
+#[cfg(windows)]
+fn nudge_active_content(
+    content_views: &HashMap<String, WebView>,
+    content_hwnds: &HashMap<String, isize>,
+    state: &AppState,
+    layout: AppLayout,
+) {
+    let Some(id) = state.tab_manager.active_tab_id.as_deref() else {
+        return;
+    };
+    let Some(wv) = content_views.get(id) else {
+        return;
+    };
+    wake_content_webview(wv);
+    let _ = wv.set_visible(false);
+    let _ = wv.set_visible(true);
+    let _ = wv.focus();
+    set_content_bounds(wv, layout.content);
+    if let Some(&hwnd) = content_hwnds.get(id) {
+        repaint_content_webview(hwnd);
+    }
+}
+
+#[cfg(windows)]
+fn heal_active_content(
+    content_views: &HashMap<String, WebView>,
+    content_hwnds: &HashMap<String, isize>,
+    state: &AppState,
+    layout: AppLayout,
+) {
+    if chrome_needs_top(state) {
+        return;
+    }
+    let Some(id) = state.tab_manager.active_tab_id.as_deref() else {
+        return;
+    };
+    let Some(wv) = content_views.get(id) else {
+        return;
+    };
+    set_content_bounds(wv, layout.content);
+    let _ = wv.set_visible(true);
+    let hwnd = content_hwnds.get(id).copied().or_else(|| webview_hwnd(wv));
+    let Some(hwnd) = hwnd else {
+        return;
+    };
+    bring_hwnd_to_top(hwnd);
+    repaint_content_webview(hwnd);
+}
+
 fn save_session(state: &AppState) {
     let active_id = state.tab_manager.active_tab_id.as_deref();
     let _ = repositories::save_session(
@@ -5792,6 +6355,20 @@ fn save_session(state: &AppState) {
         &state.tab_manager.tabs,
         active_id,
     );
+}
+
+fn queue_session_save(
+    rt: &tokio::runtime::Runtime,
+    proxy: &tao::event_loop::EventLoopProxy<AppEvent>,
+    id: &mut u64,
+) {
+    *id = id.wrapping_add(1).max(1);
+    let next = *id;
+    let proxy = proxy.clone();
+    rt.spawn(async move {
+        tokio::time::sleep(SESSION_SAVE_DELAY).await;
+        let _ = proxy.send_event(AppEvent::SaveSession { id: next });
+    });
 }
 
 fn should_save_session(event: &AppEvent) -> bool {
@@ -6954,6 +7531,7 @@ mod shortcut_tests {
             SC_REOPEN_TAB
         );
         assert_eq!(msg_shortcut(0x57, MOD_CTRL, false), SC_CLOSE_TAB);
+        assert_eq!(msg_shortcut(0x46, MOD_CTRL, false), SC_FIND);
     }
 
     #[test]

@@ -108,6 +108,13 @@ pub enum ChromeCommand {
     },
     FocusAddressBar,
     OpenTabSearch,
+    OpenFindBar,
+    FindInPage {
+        query: String,
+        forward: bool,
+        #[serde(default)]
+        tab_id: Option<String>,
+    },
     GetPageText,
     SplitView {
         mode: String,
@@ -223,8 +230,25 @@ pub enum ChromeCommand {
 pub enum AppEvent {
     Chrome(ChromeCommand),
     ChromeReady,
+    SaveSession {
+        id: u64,
+    },
+    /// Timer-driven safety net: force-dismiss the loading cover if it has obscured
+    /// the content WebView for too long (see `COVER_MAX_MS` in main.rs). While the
+    /// cover is up the chrome owns the whole window (full-window clip + top
+    /// Z-order), so the content is dark and non-interactive; this guarantees it can
+    /// never stay stuck even if the normal progress/end/recovery signals never
+    /// arrive. `id` is matched against the latest armed watchdog so stale timers
+    /// no-op.
+    CoverWatchdog {
+        id: u64,
+    },
     Shortcut {
         code: u32,
+    },
+    FindResult {
+        tab_id: String,
+        result: String,
     },
     ContentNav {
         tab_id: String,
@@ -235,11 +259,13 @@ pub enum AppEvent {
         tab_id: String,
         url: String,
         native: bool,
+        nav_id: u64,
     },
     ContentLoadEnd {
         tab_id: String,
         url: String,
         start_url: String,
+        nav_id: u64,
     },
     ContentLoadProgress {
         tab_id: String,
@@ -255,6 +281,7 @@ pub enum AppEvent {
         tab_id: String,
         url: String,
         status: i32,
+        nav_id: u64,
     },
     HttpsUpgradeFailed {
         tab_id: String,

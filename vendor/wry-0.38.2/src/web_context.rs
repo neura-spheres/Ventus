@@ -80,13 +80,25 @@ impl WebContextData {
 }
 
 #[cfg(not(gtk))]
-#[derive(Debug)]
-pub(crate) struct WebContextImpl;
+#[derive(Debug, Default)]
+pub(crate) struct WebContextImpl {
+  // Windows: the single `CoreWebView2Environment` shared by every WebView created with
+  // this context. WebView2's supported (and Microsoft-recommended) model is ONE
+  // environment with many controllers. The previous behaviour created a brand-new
+  // environment for every WebView against the same user-data folder, which causes random
+  // navigation / render failures (blank "black screen" tabs that never load) that get
+  // worse as more tabs are opened. Caching it here ties its lifetime to the WebContext:
+  // dropping or recreating the context (e.g. to apply new browser args) discards it, and
+  // the next WebView build lazily creates a fresh one.
+  #[cfg(windows)]
+  pub(crate) env:
+    Option<webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Environment>,
+}
 
 #[cfg(not(gtk))]
 impl WebContextImpl {
   fn new(_data: &WebContextData) -> Self {
-    Self
+    Self::default()
   }
 
   fn set_allows_automation(&mut self, _flag: bool) {}
