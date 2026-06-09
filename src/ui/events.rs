@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::cloud::{AuthSession, UserProfile};
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "cmd", rename_all = "snake_case")]
 pub enum ChromeCommand {
@@ -252,6 +254,30 @@ pub enum ChromeCommand {
     /// Used to dismiss chrome popovers that are clipped to their own rect (e.g. the
     /// download panel) when the user clicks out into the live web page.
     ContentPointerDown,
+    AuthSignUp {
+        email: String,
+        password: String,
+    },
+    AuthSignIn {
+        email: String,
+        password: String,
+    },
+    AuthSignInGoogle,
+    AuthSignOut,
+    AccountUpdateProfile {
+        username: String,
+        full_name: String,
+        birthdate: String,
+        bio: String,
+    },
+    AccountSetPhoto {
+        data_uri: String,
+    },
+    AccountChangePassword {
+        current: String,
+        new_password: String,
+    },
+    GetAccountState,
 }
 
 #[derive(Debug, Clone)]
@@ -457,5 +483,21 @@ pub enum AppEvent {
     PopupUrlChanged {
         id: u64,
         url: String,
+    },
+    AuthApplied {
+        session: AuthSession,
+        profile: UserProfile,
+        message: String,
+    },
+    AuthError {
+        message: String,
+    },
+    SyncPulled {
+        bookmarks: Option<String>,
+        history: Option<String>,
+        settings: Option<String>,
+    },
+    SyncPush {
+        id: u64,
     },
 }

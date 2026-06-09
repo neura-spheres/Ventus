@@ -6,6 +6,7 @@ mod adblock;
 mod ai;
 mod app;
 mod browser;
+mod cloud;
 mod config;
 mod storage;
 mod ui;
@@ -69,17 +70,7 @@ const SC_INCOGNITO: usize = 21;
 const SC_TAB_1: usize = 22;
 const SC_TAB_9: usize = 30;
 const SC_FIND: usize = 31;
-// How long the active tab may sit in the "loading" state with no completion signal
-// before the recovery ladder begins (and the interval between successive recovery steps).
-// The recovery itself is now progress-aware — a page that has committed and is rendering
-// is never torn down (see `recover_loading_tab`), so this only governs how quickly a
-// genuinely wedged / black load is retried. 6s catches those promptly while still giving
-// an ordinary load room to commit first.
 const LOAD_STALL_AFTER: u64 = 6;
-// Earlier than LOAD_STALL_AFTER: if the ACTIVE tab still hasn't committed any document
-// (pure black) by now, recreate its WebView2 controller immediately rather than making the
-// user wait out the whole stall window. Only acts on a genuinely black tab (see
-// rebuild_black_tab); committed-but-slow pages are untouched and fall through to the 6s path.
 const BLACK_PROBE_AFTER: u64 = 3;
 const COVER_MAX_MS: u64 = 1000;
 const TAB_SLEEP_CHECK_EVERY: Duration = Duration::from_secs(20);
@@ -90,8 +81,6 @@ const WEBVIEW_PROFILE_RELEASE_TIMEOUT: Duration = Duration::from_secs(5);
 const WEBVIEW_PROFILE_RELEASE_POLL: u64 = 50;
 #[cfg(windows)]
 const APP_ID: &str = "NeuraSpheres.Ventus";
-/// How often to take a proactive cookie snapshot (in addition to the
-/// per-navigation save triggered by ContentLoadEnd events).
 const COOKIE_SAVE_EVERY: Duration = Duration::from_secs(5 * 60);
 
 fn main() {
@@ -273,9 +262,6 @@ fn main() {
         start_url_server(&data_dir, proxy.clone())
     };
 
-    // Check for updates immediately, in parallel with window + WebView2 creation (the slow part
-    // of startup). The GitHub round-trip usually finishes before the UI is ready, so the result
-    // is already waiting when ChromeReady flushes it into the bottom-right notification.
     if !new_window {
         let proxy_upd = proxy.clone();
         let dismissed_ver = dismissed_update_version.clone();
@@ -455,8 +441,7 @@ fn main() {
     let crash_sentinel: Option<std::path::PathBuf> = if !new_window {
         let p = data_dir.join("running.lock");
         if p.exists() {
-            // Chrome UI and content tabs now share this one profile (one WebView2
-            // environment / browser process), so there is a single folder to wait on.
+
             let roots = vec![webview_data_dir.as_path()];
             tracing::warn!(
                 target: "ventus::startup",
@@ -483,9 +468,6 @@ fn main() {
     };
     #[cfg(windows)]
     {
-        // Log how busy/free the WebView2 profile is RIGHT BEFORE we build any WebView.
-        // If the profile is still locked here, the first content build will hit
-        // ERROR_BUSY (0x800700AA) → black tab. This line tells us if that is the cause.
         let content_free = webview_profile_lock_released(&webview_data_dir);
         tracing::info!(
             target: "ventus::startup",
@@ -494,20 +476,9 @@ fn main() {
             "[STARTUP] WebView2 profile lock state just before building WebViews"
         );
     }
-    // Browser args are fixed for the life of the process: they are baked into the WebView2
-    // environment at creation, and security-setting changes apply via a full relaunch
-    // (see TabAction::ApplyWebSecurity), so this never needs to be reassigned.
+
     let browser_args = webview_args(&state.settings);
 
-    // Shared WebView2 environment: the chrome UI WebView and every content tab run
-    // against ONE user-data folder, so they share a SINGLE msedgewebview2.exe browser
-    // process (one GPU process, one network/storage service) instead of spawning a
-    // second, duplicate process tree. Cookies, localStorage, and cache persist across
-    // restarts. The context is created BEFORE the chrome WebView so chrome can attach to
-    // it via with_web_context(); WRY caches the environment on the context and reuses it
-    // for every later WebView built from the same context.
-    // WebView2 fails silently into temp storage if the folder is missing/locked, so we
-    // pre-create it. Wrapped in Option so it can be dropped before TAO's process::exit().
     std::fs::create_dir_all(&webview_data_dir).expect("create WebView2 profile");
     encrypt_app_storage(&webview_data_dir);
     #[cfg(windows)]
@@ -587,6 +558,8 @@ fn main() {
     let mut content_views: HashMap<String, WebView> = HashMap::new();
     let mut popups: HashMap<u64, PopupWindow> = HashMap::new();
     let mut next_popup_id: u64 = 1;
+    #[cfg(windows)]
+    let mut auth_window: Option<(tao::window::Window, WebView)> = None;
     let mut content_hwnds: HashMap<String, isize> = HashMap::new();
     let mut load_watches: HashMap<String, u64> = HashMap::new();
     let mut load_watch_next = 0u64;
@@ -599,6 +572,8 @@ fn main() {
     let mut sleep_check_at = Instant::now() + TAB_SLEEP_CHECK_EVERY;
     let mut heal_content_at = Instant::now() + HEAL_CONTENT_EVERY;
     let mut save_id = 0u64;
+    let mut sync_id = 0u64;
+    let mut sync_dirty = (false, false, false);
     let ubol_dir = ubol_dir();
     let mut ubol_done = false;
     let mut ubol_enabled: Option<bool> = None;
@@ -724,6 +699,36 @@ fn main() {
     let mut fullscreen_restore_maximized: Option<bool> = None;
     let mut restore_maximized_after_fullscreen = false;
     let mut custom_maximized = false;
+    if cloud::config::is_configured() {
+        if let Ok(Some(refresh_token)) =
+            storage::keychain::get_api_key(cloud::KEYCHAIN_REFRESH_KEY)
+        {
+            let proxy_restore = proxy.clone();
+            let region = state.settings.region.clone();
+            let cached =
+                settings_store::get::<cloud::UserProfile>(&state.conn, cloud::PROFILE_CACHE_KEY)
+                    .ok()
+                    .flatten();
+            rt.spawn(async move {
+                if let Ok(session) = cloud::auth::refresh(&refresh_token).await {
+                    let (session, profile) =
+                        cloud::finalize_sign_in(session, None, None, region, cached).await;
+                    let pull_session = session.clone();
+                    let _ = proxy_restore.send_event(AppEvent::AuthApplied {
+                        session,
+                        profile,
+                        message: String::new(),
+                    });
+                    let snap = cloud::pull_all(&pull_session).await;
+                    let _ = proxy_restore.send_event(AppEvent::SyncPulled {
+                        bookmarks: snap.bookmarks,
+                        history: snap.history,
+                        settings: snap.settings,
+                    });
+                }
+            });
+        }
+    }
     // Periodic proactive cookie snapshot (backs up cookies even between navigations).
     let mut cookie_save_at = Instant::now() + COOKIE_SAVE_EVERY;
     event_loop.run(move |event, elwt, control_flow| {
@@ -877,6 +882,61 @@ fn main() {
                 handle_ai_quick_action(action, &state, &chrome, &proxy_main, &rt);
             }
 
+            Event::UserEvent(AppEvent::Chrome(ChromeCommand::AuthSignUp { email, password })) => {
+                auth_email_password(true, email, password, &state, &proxy_main, &rt);
+            }
+
+            Event::UserEvent(AppEvent::Chrome(ChromeCommand::AuthSignIn { email, password })) => {
+                auth_email_password(false, email, password, &state, &proxy_main, &rt);
+            }
+
+            Event::UserEvent(AppEvent::Chrome(ChromeCommand::AuthSignInGoogle)) => {
+                if let Some(port) = auth_google(&state, &chrome, &proxy_main, &rt) {
+                    #[cfg(windows)]
+                    {
+                        auth_window = None;
+                        if let Some(ctx) = content_web_context.as_mut() {
+                            auth_window = spawn_auth_window(
+                                elwt,
+                                &window,
+                                port,
+                                ctx,
+                                proxy_main.clone(),
+                                &browser_args,
+                            );
+                        }
+                    }
+                }
+            }
+
+            Event::UserEvent(AppEvent::Chrome(ChromeCommand::AccountUpdateProfile {
+                username,
+                full_name,
+                birthdate,
+                bio,
+            })) => {
+                account_update_profile(
+                    username,
+                    full_name,
+                    birthdate,
+                    bio,
+                    &state,
+                    &proxy_main,
+                    &rt,
+                );
+            }
+
+            Event::UserEvent(AppEvent::Chrome(ChromeCommand::AccountSetPhoto { data_uri })) => {
+                account_set_photo(data_uri, &state, &chrome, &proxy_main, &rt);
+            }
+
+            Event::UserEvent(AppEvent::Chrome(ChromeCommand::AccountChangePassword {
+                current,
+                new_password,
+            })) => {
+                account_change_password(current, new_password, &state, &proxy_main, &rt);
+            }
+
             // JS resize-handle mousedown → initiate native Win32 resize via ReleaseCapture
             // + SendMessage(WM_NCLBUTTONDOWN, hit_code).  This is the standard way to
             // trigger a system resize loop from a frameless window without NC hit testing.
@@ -1002,6 +1062,10 @@ fn main() {
                     save_session(&state);
                 }
                 save_open_cookies(&content_views, &state, &data_dir);
+                #[cfg(windows)]
+                {
+                    let _ = auth_window.take();
+                }
                 popups.clear();
                 close_chrome_controller(&chrome);
                 shutdown_webview2(
@@ -1076,6 +1140,22 @@ fn main() {
                 if save_id == id {
                     save_id = 0;
                     save_session(&state);
+                }
+            }
+
+            Event::UserEvent(AppEvent::SyncPush { id }) => {
+                if sync_id == id {
+                    sync_id = 0;
+                    let (db, dh, ds) = sync_dirty;
+                    sync_dirty = (false, false, false);
+                    if let Some(session) = state.auth.clone() {
+                        let bookmarks = db.then(|| cloud_bookmarks_blob(&state));
+                        let history = dh.then(|| cloud_history_blob(&state));
+                        let settings = ds.then(|| {
+                            serde_json::to_string(&state.settings).unwrap_or_default()
+                        });
+                        rt.spawn(cloud::push_blobs(session, bookmarks, history, settings));
+                    }
                 }
             }
 
@@ -1311,8 +1391,27 @@ fn main() {
                     _ => None,
                 };
                 let defer_session = matches!(&app_event, AppEvent::ContentMetadata { .. });
+                let auth_terminal = matches!(
+                    &app_event,
+                    AppEvent::AuthApplied { .. } | AppEvent::AuthError { .. }
+                );
+                let sync_kinds = cloud_sync_kinds(&app_event);
                 let cover_before = state.content_cover_open;
                 let action_opt = handle_app_event_inner(app_event, &mut state, &chrome);
+                #[cfg(windows)]
+                if auth_terminal {
+                    auth_window = None;
+                }
+                #[cfg(not(windows))]
+                let _ = auth_terminal;
+                if let Some((db, dh, ds)) = sync_kinds {
+                    if state.auth.is_some() {
+                        sync_dirty.0 |= db;
+                        sync_dirty.1 |= dh;
+                        sync_dirty.2 |= ds;
+                        queue_cloud_sync(&rt, &proxy_main, &mut sync_id);
+                    }
+                }
                 clear_stale_cover(&mut state, &chrome);
                 let cover_cleared = cover_before && !state.content_cover_open;
                 if let Some(tab_id) = load_end_tab_id {
@@ -2536,6 +2635,18 @@ fn main() {
                 }
             }
 
+            #[cfg(windows)]
+            Event::WindowEvent {
+                window_id,
+                event: WindowEvent::CloseRequested,
+                ..
+            } if auth_window.as_ref().map(|(w, _)| w.id()) == Some(window_id) => {
+                auth_window = None;
+                let _ = chrome.evaluate_script(
+                    "window.__neura && window.__neura.authIdle && window.__neura.authIdle()",
+                );
+            }
+
             Event::WindowEvent {
                 event:
                     WindowEvent::KeyboardInput {
@@ -2641,6 +2752,10 @@ fn main() {
                     save_session(&state);
                 }
                 save_open_cookies(&content_views, &state, &data_dir);
+                #[cfg(windows)]
+                {
+                    let _ = auth_window.take();
+                }
                 popups.clear();
                 close_chrome_controller(&chrome);
                 shutdown_webview2(
@@ -6709,6 +6824,56 @@ fn queue_session_save(
     });
 }
 
+fn cloud_sync_kinds(event: &AppEvent) -> Option<(bool, bool, bool)> {
+    match event {
+        AppEvent::SyncPulled { .. } => Some((true, true, true)),
+        AppEvent::ContentMetadata { .. } => Some((false, true, false)),
+        AppEvent::Chrome(cmd) => match cmd {
+            ChromeCommand::BookmarkAdd
+            | ChromeCommand::BookmarkAddUrl { .. }
+            | ChromeCommand::MoveBookmark { .. }
+            | ChromeCommand::BookmarkRemove { .. }
+            | ChromeCommand::BookmarkRemoveById { .. }
+            | ChromeCommand::BookmarkCreateFolder { .. }
+            | ChromeCommand::BookmarkMoveToFolder { .. }
+            | ChromeCommand::BookmarkRemoveFromFolder { .. }
+            | ChromeCommand::BookmarkFolderRename { .. }
+            | ChromeCommand::BookmarkFolderDelete { .. } => Some((true, false, false)),
+            ChromeCommand::HistoryClear | ChromeCommand::DeleteHistoryEntry { .. } => {
+                Some((false, true, false))
+            }
+            ChromeCommand::SaveSettings { .. } => Some((false, false, true)),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn queue_cloud_sync(
+    rt: &tokio::runtime::Runtime,
+    proxy: &tao::event_loop::EventLoopProxy<AppEvent>,
+    id: &mut u64,
+) {
+    *id = id.wrapping_add(1).max(1);
+    let next = *id;
+    let proxy = proxy.clone();
+    rt.spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(4)).await;
+        let _ = proxy.send_event(AppEvent::SyncPush { id: next });
+    });
+}
+
+fn cloud_bookmarks_blob(state: &AppState) -> String {
+    let bookmarks = repositories::list_bookmarks(&state.conn).unwrap_or_default();
+    let folders = repositories::list_bookmark_folders(&state.conn).unwrap_or_default();
+    serde_json::json!({ "bookmarks": bookmarks, "folders": folders }).to_string()
+}
+
+fn cloud_history_blob(state: &AppState) -> String {
+    let history = repositories::list_history(&state.conn, 150).unwrap_or_default();
+    serde_json::to_string(&history).unwrap_or_else(|_| "[]".to_string())
+}
+
 fn should_save_session(event: &AppEvent) -> bool {
     matches!(
         event,
@@ -7103,6 +7268,338 @@ fn uuid_v4_simple() -> String {
         .unwrap_or_default()
         .as_nanos();
     format!("{:x}", t)
+}
+
+fn open_in_system_browser(url: &str) {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        let _ = std::process::Command::new("cmd")
+            .args(["/c", "start", "", url])
+            .creation_flags(CREATE_NO_WINDOW)
+            .spawn();
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = std::process::Command::new("xdg-open").arg(url).spawn();
+    }
+}
+
+fn auth_email_password(
+    is_sign_up: bool,
+    email: String,
+    password: String,
+    state: &AppState,
+    proxy: &tao::event_loop::EventLoopProxy<AppEvent>,
+    rt: &tokio::runtime::Runtime,
+) {
+    if !cloud::config::is_configured() {
+        let _ = proxy.send_event(AppEvent::AuthError {
+            message: "Cloud sign-in is not configured.".into(),
+        });
+        return;
+    }
+    let proxy = proxy.clone();
+    let region = state.settings.region.clone();
+    let cached = settings_store::get::<cloud::UserProfile>(&state.conn, cloud::PROFILE_CACHE_KEY)
+        .ok()
+        .flatten();
+    rt.spawn(async move {
+        let result = if is_sign_up {
+            cloud::auth::sign_up(&email, &password).await
+        } else {
+            cloud::auth::sign_in(&email, &password).await
+        };
+        match result {
+            Ok(session) => {
+                let (session, profile) =
+                    cloud::finalize_sign_in(session, None, None, region, cached).await;
+                let message = if is_sign_up {
+                    "Account created".to_string()
+                } else {
+                    "Signed in".to_string()
+                };
+                let pull_session = session.clone();
+                let _ = proxy.send_event(AppEvent::AuthApplied {
+                    session,
+                    profile,
+                    message,
+                });
+                let snap = cloud::pull_all(&pull_session).await;
+                let _ = proxy.send_event(AppEvent::SyncPulled {
+                    bookmarks: snap.bookmarks,
+                    history: snap.history,
+                    settings: snap.settings,
+                });
+            }
+            Err(e) => {
+                let _ = proxy.send_event(AppEvent::AuthError {
+                    message: e.to_string(),
+                });
+            }
+        }
+    });
+}
+
+fn auth_google(
+    state: &AppState,
+    chrome: &WebView,
+    proxy: &tao::event_loop::EventLoopProxy<AppEvent>,
+    rt: &tokio::runtime::Runtime,
+) -> Option<u16> {
+    if !cloud::config::is_configured() {
+        let _ = proxy.send_event(AppEvent::AuthError {
+            message: "Cloud sign-in is not configured.".into(),
+        });
+        return None;
+    }
+    let (listener, port) = match cloud::local_server::bind() {
+        Ok(v) => v,
+        Err(e) => {
+            let _ = proxy.send_event(AppEvent::AuthError {
+                message: format!("Could not start sign-in: {}", e),
+            });
+            return None;
+        }
+    };
+    let html = cloud::google::auth_page_html();
+    let (tx, rx) = tokio::sync::oneshot::channel::<String>();
+    rt.spawn(cloud::local_server::serve(listener, html, tx));
+    let proxy_done = proxy.clone();
+    let region = state.settings.region.clone();
+    let cached = settings_store::get::<cloud::UserProfile>(&state.conn, cloud::PROFILE_CACHE_KEY)
+        .ok()
+        .flatten();
+    rt.spawn(async move {
+        let body = match tokio::time::timeout(std::time::Duration::from_secs(300), rx).await {
+            Ok(Ok(b)) => b,
+            _ => {
+                let _ = proxy_done.send_event(AppEvent::AuthError {
+                    message: "Google sign-in timed out.".into(),
+                });
+                return;
+            }
+        };
+        match cloud::google::parse_result(&body) {
+            Ok(g) => {
+                let session = cloud::AuthSession {
+                    uid: g.uid,
+                    id_token: g.id_token,
+                    refresh_token: g.refresh_token,
+                    email: g.email,
+                    expires_at_ms: chrono::Utc::now().timestamp_millis() + 3_600_000,
+                };
+                let name = (!g.display_name.is_empty()).then_some(g.display_name);
+                let photo = (!g.photo_url.is_empty()).then_some(g.photo_url);
+                let (session, profile) =
+                    cloud::finalize_sign_in(session, name, photo, region, cached).await;
+                let pull_session = session.clone();
+                let _ = proxy_done.send_event(AppEvent::AuthApplied {
+                    session,
+                    profile,
+                    message: "Signed in with Google".into(),
+                });
+                let snap = cloud::pull_all(&pull_session).await;
+                let _ = proxy_done.send_event(AppEvent::SyncPulled {
+                    bookmarks: snap.bookmarks,
+                    history: snap.history,
+                    settings: snap.settings,
+                });
+            }
+            Err(e) => {
+                let _ = proxy_done.send_event(AppEvent::AuthError { message: e });
+            }
+        }
+    });
+    let _ = chrome.evaluate_script(
+        "window.__neura && window.__neura.authPending && window.__neura.authPending()",
+    );
+    Some(port)
+}
+
+#[cfg(windows)]
+fn spawn_auth_window(
+    elwt: &tao::event_loop::EventLoopWindowTarget<AppEvent>,
+    main_window: &tao::window::Window,
+    port: u16,
+    web_context: &mut wry::WebContext,
+    proxy: tao::event_loop::EventLoopProxy<AppEvent>,
+    browser_args: &str,
+) -> Option<(tao::window::Window, WebView)> {
+    let w = 440u32;
+    let h = 560u32;
+    let window = WindowBuilder::new()
+        .with_title("Sign in with Google")
+        .with_inner_size(LogicalSize::new(w, h))
+        .with_resizable(false)
+        .with_visible(false)
+        .build(elwt)
+        .ok()?;
+    center_popup(&window, main_window, w, h);
+    set_window_background_dark(&window);
+
+    let size = window.inner_size();
+    let rect = Rect {
+        x: 0,
+        y: 0,
+        width: size.width.max(1),
+        height: size.height.max(1),
+    };
+    let wv = WebViewBuilder::new_as_child(&window)
+        .with_bounds(rect)
+        .with_background_color((13, 15, 19, 255))
+        .with_url(&format!("http://localhost:{}/", port))
+        .with_browser_accelerator_keys(false)
+        .with_additional_browser_args(browser_args.to_string())
+        .with_web_context(web_context)
+        .build()
+        .ok()?;
+    attach_new_window_handler(&wv, proxy, false);
+    window.set_visible(true);
+    Some((window, wv))
+}
+
+fn account_update_profile(
+    username: String,
+    full_name: String,
+    birthdate: String,
+    bio: String,
+    state: &AppState,
+    proxy: &tao::event_loop::EventLoopProxy<AppEvent>,
+    rt: &tokio::runtime::Runtime,
+) {
+    let Some(session) = state.auth.clone() else {
+        return;
+    };
+    let mut profile = state.user_profile.clone().unwrap_or_default();
+    profile.country = state.settings.region.clone();
+    let proxy = proxy.clone();
+    rt.spawn(async move {
+        let session = match cloud::ensure_fresh(session).await {
+            Ok(s) => s,
+            Err(e) => {
+                let _ = proxy.send_event(AppEvent::AuthError {
+                    message: e.to_string(),
+                });
+                return;
+            }
+        };
+        match cloud::apply_profile_edits(&session, profile, username, full_name, birthdate, bio)
+            .await
+        {
+            Ok(profile) => {
+                let _ = proxy.send_event(AppEvent::AuthApplied {
+                    session,
+                    profile,
+                    message: "Profile saved".into(),
+                });
+            }
+            Err(e) => {
+                let _ = proxy.send_event(AppEvent::AuthError {
+                    message: e.to_string(),
+                });
+            }
+        }
+    });
+}
+
+fn account_set_photo(
+    data_uri: String,
+    state: &AppState,
+    chrome: &WebView,
+    proxy: &tao::event_loop::EventLoopProxy<AppEvent>,
+    rt: &tokio::runtime::Runtime,
+) {
+    let Some(session) = state.auth.clone() else {
+        return;
+    };
+    if !cloud::config::cloudinary_configured() {
+        let _ = proxy.send_event(AppEvent::AuthError {
+            message: "Photo uploads are not configured.".into(),
+        });
+        return;
+    }
+    let profile = state.user_profile.clone().unwrap_or_default();
+    let proxy = proxy.clone();
+    let _ = chrome
+        .evaluate_script("window.__neura && window.__neura.authPending && window.__neura.authPending()");
+    rt.spawn(async move {
+        let session = match cloud::ensure_fresh(session).await {
+            Ok(s) => s,
+            Err(e) => {
+                let _ = proxy.send_event(AppEvent::AuthError {
+                    message: e.to_string(),
+                });
+                return;
+            }
+        };
+        match cloud::apply_photo(&session, profile, data_uri).await {
+            Ok(profile) => {
+                let _ = proxy.send_event(AppEvent::AuthApplied {
+                    session,
+                    profile,
+                    message: "Photo updated".into(),
+                });
+            }
+            Err(e) => {
+                let _ = proxy.send_event(AppEvent::AuthError {
+                    message: e.to_string(),
+                });
+            }
+        }
+    });
+}
+
+fn account_change_password(
+    current: String,
+    new_password: String,
+    state: &AppState,
+    proxy: &tao::event_loop::EventLoopProxy<AppEvent>,
+    rt: &tokio::runtime::Runtime,
+) {
+    let Some(session) = state.auth.clone() else {
+        return;
+    };
+    let profile = state.user_profile.clone().unwrap_or_default();
+    let email = session.email.clone();
+    let proxy = proxy.clone();
+    rt.spawn(async move {
+        if !current.is_empty() && !email.is_empty() {
+            if let Err(e) = cloud::auth::sign_in(&email, &current).await {
+                let _ = proxy.send_event(AppEvent::AuthError {
+                    message: e.to_string(),
+                });
+                return;
+            }
+        }
+        let session = match cloud::ensure_fresh(session).await {
+            Ok(s) => s,
+            Err(e) => {
+                let _ = proxy.send_event(AppEvent::AuthError {
+                    message: e.to_string(),
+                });
+                return;
+            }
+        };
+        match cloud::auth::update_password(&session.id_token, &new_password).await {
+            Ok(mut new_session) => {
+                if new_session.email.is_empty() {
+                    new_session.email = session.email.clone();
+                }
+                let _ = proxy.send_event(AppEvent::AuthApplied {
+                    session: new_session,
+                    profile,
+                    message: "Password changed".into(),
+                });
+            }
+            Err(e) => {
+                let _ = proxy.send_event(AppEvent::AuthError {
+                    message: e.to_string(),
+                });
+            }
+        }
+    });
 }
 
 fn handle_ai_message(

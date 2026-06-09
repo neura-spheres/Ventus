@@ -77,6 +77,13 @@ pub struct AppState {
     pub cached_bookmarks: Vec<repositories::Bookmark>,
     pub cached_bookmark_folders: Vec<repositories::BookmarkFolder>,
     pub cached_history: Vec<repositories::HistoryEntry>,
+    pub auth: Option<crate::cloud::AuthSession>,
+    pub user_profile: Option<crate::cloud::UserProfile>,
+    /// Per-tab: (url, row_id) of the last history entry saved for the current page.
+    /// Cleared on ContentLoadStart so the same URL can be re-saved after a reload/re-navigate.
+    /// Used to deduplicate the multiple ContentMetadata events fired per page load and to
+    /// update the title row when a better title arrives after the initial save.
+    pub history_last_saved: HashMap<String, (String, i64)>,
 }
 
 impl AppState {
@@ -88,6 +95,7 @@ impl AppState {
             settings.appearance.sidebar_mode,
             crate::config::SidebarMode::Compact
         );
+        let _ = repositories::fail_stale_downloads(&conn);
         let mut downloads = repositories::list_downloads(&conn, 100).unwrap_or_default();
         downloads.reverse();
         let cached_search_engines = repositories::list_search_engines(&conn).unwrap_or_default();
@@ -128,7 +136,50 @@ impl AppState {
             cached_bookmarks,
             cached_bookmark_folders,
             cached_history,
+            auth: None,
+            user_profile: None,
+            history_last_saved: HashMap::new(),
         }
+    }
+
+    pub fn account_state_json(&self) -> String {
+        let profile = self.user_profile.clone().unwrap_or_default();
+        serde_json::json!({
+            "configured": crate::cloud::config::is_configured(),
+            "cloudinary": crate::cloud::config::cloudinary_configured(),
+            "signed_in": self.auth.is_some(),
+            "profile": {
+                "email": profile.email,
+                "username": profile.username,
+                "full_name": profile.full_name,
+                "birthdate": profile.birthdate,
+                "bio": profile.bio,
+                "photo_url": profile.photo_url,
+                "country": profile.country,
+            }
+        })
+        .to_string()
+    }
+
+    pub fn push_account(&self, chrome: &WebView) {
+        let _ = chrome.evaluate_script(&format!(
+            "window.__neura && window.__neura.setAccount({})",
+            self.account_state_json()
+        ));
+    }
+
+    pub fn persist_session(
+        &self,
+        session: &crate::cloud::AuthSession,
+        profile: &crate::cloud::UserProfile,
+    ) {
+        let _ = keychain::set_api_key(crate::cloud::KEYCHAIN_REFRESH_KEY, &session.refresh_token);
+        let _ = settings_store::set(&self.conn, crate::cloud::PROFILE_CACHE_KEY, profile);
+    }
+
+    pub fn clear_session(&self) {
+        let _ = keychain::delete_api_key(crate::cloud::KEYCHAIN_REFRESH_KEY);
+        let _ = settings_store::delete(&self.conn, crate::cloud::PROFILE_CACHE_KEY);
     }
 
     pub fn push_state_to_chrome(&self, chrome: &WebView) {
@@ -359,6 +410,7 @@ pub fn handle_chrome_command(
             state.load_progress.remove(&id);
             state.native_loads.remove(&id);
             state.native_nav_ids.remove(&id);
+            state.history_last_saved.remove(&id);
             state.push_state_to_chrome(chrome);
             Some(TabAction::Remove(id))
         }
@@ -443,6 +495,7 @@ pub fn handle_chrome_command(
                 state.load_progress.remove(tab_id);
                 state.native_loads.remove(tab_id);
                 state.native_nav_ids.remove(tab_id);
+                state.history_last_saved.remove(tab_id);
             }
             state.push_state_to_chrome(chrome);
             Some(TabAction::RemoveMany(tab_ids))
@@ -1126,6 +1179,19 @@ pub fn handle_chrome_command(
             );
             None
         }
+        ChromeCommand::GetAccountState => {
+            state.push_account(chrome);
+            None
+        }
+        ChromeCommand::AuthSignOut => {
+            state.clear_session();
+            state.auth = None;
+            state.user_profile = None;
+            state.push_account(chrome);
+            let _ =
+                chrome.evaluate_script("window.__neura && window.__neura.authSuccess('Signed out')");
+            None
+        }
         _ => None,
     }
 }
@@ -1761,25 +1827,6 @@ pub fn handle_app_event_inner(
                     is_bm
                 ));
             }
-            let in_incognito = state.tab_manager.tab_is_incognito(&tab_id);
-            if !state.settings.privacy.disable_history
-                && !clean_url.starts_with("neura://")
-                && !in_incognito
-            {
-                let _ = repositories::add_history(&state.conn, &clean_url, &title, None);
-                // Prepend to cached history and keep at most 30 entries.
-                state.cached_history.insert(
-                    0,
-                    repositories::HistoryEntry {
-                        id: 0,
-                        url: clean_url.clone(),
-                        title: title.clone(),
-                        workspace_id: None,
-                        visited_at: chrono::Utc::now().timestamp_millis(),
-                    },
-                );
-                state.cached_history.truncate(30);
-            }
             if is_active {
                 let url_js = serde_json::to_string(&clean_url).unwrap_or_default();
                 let title_js = serde_json::to_string(&title).unwrap_or_default();
@@ -1848,6 +1895,12 @@ pub fn handle_app_event_inner(
                 if nav_id != 0 {
                     state.native_nav_ids.insert(tab_id.clone(), nav_id);
                 }
+            }
+            // Clear per-tab history tracker so a reload / re-navigate to the same URL
+            // produces a new entry. Non-native (SPA) load-starts also clear it so that
+            // a pushState to a new URL is treated as a fresh navigation.
+            if track_url {
+                state.history_last_saved.remove(&tab_id);
             }
             clear_loading_favicon(state, &tab_id);
             state.tab_manager.set_tab_loading(&tab_id, true);
@@ -2185,6 +2238,98 @@ pub fn handle_app_event_inner(
                     url_js, title_js
                 ));
             }
+            // ── History recording ────────────────────────────────────────────────
+            // ContentMetadata is the authoritative "page settled" signal on Windows
+            // (ContentNav is #[cfg(not(windows))] and never fires here).  We save a
+            // history row on the first metadata event for each navigation and update
+            // the title if a better one arrives on a subsequent event for the same URL.
+            let in_incognito = state.tab_manager.tab_is_incognito(&tab_id);
+            if !state.settings.privacy.disable_history
+                && !clean_url.starts_with("neura://")
+                && !clean_url.starts_with("about:")
+                && !in_incognito
+            {
+                let last = state.history_last_saved.get(&tab_id).cloned();
+                let is_url_fallback = |t: &str, u: &str| {
+                    t == u || t.starts_with("http://") || t.starts_with("https://")
+                };
+                if !replace {
+                    match last {
+                        Some((ref saved_url, saved_id)) if saved_url == &clean_url => {
+                            // Same page, second metadata fire — upgrade URL-fallback title
+                            if !is_url_fallback(&safe_title, &clean_url) {
+                                let old_is_fallback = state
+                                    .cached_history
+                                    .iter()
+                                    .find(|e| e.id == saved_id)
+                                    .map(|e| is_url_fallback(&e.title, &e.url))
+                                    .unwrap_or(false);
+                                if old_is_fallback {
+                                    let _ = repositories::update_history_title(
+                                        &state.conn,
+                                        saved_id,
+                                        &safe_title,
+                                    );
+                                    if let Some(e) = state
+                                        .cached_history
+                                        .iter_mut()
+                                        .find(|e| e.id == saved_id)
+                                    {
+                                        e.title = safe_title.clone();
+                                    }
+                                }
+                            }
+                        }
+                        _ => {
+                            // First metadata for this navigation, or SPA pushState to new URL
+                            if let Ok(row_id) = repositories::add_history(
+                                &state.conn,
+                                &clean_url,
+                                &safe_title,
+                                None,
+                            ) {
+                                state
+                                    .history_last_saved
+                                    .insert(tab_id.clone(), (clean_url.clone(), row_id));
+                                state.cached_history.insert(
+                                    0,
+                                    repositories::HistoryEntry {
+                                        id: row_id,
+                                        url: clean_url.clone(),
+                                        title: safe_title.clone(),
+                                        workspace_id: None,
+                                        visited_at: chrono::Utc::now().timestamp_millis(),
+                                    },
+                                );
+                                state.cached_history.truncate(30);
+                            }
+                        }
+                    }
+                } else if let Some((ref saved_url, saved_id)) = last {
+                    // replace=true (SPA replaceState / popstate back-fwd): update title only
+                    if saved_url == &clean_url && !is_url_fallback(&safe_title, &clean_url) {
+                        let old_is_fallback = state
+                            .cached_history
+                            .iter()
+                            .find(|e| e.id == saved_id)
+                            .map(|e| is_url_fallback(&e.title, &e.url))
+                            .unwrap_or(false);
+                        if old_is_fallback {
+                            let _ = repositories::update_history_title(
+                                &state.conn,
+                                saved_id,
+                                &safe_title,
+                            );
+                            if let Some(e) =
+                                state.cached_history.iter_mut().find(|e| e.id == saved_id)
+                            {
+                                e.title = safe_title.clone();
+                            }
+                        }
+                    }
+                }
+            }
+            // ── End history recording ────────────────────────────────────────────
             state.push_state_to_chrome(chrome);
             None
         }
@@ -2264,15 +2409,28 @@ pub fn handle_app_event_inner(
             if let Err(e) = repositories::save_download(&state.conn, &dl) {
                 tracing::warn!("save download start failed: {}", e);
             }
+            let nav_stops: Vec<(String, String)> = state
+                .native_loads
+                .iter()
+                .filter(|(_, u)| same_nav(u.as_str(), url.as_str()))
+                .map(|(tid, u)| (tid.clone(), u.clone()))
+                .collect();
+            let had_nav_stop = !nav_stops.is_empty();
+            for (tid, nav_url) in &nav_stops {
+                let key = load_key(tid, nav_url);
+                let _ = stop_failed_load(state, chrome, tid, &key);
+            }
             let _ =
                 chrome.evaluate_script("window.__neura && window.__neura.setDownloadActive(true)");
-            // Push state first so the panel renders the new item, then play the
-            // download-start feedback (button pulse + brief non-blocking peek).
             state.push_state_to_chrome(chrome);
             let _ = chrome.evaluate_script(
                 "window.__neura && window.__neura.flashDownloadStart && window.__neura.flashDownloadStart()",
             );
-            None
+            if had_nav_stop {
+                Some(TabAction::SyncViews)
+            } else {
+                None
+            }
         }
         AppEvent::DownloadCompleted { url, path, success } => {
             if let Some(dl) = state.downloads.downloads.iter_mut().rev().find(|d| {
@@ -2432,8 +2590,149 @@ pub fn handle_app_event_inner(
             }
             None
         }
+        AppEvent::AuthApplied {
+            session,
+            profile,
+            message,
+        } => {
+            state.persist_session(&session, &profile);
+            state.auth = Some(session);
+            state.user_profile = Some(profile);
+            state.push_account(chrome);
+            if !message.is_empty() {
+                let m = serde_json::to_string(&message).unwrap_or_default();
+                let _ = chrome.evaluate_script(&format!(
+                    "window.__neura && window.__neura.authSuccess({})",
+                    m
+                ));
+            }
+            None
+        }
+        AppEvent::AuthError { message } => {
+            let m = serde_json::to_string(&message).unwrap_or_default();
+            let _ = chrome
+                .evaluate_script(&format!("window.__neura && window.__neura.authError({})", m));
+            state.push_account(chrome);
+            None
+        }
+        AppEvent::SyncPulled {
+            bookmarks,
+            history,
+            settings,
+        } => {
+            if let Some(b) = bookmarks {
+                merge_cloud_bookmarks(state, &b);
+            }
+            if let Some(h) = history {
+                merge_cloud_history(state, &h);
+            }
+            if let Some(s) = settings {
+                apply_cloud_settings(state, &s);
+            }
+            state.cached_bookmarks = repositories::list_bookmarks(&state.conn).unwrap_or_default();
+            state.cached_bookmark_folders =
+                repositories::list_bookmark_folders(&state.conn).unwrap_or_default();
+            state.cached_history = repositories::list_history(&state.conn, 30).unwrap_or_default();
+            state.push_state_to_chrome(chrome);
+            Some(TabAction::SyncViews)
+        }
         _ => None,
     }
+}
+
+fn merge_cloud_bookmarks(state: &AppState, blob: &str) {
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(blob) else {
+        return;
+    };
+    let have_folders: std::collections::HashSet<String> =
+        repositories::list_bookmark_folders(&state.conn)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|f| f.id)
+            .collect();
+    if let Some(folders) = v["folders"].as_array() {
+        for f in folders {
+            let id = f["id"].as_str().unwrap_or_default();
+            if id.is_empty() || have_folders.contains(id) {
+                continue;
+            }
+            let _ = state.conn.execute(
+                "INSERT OR IGNORE INTO bookmark_folders(id, name, parent_id, position, created_at) VALUES(?1,?2,?3,?4,?5)",
+                rusqlite::params![
+                    id,
+                    f["name"].as_str().unwrap_or("Folder"),
+                    f["parent_id"].as_str(),
+                    f["position"].as_i64().unwrap_or(0),
+                    f["created_at"].as_i64().unwrap_or_else(|| chrono::Utc::now().timestamp_millis()),
+                ],
+            );
+        }
+    }
+    let have_urls: std::collections::HashSet<String> = repositories::list_bookmarks(&state.conn)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|b| b.url)
+        .collect();
+    if let Some(items) = v["bookmarks"].as_array() {
+        for b in items {
+            let url = b["url"].as_str().unwrap_or_default();
+            if url.is_empty() || have_urls.contains(url) {
+                continue;
+            }
+            let id = b["id"]
+                .as_str()
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+            let _ = state.conn.execute(
+                "INSERT OR IGNORE INTO bookmarks(id, url, title, folder_id, position, created_at) VALUES(?1,?2,?3,?4,?5,?6)",
+                rusqlite::params![
+                    id,
+                    url,
+                    b["title"].as_str().unwrap_or(url),
+                    b["folder_id"].as_str(),
+                    b["position"].as_i64().unwrap_or(0),
+                    b["created_at"].as_i64().unwrap_or_else(|| chrono::Utc::now().timestamp_millis()),
+                ],
+            );
+        }
+    }
+}
+
+fn merge_cloud_history(state: &AppState, blob: &str) {
+    let Ok(items) = serde_json::from_str::<Vec<repositories::HistoryEntry>>(blob) else {
+        return;
+    };
+    let have: std::collections::HashSet<(String, i64)> =
+        repositories::list_history(&state.conn, 1000)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|e| (e.url, e.visited_at))
+            .collect();
+    for e in items {
+        if e.url.is_empty() || have.contains(&(e.url.clone(), e.visited_at)) {
+            continue;
+        }
+        let _ = state.conn.execute(
+            "INSERT INTO history(url, title, workspace_id, visited_at) VALUES(?1,?2,?3,?4)",
+            rusqlite::params![e.url, e.title, e.workspace_id, e.visited_at],
+        );
+    }
+    let _ = state.conn.execute(
+        "DELETE FROM history WHERE id NOT IN (SELECT id FROM history ORDER BY visited_at DESC LIMIT 150)",
+        [],
+    );
+}
+
+fn apply_cloud_settings(state: &mut AppState, blob: &str) {
+    let Ok(settings) = serde_json::from_str::<AppSettings>(blob) else {
+        return;
+    };
+    state.settings = settings;
+    state.sidebar_collapsed = matches!(
+        state.settings.appearance.sidebar_mode,
+        crate::config::SidebarMode::Compact
+    );
+    let _ = settings_store::set(&state.conn, "app_settings", &state.settings);
 }
 
 fn should_record_replace_as_visit(old_url: &str, new_url: &str) -> bool {

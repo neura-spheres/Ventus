@@ -540,7 +540,10 @@ button,input,select,textarea{font-family:var(--font)}
   width:7px;height:7px;border-radius:50%;background:var(--accent);
   display:none;pointer-events:none;border:1.5px solid var(--chrome-bg);
 }
-#btn-more.has-downloads #more-btn-badge{display:block}
+#btn-more.has-attention #more-btn-badge{display:block}
+#more-btn-avatar{display:none;width:22px;height:22px;border-radius:50%;object-fit:cover}
+#btn-more.has-avatar #more-btn-avatar{display:block}
+#btn-more.has-avatar #more-btn-dots{display:none}
 #more-menu{
   position:fixed;top:0;right:0;
   z-index:290;
@@ -555,6 +558,7 @@ button,input,select,textarea{font-family:var(--font)}
 }
 #more-menu.open{display:flex}
 .more-item{
+  position:relative;
   display:flex;align-items:center;gap:10px;
   padding:7px 10px;border-radius:6px;
   background:none;border:none;cursor:pointer;
@@ -563,6 +567,11 @@ button,input,select,textarea{font-family:var(--font)}
   font-family:inherit;
 }
 .more-item:hover{background:var(--bg-hover)}
+.more-item-dot{
+  display:none;position:absolute;left:2px;top:50%;transform:translateY(-50%);
+  width:6px;height:6px;border-radius:50%;background:var(--accent);
+}
+.more-item.has-dot .more-item-dot{display:block}
 .more-item-icon{flex-shrink:0;color:var(--text-muted);display:flex;align-items:center}
 .more-item-label{flex:1}
 .more-item-kbd{
@@ -1357,6 +1366,55 @@ button,input,select,textarea{font-family:var(--font)}
 .settings-section.active{display:block;animation:ventus-fade-up 0.18s ease}
 .settings-section h2{font-size:18px;font-weight:700;margin-bottom:4px;color:var(--text);letter-spacing:-0.3px}
 .settings-section .subtitle{color:var(--text-muted);font-size:12px;margin-bottom:24px;line-height:1.5}
+.acct-empty{text-align:center;padding:46px 20px;color:var(--text-muted)}
+.acct-empty-icon{color:var(--text-dim);margin-bottom:12px}
+.acct-empty h3{font-size:14px;font-weight:600;color:var(--text);margin:0 0 6px}
+.acct-empty p{font-size:12px;line-height:1.5;max-width:320px;margin:0 auto}
+.acct-auth{max-width:360px}
+.acct-tabs{display:flex;gap:4px;background:var(--modal-bg-2);border:1px solid var(--modal-border);border-radius:11px;padding:4px;margin-bottom:18px}
+.acct-tab{flex:1;padding:8px;font-size:12.5px;font-weight:600;color:var(--text-muted);background:transparent;border:none;border-radius:8px;cursor:pointer;transition:all .12s ease;font-family:var(--font)}
+.acct-tab:hover{color:var(--text)}
+.acct-tab.active{background:var(--accent);color:#fff}
+.acct-fields{display:flex;flex-direction:column}
+.acct-fields label,.acct-field label{display:block;font-size:11.5px;font-weight:600;color:var(--text);margin:0 0 6px}
+.acct-fields input,.acct-field input,.acct-field textarea{
+  width:100%;box-sizing:border-box;background:var(--modal-bg-2);border:1px solid var(--modal-border);
+  color:var(--text);border-radius:10px;padding:9px 12px;font-size:13px;outline:none;font-family:var(--font);
+  margin-bottom:14px;transition:border-color .12s ease;
+}
+.acct-fields input:focus,.acct-field input:focus,.acct-field textarea:focus{border-color:var(--accent)}
+.acct-field input:disabled,.acct-field textarea:disabled{opacity:.6;cursor:not-allowed}
+.acct-field textarea{resize:vertical;min-height:62px;line-height:1.5}
+.acct-primary{width:100%;padding:10px;font-size:13px;font-weight:600;color:#fff;background:var(--accent);border:none;border-radius:10px;cursor:pointer;font-family:var(--font);transition:filter .12s ease}
+.acct-primary:hover{filter:brightness(1.08)}
+.acct-primary:disabled{opacity:.65;cursor:default}
+.acct-secondary{padding:8px 16px;font-size:12.5px;font-weight:600;color:var(--text);background:var(--soft-btn-bg);border:1px solid var(--modal-border);border-radius:9px;cursor:pointer;font-family:var(--font)}
+.acct-secondary:hover{background:var(--modal-bg-2)}
+.acct-divider{display:flex;align-items:center;text-align:center;color:var(--text-dim);font-size:11px;margin:16px 0}
+.acct-divider::before,.acct-divider::after{content:'';flex:1;height:1px;background:var(--modal-border)}
+.acct-divider span{padding:0 12px}
+.acct-google{width:100%;display:flex;align-items:center;justify-content:center;gap:10px;padding:10px;font-size:13px;font-weight:600;color:var(--text);background:var(--soft-btn-bg);border:1px solid var(--modal-border);border-radius:10px;cursor:pointer;font-family:var(--font);transition:background .12s ease}
+.acct-google:hover{background:var(--modal-bg-2)}
+.acct-google:disabled{opacity:.6;cursor:default}
+.acct-profile{max-width:460px}
+.acct-head{display:flex;align-items:center;gap:16px;margin-bottom:24px}
+.acct-avatar{position:relative;width:66px;height:66px;flex-shrink:0}
+.acct-avatar-img{width:66px;height:66px;border-radius:50%;object-fit:cover;border:1px solid var(--modal-border)}
+.acct-avatar-ph{width:66px;height:66px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:600;color:#fff;background:var(--accent)}
+.acct-avatar-edit{position:absolute;right:-2px;bottom:-2px;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;background:var(--accent);border:2px solid var(--modal-bg);cursor:pointer;padding:0}
+.acct-avatar-edit:hover{filter:brightness(1.1)}
+.acct-head-name{font-size:15px;font-weight:700;color:var(--text)}
+.acct-head-email{font-size:12px;color:var(--text-muted);margin-top:2px}
+.acct-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 16px}
+.acct-actions{margin-top:4px}
+.acct-actions .acct-primary{width:auto;min-width:150px}
+.acct-sep{height:1px;background:var(--modal-border);margin:22px 0}
+.acct-pw summary{font-size:12.5px;font-weight:600;color:var(--text);cursor:pointer;margin-bottom:14px;list-style:none}
+.acct-pw summary::-webkit-details-marker{display:none}
+.acct-pw summary::before{content:'▸';display:inline-block;margin-right:7px;color:var(--text-muted);transition:transform .12s ease}
+.acct-pw[open] summary::before{transform:rotate(90deg)}
+.acct-signout{padding:9px 18px;font-size:12.5px;font-weight:600;color:#ff6b6b;background:transparent;border:1px solid rgba(255,107,107,.35);border-radius:9px;cursor:pointer;font-family:var(--font);transition:background .12s ease}
+.acct-signout:hover{background:rgba(255,107,107,.1)}
 .settings-group{margin-bottom:24px}
 .settings-group label{
   display:block;font-size:12px;font-weight:600;
@@ -2410,9 +2468,6 @@ html:not([data-browser-font="system"]) #newtab-placeholder #newtab-clock{font-fa
 .bm-item-info{flex:1;min-width:0}
 .bm-item-title{font-size:12px;font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bm-item-url{font-size:11px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.bm-item-del{width:24px;height:24px;border:none;background:transparent;color:var(--text-dim);cursor:pointer;border-radius:3px;display:flex;align-items:center;justify-content:center;transition:all var(--transition);flex-shrink:0;opacity:0}
-.bm-item:hover .bm-item-del{opacity:1}
-.bm-item-del:hover{background:var(--danger-dim);color:var(--danger)}
 /* Folder item */
 .bm-folder-item{background:color-mix(in srgb,var(--accent) 4%,var(--bg))}
 .bm-folder-item:hover{background:color-mix(in srgb,var(--accent) 8%,var(--bg-hover))}
@@ -2422,11 +2477,7 @@ html:not([data-browser-font="system"]) #newtab-placeholder #newtab-clock{font-fa
 .bm-folder-grid span:first-child{opacity:1}
 /* Drag-over-folder target highlight */
 .bm-item.bm-folder-target{border-color:var(--accent)!important;background:color-mix(in srgb,var(--accent) 10%,var(--bg))!important;box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 25%,transparent)}
-/* Bookmarks bar item delete */
 .bm-bar-item{position:relative}
-.bm-bar-del{position:absolute;right:0;top:0;bottom:0;width:26px;border:none;background:transparent;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity var(--transition);z-index:2;padding:0}
-.bm-bar-item:hover .bm-bar-del{opacity:1}
-.bm-bar-item:hover::after{content:'';position:absolute;right:0;top:0;bottom:0;width:48px;background:linear-gradient(to right,transparent,var(--bg-hover) 55%);pointer-events:none;z-index:1}
 /* Folder modal */
 #folder-modal-backdrop{position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,0.45);backdrop-filter:blur(2px);display:none}
 #folder-modal-backdrop.open{display:block}
@@ -2786,7 +2837,8 @@ svg{display:block;flex-shrink:0}
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.937A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.582a.5.5 0 0 1 0 .962L15.5 14.063A2 2 0 0 0 14.063 15.5l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4m2-2h-4"/><path d="M4 17v2m1-1H3"/></svg>
   </button>
   <button class="tb-btn" id="btn-more" onclick="toggleMoreMenu(event)" title="More options" aria-haspopup="true">
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1.2" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.2" fill="currentColor" stroke="none"/></svg>
+    <span id="more-btn-dots"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1.2" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.2" fill="currentColor" stroke="none"/></svg></span>
+    <img id="more-btn-avatar" alt="">
     <span id="more-btn-badge"></span>
   </button>
   <div class="tb-sep"></div>
@@ -2871,7 +2923,8 @@ svg{display:block;flex-shrink:0}
     <span class="more-item-label">Bookmark this page</span>
     <span class="more-item-kbd">Ctrl+D</span>
   </button>
-  <button class="more-item" onclick="closeMoreMenu();setTimeout(function(){toggleDownloadPanel(null)},60)" role="menuitem">
+  <button class="more-item" id="more-item-downloads" onclick="closeMoreMenu();setTimeout(function(){toggleDownloadPanel(null)},60)" role="menuitem">
+    <span class="more-item-dot"></span>
     <span class="more-item-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>
     <span class="more-item-label">Downloads</span>
     <span class="more-item-kbd">Ctrl+J</span>
@@ -2891,11 +2944,16 @@ svg{display:block;flex-shrink:0}
     </div>
   </div>
   <div class="more-sep"></div>
+  <button class="more-item" onclick="closeMoreMenu();openSettings('account')" role="menuitem">
+    <span class="more-item-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>
+    <span class="more-item-label">Account</span>
+  </button>
   <button class="more-item" onclick="closeMoreMenu();openSettings('general')" role="menuitem">
     <span class="more-item-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
     <span class="more-item-label">Settings</span>
   </button>
-  <button class="more-item" onclick="closeMoreMenu();checkForUpdate()" role="menuitem">
+  <button class="more-item" id="more-item-update" onclick="closeMoreMenu();checkForUpdate()" role="menuitem">
+    <span class="more-item-dot"></span>
     <span class="more-item-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg></span>
     <span class="more-item-label">Check for Updates</span>
   </button>
@@ -3233,6 +3291,8 @@ svg{display:block;flex-shrink:0}
 <div id="settings-overlay" onclick="handleSettingsOverlayClick(event)">
   <div id="settings-panel">
     <nav class="settings-nav">
+      <div class="settings-nav-group">Account</div>
+      <div class="settings-nav-item" data-section="account" onclick="switchSettings('account')">Account</div>
       <div class="settings-nav-group">General</div>
       <div class="settings-nav-item active" data-section="general" onclick="switchSettings('general')">General</div>
       <div class="settings-nav-item" data-section="appearance" onclick="switchSettings('appearance')">Appearance</div>
@@ -3254,6 +3314,12 @@ svg{display:block;flex-shrink:0}
       <button class="settings-close" onclick="closeSettings()">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
       </button>
+
+      <div class="settings-section" id="section-account">
+        <h2>Account</h2>
+        <p class="subtitle">Sign in to sync your profile to the cloud.</p>
+        <div id="account-body"></div>
+      </div>
 
       <div class="settings-section active" id="section-general">
         <h2>General</h2>
@@ -4208,6 +4274,16 @@ window.__neura = {
   },
   showError(msg) { toast(msg, 'error'); finishAiBusy(); },
   showSuccess(msg) { toast(msg, 'success'); },
+  setAccount(a) {
+    state.account = a || {};
+    accountPending = false;
+    renderAccountPanel();
+    updateMoreButtonAvatar();
+  },
+  authPending() { accountPending = true; renderAccountPanel(); },
+  authSuccess(msg) { accountPending = false; toast(msg, 'success'); renderAccountPanel(); },
+  authError(msg) { accountPending = false; toast(msg, 'error'); renderAccountPanel(); },
+  authIdle() { accountPending = false; renderAccountPanel(); },
   setBookmarked(v) {
     state.is_bookmarked = v;
     renderBookmarkIcon();
@@ -4271,9 +4347,8 @@ window.__neura = {
   setFindResult(result) {
     applyFindResult(result || {});
   },
-  setDownloadActive(active) {
-    const btn = document.getElementById('btn-more');
-    if (btn) btn.classList.toggle('has-downloads', !!active);
+  setDownloadActive() {
+    refreshMoreAttention();
   },
   flashDownloadStart() { flashDownloadStart(); },
   onContentPointerDown() { onContentPointerDown(); },
@@ -4338,11 +4413,13 @@ window.__neura = {
       if (__manualUpdateCheck || isUpdateModalOpen()) showUpdateModal({status});
     } else if (status === 'up_to_date') {
       btn && (btn.disabled = false);
+      updateAvailable = false;
       if (area) area.innerHTML = '<div style="display:flex;align-items:center;gap:8px;color:var(--success);font-size:12px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>You\'re up to date.</div>';
       if (__manualUpdateCheck || isUpdateModalOpen()) showUpdateModal({status});
       __manualUpdateCheck = false;
     } else if (status === 'available') {
       btn && (btn.disabled = false);
+      updateAvailable = true;
       if (area) area.innerHTML = `<div style="display:flex;flex-direction:column;gap:10px">
         <div style="display:flex;align-items:center;gap:8px">
           <span style="padding:2px 8px;border-radius:10px;background:var(--accent-dim);color:var(--accent);font-size:11px;font-weight:600">v${escHtml(version)} available</span>
@@ -4367,6 +4444,7 @@ window.__neura = {
       if (isUpdateModalOpen()) showUpdateModal({status, received, total});
     } else if (status === 'installing') {
       btn && (btn.disabled = true);
+      updateAvailable = false;
       if (area) area.innerHTML = '<div style="font-size:12px;color:var(--text-muted)">Installing update and restarting...</div>';
       if (isUpdateModalOpen()) showUpdateModal({status});
     } else if (status === 'error') {
@@ -4375,6 +4453,7 @@ window.__neura = {
       if (__manualUpdateCheck || isUpdateModalOpen()) showUpdateModal({status, error});
       __manualUpdateCheck = false;
     }
+    refreshMoreAttention();
   },
   showContextMenu(data) { showBrowserContextMenu(data); },
   spotlightAiChunk(text, done) {
@@ -4434,6 +4513,7 @@ function render() {
   window.__neura.updateNavState(!!state.can_go_back, !!state.can_go_fwd, !!state.is_loading);
   renderAdBlockBtn();
   _syncAdBlockModal();
+  refreshMoreAttention();
   // renderBookmarksBar is called inside applySidebarMode after class toggle
 }
 
@@ -7113,6 +7193,157 @@ function switchSettings(sec) {
   if (sec === 'bookmarks') renderBookmarks();
   if (sec === 'downloads') renderDownloads();
   if (sec === 'general') populateRegionSettings();
+  if (sec === 'account') { renderAccountPanel(); send('GetAccountState'); }
+}
+
+let accountMode = 'signin';
+let accountPending = false;
+let accountLastEmail = '';
+
+function renderAccountPanel() {
+  const body = document.getElementById('account-body');
+  if (!body) return;
+  const a = state.account || {};
+  if (!a.configured) {
+    body.innerHTML = `<div class="acct-empty">
+      <div class="acct-empty-icon"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg></div>
+      <h3>Cloud accounts aren't set up</h3>
+      <p>This build of Ventus was compiled without cloud credentials, so sign-in is unavailable.</p>
+    </div>`;
+    return;
+  }
+  if (!a.signed_in) { body.innerHTML = renderAccountSignedOut(); return; }
+  body.innerHTML = renderAccountSignedIn(a.profile || {});
+}
+
+function renderAccountSignedOut() {
+  const isSignup = accountMode === 'signup';
+  const dis = accountPending ? 'disabled' : '';
+  const emailVal = escAttr(accountLastEmail || '');
+  return `
+  <div class="acct-auth">
+    <div class="acct-tabs">
+      <button class="acct-tab ${!isSignup?'active':''}" ${dis} onclick="accountSetMode('signin')">Sign in</button>
+      <button class="acct-tab ${isSignup?'active':''}" ${dis} onclick="accountSetMode('signup')">Create account</button>
+    </div>
+    <form id="acct-form" class="acct-fields" onsubmit="event.preventDefault();accountSubmit()">
+      <label>Email</label>
+      <input id="acct-email" type="email" autocomplete="username" placeholder="you@example.com" value="${emailVal}" ${dis}>
+      <label>Password</label>
+      <input id="acct-password" type="password" autocomplete="${isSignup?'new-password':'current-password'}" placeholder="${isSignup?'At least 6 characters':'Your password'}" ${dis}>
+      <button class="acct-primary" type="submit" ${dis}>${accountPending?'Please wait…':(isSignup?'Create account':'Sign in')}</button>
+    </form>
+    <div class="acct-divider"><span>or</span></div>
+    <button class="acct-google" ${dis} onclick="accountGoogle()">
+      <svg width="16" height="16" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.6 6.1 29.6 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.3-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.6 6.1 29.6 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.5 0 10.5-2.1 14.3-5.6l-6.6-5.6C29.6 34.6 26.9 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.6 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.2 4.2-4 5.6l6.6 5.6C41.4 36.3 44 30.7 44 24c0-1.3-.1-2.3-.4-3.5z"/></svg>
+      Continue with Google
+    </button>
+  </div>`;
+}
+
+function renderAccountSignedIn(p) {
+  const dis = accountPending ? 'disabled' : '';
+  const initial = (p.full_name || p.username || p.email || '?').trim().charAt(0).toUpperCase() || '?';
+  const avatar = p.photo_url
+    ? `<img src="${escAttr(p.photo_url)}" alt="" class="acct-avatar-img" onerror="this.style.display='none'">`
+    : `<div class="acct-avatar-ph">${escHtml(initial)}</div>`;
+  return `
+  <div class="acct-profile">
+    <div class="acct-head">
+      <div class="acct-avatar">${avatar}
+        <button class="acct-avatar-edit" ${dis} onclick="document.getElementById('acct-photo-input').click()" title="Change photo">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        </button>
+        <input id="acct-photo-input" type="file" accept="image/*" hidden onchange="accountPhotoChange(this)">
+      </div>
+      <div class="acct-head-info">
+        <div class="acct-head-name">${escHtml(p.full_name || p.username || 'Your account')}</div>
+        <div class="acct-head-email">${escHtml(p.email || '')}</div>
+      </div>
+    </div>
+    <div class="acct-grid">
+      <div class="acct-field"><label>Username</label><input id="acct-username" type="text" value="${escAttr(p.username||'')}" placeholder="username" ${dis}></div>
+      <div class="acct-field"><label>Full name</label><input id="acct-fullname" type="text" value="${escAttr(p.full_name||'')}" placeholder="Your name" ${dis}></div>
+      <div class="acct-field"><label>Birthdate</label><input id="acct-birthdate" type="date" value="${escAttr(p.birthdate||'')}" ${dis}></div>
+      <div class="acct-field"><label>Country</label><input type="text" value="${escAttr(p.country||'')}" placeholder="Set in General → Region" disabled></div>
+    </div>
+    <div class="acct-field"><label>Bio</label><textarea id="acct-bio" rows="3" placeholder="A little about you" ${dis}>${escHtml(p.bio||'')}</textarea></div>
+    <div class="acct-actions">
+      <button class="acct-primary" ${dis} onclick="accountSaveProfile()">${accountPending?'Saving…':'Save changes'}</button>
+    </div>
+    <div class="acct-sep"></div>
+    <details class="acct-pw">
+      <summary>Change password</summary>
+      <div class="acct-field"><label>Current password</label><input id="acct-pw-current" type="password" autocomplete="current-password" ${dis}></div>
+      <div class="acct-field"><label>New password</label><input id="acct-pw-new" type="password" autocomplete="new-password" placeholder="At least 6 characters" ${dis}></div>
+      <button class="acct-secondary" ${dis} onclick="accountChangePassword()">Update password</button>
+    </details>
+    <div class="acct-sep"></div>
+    <button class="acct-signout" ${dis} onclick="accountSignOut()">Sign out</button>
+  </div>`;
+}
+
+function updateMoreButtonAvatar() {
+  const btn = document.getElementById('btn-more');
+  const img = document.getElementById('more-btn-avatar');
+  if (!btn || !img) return;
+  const a = state.account || {};
+  const url = (a.signed_in && a.profile && a.profile.photo_url) ? a.profile.photo_url : '';
+  if (!url) { btn.classList.remove('has-avatar'); img.removeAttribute('src'); return; }
+  img.onerror = () => { btn.classList.remove('has-avatar'); img.removeAttribute('src'); };
+  img.src = url;
+  btn.classList.add('has-avatar');
+}
+
+function accountSetMode(m) { accountMode = m; renderAccountPanel(); }
+
+function accountSubmit() {
+  const email = (document.getElementById('acct-email').value || '').trim();
+  const password = document.getElementById('acct-password').value || '';
+  if (!email || !password) { toast('Enter your email and password', 'error'); return; }
+  accountLastEmail = email;
+  accountPending = true;
+  renderAccountPanel();
+  send(accountMode === 'signup' ? 'AuthSignUp' : 'AuthSignIn', { email, password });
+}
+
+function accountGoogle() {
+  accountPending = true;
+  renderAccountPanel();
+  send('AuthSignInGoogle');
+}
+
+function accountSignOut() { send('AuthSignOut'); }
+
+function accountSaveProfile() {
+  const a = state.account || {};
+  const username = (document.getElementById('acct-username').value || '').trim();
+  const full_name = (document.getElementById('acct-fullname').value || '').trim();
+  const birthdate = (document.getElementById('acct-birthdate').value || '').trim();
+  const bio = (document.getElementById('acct-bio').value || '').trim();
+  if (a.profile) { a.profile.username = username; a.profile.full_name = full_name; a.profile.birthdate = birthdate; a.profile.bio = bio; }
+  accountPending = true;
+  renderAccountPanel();
+  send('AccountUpdateProfile', { username, full_name, birthdate, bio });
+}
+
+function accountChangePassword() {
+  const current = document.getElementById('acct-pw-current').value || '';
+  const new_password = document.getElementById('acct-pw-new').value || '';
+  if (new_password.length < 6) { toast('New password must be at least 6 characters', 'error'); return; }
+  accountPending = true;
+  renderAccountPanel();
+  send('AccountChangePassword', { current, new_password });
+}
+
+function accountPhotoChange(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  if (file.size > 8 * 1024 * 1024) { toast('Image must be under 8 MB', 'error'); return; }
+  const reader = new FileReader();
+  reader.onload = () => { accountPending = true; renderAccountPanel(); send('AccountSetPhoto', { data_uri: reader.result }); };
+  reader.onerror = () => toast('Could not read that image', 'error');
+  reader.readAsDataURL(file);
 }
 function toggleSetting(key) {
   const el = document.getElementById('toggle-' + key.replace(/_/g,'-'));
@@ -7975,6 +8206,17 @@ let __updateToastTimer = null;
 let __pendingUpdateVersion = null;
 let __manualUpdateCheck = false;
 let __updateModalVersion = null;
+let updateAvailable = false;
+function refreshMoreAttention() {
+  const dls = state.downloads || [];
+  const dlActive = dls.some(d => d.status === 'downloading' || d.status === 'pending');
+  const btn = document.getElementById('btn-more');
+  if (btn) btn.classList.toggle('has-attention', dlActive || updateAvailable);
+  const dlItem = document.getElementById('more-item-downloads');
+  if (dlItem) dlItem.classList.toggle('has-dot', dlActive);
+  const upItem = document.getElementById('more-item-update');
+  if (upItem) upItem.classList.toggle('has-dot', updateAvailable);
+}
 function isUpdateModalOpen() {
   const modal = document.getElementById('update-modal');
   return !!modal && modal.classList.contains('open');
@@ -8134,30 +8376,25 @@ function renderBookmarks() {
     list.innerHTML = '<div style="color:var(--text-muted);font-size:12px;text-align:center;padding:24px 0">No bookmarks yet. Hit the bookmark icon in the address bar to save a page.</div>';
     return;
   }
-  const xSvg = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
   const folderSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
   let html = '';
-  // Folder items first
   folders.forEach(f => {
     const items = bms.filter(b => b.folder_id === f.id);
     const count = items.length;
-    html += `<div class="bm-item bm-folder-item" data-folder-id="${escAttr(f.id)}" onclick="openFolderModal('${escAttr(f.id)}')">
+    html += `<div class="bm-item bm-folder-item" data-folder-id="${escAttr(f.id)}" onclick="openFolderModal('${escAttr(f.id)}')" oncontextmenu="bmFolderContextMenu(event,this)">
       <div class="bm-folder-icon">${folderSvg}</div>
       <div class="bm-item-info">
         <div class="bm-item-title">${escHtml(f.name)}</div>
         <div class="bm-item-url">${count} bookmark${count !== 1 ? 's' : ''}</div>
       </div>
-      <button class="bm-item-del" title="Delete folder" onclick="event.stopPropagation();deleteFolderById('${escAttr(f.id)}')">${xSvg}</button>
     </div>`;
   });
-  // Unfiled bookmarks
   bms.filter(b => !b.folder_id).forEach(b => {
-    html += `<div class="bm-item" draggable="true" data-reorder-id="${escAttr(b.id)}" data-nav-url="${escAttr(b.url)}">
+    html += `<div class="bm-item" draggable="true" data-reorder-id="${escAttr(b.id)}" data-nav-url="${escAttr(b.url)}" oncontextmenu="bmItemContextMenu(event,this)">
       <div class="bm-item-info">
         <div class="bm-item-title">${escHtml(b.title || b.url)}</div>
         <div class="bm-item-url">${escHtml(b.url)}</div>
       </div>
-      <button class="bm-item-del" title="Remove bookmark" data-remove-bookmark-id="${escAttr(b.id)}">${xSvg}</button>
     </div>`;
   });
   list.innerHTML = html;
@@ -8258,7 +8495,6 @@ function ctxAction(action) {
   if (!d) return;
   closeContextMenu();
   switch (action) {
-    case 'open_link':       send('Navigate', {url: d.linkUrl}); break;
     case 'open_link_tab':   send('OpenInNewTab', {url: d.linkUrl}); break;
     case 'open_link_win':   send('OpenInNewWindow', {url: d.linkUrl}); break;
     case 'copy_link':       copyToClipboard(d.linkUrl); break;
@@ -8297,7 +8533,6 @@ function showBrowserContextMenu(data) {
     rows.push(`<div class="ctx-item${cls ? ' '+cls : ''}" onclick="ctxAction('${action}')">${escHtml(label)}</div>`);
 
   if (data.linkUrl) {
-    item('open_link',     'Open link');
     item('open_link_tab', 'Open link in new tab');
     item('open_link_win', 'Open link in new window');
     item('copy_link',     'Copy link address');
@@ -8606,6 +8841,7 @@ function openMoreMenu() {
   menu.style.left = 'auto';
   menu.style.right = (window.innerWidth - rect.right) + 'px';
   updateMoreMenuZoom();
+  refreshMoreAttention();
   menu.classList.add('open');
   btn.classList.add('active');
   requestAnimationFrame(() => {
@@ -8646,28 +8882,23 @@ function renderBookmarksBar() {
     bar.innerHTML = '<span class="bm-bar-empty">No bookmarks yet - save pages with Ctrl+D</span>';
     return;
   }
-  const xSvg = '<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
   const folderSvg = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
-  // Folder pills
   const folderHtml = folders.map(f => {
     const label = f.name.length > 18 ? f.name.slice(0,16)+'...' : f.name;
-    return `<div class="bm-bar-item" title="${escAttr(f.name)}" onclick="openFolderModal('${escAttr(f.id)}')">
+    return `<div class="bm-bar-item" data-folder-id="${escAttr(f.id)}" title="${escAttr(f.name)}" onclick="openFolderModal('${escAttr(f.id)}')" oncontextmenu="bmFolderContextMenu(event,this)">
       <span style="display:flex;align-items:center;gap:4px;opacity:0.75">${folderSvg}</span>
       <span class="bm-bar-text">${escHtml(label)}</span>
-      <button class="bm-bar-del" title="Delete folder" onclick="event.stopPropagation();deleteFolderById('${escAttr(f.id)}')">${xSvg}</button>
     </div>`;
   }).join('');
-  // Unfiled bookmark items
   const bmHtml = unfiledBms.map(b => {
     const title = bookmarkLabel(b.url, b.title);
     const tip = [b.title, b.url].filter(Boolean).join(' - ');
     const icon = bookmarkIconUrl(b.url);
     const img = icon ? `<img class="bm-bar-icon" src="${escAttr(icon)}" alt="" onerror="this.style.display='none';this.nextElementSibling.classList.remove('hidden')">` : '';
     const fallback = `<span class="bm-bar-fallback ${icon ? 'hidden' : ''}">${escHtml(siteInitial(title))}</span>`;
-    return `<div class="bm-bar-item" draggable="true" data-reorder-id="${escAttr(b.id)}" title="${escAttr(tip)}" data-nav-url="${escAttr(b.url)}" onclick="navigateToUrl('${escAttr(b.url)}')">
+    return `<div class="bm-bar-item" draggable="true" data-reorder-id="${escAttr(b.id)}" title="${escAttr(tip)}" data-nav-url="${escAttr(b.url)}" onclick="navigateToUrl('${escAttr(b.url)}')" oncontextmenu="bmItemContextMenu(event,this)">
       ${img}${fallback}
       <span class="bm-bar-text">${escHtml(title.length > 24 ? title.slice(0,22)+'...' : title)}</span>
-      <button class="bm-bar-del" title="Remove bookmark" onclick="event.stopPropagation();removeBookmarkByUrl('${escAttr(b.url)}')">${xSvg}</button>
     </div>`;
   }).join('');
   bar.innerHTML = folderHtml + bmHtml;
@@ -8834,6 +9065,36 @@ function deleteHistoryEntry(id) {
 
 function removeBookmarkByUrl(url) {
   send('BookmarkRemove', {url});
+}
+
+function bmItemContextMenu(ev, el) {
+  ev.preventDefault();
+  ev.stopPropagation();
+  const item = el.closest('[data-nav-url]');
+  const url = item?.dataset.navUrl;
+  const bmId = item?.dataset.reorderId;
+  if (!url) return;
+  showContextMenu(ev.clientX, ev.clientY, [
+    { label: 'Open', action: () => navigateToUrl(url) },
+    { label: 'Open in new tab', action: () => send('OpenInNewTab', {url}) },
+    { label: 'Copy URL', action: () => copyToClipboard(url) },
+    { sep: true },
+    { label: 'Delete bookmark', danger: true, action: () => bmId ? send('BookmarkRemoveById', {id: bmId}) : send('BookmarkRemove', {url}) },
+  ]);
+}
+
+function bmFolderContextMenu(ev, el) {
+  ev.preventDefault();
+  ev.stopPropagation();
+  const item = el.closest('[data-folder-id]');
+  const folderId = item?.dataset.folderId;
+  if (!folderId) return;
+  showContextMenu(ev.clientX, ev.clientY, [
+    { label: 'Open folder', action: () => openFolderModal(folderId) },
+    { label: 'Rename', action: () => openFolderModalAndRename(folderId) },
+    { sep: true },
+    { label: 'Delete folder', danger: true, action: () => deleteFolderById(folderId) },
+  ]);
 }
 
 // ============================================================

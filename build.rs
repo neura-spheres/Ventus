@@ -3,6 +3,8 @@ fn main() {
     println!("cargo:rerun-if-changed=config.yaml");
     println!("cargo:rustc-env=NEURA_APP_VERSION={version}");
 
+    emit_cloud_env();
+
     let png_path = std::path::Path::new("public/ventus.png");
     if !png_path.exists() {
         return;
@@ -36,6 +38,28 @@ fn main() {
     }
 
     println!("cargo:rerun-if-changed=public/ventus.png");
+}
+
+fn emit_cloud_env() {
+    println!("cargo:rerun-if-changed=cloud.env");
+    let Ok(contents) = std::fs::read_to_string("cloud.env") else {
+        return;
+    };
+    for line in contents.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        let key = key.trim();
+        let value = value.trim();
+        if key.is_empty() {
+            continue;
+        }
+        println!("cargo:rustc-env=VENTUS_{key}={value}");
+    }
 }
 
 fn app_version() -> String {

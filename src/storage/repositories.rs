@@ -548,16 +548,31 @@ pub struct HistoryEntry {
     pub visited_at: i64,
 }
 
+const HISTORY_LIMIT: i64 = 150;
+
 pub fn add_history(
     conn: &Connection,
     url: &str,
     title: &str,
     workspace_id: Option<&str>,
-) -> Result<()> {
+) -> Result<i64> {
     let now = chrono::Utc::now().timestamp_millis();
     conn.execute(
         "INSERT INTO history(url, title, workspace_id, visited_at) VALUES(?1,?2,?3,?4)",
         params![url, title, workspace_id, now],
+    )?;
+    let row_id = conn.last_insert_rowid();
+    conn.execute(
+        "DELETE FROM history WHERE id NOT IN (SELECT id FROM history ORDER BY visited_at DESC LIMIT ?1)",
+        params![HISTORY_LIMIT],
+    )?;
+    Ok(row_id)
+}
+
+pub fn update_history_title(conn: &Connection, id: i64, title: &str) -> Result<()> {
+    conn.execute(
+        "UPDATE history SET title = ?1 WHERE id = ?2",
+        params![title, id],
     )?;
     Ok(())
 }
@@ -723,6 +738,15 @@ pub fn delete_download(conn: &Connection, id: &str) -> Result<()> {
 
 pub fn clear_downloads(conn: &Connection) -> Result<()> {
     conn.execute("DELETE FROM downloads", [])?;
+    Ok(())
+}
+
+pub fn fail_stale_downloads(conn: &Connection) -> Result<()> {
+    let now = chrono::Utc::now().timestamp_millis();
+    conn.execute(
+        "UPDATE downloads SET status = 'failed', completed_at = ?1 WHERE status IN ('downloading','pending')",
+        params![now],
+    )?;
     Ok(())
 }
 
