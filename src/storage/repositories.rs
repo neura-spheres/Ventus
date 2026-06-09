@@ -476,6 +476,70 @@ pub fn search_bookmarks(conn: &Connection, q: &str) -> Result<Vec<Bookmark>> {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct BookmarkFolder {
+    pub id: String,
+    pub name: String,
+    pub parent_id: Option<String>,
+    pub position: i32,
+    pub created_at: i64,
+}
+
+pub fn add_bookmark_folder(conn: &Connection, name: &str) -> Result<BookmarkFolder> {
+    let id = Uuid::new_v4().to_string();
+    let now = chrono::Utc::now().timestamp_millis();
+    let position: i32 = conn
+        .query_row(
+            "SELECT COALESCE(MIN(position), 0) - 1 FROM bookmark_folders",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
+    conn.execute(
+        "INSERT INTO bookmark_folders(id, name, parent_id, position, created_at) VALUES(?1,?2,NULL,?3,?4)",
+        params![id, name, position, now],
+    )?;
+    Ok(BookmarkFolder { id, name: name.to_string(), parent_id: None, position, created_at: now })
+}
+
+pub fn list_bookmark_folders(conn: &Connection) -> Result<Vec<BookmarkFolder>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, name, parent_id, position, created_at FROM bookmark_folders ORDER BY position ASC, created_at DESC",
+    )?;
+    let rows = stmt.query_map([], |row| {
+        Ok(BookmarkFolder {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            parent_id: row.get(2)?,
+            position: row.get(3)?,
+            created_at: row.get(4)?,
+        })
+    })?;
+    Ok(rows.collect::<rusqlite::Result<_>>()?)
+}
+
+pub fn set_bookmark_folder(conn: &Connection, bookmark_id: &str, folder_id: Option<&str>) -> Result<()> {
+    conn.execute(
+        "UPDATE bookmarks SET folder_id = ?1 WHERE id = ?2",
+        params![folder_id, bookmark_id],
+    )?;
+    Ok(())
+}
+
+pub fn delete_bookmark_folder(conn: &Connection, id: &str) -> Result<()> {
+    conn.execute("UPDATE bookmarks SET folder_id = NULL WHERE folder_id = ?1", [id])?;
+    conn.execute("DELETE FROM bookmark_folders WHERE id = ?1", [id])?;
+    Ok(())
+}
+
+pub fn rename_bookmark_folder(conn: &Connection, id: &str, name: &str) -> Result<()> {
+    conn.execute(
+        "UPDATE bookmark_folders SET name = ?1 WHERE id = ?2",
+        params![name, id],
+    )?;
+    Ok(())
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct HistoryEntry {
     pub id: i64,
     pub url: String,

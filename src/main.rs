@@ -76,6 +76,11 @@ const SC_FIND: usize = 31;
 // genuinely wedged / black load is retried. 6s catches those promptly while still giving
 // an ordinary load room to commit first.
 const LOAD_STALL_AFTER: u64 = 6;
+// Earlier than LOAD_STALL_AFTER: if the ACTIVE tab still hasn't committed any document
+// (pure black) by now, recreate its WebView2 controller immediately rather than making the
+// user wait out the whole stall window. Only acts on a genuinely black tab (see
+// rebuild_black_tab); committed-but-slow pages are untouched and fall through to the 6s path.
+const BLACK_PROBE_AFTER: u64 = 3;
 const COVER_MAX_MS: u64 = 1000;
 const TAB_SLEEP_CHECK_EVERY: Duration = Duration::from_secs(20);
 const HEAL_CONTENT_EVERY: Duration = Duration::from_millis(750);
@@ -336,39 +341,83 @@ fn main() {
         state.tab_manager.active_tab_id = Some(tab_id);
     }
 
-    if (restore_session
+    let restore_requested = (restore_session
         || matches!(
             state.settings.startup_behavior,
             config::StartupBehavior::LastSession
         ))
-        && cli_url.is_none()
-    {
-        if let Ok(Some(saved)) = repositories::load_session(&state.conn) {
-            state.tab_manager.workspaces = saved.workspaces;
-            state.tab_manager.active_workspace_id = saved.active_workspace_id;
-            state.tab_manager.tabs.clear();
-            state.tab_manager.active_tab_id = saved.active_tab_id;
-            for saved_tab in saved.tabs {
-                let mut tab = browser::tab::Tab::new(saved_tab.workspace_id, saved_tab.url);
-                tab.id = saved_tab.id;
-                tab.title = saved_tab.title;
-                tab.favicon = saved_tab.favicon;
-                tab.pinned = saved_tab.pinned;
-                tab.is_essential = saved_tab.is_essential;
-                tab.created_at = saved_tab.created_at;
-                tab.last_active_at = saved_tab.last_active_at;
-                tab.back_stack = saved_tab.back_stack;
-                tab.forward_stack = saved_tab.forward_stack;
-                tab.status = browser::tab::TabStatus::Complete;
-                tab.sync_nav_flags();
-                if !tab.is_neura_page() {
-                    restored_tabs.insert(tab.id.clone());
+        && cli_url.is_none();
+    tracing::info!(
+        target: "ventus::session",
+        startup_behavior = ?state.settings.startup_behavior,
+        restore_session_flag = restore_session,
+        restore_requested,
+        "[SESSION] startup: deciding whether to restore last session"
+    );
+    if restore_requested {
+        match repositories::load_session(&state.conn) {
+            Ok(Some(saved)) => {
+                state.tab_manager.workspaces = saved.workspaces;
+                state.tab_manager.active_workspace_id = saved.active_workspace_id;
+                state.tab_manager.tabs.clear();
+                state.tab_manager.active_tab_id = saved.active_tab_id;
+                let saved_tab_count = saved.tabs.len();
+                for saved_tab in saved.tabs {
+                    let mut tab = browser::tab::Tab::new(saved_tab.workspace_id, saved_tab.url);
+                    tab.id = saved_tab.id;
+                    tab.title = saved_tab.title;
+                    tab.favicon = saved_tab.favicon;
+                    tab.pinned = saved_tab.pinned;
+                    tab.is_essential = saved_tab.is_essential;
+                    tab.created_at = saved_tab.created_at;
+                    tab.last_active_at = saved_tab.last_active_at;
+                    tab.back_stack = saved_tab.back_stack;
+                    tab.forward_stack = saved_tab.forward_stack;
+                    tab.status = browser::tab::TabStatus::Complete;
+                    tab.sync_nav_flags();
+                    if !tab.is_neura_page() {
+                        restored_tabs.insert(tab.id.clone());
+                    }
+                    tracing::debug!(
+                        target: "ventus::session",
+                        tab = %tab.id,
+                        url = %tab.url,
+                        neura_page = tab.is_neura_page(),
+                        "[SESSION] restored tab"
+                    );
+                    state.tab_manager.tabs.push(tab);
                 }
-                state.tab_manager.tabs.push(tab);
+                if state.tab_manager.active_tab_id.is_none() {
+                    state.tab_manager.active_tab_id =
+                        state.tab_manager.tabs.first().map(|tab| tab.id.clone());
+                }
+                let active_id = state.tab_manager.active_tab_id.clone();
+                let active_url = state
+                    .tab_manager
+                    .active_tab()
+                    .map(|t| t.url.clone())
+                    .unwrap_or_default();
+                tracing::info!(
+                    target: "ventus::session",
+                    saved_tab_count,
+                    live_content_tabs = restored_tabs.len(),
+                    active_tab = ?active_id,
+                    active_url = %active_url,
+                    "[SESSION] restore complete: active tab will load eagerly at cold start, others stay sleeping"
+                );
             }
-            if state.tab_manager.active_tab_id.is_none() {
-                state.tab_manager.active_tab_id =
-                    state.tab_manager.tabs.first().map(|tab| tab.id.clone());
+            Ok(None) => {
+                tracing::info!(
+                    target: "ventus::session",
+                    "[SESSION] restore requested but no saved session found"
+                );
+            }
+            Err(e) => {
+                tracing::warn!(
+                    target: "ventus::session",
+                    error = %e,
+                    "[SESSION] restore requested but load_session failed"
+                );
             }
         }
     }
@@ -403,16 +452,29 @@ fn main() {
         .unwrap_or_else(|| browser::tab::Tab::new_tab_url().to_string());
     let win_size = window.inner_size();
     let webview_data_dir = data_dir.join("webview_data");
-    let chrome_data_dir = default_webview2_data_dir();
     let crash_sentinel: Option<std::path::PathBuf> = if !new_window {
         let p = data_dir.join("running.lock");
         if p.exists() {
-            let mut roots = vec![webview_data_dir.as_path()];
-            if let Some(dir) = chrome_data_dir.as_deref() {
-                roots.push(dir);
-            }
-            tracing::warn!("previous session ended without clean shutdown");
+            // Chrome UI and content tabs now share this one profile (one WebView2
+            // environment / browser process), so there is a single folder to wait on.
+            let roots = vec![webview_data_dir.as_path()];
+            tracing::warn!(
+                target: "ventus::startup",
+                lock = %p.display(),
+                "[STARTUP] previous session ended WITHOUT clean shutdown (running.lock present) — waiting for its WebView2 profile lock to release before building content WebViews"
+            );
+            let wait_started = Instant::now();
             wait_for_previous_instance(&p, &roots);
+            tracing::info!(
+                target: "ventus::startup",
+                waited_ms = wait_started.elapsed().as_millis() as u64,
+                "[STARTUP] finished waiting for previous instance / profile release"
+            );
+        } else {
+            tracing::info!(
+                target: "ventus::startup",
+                "[STARTUP] clean previous shutdown (no running.lock) — profile should be free"
+            );
         }
         let _ = std::fs::write(&p, std::process::id().to_string().as_bytes());
         Some(p)
@@ -420,10 +482,37 @@ fn main() {
         None
     };
     #[cfg(windows)]
-    if let Some(chrome_profile_dir) = chrome_data_dir.as_ref() {
-        sync_webview_secure_dns_prefs(&chrome_profile_dir, &state.settings);
+    {
+        // Log how busy/free the WebView2 profile is RIGHT BEFORE we build any WebView.
+        // If the profile is still locked here, the first content build will hit
+        // ERROR_BUSY (0x800700AA) → black tab. This line tells us if that is the cause.
+        let content_free = webview_profile_lock_released(&webview_data_dir);
+        tracing::info!(
+            target: "ventus::startup",
+            content_profile_free = content_free,
+            orphan_msedgewebview2 = count_msedgewebview2_processes(),
+            "[STARTUP] WebView2 profile lock state just before building WebViews"
+        );
     }
-    let mut browser_args = webview_args(&state.settings);
+    // Browser args are fixed for the life of the process: they are baked into the WebView2
+    // environment at creation, and security-setting changes apply via a full relaunch
+    // (see TabAction::ApplyWebSecurity), so this never needs to be reassigned.
+    let browser_args = webview_args(&state.settings);
+
+    // Shared WebView2 environment: the chrome UI WebView and every content tab run
+    // against ONE user-data folder, so they share a SINGLE msedgewebview2.exe browser
+    // process (one GPU process, one network/storage service) instead of spawning a
+    // second, duplicate process tree. Cookies, localStorage, and cache persist across
+    // restarts. The context is created BEFORE the chrome WebView so chrome can attach to
+    // it via with_web_context(); WRY caches the environment on the context and reuses it
+    // for every later WebView built from the same context.
+    // WebView2 fails silently into temp storage if the folder is missing/locked, so we
+    // pre-create it. Wrapped in Option so it can be dropped before TAO's process::exit().
+    std::fs::create_dir_all(&webview_data_dir).expect("create WebView2 profile");
+    encrypt_app_storage(&webview_data_dir);
+    #[cfg(windows)]
+    sync_webview_secure_dns_prefs(&webview_data_dir, &state.settings);
+    let mut content_web_context = Some(wry::WebContext::new(Some(webview_data_dir.clone())));
 
     let proxy_chrome = proxy.clone();
     let proxy_chrome_load = proxy.clone();
@@ -440,6 +529,11 @@ fn main() {
         .with_browser_accelerator_keys(false)
         .with_additional_browser_args(browser_args.clone());
     let chrome = match chrome_builder
+        // Share the content profile's WebView2 environment so the chrome UI does NOT
+        // spawn its own (duplicate) browser/GPU/utility process tree. Chrome is built
+        // first, so its browser args define the shared environment; content tabs use the
+        // identical args (webview_args), so reusing chrome's environment is consistent.
+        .with_web_context(content_web_context.as_mut().unwrap())
         .with_html(chrome_html())
         .with_ipc_handler(move |req: wry::http::Request<String>| {
             let body = req.body();
@@ -475,22 +569,6 @@ fn main() {
     let initial_layout =
         AppLayout::calculate(win_size, window.scale_factor(), &state, &layout_config);
 
-    // Shared WebContext: all content WebViews use the same data folder so
-    // cookies, localStorage, and HTTP cache persist across restarts and are
-    // shared between tabs (same as how a real browser works).
-    // Ensure webview_data dir exists before handing it to WebView2.
-    // WebView2 will fail silently and use a temp folder (losing cookies) if the path
-    // doesn't exist or is locked by a stale process, so we pre-create it here.
-    std::fs::create_dir_all(&webview_data_dir).expect("create WebView2 profile");
-    encrypt_app_storage(&webview_data_dir);
-    #[cfg(windows)]
-    sync_webview_secure_dns_prefs(&webview_data_dir, &state.settings);
-    // Wrapped in Option so we can explicitly drop it before TAO calls process::exit().
-    // Without this, Rust's Drop never runs for these contexts, so msedgewebview2.exe outlives
-    // the Ventus process and holds the profile lock — causing the next launch to silently use
-    // temp storage and lose all cookies.
-    let mut content_web_context = Some(wry::WebContext::new(Some(webview_data_dir.clone())));
-
     // Incognito tabs get their own ephemeral data directory that is wiped on every startup,
     // so cookies, cache, and localStorage never persist across sessions.
     // New windows use a per-process incognito dir so concurrent windows don't wipe each other.
@@ -512,6 +590,9 @@ fn main() {
     let mut content_hwnds: HashMap<String, isize> = HashMap::new();
     let mut load_watches: HashMap<String, u64> = HashMap::new();
     let mut load_watch_next = 0u64;
+    // In-flight "Save image as" requests: save_id → chosen destination. Filled when the
+    // save dialog is confirmed; drained when the content WebView posts back the image bytes.
+    let mut pending_image_saves: HashMap<String, PendingImageSave> = HashMap::new();
     let mut cover_was_open = false;
     let mut cover_watch_id = 0u64;
     let mut last_active_tab_id: Option<String> = state.tab_manager.active_tab_id.clone();
@@ -525,6 +606,13 @@ fn main() {
     let mut first_load_after_layout: Option<(String, String)> = None;
 
     if !first_url.starts_with("neura://") {
+        tracing::info!(
+            target: "ventus::startup",
+            tab = %first_tab_id,
+            url = %first_url,
+            restored = restored_tabs.contains(&first_tab_id),
+            "[STARTUP] building FIRST content WebView (eager cold-start load) — this is the moment most likely to hit a locked profile after a restore"
+        );
         let first_is_incognito = state.tab_manager.tab_is_incognito(&first_tab_id);
         begin_native_load(&mut state, &chrome, &first_tab_id);
         let ctx = if first_is_incognito {
@@ -551,6 +639,11 @@ fn main() {
             false,
         ) {
             Ok(first_wv) => {
+                tracing::info!(
+                    target: "ventus::startup",
+                    tab = %first_tab_id,
+                    "[STARTUP] FIRST content WebView built OK"
+                );
                 #[cfg(windows)]
                 let first_hwnd = webview_hwnd(&first_wv);
                 content_views.insert(first_tab_id.clone(), first_wv);
@@ -575,7 +668,13 @@ fn main() {
                 );
             }
             Err(e) => {
-                tracing::error!("build first content webview: {}", e);
+                tracing::error!(
+                    target: "ventus::startup",
+                    tab = %first_tab_id,
+                    url = %first_url,
+                    error = %e,
+                    "[STARTUP] FIRST content WebView build FAILED — tab will be blank/black. If error contains 0x800700AA the content profile was still locked by an orphaned msedgewebview2.exe"
+                );
                 if let Some(tab) = state.tab_manager.get_tab_mut(&first_tab_id) {
                     tab.url = browser::tab::Tab::new_tab_url().to_string();
                     tab.title = "New Tab".to_string();
@@ -801,6 +900,58 @@ fn main() {
                 }
             }
 
+            Event::UserEvent(AppEvent::CopyImageResult { success }) => {
+                let js = if success {
+                    "window.__neura && window.__neura.showSuccess('Image copied to clipboard')"
+                } else {
+                    "window.__neura && window.__neura.showError('Could not copy image')"
+                };
+                let _ = chrome.evaluate_script(js);
+            }
+
+            // Image bytes (or failure) returned by the content WebView for a "Save image as".
+            Event::UserEvent(AppEvent::SaveImageData { id, ok, data }) => {
+                if let Some(pending) = pending_image_saves.remove(&id) {
+                    let PendingImageSave { dest, url, referer } = pending;
+                    let dest_str = dest.to_string_lossy().to_string();
+                    let proxy_sa = proxy_main.clone();
+                    if ok && data.starts_with("data:") {
+                        // The page successfully read the image — decode and write it.
+                        rt.spawn(async move {
+                            let success = decode_data_url(&data)
+                                .and_then(|bytes| Ok(std::fs::write(&dest, bytes)?))
+                                .is_ok();
+                            let _ = proxy_sa.send_event(AppEvent::DownloadCompleted {
+                                url,
+                                path: Some(dest_str),
+                                success,
+                            });
+                        });
+                    } else if url.starts_with("http") {
+                        // The page couldn't read it (cross-origin, no CORS) — fetch server-side,
+                        // where CORS doesn't apply, using the page URL as Referer.
+                        rt.spawn(async move {
+                            let success = match fetch_image_bytes(&url, &referer).await {
+                                Ok(bytes) => std::fs::write(&dest, bytes).is_ok(),
+                                Err(_) => false,
+                            };
+                            let _ = proxy_sa.send_event(AppEvent::DownloadCompleted {
+                                url,
+                                path: Some(dest_str),
+                                success,
+                            });
+                        });
+                    } else {
+                        // blob:/other scheme the page failed on — nothing more we can do.
+                        let _ = proxy_sa.send_event(AppEvent::DownloadCompleted {
+                            url,
+                            path: Some(dest_str),
+                            success: false,
+                        });
+                    }
+                }
+            }
+
             // F12 / OpenDevtools — open Chrome DevTools for the active content WebView.
             // `open_devtools()` may create a new child HWND inside the main window that
             // initially appears black while loading.  Re-applying the layout immediately
@@ -852,6 +1003,7 @@ fn main() {
                 }
                 save_open_cookies(&content_views, &state, &data_dir);
                 popups.clear();
+                close_chrome_controller(&chrome);
                 shutdown_webview2(
                     crash_sentinel.as_deref(),
                     &mut content_views,
@@ -1085,6 +1237,15 @@ fn main() {
                     }
                     load_watches.remove(&key);
                 }
+                if let AppEvent::ContentBlackProbe { tab_id, url, watch } = &app_event {
+                    // Validate the watch is still current, but DO NOT consume it: if the probe
+                    // decides not to act (page committed, or not yet black), the full 6s stall
+                    // timer must still be allowed to fire on this same load.
+                    let key = app::load_key(tab_id, url);
+                    if load_watches.get(&key).copied() != Some(*watch) {
+                        return;
+                    }
+                }
                 if let AppEvent::ContentLoadEnd { tab_id, url, .. } = &app_event {
                     clear_load_watches(&mut load_watches, tab_id);
                     // Snapshot cookies after each page load into our isolated store.
@@ -1093,6 +1254,21 @@ fn main() {
                         if let Some(wv) = content_views.get(tab_id.as_str()) {
                             browser::cookie_manager::trigger_save(wv, cookie_tx.clone());
                         }
+                    }
+                    // Page navigation creates a new window context, resetting any JS
+                    // globals we injected via evaluate_script (including __vLeftEdge).
+                    // Re-inject it so the resize-cursor guard stays correct after load.
+                    let nav_layout = AppLayout::calculate(
+                        layout_size(&window, &state),
+                        window.scale_factor(),
+                        &state,
+                        &layout_config,
+                    );
+                    if let Some(wv) = content_views.get(tab_id.as_str()) {
+                        let _ = wv.evaluate_script(&format!(
+                            "window.__vLeftEdge={}",
+                            nav_layout.content.x.max(0)
+                        ));
                     }
                 }
                 if let AppEvent::ContentNavigationFailed { tab_id, url, .. } = &app_event {
@@ -1583,6 +1759,28 @@ fn main() {
                                 }
                             }
                         }
+                        TabAction::ExtendLoadWatch { tab_id, url } => {
+                            // The navigation is still in-flight (slow main-document download).
+                            // Do NOT touch the WebView or re-navigate — that would abort the
+                            // live connection. Just re-arm the stall watchdog so we keep
+                            // giving the connection room to commit.
+                            if content_views.contains_key(&tab_id) {
+                                tracing::info!(
+                                    target: "ventus::nav",
+                                    tab = %tab_id,
+                                    url = %url,
+                                    "ExtendLoadWatch: re-arming stall watchdog, keeping the live connection"
+                                );
+                                watch_load(
+                                    &rt,
+                                    &proxy_main,
+                                    &mut load_watches,
+                                    &mut load_watch_next,
+                                    tab_id,
+                                    url,
+                                );
+                            }
+                        }
                         TabAction::NudgeContent { tab_id, url } => {
                             if let Some(wv) = content_views.get(&tab_id) {
                                 let active = state.tab_manager.active_tab_id.as_deref()
@@ -1799,6 +1997,12 @@ fn main() {
                                         if let Some(wv) = content_views.get(&tab_id) {
                                             let _ = wv.load_url(&url);
                                         }
+                                        tracing::info!(
+                                            target: "ventus::session",
+                                            tab = %tab_id,
+                                            url = %url,
+                                            "[SESSION] woke sleeping/restored tab: content WebView built OK"
+                                        );
                                         watch_load(
                                             &rt,
                                             &proxy_main,
@@ -1808,7 +2012,13 @@ fn main() {
                                             url.clone(),
                                         );
                                     }
-                                    Err(e) => tracing::error!("activate content view: {}", e),
+                                    Err(e) => tracing::error!(
+                                        target: "ventus::session",
+                                        tab = %tab_id,
+                                        url = %url,
+                                        error = %e,
+                                        "[SESSION] woke sleeping/restored tab but content WebView build FAILED — tab stays black. 0x800700AA = profile still locked"
+                                    ),
                                 }
                             }
                         }
@@ -1876,157 +2086,39 @@ fn main() {
                             }
                         }
                         TabAction::ApplyWebSecurity => {
-                            browser_args = webview_args(&state.settings);
-                            #[cfg(windows)]
-                            {
-                                if let Some(chrome_profile_dir) = default_webview2_data_dir() {
-                                    sync_webview_secure_dns_prefs(
-                                        &chrome_profile_dir,
-                                        &state.settings,
-                                    );
-                                }
-                                sync_webview_secure_dns_prefs(&webview_data_dir, &state.settings);
-                                sync_webview_secure_dns_prefs(
-                                    &incognito_data_dir,
-                                    &state.settings,
+                            // DoH / third-party-cookie blocking are baked into the WebView2
+                            // environment's browser args, fixed when the environment is created.
+                            // The chrome UI and every content tab now share ONE environment (a
+                            // single browser process), so it can't be torn down and rebuilt in
+                            // place. Relaunch Ventus: the fresh process recreates the shared
+                            // environment with the new args and --restore-session reopens every
+                            // tab. Session + cookies are snapshotted first, exactly like a normal
+                            // exit, so nothing is lost.
+                            if new_window {
+                                // Secondary windows share the main instance's browser process;
+                                // the env args only change when the whole app restarts.
+                                let _ = chrome.evaluate_script(
+                                    "window.__neura && window.__neura.showSuccess('Restart Ventus to apply privacy changes')",
                                 );
-                            }
-
-                            save_open_cookies(&content_views, &state, &data_dir);
-                            #[cfg(windows)]
-                            drain_message_queue_ms(200);
-                            content_views.clear();
-                            content_hwnds.clear();
-                            load_watches.clear();
-                            drop(content_web_context.take());
-                            drop(incognito_web_context.take());
-                            #[cfg(windows)]
-                            {
-                                if !wait_for_webview_profiles_released(
-                                    &[
-                                        webview_data_dir.as_path(),
-                                        incognito_data_dir.as_path(),
-                                    ],
-                                    WEBVIEW_PROFILE_RELEASE_TIMEOUT,
-                                ) {
-                                    tracing::warn!(
-                                        "privacy: timed out waiting for WebView2 profile release"
-                                    );
-                                }
-                            }
-                            #[cfg(not(windows))]
-                            std::thread::sleep(Duration::from_millis(800));
-
-                            std::fs::create_dir_all(&webview_data_dir).ok();
-                            std::fs::create_dir_all(&incognito_data_dir).ok();
-                            encrypt_app_storage(&webview_data_dir);
-                            encrypt_app_storage(&incognito_data_dir);
-                            #[cfg(windows)]
-                            {
-                                sync_webview_secure_dns_prefs(&webview_data_dir, &state.settings);
-                                sync_webview_secure_dns_prefs(
-                                    &incognito_data_dir,
-                                    &state.settings,
+                            } else {
+                                save_window_size(&window, &mut state, custom_maximized);
+                                save_session(&state);
+                                save_open_cookies(&content_views, &state, &data_dir);
+                                popups.clear();
+                                relaunch_self(true);
+                                // Close chrome's controller so the shared msedgewebview2.exe can
+                                // flush its cookie DB and exit, releasing the profile lock before
+                                // the relaunched instance claims it.
+                                close_chrome_controller(&chrome);
+                                shutdown_webview2(
+                                    crash_sentinel.as_deref(),
+                                    &mut content_views,
+                                    &mut content_hwnds,
+                                    &mut content_web_context,
+                                    &mut incognito_web_context,
                                 );
+                                *control_flow = ControlFlow::Exit;
                             }
-                            content_web_context =
-                                Some(wry::WebContext::new(Some(webview_data_dir.clone())));
-                            incognito_web_context =
-                                Some(wry::WebContext::new(Some(incognito_data_dir.clone())));
-                            ubol_done = false;
-                            ubol_enabled = None;
-                            ubol_tab = None;
-
-                            let active_content =
-                                state.tab_manager.active_tab_id.clone().and_then(|tab_id| {
-                                    state
-                                        .tab_manager
-                                        .get_tab(&tab_id)
-                                        .map(|tab| (tab_id, tab.url.clone()))
-                                });
-                            if let Some((tab_id, url)) = active_content {
-                                if !url.starts_with("neura://") {
-                                    begin_native_load(&mut state, &chrome, &tab_id);
-                                    state.load_recoveries.remove(&app::load_key(&tab_id, &url));
-                                    state.push_state_to_chrome(&chrome);
-
-                                    let is_incog = state.tab_manager.tab_is_incognito(&tab_id);
-                                    let ctx = if is_incog {
-                                        incognito_web_context.as_mut().unwrap()
-                                    } else {
-                                        content_web_context.as_mut().unwrap()
-                                    };
-                                    let ad_script = state.ad_block_engine.init_script().to_string();
-                                    match build_content_webview(
-                                        &window,
-                                        &tab_id,
-                                        &url,
-                                        layout.content,
-                                        proxy_main.clone(),
-                                        ctx,
-                                        is_incog,
-                                        std::sync::Arc::clone(&shared_dl_dir),
-                                        tab_zoom(&state, &tab_id),
-                                        &browser_args,
-                                        ad_script,
-                                        state.settings.privacy.fingerprint_protection,
-                                        state.settings.privacy.strict_permissions,
-                                        state.settings.privacy.https_only,
-                                        false,
-                                    ) {
-                                        Ok(wv) => {
-                                            #[cfg(windows)]
-                                            let hwnd = webview_hwnd(&wv);
-                                            content_views.insert(tab_id.clone(), wv);
-                                            #[cfg(windows)]
-                                            track_content_hwnd(hwnd, &tab_id, &mut content_hwnds);
-                                            apply_layout(
-                                                &chrome,
-                                                chrome_hwnd,
-                                                &content_views,
-                                                &state,
-                                                &layout_config,
-                                                &window,
-                                            );
-                                            if let Some(wv) = content_views.get(&tab_id) {
-                                                let _ = wv.focus();
-                                                let _ = wv.load_url(&url);
-                                            }
-                                            watch_load(
-                                                &rt,
-                                                &proxy_main,
-                                                &mut load_watches,
-                                                &mut load_watch_next,
-                                                tab_id.clone(),
-                                                url.clone(),
-                                            );
-                                        }
-                                        Err(e) => {
-                                            tracing::error!("apply secure DNS content rebuild: {}", e)
-                                        }
-                                    }
-                                }
-                            }
-
-                            apply_layout(
-                                &chrome,
-                                chrome_hwnd,
-                                &content_views,
-                                &state,
-                                &layout_config,
-                                &window,
-                            );
-                            sync_active_ubol(
-                                &content_views,
-                                &state,
-                                ubol_dir.as_deref(),
-                                &mut ubol_done,
-                                &mut ubol_enabled,
-                                &mut ubol_tab,
-                            );
-                            let _ = chrome.evaluate_script(
-                                "window.__neura && window.__neura.showSuccess('Secure DNS applied')",
-                            );
                         }
                         TabAction::DownloadUpdate(download_url) => {
                             let proxy_dl = proxy_main.clone();
@@ -2053,6 +2145,125 @@ fn main() {
                                             });
                                     }
                                 }
+                            });
+                        }
+                        TabAction::SaveImageAs { url } => {
+                            let filename = image_filename_from_url(&url);
+                            let mut dlg = rfd::FileDialog::new()
+                                .set_title("Save image as")
+                                .set_file_name(&filename)
+                                .add_filter(
+                                    "Images",
+                                    &["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico", "avif"],
+                                )
+                                .add_filter("All files", &["*"]);
+                            // Default to the configured download folder, else the user's Downloads.
+                            let default_dir = {
+                                let prefs = shared_dl_dir
+                                    .lock()
+                                    .unwrap_or_else(|e| e.into_inner())
+                                    .clone();
+                                if prefs.dir.exists() {
+                                    Some(prefs.dir)
+                                } else {
+                                    directories::UserDirs::new()
+                                        .and_then(|ud| ud.download_dir().map(|p| p.to_path_buf()))
+                                }
+                            };
+                            if let Some(dir) = default_dir {
+                                dlg = dlg.set_directory(dir);
+                            }
+                            if let Some(dest) = dlg.save_file() {
+                                let dest_str = dest.to_string_lossy().to_string();
+                                let fname = dest
+                                    .file_name()
+                                    .and_then(|n| n.to_str())
+                                    .unwrap_or(&filename)
+                                    .to_string();
+                                // Show the download immediately (panel + feedback animation).
+                                let _ = proxy_main.send_event(AppEvent::DownloadStarted {
+                                    url: url.clone(),
+                                    filename: fname,
+                                    path: dest_str.clone(),
+                                });
+                                if url.starts_with("data:") {
+                                    // Self-contained — decode and write without involving the page.
+                                    let proxy_sa = proxy_main.clone();
+                                    rt.spawn(async move {
+                                        let ok = decode_data_url(&url)
+                                            .and_then(|bytes| Ok(std::fs::write(&dest, bytes)?))
+                                            .is_ok();
+                                        let _ = proxy_sa.send_event(AppEvent::DownloadCompleted {
+                                            url,
+                                            path: Some(dest_str),
+                                            success: ok,
+                                        });
+                                    });
+                                } else {
+                                    // Fetch inside the active page (cookies, session, blob: access),
+                                    // then write the bytes it returns. SaveImageData resolves it.
+                                    let active = state.tab_manager.active_tab_id.clone();
+                                    let referer = state
+                                        .tab_manager
+                                        .active_tab()
+                                        .map(|t| t.url.clone())
+                                        .unwrap_or_default();
+                                    let live = active
+                                        .as_ref()
+                                        .and_then(|id| content_views.get(id))
+                                        .is_some();
+                                    if live {
+                                        let save_id = uuid::Uuid::new_v4().to_string();
+                                        let script = save_image_fetch_script(&save_id, &url);
+                                        if let Some(wv) =
+                                            active.as_ref().and_then(|id| content_views.get(id))
+                                        {
+                                            let _ = wv.evaluate_script(&script);
+                                            pending_image_saves.insert(
+                                                save_id,
+                                                PendingImageSave {
+                                                    dest,
+                                                    url,
+                                                    referer,
+                                                },
+                                            );
+                                        }
+                                    } else {
+                                        // No live page (e.g. internal tab) — best-effort server fetch.
+                                        let proxy_sa = proxy_main.clone();
+                                        rt.spawn(async move {
+                                            let ok = match fetch_image_bytes(&url, &referer).await {
+                                                Ok(bytes) => std::fs::write(&dest, bytes).is_ok(),
+                                                Err(_) => false,
+                                            };
+                                            let _ = proxy_sa.send_event(AppEvent::DownloadCompleted {
+                                                url,
+                                                path: Some(dest_str),
+                                                success: ok,
+                                            });
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                        TabAction::CopyImageToClipboard { url } => {
+                            let referer = state
+                                .tab_manager
+                                .active_tab()
+                                .map(|t| t.url.clone())
+                                .unwrap_or_default();
+                            let proxy_cp = proxy_main.clone();
+                            rt.spawn(async move {
+                                let result: anyhow::Result<()> = if url.starts_with("data:") {
+                                    decode_data_url(&url).and_then(|b| write_image_to_clipboard(&b))
+                                } else {
+                                    fetch_image_bytes(&url, &referer)
+                                        .await
+                                        .and_then(|b| write_image_to_clipboard(&b))
+                                };
+                                let _ = proxy_cp.send_event(AppEvent::CopyImageResult {
+                                    success: result.is_ok(),
+                                });
                             });
                         }
                         TabAction::SetFullscreen(active) => {
@@ -2431,6 +2642,7 @@ fn main() {
                 }
                 save_open_cookies(&content_views, &state, &data_dir);
                 popups.clear();
+                close_chrome_controller(&chrome);
                 shutdown_webview2(
                     crash_sentinel.as_deref(),
                     &mut content_views,
@@ -2620,6 +2832,27 @@ fn send_launch_url(data_dir: &std::path::Path, url: &str) -> bool {
     false
 }
 
+/// Relaunch Ventus in a fresh process, then let the caller exit this one. Used when a
+/// setting changes a WebView2 environment browser-arg (DoH, third-party-cookie blocking)
+/// that can only take effect in a newly created environment — and, because the chrome UI
+/// shares the single environment, that means a whole-process restart. The new instance
+/// waits for this PID to fully exit (releasing the profile lock) via `--wait-for-pid`
+/// before claiming the profile, and `--restore-session` reopens the saved tabs.
+fn relaunch_self(restore_session: bool) {
+    let Ok(exe) = std::env::current_exe() else {
+        tracing::error!("relaunch_self: current_exe() failed; cannot restart");
+        return;
+    };
+    let mut cmd = std::process::Command::new(exe);
+    cmd.arg("--wait-for-pid").arg(std::process::id().to_string());
+    if restore_session {
+        cmd.arg("--restore-session");
+    }
+    if let Err(e) = cmd.spawn() {
+        tracing::error!("relaunch_self: failed to spawn new instance: {}", e);
+    }
+}
+
 #[cfg(windows)]
 fn wait_for_relaunch_parent(pid: Option<u32>) {
     let Some(pid) = pid else {
@@ -2726,6 +2959,40 @@ async fn run_cookie_save_task(
         }
     }
     tracing::debug!("cookie_store save task: channel closed, exiting");
+}
+
+/// Best-effort count of running msedgewebview2.exe processes. Used only for startup
+/// diagnostics: a high count after a restart means previous WebView2 browser processes
+/// did not exit and are holding the profile lock (the root cause of stuck black tabs).
+#[cfg(windows)]
+fn count_msedgewebview2_processes() -> usize {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    let output = std::process::Command::new("tasklist")
+        .args([
+            "/FI",
+            "IMAGENAME eq msedgewebview2.exe",
+            "/NH",
+            "/FO",
+            "CSV",
+        ])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output();
+    match output {
+        Ok(out) => {
+            let text = String::from_utf8_lossy(&out.stdout);
+            text.lines()
+                .filter(|l| l.to_lowercase().contains("msedgewebview2.exe"))
+                .count()
+        }
+        Err(_) => 0,
+    }
+}
+
+#[cfg(not(windows))]
+#[allow(dead_code)]
+fn count_msedgewebview2_processes() -> usize {
+    0
 }
 
 fn wait_for_previous_instance(sentinel: &std::path::Path, profiles: &[&std::path::Path]) {
@@ -2857,6 +3124,20 @@ fn wait_for_webview_profiles_released(
         drain_message_queue_ms(WEBVIEW_PROFILE_RELEASE_POLL);
     }
 }
+
+/// Close the chrome WebView's controller so the shared WebView2 browser process can flush
+/// its cookie database and exit cleanly. Chrome now shares the content profile's single
+/// environment, so without this it keeps msedgewebview2.exe alive past content teardown and
+/// `process::exit()` hard-kills it before the final cookie flush — losing the last cookies
+/// set before close. Must run AFTER `save_open_cookies` and BEFORE `shutdown_webview2`.
+#[cfg(windows)]
+fn close_chrome_controller(chrome: &WebView) {
+    unsafe {
+        let _ = chrome.controller().Close();
+    }
+}
+#[cfg(not(windows))]
+fn close_chrome_controller(_chrome: &WebView) {}
 
 /// Explicitly release all WebView2 resources before TAO calls process::exit().
 /// TAO's run() is `-> !` and calls process::exit() which skips Rust Drop, so without this
@@ -3826,6 +4107,26 @@ fn build_content_webview_once(
                     let _ = proxy_ipc.send_event(AppEvent::AiToolResult { call_id, result });
                     return;
                 }
+                if value.get("cmd").and_then(|v| v.as_str()) == Some("save_image_data") {
+                    let id = value
+                        .get("save_id")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default()
+                        .to_string();
+                    let ok = value.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
+                    let data = value
+                        .get("data")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default()
+                        .to_string();
+                    let _ = proxy_ipc.send_event(AppEvent::SaveImageData { id, ok, data });
+                    return;
+                }
+                if value.get("cmd").and_then(|v| v.as_str()) == Some("content_pointer_down") {
+                    let _ =
+                        proxy_ipc.send_event(AppEvent::Chrome(ChromeCommand::ContentPointerDown));
+                    return;
+                }
                 if value.get("cmd").and_then(|v| v.as_str()) == Some("begin_resize") {
                     let edge = value
                         .get("edge")
@@ -4113,12 +4414,6 @@ fn doh_feature_arg(url: &str, mode: &config::SecureDnsMode) -> String {
     let fallback = matches!(mode, config::SecureDnsMode::Automatic);
     let encoded_url: String = url::form_urlencoded::byte_serialize(url.as_bytes()).collect();
     format!("DnsOverHttps:Fallback/{fallback}/Templates/{encoded_url}")
-}
-
-fn default_webview2_data_dir() -> Option<std::path::PathBuf> {
-    let mut path = std::env::current_exe().ok()?.into_os_string();
-    path.push(".WebView2");
-    Some(std::path::PathBuf::from(path))
 }
 
 fn sync_webview_secure_dns_prefs(profile_root: &std::path::Path, settings: &config::AppSettings) {
@@ -4812,7 +5107,13 @@ fn content_initialization_script(
     var x = e.clientX, y = e.clientY;
     var onR = x >= W - RESIZE_ZONE;
     var onB = y >= H - RESIZE_ZONE;
-    var onL = x <= RESIZE_ZONE;
+    // __vLeftEdge is the content WebView's left offset in window coords, injected by Rust
+    // via evaluate_script on every layout change + page load. When a sidebar is visible
+    // content_x > 0, so the content's left edge is NOT the window's left edge — adding
+    // the offset makes onL false for all practical cursor positions, suppressing the
+    // spurious ew-resize cursor that otherwise appears at the sidebar's right border.
+    var __wle = (typeof window.__vLeftEdge === 'number') ? window.__vLeftEdge : 0;
+    var onL = (x + __wle) <= RESIZE_ZONE;
     var edge = null;
     var cur  = '';
     if (onR && onB) { edge = 'bottomright'; cur = 'nwse-resize'; }
@@ -4831,6 +5132,10 @@ fn content_initialization_script(
       try { post({cmd: 'begin_resize', edge: __resizeEdge}); } catch(_) {}
       // Don't preventDefault — let the page also handle it normally
     }
+    // A press inside the live page dismisses chrome popovers that are clipped to their
+    // own rect (e.g. the download panel), giving them click-outside-to-close behaviour
+    // without the chrome having to cover — and block — the whole page.
+    try { post({cmd: 'content_pointer_down'}); } catch(_) {}
   }, {capture: true});
 
   // Context menu: intercept right-clicks and relay target info to Rust so the
@@ -5223,6 +5528,17 @@ fn watch_load(
     let watch = *next;
     clear_load_watches(watches, &tab_id);
     watches.insert(app::load_key(&tab_id, &url), watch);
+    let probe_proxy = proxy.clone();
+    let probe_tab = tab_id.clone();
+    let probe_url = url.clone();
+    rt.spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(BLACK_PROBE_AFTER)).await;
+        let _ = probe_proxy.send_event(AppEvent::ContentBlackProbe {
+            tab_id: probe_tab,
+            url: probe_url,
+            watch,
+        });
+    });
     rt.spawn(async move {
         tokio::time::sleep(std::time::Duration::from_secs(LOAD_STALL_AFTER)).await;
         let _ = proxy.send_event(AppEvent::ContentLoadStalled { tab_id, url, watch });
@@ -5847,13 +6163,20 @@ fn sync_content_views(
         .map(|tab| tab.is_neura_page())
         .unwrap_or(false);
 
+    // content_x is the WebView's left offset in window coordinates. Push it so the
+    // init-script resize detection can determine whether the WebView's left edge is
+    // actually the window's left edge (content_x == 0, auto-hide mode) or the sidebar's
+    // right border (content_x > 0) — in the latter case onL must stay false.
+    let content_left = layout.content.x.max(0);
+    let left_edge_js = format!("window.__vLeftEdge={}", content_left);
+
     if !active_is_neura_page {
         if let Some(wv) = content_views.get(active_id) {
             set_content_bounds(wv, layout.content);
             let _ = wv.set_visible(true);
             let _ = wv.evaluate_script(&format!(
-                "window.__neuraContentFullscreen={}",
-                state.content_fullscreen
+                "window.__neuraContentFullscreen={};{}",
+                state.content_fullscreen, left_edge_js
             ));
         }
     }
@@ -5864,12 +6187,14 @@ fn sync_content_views(
         }
         set_content_bounds(wv, layout.content);
         let _ = wv.set_visible(false);
+        let _ = wv.evaluate_script(&left_edge_js);
     }
 
     if active_is_neura_page {
         if let Some(wv) = content_views.get(active_id) {
             set_content_bounds(wv, layout.content);
             let _ = wv.set_visible(false);
+            let _ = wv.evaluate_script(&left_edge_js);
         }
     }
 }
@@ -6348,13 +6673,26 @@ fn heal_active_content(
 
 fn save_session(state: &AppState) {
     let active_id = state.tab_manager.active_tab_id.as_deref();
-    let _ = repositories::save_session(
+    let result = repositories::save_session(
         &state.conn,
         &state.tab_manager.workspaces,
         &state.tab_manager.active_workspace_id,
         &state.tab_manager.tabs,
         active_id,
     );
+    match result {
+        Ok(()) => tracing::debug!(
+            target: "ventus::session",
+            tab_count = state.tab_manager.tabs.len(),
+            active_tab = ?active_id,
+            "[SESSION] saved session snapshot"
+        ),
+        Err(e) => tracing::warn!(
+            target: "ventus::session",
+            error = %e,
+            "[SESSION] save_session FAILED — last session may not restore correctly"
+        ),
+    }
 }
 
 fn queue_session_save(
@@ -7827,4 +8165,212 @@ fn sleep_threshold_ms(free_mb: u64) -> u64 {
         m if m > 512 => 4 * 60 * 1000,
         _ => 2 * 60 * 1000,
     }
+}
+
+fn image_filename_from_url(url: &str) -> String {
+    if url.starts_with("data:") {
+        let mime = url.get(5..).and_then(|s| s.split(';').next()).unwrap_or("image/png");
+        let ext = match mime {
+            "image/jpeg" | "image/jpg" => "jpg",
+            "image/gif" => "gif",
+            "image/webp" => "webp",
+            "image/svg+xml" => "svg",
+            "image/bmp" => "bmp",
+            "image/ico" | "image/x-icon" => "ico",
+            _ => "png",
+        };
+        return format!("image.{}", ext);
+    }
+    if let Ok(parsed) = url::Url::parse(url) {
+        if let Some(last) = parsed.path_segments().and_then(|s| s.last()) {
+            let name = last.split('?').next().unwrap_or(last);
+            let lower = name.to_lowercase();
+            let known_ext = ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico", "avif"]
+                .iter()
+                .any(|e| lower.ends_with(&format!(".{}", e)));
+            if known_ext && !name.is_empty() {
+                return name.to_string();
+            }
+        }
+    }
+    "image.png".to_string()
+}
+
+/// A confirmed "Save image as" destination awaiting the image bytes from the content WebView.
+struct PendingImageSave {
+    dest: std::path::PathBuf,
+    url: String,
+    /// Page URL used as the Referer for the reqwest fallback (hotlink-protected hosts).
+    referer: String,
+}
+
+/// Decode the bytes encoded in a `data:` URL. Handles both base64 (`;base64,`) and
+/// percent-encoded payloads (e.g. inline SVG). The `data:` part may be absent — anything
+/// after the first comma is treated as the payload.
+fn decode_data_url(data: &str) -> anyhow::Result<Vec<u8>> {
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
+    let comma = data
+        .find(',')
+        .ok_or_else(|| anyhow::anyhow!("malformed data URL"))?;
+    let header = &data[..comma];
+    let payload = &data[comma + 1..];
+    if header.contains(";base64") {
+        // Whitespace can appear in long base64 data URLs — strip it before decoding.
+        let cleaned: String = payload.chars().filter(|c| !c.is_whitespace()).collect();
+        Ok(STANDARD.decode(cleaned)?)
+    } else {
+        // Percent-decoded text payload.
+        Ok(percent_decode(payload))
+    }
+}
+
+fn percent_decode(s: &str) -> Vec<u8> {
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'%' if i + 2 < bytes.len() => {
+                let hi = (bytes[i + 1] as char).to_digit(16);
+                let lo = (bytes[i + 2] as char).to_digit(16);
+                if let (Some(hi), Some(lo)) = (hi, lo) {
+                    out.push((hi * 16 + lo) as u8);
+                    i += 3;
+                } else {
+                    out.push(bytes[i]);
+                    i += 1;
+                }
+            }
+            b'+' => {
+                out.push(b' ');
+                i += 1;
+            }
+            b => {
+                out.push(b);
+                i += 1;
+            }
+        }
+    }
+    out
+}
+
+/// Download an image over HTTP(S) using a browser-like User-Agent and a Referer header.
+/// The Referer lets hotlink-protected hosts serve the asset, and a real UA avoids the
+/// blanket 403s some CDNs return for unknown clients. Errors on any non-success status so
+/// the caller can mark the download Failed instead of writing an HTML error page to disk.
+async fn fetch_image_bytes(url: &str, referer: &str) -> anyhow::Result<Vec<u8>> {
+    let client = reqwest::Client::builder()
+        .user_agent(crate::version::USER_AGENT)
+        .timeout(std::time::Duration::from_secs(30))
+        .build()?;
+    let mut req = client.get(url);
+    if !referer.trim().is_empty() && referer.starts_with("http") {
+        req = req.header(reqwest::header::REFERER, referer);
+    }
+    let resp = req.send().await?;
+    if !resp.status().is_success() {
+        return Err(anyhow::anyhow!("http {}", resp.status().as_u16()));
+    }
+    Ok(resp.bytes().await?.to_vec())
+}
+
+/// Decode image bytes (any supported format) into a CF_DIB bitmap and write it to
+/// the Windows clipboard so the user can paste it into any application.
+/// Uses a 24-bit BGR bottom-up DIB which is universally accepted by Win32 apps.
+#[cfg(windows)]
+fn write_image_to_clipboard(bytes: &[u8]) -> anyhow::Result<()> {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::System::DataExchange::{CloseClipboard, OpenClipboard};
+
+    let img = image::load_from_memory(bytes)?.to_rgba8();
+    let width = img.width() as usize;
+    let height = img.height() as usize;
+    let pixels = img.as_raw();
+
+    // CF_DIB: BITMAPINFOHEADER (40 bytes) + 24bpp BGR rows, bottom-up, 4-byte-aligned stride
+    let stride = (width * 3 + 3) & !3;
+    const HDR: usize = 40;
+    let total = HDR + stride * height;
+    let mut dib = vec![0u8; total];
+
+    dib[0..4].copy_from_slice(&40u32.to_le_bytes());            // biSize
+    dib[4..8].copy_from_slice(&(width as i32).to_le_bytes());   // biWidth
+    dib[8..12].copy_from_slice(&(height as i32).to_le_bytes()); // biHeight (positive = bottom-up)
+    dib[12..14].copy_from_slice(&1u16.to_le_bytes());           // biPlanes
+    dib[14..16].copy_from_slice(&24u16.to_le_bytes());          // biBitCount
+    // biCompression, biSizeImage, biX/YPelsPerMeter, biClrUsed, biClrImportant = 0
+
+    for dib_row in 0..height {
+        let img_row = height - 1 - dib_row; // flip: DIB row 0 = bottom of image
+        let dst = HDR + dib_row * stride;
+        let src = img_row * width * 4;
+        for col in 0..width {
+            dib[dst + col * 3]     = pixels[src + col * 4 + 2]; // B
+            dib[dst + col * 3 + 1] = pixels[src + col * 4 + 1]; // G
+            dib[dst + col * 3 + 2] = pixels[src + col * 4];     // R
+        }
+    }
+
+    unsafe { OpenClipboard(HWND(0))? };
+    let result = write_dib_to_open_clipboard(&dib);
+    unsafe { let _ = CloseClipboard(); }
+    result
+}
+
+#[cfg(windows)]
+fn write_dib_to_open_clipboard(dib: &[u8]) -> anyhow::Result<()> {
+    use windows::Win32::Foundation::HANDLE;
+    use windows::Win32::System::DataExchange::{EmptyClipboard, SetClipboardData};
+    use windows::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE};
+
+    unsafe {
+        EmptyClipboard()?;
+        let hmem = GlobalAlloc(GMEM_MOVEABLE, dib.len())?;
+        let ptr = GlobalLock(hmem) as *mut u8;
+        if ptr.is_null() {
+            return Err(anyhow::anyhow!("GlobalLock failed"));
+        }
+        std::ptr::copy_nonoverlapping(dib.as_ptr(), ptr, dib.len());
+        let _ = GlobalUnlock(hmem);
+        if let Err(e) = SetClipboardData(8u32, HANDLE(hmem.0 as isize)) {
+            return Err(anyhow::anyhow!("SetClipboardData: {e}"));
+        }
+        Ok(())
+    }
+}
+
+#[cfg(not(windows))]
+fn write_image_to_clipboard(_bytes: &[u8]) -> anyhow::Result<()> {
+    Err(anyhow::anyhow!("clipboard write not supported on this platform"))
+}
+
+/// JS injected into the active content WebView to fetch an image the way the page itself
+/// would — with its cookies/session and full access to `blob:` URLs that don't exist
+/// outside the page. The bytes come back as a base64 data URL via IPC; Rust writes them to
+/// the user-chosen path. Cross-origin images the page can't read (no CORS) reject here and
+/// fall back to a server-side reqwest fetch in Rust.
+fn save_image_fetch_script(save_id: &str, url: &str) -> String {
+    let id_js = serde_json::to_string(save_id).unwrap_or_else(|_| "\"\"".into());
+    let url_js = serde_json::to_string(url).unwrap_or_else(|_| "\"\"".into());
+    format!(
+        r#"(function(){{
+  var __id={id}, __u={url};
+  function __post(ok,data){{
+    try{{ window.ipc.postMessage(JSON.stringify({{cmd:'save_image_data',save_id:__id,ok:ok,data:data||''}})); }}catch(e){{}}
+  }}
+  try{{
+    fetch(__u,{{credentials:'include'}})
+      .then(function(r){{ if(!r.ok) throw new Error('status'); return r.blob(); }})
+      .then(function(b){{
+        var fr=new FileReader();
+        fr.onload=function(){{ __post(true,fr.result); }};
+        fr.onerror=function(){{ __post(false,''); }};
+        fr.readAsDataURL(b);
+      }})
+      .catch(function(){{ __post(false,''); }});
+  }}catch(e){{ __post(false,''); }}
+}})()"#,
+        id = id_js,
+        url = url_js
+    )
 }

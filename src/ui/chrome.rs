@@ -457,6 +457,8 @@ button,input,select,textarea{font-family:var(--font)}
 }
 #url-input::placeholder{color:var(--text-dim)}
 #url-input:focus::placeholder{color:var(--text-muted)}
+#active-favicon[draggable="true"]{cursor:grab}
+#active-favicon[draggable="true"]:active{cursor:grabbing}
 #lock-icon{color:var(--success);flex-shrink:0}
 #insecure-icon{color:var(--warning);flex-shrink:0}
 
@@ -1928,10 +1930,36 @@ html:not([data-browser-font="system"]) #newtab-placeholder #newtab-clock{font-fa
   background:var(--modal-bg);
   border:1px solid var(--modal-border);
   border-radius:20px;
-  box-shadow:var(--modal-shadow);
+  /* Tighter shadow than other modals: the panel's chrome overlay is clipped to its own
+     rect (so the page stays interactive), and a big soft shadow would either be cut off
+     or force a large click-dead halo over the page. */
+  box-shadow:var(--shadow);
   z-index:350;
+  transform-origin:top right;
 }
-#download-panel.open{display:flex}
+#download-panel.open{display:flex;animation:dlPanelIn .2s cubic-bezier(.16,1,.3,1)}
+@keyframes dlPanelIn{
+  from{opacity:0;transform:translateY(-10px) scale(.97)}
+  to{opacity:1;transform:none}
+}
+/* Auto-peek (download just started): same entrance, gentle accent ring that fades. */
+#download-panel.dl-peek{box-shadow:var(--modal-shadow),0 0 0 1px var(--accent)}
+/* Downloads button feedback pulse on download start. */
+@keyframes dlBtnPulse{
+  0%{transform:none}
+  25%{transform:translateY(2px) scale(1.06)}
+  55%{transform:translateY(-1px) scale(1.02)}
+  100%{transform:none}
+}
+#btn-more.dl-bounce{animation:dlBtnPulse .6s ease}
+#btn-more.dl-bounce svg{color:var(--accent)}
+/* Flare the existing downloads badge dot when a download begins. */
+#btn-more.dl-bounce #more-btn-badge{animation:dlDotFlare .7s ease}
+@keyframes dlDotFlare{
+  0%{box-shadow:0 0 0 0 var(--accent);transform:scale(1)}
+  60%{box-shadow:0 0 0 7px transparent;transform:scale(1.5)}
+  100%{box-shadow:0 0 0 7px transparent;transform:scale(1)}
+}
 .dl-panel-head{
   display:flex;align-items:center;gap:10px;
   padding:16px 18px 14px;
@@ -2366,7 +2394,7 @@ html:not([data-browser-font="system"]) #newtab-placeholder #newtab-clock{font-fa
 .ctx-item.danger:hover{background:var(--danger-dim)}
 .ctx-sep{height:1px;background:var(--border-subtle);margin:3px 0}
 
-.bm-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:var(--radius-sm);background:var(--bg);border:1px solid var(--border-subtle);cursor:pointer;transition:background var(--transition)}
+.bm-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:var(--radius-sm);background:var(--bg);border:1px solid var(--border-subtle);cursor:pointer;transition:background var(--transition),border-color var(--transition)}
 .bm-item:hover{background:var(--bg-hover)}
 .bm-item-info{flex:1;min-width:0}
 .bm-item-title{font-size:12px;font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -2374,6 +2402,45 @@ html:not([data-browser-font="system"]) #newtab-placeholder #newtab-clock{font-fa
 .bm-item-del{width:24px;height:24px;border:none;background:transparent;color:var(--text-dim);cursor:pointer;border-radius:3px;display:flex;align-items:center;justify-content:center;transition:all var(--transition);flex-shrink:0;opacity:0}
 .bm-item:hover .bm-item-del{opacity:1}
 .bm-item-del:hover{background:var(--danger-dim);color:var(--danger)}
+/* Folder item */
+.bm-folder-item{background:color-mix(in srgb,var(--accent) 4%,var(--bg))}
+.bm-folder-item:hover{background:color-mix(in srgb,var(--accent) 8%,var(--bg-hover))}
+.bm-folder-icon{width:32px;height:32px;border-radius:7px;background:color-mix(in srgb,var(--accent) 14%,var(--bg));display:flex;align-items:center;justify-content:center;color:var(--accent);flex-shrink:0}
+.bm-folder-grid{display:grid;grid-template-columns:1fr 1fr;gap:2px;width:18px;height:18px}
+.bm-folder-grid span{border-radius:2px;background:currentColor;opacity:0.7}
+.bm-folder-grid span:first-child{opacity:1}
+/* Drag-over-folder target highlight */
+.bm-item.bm-folder-target{border-color:var(--accent)!important;background:color-mix(in srgb,var(--accent) 10%,var(--bg))!important;box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 25%,transparent)}
+/* Bookmarks bar item delete */
+.bm-bar-item{position:relative}
+.bm-bar-del{position:absolute;top:-4px;right:-4px;width:16px;height:16px;border-radius:999px;border:none;background:var(--danger);color:#fff;font-size:9px;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity var(--transition);z-index:2;padding:0;line-height:1}
+.bm-bar-item:hover .bm-bar-del{opacity:1}
+.bm-bar-del:hover{background:color-mix(in srgb,var(--danger) 80%,#000)}
+/* Folder modal */
+#folder-modal-backdrop{position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,0.45);backdrop-filter:blur(2px);display:none}
+#folder-modal-backdrop.open{display:block}
+#folder-modal{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:9001;width:340px;max-height:70vh;display:flex;flex-direction:column;border-radius:14px;background:var(--modal-bg);border:1px solid var(--modal-border);box-shadow:0 24px 60px rgba(0,0,0,0.45);overflow:hidden;display:none}
+#folder-modal.open{display:flex}
+.fm-header{display:flex;align-items:center;gap:10px;padding:14px 14px 12px;border-bottom:1px solid var(--border-subtle)}
+.fm-header-icon{width:34px;height:34px;border-radius:9px;background:color-mix(in srgb,var(--accent) 14%,var(--bg));display:flex;align-items:center;justify-content:center;color:var(--accent);flex-shrink:0}
+.fm-name{flex:1;border:none;background:transparent;color:var(--text);font-size:13px;font-weight:600;outline:none;padding:4px 6px;border-radius:5px;transition:background var(--transition)}
+.fm-name:hover{background:var(--bg-hover)}
+.fm-name:focus{background:var(--bg-active);outline:1px solid var(--accent)}
+.fm-close{width:26px;height:26px;border:none;background:transparent;color:var(--text-muted);cursor:pointer;border-radius:6px;display:flex;align-items:center;justify-content:center;transition:background var(--transition)}
+.fm-close:hover{background:var(--bg-hover);color:var(--text)}
+.fm-body{flex:1;overflow-y:auto;padding:10px;scrollbar-width:thin;scrollbar-color:var(--border) transparent;display:flex;flex-direction:column;gap:4px}
+.fm-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;transition:background var(--transition)}
+.fm-item:hover{background:var(--bg-hover)}
+.fm-item-info{flex:1;min-width:0}
+.fm-item-title{font-size:12px;font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fm-item-url{font-size:11px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fm-item-remove{width:22px;height:22px;border:none;background:transparent;color:var(--text-dim);cursor:pointer;border-radius:4px;display:flex;align-items:center;justify-content:center;transition:all var(--transition);opacity:0;flex-shrink:0}
+.fm-item:hover .fm-item-remove{opacity:1}
+.fm-item-remove:hover{background:var(--danger-dim);color:var(--danger)}
+.fm-empty{color:var(--text-muted);font-size:12px;text-align:center;padding:24px 0}
+.fm-footer{padding:10px 14px;border-top:1px solid var(--border-subtle)}
+.fm-delete-btn{width:100%;padding:7px;border-radius:7px;border:1px solid color-mix(in srgb,var(--danger) 30%,transparent);background:transparent;color:var(--danger);font-size:12px;cursor:pointer;transition:background var(--transition)}
+.fm-delete-btn:hover{background:var(--danger-dim)}
 
 .hist-item{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:var(--radius-sm);transition:background var(--transition);cursor:pointer}
 .hist-item:hover{background:var(--bg-hover)}
@@ -2683,7 +2750,7 @@ svg{display:block;flex-shrink:0}
     <span id="insecure-icon" style="display:none">
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
     </span>
-    <img id="active-favicon" class="favicon" style="display:none" src="" alt="">
+    <img id="active-favicon" class="favicon" style="display:none" src="" alt="" draggable="true" title="Drag to bookmark or open in new tab">
     <span id="active-loading-icon" class="favicon" style="display:none">
       <svg width="14" height="14" viewBox="0 0 14 14"><circle class="ld-ring" cx="7" cy="7" r="5.5" fill="none" stroke="currentColor" stroke-width="1.4" opacity=".22"/><circle class="ld-arc" cx="7" cy="7" r="5.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="10 24"/><circle class="ld-dot" cx="7" cy="1.5" r="1.3" fill="currentColor"/></svg>
     </span>
@@ -2744,7 +2811,7 @@ svg{display:block;flex-shrink:0}
 </div>
 
 <!-- DOWNLOAD PANEL -->
-<div id="download-panel">
+<div id="download-panel" onmouseenter="cancelDownloadPeek()" onmousedown="cancelDownloadPeek()" onwheel="cancelDownloadPeek()">
   <div class="dl-panel-head">
     <div class="dl-panel-head-icon">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -3969,6 +4036,22 @@ svg{display:block;flex-shrink:0}
 <!-- TOAST CONTAINER -->
 <div id="toast-container"></div>
 
+<!-- FOLDER MODAL -->
+<div id="folder-modal-backdrop" onclick="closeFolderModal()"></div>
+<div id="folder-modal">
+  <div class="fm-header">
+    <div class="fm-header-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></div>
+    <input class="fm-name" id="fm-name-input" type="text" placeholder="Folder name"
+      onblur="saveFolderName(this.value)"
+      onkeydown="if(event.key==='Enter')this.blur();else if(event.key==='Escape'){this.value=_fmOrigName;this.blur();}">
+    <button class="fm-close" onclick="closeFolderModal()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+  </div>
+  <div class="fm-body" id="fm-body"></div>
+  <div class="fm-footer">
+    <button class="fm-delete-btn" onclick="deleteFolderAndClose()">Delete folder</button>
+  </div>
+</div>
+
 <script>
 // ============================================================
 // STATE
@@ -3982,6 +4065,7 @@ let state = {
   sidebar_collapsed: false,
   ai_open: false,
   bookmarks: [],
+  bookmark_folders: [],
   history: [],
   downloads: [],
   search_engines: [],
@@ -4134,6 +4218,7 @@ window.__neura = {
     if (tspInput && tspInput.value.trim()) renderTspSuggestions(tspInput.value);
   },
   showOnboarding() { openOnboarding(); },
+  openFolderModalAndRename(folderId) { openFolderModalAndRename(folderId); },
   updateNavState(canBack, canForward, loading) {
     document.getElementById('btn-back').disabled = !canBack;
     document.getElementById('btn-forward').disabled = !canForward;
@@ -4176,6 +4261,8 @@ window.__neura = {
     const btn = document.getElementById('btn-more');
     if (btn) btn.classList.toggle('has-downloads', !!active);
   },
+  flashDownloadStart() { flashDownloadStart(); },
+  onContentPointerDown() { onContentPointerDown(); },
   setHistory(items) {
     state.history = items || [];
     renderHistory();
@@ -4190,6 +4277,10 @@ window.__neura = {
       const el = document.getElementById(id);
       if (el) el.classList.remove('open');
     });
+    // Download panel: also drop its peek state + auto-dismiss timer (clip is reset Rust-side).
+    clearTimeout(_dlPeekTimer);
+    const dlp = document.getElementById('download-panel');
+    if (dlp) { dlp.classList.remove('dl-peek'); dlp.dataset.peek = '0'; }
     const ctx = document.getElementById('ctx-menu');
     if (ctx) ctx.style.display = 'none';
     const toast = document.getElementById('update-toast');
@@ -4310,6 +4401,7 @@ function render() {
   renderIncognitoBadge();
   renderSearchSettings();
   renderBookmarks();
+  if (_activeFolderId) renderFolderModalBody(_activeFolderId);
   renderDownloads();
   applyNewtabSettings();
   if (document.getElementById('download-panel') && document.getElementById('download-panel').classList.contains('open')) {
@@ -5025,9 +5117,9 @@ function toggleSidebar() {
   const app = document.getElementById('app');
   const isAutoHide = app.classList.contains('sidebar-auto-hide');
   if (isAutoHide) {
-    // Toggle pins/unpins the sidebar. Pinned = solid, pushes content smaller.
-    // Pressing again (or while only hover-peeking) returns to the overlay/auto-hide.
-    if (sidebarPinned) {
+    // In auto-hide mode: toggle shows/hides the floating sidebar without changing the mode.
+    // sidebarPeeking tracks whether the sidebar is currently visible.
+    if (sidebarPeeking) {
       hideFloatingSidebar(true);
     } else {
       showFloatingSidebar(true);
@@ -5365,6 +5457,10 @@ function scheduledHide() {
   if (!sidebarPeeking || sidebarPinned) return;
   const pop = document.getElementById('sb-ws-popover');
   if (pop && pop.classList.contains('visible')) return;
+  // Keep the auto-hide sidebar open while a context menu spawned from it is showing —
+  // moving onto the menu must not collapse the tabs out from under it.
+  const ctx = document.getElementById('ctx-menu');
+  if (ctx && ctx.style.display === 'block') return;
   cancelSidebarHide();
   sidebarHideTimer = setTimeout(() => {
     sidebarHideTimer = null;
@@ -5830,6 +5926,7 @@ function updateLockIcon(url) {
     warn.style.display = 'none';
   } else if (tab && tab.favicon) {
     favicon.src = tab.favicon;
+    favicon.dataset.navUrl = url || '';
     favicon.style.display = 'block';
     loadingIcon.style.display = 'none';
     lock.style.display = 'none';
@@ -5838,16 +5935,19 @@ function updateLockIcon(url) {
     lock.style.display = 'flex';
     warn.style.display = 'none';
     favicon.style.display = 'none';
+    delete favicon.dataset.navUrl;
     loadingIcon.style.display = 'none';
   } else if (url && url.startsWith('http://')) {
     warn.style.display = 'flex';
     lock.style.display = 'none';
     favicon.style.display = 'none';
+    delete favicon.dataset.navUrl;
     loadingIcon.style.display = 'none';
   } else {
     lock.style.display = 'none';
     warn.style.display = 'none';
     favicon.style.display = 'none';
+    delete favicon.dataset.navUrl;
     loadingIcon.style.display = 'none';
   }
 }
@@ -8015,20 +8115,39 @@ function renderBookmarks() {
   const list = document.getElementById('bookmarks-list');
   if (!list) return;
   const bms = state.bookmarks || [];
-  if (!bms.length) {
+  const folders = state.bookmark_folders || [];
+  if (!bms.length && !folders.length) {
     list.innerHTML = '<div style="color:var(--text-muted);font-size:12px;text-align:center;padding:24px 0">No bookmarks yet. Hit the bookmark icon in the address bar to save a page.</div>';
     return;
   }
-  list.innerHTML = bms.map(b => `
-    <div class="bm-item" draggable="true" data-reorder-id="${escAttr(b.id)}" data-nav-url="${escAttr(b.url)}">
+  const xSvg = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+  const folderSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
+  let html = '';
+  // Folder items first
+  folders.forEach(f => {
+    const items = bms.filter(b => b.folder_id === f.id);
+    const count = items.length;
+    html += `<div class="bm-item bm-folder-item" data-folder-id="${escAttr(f.id)}" onclick="openFolderModal('${escAttr(f.id)}')">
+      <div class="bm-folder-icon">${folderSvg}</div>
+      <div class="bm-item-info">
+        <div class="bm-item-title">${escHtml(f.name)}</div>
+        <div class="bm-item-url">${count} bookmark${count !== 1 ? 's' : ''}</div>
+      </div>
+      <button class="bm-item-del" title="Delete folder" onclick="event.stopPropagation();deleteFolderById('${escAttr(f.id)}')">${xSvg}</button>
+    </div>`;
+  });
+  // Unfiled bookmarks
+  bms.filter(b => !b.folder_id).forEach(b => {
+    html += `<div class="bm-item" draggable="true" data-reorder-id="${escAttr(b.id)}" data-nav-url="${escAttr(b.url)}">
       <div class="bm-item-info">
         <div class="bm-item-title">${escHtml(b.title || b.url)}</div>
         <div class="bm-item-url">${escHtml(b.url)}</div>
       </div>
-      <button class="bm-item-del" title="Remove bookmark" data-remove-bookmark-url="${escAttr(b.url)}">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-      </button>
-    </div>`).join('');
+      <button class="bm-item-del" title="Remove bookmark" data-remove-bookmark-id="${escAttr(b.id)}">${xSvg}</button>
+    </div>`;
+  });
+  list.innerHTML = html;
+  setupBookmarkFolderDrop(list);
 }
 
 function renderHistory() {
@@ -8130,6 +8249,7 @@ function ctxAction(action) {
     case 'open_link_win':   send('OpenInNewWindow', {url: d.linkUrl}); break;
     case 'copy_link':       copyToClipboard(d.linkUrl); break;
     case 'open_image_tab':  send('OpenInNewTab', {url: d.imageSrc}); break;
+    case 'copy_image':      send('CopyImage', {url: d.imageSrc}); break;
     case 'copy_image_url':  copyToClipboard(d.imageSrc); break;
     case 'save_image':      send('ContextMenuSaveImage', {url: d.imageSrc}); break;
     case 'copy_text':       copyToClipboard(d.selectedText); break;
@@ -8171,6 +8291,7 @@ function showBrowserContextMenu(data) {
   if (data.imageSrc) {
     if (data.linkUrl) sep();
     item('open_image_tab', 'Open image in new tab');
+    item('copy_image',     'Copy image');
     item('copy_image_url', 'Copy image address');
     item('save_image',     'Save image as…');
   }
@@ -8240,6 +8361,29 @@ document.addEventListener('contextmenu', e => e.preventDefault());
 // ============================================================
 // DOWNLOAD PANEL
 // ============================================================
+let _dlPeekTimer = null;
+
+// Clip the chrome overlay to just the panel's rectangle so the panel stays interactive
+// while the rest of the window falls through to the live web page (scroll + clicks work).
+function _syncDownloadOverlay() {
+  const panel = document.getElementById('download-panel');
+  if (!panel || !panel.classList.contains('open')) {
+    send('SuggestionOverlay', {visible:false, x:0, y:0, width:0, height:0});
+    return;
+  }
+  const r = panel.getBoundingClientRect();
+  // Halo around the panel so its border + soft shadow aren't clipped. Kept small so the
+  // click-through "dead zone" over the page stays minimal; a touch more below/left where
+  // the shadow falls. The panel's right edge sits near the window edge (shadow off-screen).
+  send('SuggestionOverlay', {
+    visible:true,
+    x: r.left - 18,
+    y: r.top - 8,
+    width: r.width + 26,
+    height: r.height + 30
+  });
+}
+
 function toggleDownloadPanel(event) {
   if (event) event.stopPropagation();
   const panel = document.getElementById('download-panel');
@@ -8247,22 +8391,81 @@ function toggleDownloadPanel(event) {
     closeDownloadPanel();
     return;
   }
+  openDownloadPanel(false);
+}
+
+// peek=true: opened automatically on a download start — auto-dismisses unless the user
+// interacts with it. peek=false: a normal user-initiated open that stays until dismissed.
+function openDownloadPanel(peek) {
+  const panel = document.getElementById('download-panel');
+  if (!panel) return;
   const btn = document.getElementById('btn-more');
   const rect = btn ? btn.getBoundingClientRect() : {bottom: 48, right: window.innerWidth - 8};
   panel.style.top = rect.bottom + 4 + 'px';
   panel.style.right = (window.innerWidth - rect.right) + 'px';
   renderDownloadPanel();
   panel.classList.add('open');
-  // Full-window clip so clicks anywhere (including outside the panel) reach the chrome WebView
-  // and the click-outside handler can close the panel properly.
-  requestAnimationFrame(() => {
-    send('SuggestionOverlay', {visible:true, x:0, y:0, width:window.innerWidth, height:window.innerHeight});
-  });
+  clearTimeout(_dlPeekTimer);
+  if (peek) {
+    panel.classList.add('dl-peek');
+    panel.dataset.peek = '1';
+    // Auto-dismiss the peek after a few seconds if the user never engages with it.
+    _dlPeekTimer = setTimeout(() => {
+      if (panel.dataset.peek === '1') closeDownloadPanel();
+    }, 3200);
+  } else {
+    panel.classList.remove('dl-peek');
+    panel.dataset.peek = '0';
+  }
+  // Clip to the panel rect only — page underneath stays scrollable/interactive.
+  // rAF lets layout settle so getBoundingClientRect is accurate.
+  requestAnimationFrame(_syncDownloadOverlay);
+}
+
+// User engaged with the peeking panel → make it sticky (cancel auto-dismiss).
+function cancelDownloadPeek() {
+  const panel = document.getElementById('download-panel');
+  if (!panel) return;
+  clearTimeout(_dlPeekTimer);
+  panel.dataset.peek = '0';
+  panel.classList.remove('dl-peek');
 }
 
 function closeDownloadPanel() {
-  document.getElementById('download-panel').classList.remove('open');
+  clearTimeout(_dlPeekTimer);
+  const panel = document.getElementById('download-panel');
+  panel.classList.remove('open', 'dl-peek');
+  panel.dataset.peek = '0';
   send('SuggestionOverlay', {visible:false, x:0, y:0, width:0, height:0});
+}
+
+// Visual feedback when any download starts: pulse the downloads button and briefly
+// peek the panel (non-blocking). Called from Rust via __neura.flashDownloadStart().
+function flashDownloadStart() {
+  const btn = document.getElementById('btn-more');
+  if (btn) {
+    btn.classList.remove('dl-bounce');
+    void btn.offsetWidth; // restart the animation if it's mid-flight
+    btn.classList.add('dl-bounce');
+    setTimeout(() => btn.classList.remove('dl-bounce'), 700);
+  }
+  const panel = document.getElementById('download-panel');
+  if (!panel) return;
+  if (panel.classList.contains('open')) {
+    // Already open — just refresh contents and keep the panel rect clip in sync.
+    renderDownloadPanel();
+    requestAnimationFrame(_syncDownloadOverlay);
+  } else {
+    openDownloadPanel(true);
+  }
+}
+
+// A press landed in the live web page (relayed by the content WebView). Close the
+// download panel — it's clipped to its own rect, so the page never received the chrome's
+// own document-level click handler that would otherwise dismiss it.
+function onContentPointerDown() {
+  const panel = document.getElementById('download-panel');
+  if (panel && panel.classList.contains('open')) closeDownloadPanel();
 }
 
 function isPdfFile(name) {
@@ -8422,12 +8625,26 @@ function renderBookmarksBar() {
   if (!bar) return;
   const show = document.getElementById('app').classList.contains('show-bookmarks-bar');
   if (!show) return;
-  const bms = (state.bookmarks || []).slice(0, 20);
-  if (!bms.length) {
+  const folders = state.bookmark_folders || [];
+  const allBms = state.bookmarks || [];
+  const unfiledBms = allBms.filter(b => !b.folder_id).slice(0, 20);
+  if (!unfiledBms.length && !folders.length) {
     bar.innerHTML = '<span class="bm-bar-empty">No bookmarks yet - save pages with Ctrl+D</span>';
     return;
   }
-  bar.innerHTML = bms.map(b => {
+  const xSvg = '<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+  const folderSvg = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
+  // Folder pills
+  const folderHtml = folders.map(f => {
+    const label = f.name.length > 18 ? f.name.slice(0,16)+'...' : f.name;
+    return `<div class="bm-bar-item" title="${escAttr(f.name)}" onclick="openFolderModal('${escAttr(f.id)}')">
+      <span style="display:flex;align-items:center;gap:4px;opacity:0.75">${folderSvg}</span>
+      <span class="bm-bar-text">${escHtml(label)}</span>
+      <button class="bm-bar-del" title="Delete folder" onclick="event.stopPropagation();deleteFolderById('${escAttr(f.id)}')">${xSvg}</button>
+    </div>`;
+  }).join('');
+  // Unfiled bookmark items
+  const bmHtml = unfiledBms.map(b => {
     const title = bookmarkLabel(b.url, b.title);
     const tip = [b.title, b.url].filter(Boolean).join(' - ');
     const icon = bookmarkIconUrl(b.url);
@@ -8436,8 +8653,10 @@ function renderBookmarksBar() {
     return `<div class="bm-bar-item" draggable="true" data-reorder-id="${escAttr(b.id)}" title="${escAttr(tip)}" data-nav-url="${escAttr(b.url)}" onclick="navigateToUrl('${escAttr(b.url)}')">
       ${img}${fallback}
       <span class="bm-bar-text">${escHtml(title.length > 24 ? title.slice(0,22)+'...' : title)}</span>
+      <button class="bm-bar-del" title="Remove bookmark" onclick="event.stopPropagation();removeBookmarkByUrl('${escAttr(b.url)}')">${xSvg}</button>
     </div>`;
   }).join('');
+  bar.innerHTML = folderHtml + bmHtml;
 }
 
 // ============================================================
@@ -8499,6 +8718,145 @@ function removeBookmarkByUrl(url) {
   send('BookmarkRemove', {url});
 }
 
+// ============================================================
+// BOOKMARK FOLDERS
+// ============================================================
+let _activeFolderId = null;
+let _fmOrigName = '';
+
+function openFolderModal(folderId) {
+  _activeFolderId = folderId;
+  const folder = (state.bookmark_folders || []).find(f => f.id === folderId);
+  if (!folder) return;
+  _fmOrigName = folder.name;
+  document.getElementById('fm-name-input').value = folder.name;
+  renderFolderModalBody(folderId);
+  document.getElementById('folder-modal-backdrop').classList.add('open');
+  document.getElementById('folder-modal').classList.add('open');
+  send('SuggestionOverlay', {visible:true, x:0, y:0, width:window.innerWidth, height:window.innerHeight});
+  // Focus name input after a tick so modal is painted
+  setTimeout(() => {
+    const inp = document.getElementById('fm-name-input');
+    if (inp) { inp.focus(); inp.select(); }
+  }, 80);
+}
+
+function openFolderModalAndRename(folderId) {
+  openFolderModal(folderId);
+}
+
+function closeFolderModal() {
+  _activeFolderId = null;
+  document.getElementById('folder-modal-backdrop').classList.remove('open');
+  document.getElementById('folder-modal').classList.remove('open');
+  send('SuggestionOverlay', {visible:false, x:0, y:0, width:0, height:0});
+}
+
+function renderFolderModalBody(folderId) {
+  const body = document.getElementById('fm-body');
+  if (!body) return;
+  const bms = (state.bookmarks || []).filter(b => b.folder_id === folderId);
+  const xSvg = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+  if (!bms.length) {
+    body.innerHTML = '<div class="fm-empty">No bookmarks in this folder</div>';
+    return;
+  }
+  body.innerHTML = bms.map(b => {
+    const icon = bookmarkIconUrl(b.url);
+    const img = icon ? `<img style="width:14px;height:14px;border-radius:3px;flex-shrink:0" src="${escAttr(icon)}" alt="" onerror="this.style.display='none'">` : '';
+    return `<div class="fm-item" data-nav-url="${escAttr(b.url)}" onclick="closeFolderModal();navigateToUrl('${escAttr(b.url)}')">
+      ${img}
+      <div class="fm-item-info">
+        <div class="fm-item-title">${escHtml(b.title || b.url)}</div>
+        <div class="fm-item-url">${escHtml(b.url)}</div>
+      </div>
+      <button class="fm-item-remove" title="Remove from folder" onclick="event.stopPropagation();removeFromFolder('${escAttr(b.id)}')">${xSvg}</button>
+    </div>`;
+  }).join('');
+}
+
+function saveFolderName(name) {
+  if (!_activeFolderId || !name.trim()) return;
+  if (name.trim() === _fmOrigName) return;
+  _fmOrigName = name.trim();
+  send('BookmarkFolderRename', {folder_id: _activeFolderId, name: name.trim()});
+}
+
+function removeFromFolder(bookmarkId) {
+  send('BookmarkRemoveFromFolder', {bookmark_id: bookmarkId});
+  // Optimistically update modal body
+  if (_activeFolderId) renderFolderModalBody(_activeFolderId);
+}
+
+function deleteFolderAndClose() {
+  if (!_activeFolderId) return;
+  deleteFolderById(_activeFolderId);
+  closeFolderModal();
+}
+
+function deleteFolderById(folderId) {
+  send('BookmarkFolderDelete', {folder_id: folderId});
+}
+
+// Drag-to-folder: delegated listeners on the bookmarks list.
+// Dropping a bookmark ON another bookmark's center zone creates/assigns a folder.
+let _bmFolderDropTimer = null;
+
+function setupBookmarkFolderDrop(list) {
+  // Remove old listeners by cloning (simple approach since list is re-rendered)
+  list.addEventListener('dragover', _bmDragOver);
+  list.addEventListener('dragleave', _bmDragLeave);
+  list.addEventListener('drop', _bmDrop);
+}
+
+function _clearFolderTarget() {
+  document.querySelectorAll('.bm-folder-target').forEach(el => el.classList.remove('bm-folder-target'));
+  if (_bmFolderDropTimer) { clearTimeout(_bmFolderDropTimer); _bmFolderDropTimer = null; }
+}
+
+function _bmDragOver(e) {
+  if (dragKind !== 'bookmark') return;
+  const item = e.target.closest('.bm-item:not(.bm-folder-item)');
+  if (!item || item.dataset.reorderId === dragId) return;
+  const rect = item.getBoundingClientRect();
+  const relY = e.clientY - rect.top;
+  // Only trigger folder merge when hovering the CENTER 50% of the item height
+  if (relY < rect.height * 0.25 || relY > rect.height * 0.75) {
+    _clearFolderTarget();
+    return;
+  }
+  e.preventDefault();
+  e.stopPropagation();
+  e.dataTransfer.dropEffect = 'move';
+  if (!item.classList.contains('bm-folder-target')) {
+    _clearFolderTarget();
+    item.classList.add('bm-folder-target');
+  }
+}
+
+function _bmDragLeave(e) {
+  const item = e.target.closest('.bm-item');
+  if (item) item.classList.remove('bm-folder-target');
+}
+
+function _bmDrop(e) {
+  const target = e.target.closest('.bm-folder-target');
+  if (!target) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const targetId = target.dataset.reorderId;
+  const targetFolderId = target.dataset.folderId;
+  _clearFolderTarget();
+  if (!dragId) return;
+  if (targetFolderId) {
+    // Dropped onto a folder item → move bookmark into folder
+    send('BookmarkMoveToFolder', {bookmark_id: dragId, folder_id: targetFolderId});
+  } else if (targetId && targetId !== dragId) {
+    // Dropped onto a regular bookmark → create new folder with both
+    send('BookmarkCreateFolder', {bookmark_id_a: dragId, bookmark_id_b: targetId});
+  }
+}
+
 function clearHistory() {
   send('HistoryClear');
 }
@@ -8549,6 +8907,13 @@ function handleDelegatedListClick(e) {
     e.preventDefault();
     e.stopPropagation();
     removeBookmarkByUrl(removeBookmark.dataset.removeBookmarkUrl);
+    return;
+  }
+  const removeBookmarkById = e.target.closest('[data-remove-bookmark-id]');
+  if (removeBookmarkById) {
+    e.preventDefault();
+    e.stopPropagation();
+    send('BookmarkRemoveById', {id: removeBookmarkById.dataset.removeBookmarkId});
     return;
   }
   const deleteHistory = e.target.closest('[data-delete-history-id]');
@@ -8812,12 +9177,73 @@ function handleTabSearchKey(e) {
 let _ctxActions = [];
 function tabContextMenu(ev, tabId) {
   ev.preventDefault();
-  showContextMenu(ev.clientX, ev.clientY, [
-    {label:'Pin tab', action:() => send('PinTab', {id: tabId})},
-    {label:'Duplicate', action:() => send('NewTab')},
-    {sep:true},
-    {label:'Close tab', danger:true, action:() => send('CloseTab', {id: tabId})},
-  ]);
+  ev.stopPropagation();
+  const tab = (state.tabs || []).find(t => t.id === tabId);
+  if (!tab) return;
+  const ws = state.active_workspace_id;
+  const tabs = (state.tabs || []).filter(t => t.workspace_id === ws);
+  const idx = tabs.findIndex(t => t.id === tabId);
+  const isWeb = !!tab.url && !tab.url.startsWith('neura://') && !tab.url.startsWith('about:');
+  // Pinned tabs are protected — skip them in bulk-close counts
+  const others = tabs.filter(t => t.id !== tabId && !t.pinned);
+  const below  = idx >= 0 ? tabs.slice(idx + 1).filter(t => !t.pinned) : [];
+
+  const items = [
+    // ── Audio ──────────────────────────────────────────────────────────────
+    {
+      label: tab.is_muted ? 'Unmute tab' : 'Mute tab',
+      action: () => send('MuteTab', {tab_id: tabId})
+    },
+    {sep: true},
+    // ── Tab management ─────────────────────────────────────────────────────
+    {
+      label: tab.pinned ? 'Unpin tab' : 'Pin tab',
+      action: () => send(tab.pinned ? 'UnpinTab' : 'PinTab', {id: tabId})
+    },
+    {
+      label: 'Duplicate tab',
+      action: () => isWeb ? send('OpenInNewTab', {url: tab.url}) : send('NewTab')
+    },
+    {
+      label: 'Reload',
+      action: () => {
+        // Switch first so the Reload command acts on the right tab
+        if (tabId !== state.active_tab_id) send('SwitchTab', {id: tabId});
+        send('Reload');
+      }
+    },
+  ];
+
+  // ── Open in new window (web URLs only) ───────────────────────────────────
+  if (isWeb) {
+    items.push({sep: true});
+    items.push({label: 'Open in new window', action: () => send('OpenInNewWindow', {url: tab.url})});
+  }
+
+  // ── Bulk-close (only when there is something to close) ───────────────────
+  if (others.length > 0 || below.length > 0) {
+    items.push({sep: true});
+    if (others.length > 0) {
+      items.push({
+        label: others.length === 1 ? 'Close other tab' : `Close other tabs (${others.length})`,
+        danger: true,
+        action: () => others.forEach(t => send('CloseTab', {id: t.id}))
+      });
+    }
+    if (below.length > 0) {
+      items.push({
+        label: below.length === 1 ? 'Close tab below' : `Close tabs below (${below.length})`,
+        danger: true,
+        action: () => below.forEach(t => send('CloseTab', {id: t.id}))
+      });
+    }
+  }
+
+  // ── Close this tab ────────────────────────────────────────────────────────
+  items.push({sep: true});
+  items.push({label: 'Close tab', danger: true, action: () => send('CloseTab', {id: tabId})});
+
+  showContextMenu(ev.clientX, ev.clientY, items);
 }
 function wsContextMenu(ev, wsId) {
   ev.preventDefault();
@@ -8828,7 +9254,18 @@ function wsContextMenu(ev, wsId) {
   }
   showContextMenu(ev.clientX, ev.clientY, items);
 }
+let _ctxOverlayActive = false;
+function _hideCtxMenu() {
+  document.getElementById('ctx-menu').style.display = 'none';
+  if (_ctxOverlayActive) {
+    _ctxOverlayActive = false;
+    send('SuggestionOverlay', {visible:false, x:0, y:0, width:0, height:0});
+  }
+}
 function showContextMenu(x, y, items) {
+  // Cancel any in-flight auto-hide so a timer armed just before the right-click
+  // can't collapse the sidebar while the menu is up.
+  cancelSidebarHide();
   _ctxActions = [];
   const menu = document.getElementById('ctx-menu');
   let idx = 0;
@@ -8837,7 +9274,7 @@ function showContextMenu(x, y, items) {
     const i = idx;
     _ctxActions.push(item.action);
     idx++;
-    return `<div class="ctx-item ${item.danger?'danger':''}" onclick="document.getElementById('ctx-menu').style.display='none';_ctxActions[${i}]()">
+    return `<div class="ctx-item ${item.danger?'danger':''}" onclick="_hideCtxMenu();_ctxActions[${i}]()">
       ${escHtml(item.label)}
     </div>`;
   }).join('');
@@ -8845,14 +9282,20 @@ function showContextMenu(x, y, items) {
   menu.style.left = x + 'px';
   menu.style.top = y + 'px';
   const rect = menu.getBoundingClientRect();
-  if (rect.right > window.innerWidth) menu.style.left = (x - rect.width) + 'px';
-  if (rect.bottom > window.innerHeight) menu.style.top = (y - rect.height) + 'px';
+  // Flip left if menu would overflow the window's right edge
+  if (rect.right > window.innerWidth) menu.style.left = Math.max(0, x - rect.width) + 'px';
+  // Flip up if menu would overflow the window's bottom edge
+  if (rect.bottom > window.innerHeight) menu.style.top = Math.max(0, y - rect.height) + 'px';
+  // Expand the Win32 SetWindowRgn clip region to cover the menu's actual bounding rect.
+  // Without this, any part of the menu that falls outside the sidebar's painted region
+  // is invisibly clipped at the OS level regardless of CSS positioning.
+  const r = menu.getBoundingClientRect();
+  _ctxOverlayActive = true;
+  send('SuggestionOverlay', {visible:true, x:r.left - 2, y:r.top - 2, width:r.width + 4, height:r.height + 4});
 }
-document.addEventListener('click', () => {
-  document.getElementById('ctx-menu').style.display = 'none';
-});
+document.addEventListener('click', () => { _hideCtxMenu(); });
 document.addEventListener('contextmenu', e => {
-  if (!e.target.closest('#ctx-menu')) document.getElementById('ctx-menu').style.display = 'none';
+  if (!e.target.closest('#ctx-menu')) _hideCtxMenu();
 });
 document.addEventListener('click', handleDelegatedListClick);
 
@@ -9019,7 +9462,8 @@ document.addEventListener('keydown', e => {
   else if (ctrl && e.key === '-') { e.preventDefault(); zoomOut(); }
   else if (ctrl && e.key === '0') { e.preventDefault(); zoomReset(); }
   else if (e.key === 'Escape') {
-    if (spotlightOpen) closeSpotlight();
+    if (_activeFolderId) closeFolderModal();
+    else if (spotlightOpen) closeSpotlight();
     else if (findOpen) closeFindBar(true);
     else if (document.getElementById('workspace-delete-modal').classList.contains('open')) closeWorkspaceDeleteModal();
     else if (document.getElementById('workspace-modal').classList.contains('open')) closeWorkspaceModal();
@@ -9044,6 +9488,17 @@ window.addEventListener('resize', () => {
   refreshSuggestionOverlayBounds();
   syncFindOverlay();
   syncUpdateModalClip();
+  // Keep the download panel's chrome clip aligned with its (right-anchored) position.
+  const dlp = document.getElementById('download-panel');
+  if (dlp && dlp.classList.contains('open')) {
+    const btn = document.getElementById('btn-more');
+    if (btn) {
+      const rect = btn.getBoundingClientRect();
+      dlp.style.top = rect.bottom + 4 + 'px';
+      dlp.style.right = (window.innerWidth - rect.right) + 'px';
+    }
+    _syncDownloadOverlay();
+  }
 }, {passive: true});
 
 // Middle-click anywhere in the chrome UI opens the target URL in a new tab.
@@ -9134,6 +9589,8 @@ function clearAllDropFeedback() {
   if (bar) bar.classList.remove('drag-over');
 }
 document.addEventListener('dragstart', function(e) {
+  // URL input has its own dedicated handler below that sets dataTransfer before this fires.
+  if (e.target.id === 'url-input') return;
   if (e.target.closest('button')) { e.preventDefault(); return; }
   const el = e.target.closest('[data-nav-url]');
   if (!el) { e.preventDefault(); return; }
@@ -9148,7 +9605,9 @@ document.addEventListener('dragstart', function(e) {
     const lbl = el.querySelector('.bm-item-title,.bm-bar-text');
     dragTitle = (lbl && lbl.textContent) || '';
   } else {
-    dragKind = 'url'; dragId = null; dragPinned = false; dragTitle = '';
+    dragKind = 'url'; dragId = null; dragPinned = false;
+    // For favicon drags from the address bar, use the current page title.
+    dragTitle = el.closest('#address-bar') ? (state.active_title || '') : '';
   }
   e.dataTransfer.effectAllowed = dragKind === 'url' ? 'copy' : 'copyMove';
   e.dataTransfer.setData('text/uri-list', url);
@@ -9243,6 +9702,32 @@ function setupDropZone(container, cfg) {
     inp.focus();
     inp.select();
     inp.dispatchEvent(new Event('input', {bubbles: true}));
+  }, false);
+})();
+
+// ── URL input: text-selection drag that also carries URI data when text is a URL ──
+// This fires before the global dragstart listener. If the selected (or full) input
+// text is a valid URL we piggyback text/uri-list so bookmark drop zones accept it.
+// If it is just plain text we leave dataTransfer alone and the native copy drag works.
+(function() {
+  const inp = document.getElementById('url-input');
+  if (!inp) return;
+  inp.addEventListener('dragstart', function(e) {
+    const sel = inp.value.substring(inp.selectionStart, inp.selectionEnd).trim();
+    const candidate = (sel || inp.value || '').trim();
+    let url = '';
+    try {
+      if (/^https?:\/\//i.test(candidate)) url = candidate;
+      else if (/^[a-z0-9.-]+\.[a-z]{2,}([\/?#]|$)/i.test(candidate)) url = candidate;
+    } catch (_) {}
+    if (!url) return; // plain text — let native drag proceed untouched
+    dragKind = 'url';
+    dragId = null;
+    dragPinned = false;
+    dragTitle = state.active_title || '';
+    e.dataTransfer.effectAllowed = 'copyMove';
+    e.dataTransfer.setData('text/uri-list', url);
+    e.dataTransfer.setData('text/plain', url);
   }, false);
 })();
 

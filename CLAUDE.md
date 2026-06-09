@@ -23,6 +23,8 @@ The most critical architectural concept. Two types of WebViews co-exist as Win32
 
 **Key constraint**: `WM_MOUSELEAVE` never fires when cursor moves from chrome clip region into content area (content is a sibling HWND, not the chrome's client). The content WebView's `mousemove` IPC is used instead to signal Rust to close the sidebar.
 
+**Single WebView2 environment (critical)**: The chrome WebView and all normal content tabs (+ popups) share ONE `WebContext` (`content_web_context`, profile `webview_data`). The context is created BEFORE the chrome builder, and chrome attaches via `.with_web_context(...)`. WRY caches the `ICoreWebView2Environment` on the context and reuses it for every later WebView, so there is a SINGLE `msedgewebview2.exe` browser process tree (one GPU/network/storage utility set) under `ventus.exe`. **Never build a WebView without a shared `WebContext`** — a context-less `WebViewBuilder` makes WRY create a second environment (default `<exe>.WebView2` dir) = a duplicate process tree in Task Manager. Incognito tabs intentionally use a separate `incognito_web_context` (ephemeral profile) → their own environment, only while incognito tabs exist. Because chrome shares the env, browser args (DoH, 3p-cookie block) can't be swapped at runtime — `TabAction::ApplyWebSecurity` relaunches the app (`relaunch_self` → `--wait-for-pid` + `--restore-session`). On exit, `close_chrome_controller()` runs before `shutdown_webview2()` so the shared browser process flushes its cookie DB before `process::exit()`.
+
 ---
 
 ## Key Files

@@ -16,6 +16,14 @@ use crate::ui::events::{AppEvent, ChromeCommand};
 const WEB_ERROR_CONNECTION_ABORTED: i32 = 9;
 const WEB_ERROR_OPERATION_CANCELED: i32 = 14;
 
+// How many times to extend the stall watchdog for an uncommitted-but-in-flight navigation
+// before concluding the controller is actually wedged and rebuilding it. Each extension is
+// one LOAD_STALL_AFTER window (~6 s), so this grants a slow main-document download roughly
+// UNCOMMITTED_PATIENT_TRIES * 6 s to commit before any disruptive recovery. This keeps heavy
+// sites (YouTube) from being torn down mid-load, which previously aborted their connection
+// (status 9) and left the tab stuck black.
+const UNCOMMITTED_PATIENT_TRIES: u8 = 3;
+
 #[derive(Debug, Clone, Copy)]
 pub struct ChromeClipRect {
     pub x: f64,
@@ -67,6 +75,7 @@ pub struct AppState {
     /// Avoids 3 SQLite queries on every push_state_to_chrome call.
     pub cached_search_engines: Vec<crate::browser::search_engine::SearchEngine>,
     pub cached_bookmarks: Vec<repositories::Bookmark>,
+    pub cached_bookmark_folders: Vec<repositories::BookmarkFolder>,
     pub cached_history: Vec<repositories::HistoryEntry>,
 }
 
@@ -83,6 +92,7 @@ impl AppState {
         downloads.reverse();
         let cached_search_engines = repositories::list_search_engines(&conn).unwrap_or_default();
         let cached_bookmarks = repositories::list_bookmarks(&conn).unwrap_or_default();
+        let cached_bookmark_folders = repositories::list_bookmark_folders(&conn).unwrap_or_default();
         let cached_history = repositories::list_history(&conn, 30).unwrap_or_default();
         Self {
             tab_manager: TabManager::new(),
@@ -116,6 +126,7 @@ impl AppState {
             adblock_page_kills: 0,
             cached_search_engines,
             cached_bookmarks,
+            cached_bookmark_folders,
             cached_history,
         }
     }
@@ -186,6 +197,7 @@ impl AppState {
             "sidebar_collapsed": self.sidebar_collapsed,
             "ai_open": self.ai_sidebar_open,
             "bookmarks": &self.cached_bookmarks,
+            "bookmark_folders": &self.cached_bookmark_folders,
             "history": &self.cached_history,
             "downloads": &self.downloads.downloads,
             "ai_key_status": {
@@ -240,11 +252,24 @@ pub enum TabAction {
         tab_id: String,
         url: String,
     },
+    /// Re-arm the stall watchdog for a tab whose navigation is still legitimately
+    /// in-flight (slow main-document download). Keeps the live connection instead of
+    /// rebuilding, which would abort it (WebView2 ConnectionAborted / status 9).
+    ExtendLoadWatch {
+        tab_id: String,
+        url: String,
+    },
     DropContent {
         tab_id: String,
     },
     ApplyWebSecurity,
     DownloadUpdate(String),
+    SaveImageAs {
+        url: String,
+    },
+    CopyImageToClipboard {
+        url: String,
+    },
     SetFullscreen(bool),
     ContentScriptOnTab {
         tab_id: String,
@@ -537,6 +562,61 @@ pub fn handle_chrome_command(
             state.push_state_to_chrome(chrome);
             None
         }
+        ChromeCommand::BookmarkRemoveById { id } => {
+            let _ = state.conn.execute("DELETE FROM bookmarks WHERE id = ?1", [&id]);
+            state.cached_bookmarks = repositories::list_bookmarks(&state.conn).unwrap_or_default();
+            state.cached_bookmark_folders = repositories::list_bookmark_folders(&state.conn).unwrap_or_default();
+            if state.tab_manager.active_tab().map(|t| {
+                !state.cached_bookmarks.iter().any(|b| b.url == t.url)
+            }).unwrap_or(false) {
+                let _ = chrome.evaluate_script("window.__neura && window.__neura.setBookmarked(false)");
+            }
+            state.push_state_to_chrome(chrome);
+            None
+        }
+        ChromeCommand::BookmarkCreateFolder { bookmark_id_a, bookmark_id_b } => {
+            match repositories::add_bookmark_folder(&state.conn, "New Folder") {
+                Ok(folder) => {
+                    let _ = repositories::set_bookmark_folder(&state.conn, &bookmark_id_a, Some(&folder.id));
+                    let _ = repositories::set_bookmark_folder(&state.conn, &bookmark_id_b, Some(&folder.id));
+                    state.cached_bookmarks = repositories::list_bookmarks(&state.conn).unwrap_or_default();
+                    state.cached_bookmark_folders = repositories::list_bookmark_folders(&state.conn).unwrap_or_default();
+                    state.push_state_to_chrome(chrome);
+                    let js = format!(
+                        "window.__neura && window.__neura.openFolderModalAndRename('{}')",
+                        folder.id.replace('\'', "\\'")
+                    );
+                    let _ = chrome.evaluate_script(&js);
+                }
+                Err(e) => tracing::warn!("BookmarkCreateFolder failed: {}", e),
+            }
+            None
+        }
+        ChromeCommand::BookmarkMoveToFolder { bookmark_id, folder_id } => {
+            let _ = repositories::set_bookmark_folder(&state.conn, &bookmark_id, Some(&folder_id));
+            state.cached_bookmarks = repositories::list_bookmarks(&state.conn).unwrap_or_default();
+            state.push_state_to_chrome(chrome);
+            None
+        }
+        ChromeCommand::BookmarkRemoveFromFolder { bookmark_id } => {
+            let _ = repositories::set_bookmark_folder(&state.conn, &bookmark_id, None);
+            state.cached_bookmarks = repositories::list_bookmarks(&state.conn).unwrap_or_default();
+            state.push_state_to_chrome(chrome);
+            None
+        }
+        ChromeCommand::BookmarkFolderRename { folder_id, name } => {
+            let _ = repositories::rename_bookmark_folder(&state.conn, &folder_id, &name);
+            state.cached_bookmark_folders = repositories::list_bookmark_folders(&state.conn).unwrap_or_default();
+            state.push_state_to_chrome(chrome);
+            None
+        }
+        ChromeCommand::BookmarkFolderDelete { folder_id } => {
+            let _ = repositories::delete_bookmark_folder(&state.conn, &folder_id);
+            state.cached_bookmarks = repositories::list_bookmarks(&state.conn).unwrap_or_default();
+            state.cached_bookmark_folders = repositories::list_bookmark_folders(&state.conn).unwrap_or_default();
+            state.push_state_to_chrome(chrome);
+            None
+        }
         ChromeCommand::HistoryClear => {
             let _ = repositories::clear_history(&state.conn);
             state.cached_history.clear();
@@ -698,11 +778,13 @@ pub fn handle_chrome_command(
             Some(TabAction::SyncViews)
         }
         ChromeCommand::SidebarToggle => {
-            let is_compact = matches!(
+            // Auto-hide counts as "needs expanding" — toggle takes it to expanded,
+            // not compact, which matches what the toolbar button and SC_SIDEBAR do.
+            let is_compact_or_auto_hide = matches!(
                 state.settings.appearance.sidebar_mode,
-                crate::config::SidebarMode::Compact
+                crate::config::SidebarMode::Compact | crate::config::SidebarMode::AutoHide
             ) || state.sidebar_collapsed;
-            let next = if is_compact {
+            let next = if is_compact_or_auto_hide {
                 state.settings.appearance.sidebar_mode = crate::config::SidebarMode::Expanded;
                 state.sidebar_collapsed = false;
                 "expanded"
@@ -906,14 +988,8 @@ pub fn handle_chrome_command(
                 url: resolved,
             })
         }
-        ChromeCommand::ContextMenuSaveImage { url } => {
-            let url_js = serde_json::to_string(&url).unwrap_or_default();
-            Some(TabAction::ContentScript(format!(
-                "(() => {{ const a = document.createElement('a'); a.href = {}; a.download = ''; \
-                 document.body.appendChild(a); a.click(); setTimeout(() => {{ if (a.parentNode) a.parentNode.removeChild(a); }}, 100); }})()",
-                url_js
-            )))
-        }
+        ChromeCommand::ContextMenuSaveImage { url } => Some(TabAction::SaveImageAs { url }),
+        ChromeCommand::CopyImage { url } => Some(TabAction::CopyImageToClipboard { url }),
         ChromeCommand::ClearDownloads => {
             let _ = repositories::clear_downloads(&state.conn);
             state.downloads.downloads.clear();
@@ -1040,6 +1116,15 @@ pub fn handle_chrome_command(
             };
             state.push_state_to_chrome(chrome);
             Some(TabAction::Create { tab_id, url })
+        }
+        ChromeCommand::ContentPointerDown => {
+            // A press landed in the live web page — dismiss chrome popovers that are
+            // clipped to their own rect (currently the download panel) so they get
+            // click-outside-to-close without the chrome covering the page.
+            let _ = chrome.evaluate_script(
+                "window.__neura&&window.__neura.onContentPointerDown&&window.__neura.onContentPointerDown()",
+            );
+            None
         }
         _ => None,
     }
@@ -1361,14 +1446,50 @@ fn recover_loading_tab(
     let committed = pct > 0.0;
 
     if !committed {
-        // Black screen. The 750ms heal pass already re-shows and repaints the surface
-        // every frame, so nudging can't be the cure — an un-committed navigation means
-        // the WebView2 controller is wedged, and only recreating it (fresh renderer
-        // process) reliably fixes that. Rebuild promptly, twice, then stop the spinner
-        // (the tab is never left a permanent black void).
-        if tries < 2 {
+        // pct == 0 means no document has committed yet — but that alone does NOT mean the
+        // controller is wedged. A heavy main document over a slow or cold connection
+        // (YouTube with many tabs open) can take 10-30 s to commit while its network
+        // request is very much alive. The decisive signal is whether a NATIVE NAVIGATION
+        // is still in-flight: `native_nav_ids` holds the tab between NavigationStarting and
+        // NavigationCompleted/Failed.
+        //
+        // If a nav is in-flight, rebuilding the controller would ABORT that live connection
+        // (WebView2 reports WebErrorStatus::ConnectionAborted, status 9) and restart from
+        // scratch — and doing it on a 3-6 s timer is exactly what churned YouTube into a
+        // permanent black screen (each rebuild aborts the slow load before it can commit,
+        // then the next one aborts again). So:
+        //   - in-flight        -> be patient: keep the connection, re-arm a longer watch.
+        //   - NOT in-flight     -> the controller produced no navigation at all: genuinely
+        //                          wedged, rebuild promptly (the original black-tab bug).
+        let in_flight = state.native_nav_ids.contains_key(&tab_id);
+        if in_flight && tries < UNCOMMITTED_PATIENT_TRIES {
+            state.load_recoveries.insert(key, tries + 1);
+            tracing::info!(
+                target: "ventus::nav",
+                tab = %tab_id,
+                url = %recover_url,
+                tries,
+                "recover: uncommitted but navigation still in-flight — staying patient (NOT rebuilding, which would abort the live connection)"
+            );
+            return Some(TabAction::ExtendLoadWatch {
+                tab_id,
+                url: recover_url,
+            });
+        }
+        // Either no nav is in-flight (truly wedged controller) or we have been patient long
+        // enough and it still has not committed: recreate the controller, twice, then stop
+        // the spinner (the tab is never left a permanent black void).
+        if tries < UNCOMMITTED_PATIENT_TRIES + 2 {
             state.load_recoveries.insert(key, tries + 1);
             state.load_progress.insert(tab_id.clone(), 0.0);
+            tracing::info!(
+                target: "ventus::nav",
+                tab = %tab_id,
+                url = %recover_url,
+                tries,
+                in_flight,
+                "recover: uncommitted and controller appears wedged — rebuilding"
+            );
             return Some(TabAction::RebuildContent {
                 tab_id,
                 url: recover_url,
@@ -1404,6 +1525,94 @@ fn recover_loading_tab(
         });
     }
     stop_failed_load(state, chrome, &tab_id, &key)
+}
+
+/// Early, conservative recovery for a tab that is still showing a pure black screen
+/// (no document ever committed) a few seconds into its load. This fires BEFORE the full
+/// stall timeout so a wedged WebView2 controller is recreated promptly instead of making
+/// the user stare at black for the whole stall window. It is deliberately strict so it can
+/// never disrupt a healthy load:
+///   - only the ACTIVE tab (a background tab loading slowly is fine, leave it),
+///   - only when progress is EXACTLY 0.0 (any commit means a renderer is alive — not black),
+///   - only on the FIRST detection (tries == 0); deeper retries stay on the gentle stall
+///     ladder so we never thrash a controller.
+fn rebuild_black_tab(
+    tab_id: String,
+    url: String,
+    state: &mut AppState,
+    chrome: &WebView,
+) -> Option<TabAction> {
+    let _ = chrome;
+    let Some(tab) = state.tab_manager.get_tab(&tab_id) else {
+        return None;
+    };
+    if tab.status != crate::browser::tab::TabStatus::Loading {
+        return None;
+    }
+    if url.starts_with("neura://") || url.trim().is_empty() {
+        return None;
+    }
+    // Only ever touch the active tab.
+    if state.tab_manager.active_tab_id.as_deref() != Some(tab_id.as_str()) {
+        return None;
+    }
+    let tab_url = tab.url.clone();
+    let pending = state
+        .pending_nav_urls
+        .get(&tab_id)
+        .map(|expected| same_nav(expected, &url))
+        .unwrap_or(false);
+    let native_match = state
+        .native_loads
+        .get(&tab_id)
+        .map(|expected| same_nav(expected, &url))
+        .unwrap_or(false);
+    if !tab_url.is_empty() && !same_nav(&tab_url, &url) && !pending && !native_match {
+        return None;
+    }
+    let recover_url = if native_match {
+        url
+    } else if !tab_url.is_empty() && same_nav(&tab_url, &url) {
+        tab_url
+    } else {
+        url
+    };
+    // Committed (renderer alive and parsing) → NOT black. Leave it for the gentle stall path.
+    let pct = state.load_progress.get(&tab_id).copied().unwrap_or(0.0);
+    if pct > 0.0 {
+        return None;
+    }
+    // If a native navigation is still in-flight (NavigationStarting fired, no completion
+    // yet), the connection is alive and the main document is simply slow to commit.
+    // Rebuilding here would abort that live connection (ConnectionAborted / status 9) — the
+    // exact churn that left YouTube stuck black. The early probe must only ever recover a
+    // controller that produced NO navigation at all; in-flight loads are left to the patient
+    // stall path.
+    if state.native_nav_ids.contains_key(&tab_id) {
+        return None;
+    }
+    let key = load_key(&tab_id, &recover_url);
+    let tries = state.load_recoveries.get(&key).copied().unwrap_or(0);
+    if tries >= 1 {
+        return None;
+    }
+    if native_match {
+        state
+            .pending_nav_urls
+            .insert(tab_id.clone(), recover_url.clone());
+    }
+    state.load_recoveries.insert(key, tries + 1);
+    state.load_progress.insert(tab_id.clone(), 0.0);
+    tracing::info!(
+        target: "ventus::nav",
+        tab = %tab_id,
+        url = %recover_url,
+        "black-probe: active tab uncommitted (black) at early window — rebuilding controller now instead of waiting for full stall timeout"
+    );
+    Some(TabAction::RebuildContent {
+        tab_id,
+        url: recover_url,
+    })
 }
 
 fn stop_failed_load(
@@ -1837,6 +2046,9 @@ pub fn handle_app_event_inner(
         AppEvent::ContentLoadStalled { tab_id, url, .. } => {
             recover_loading_tab(tab_id, url, false, state, chrome)
         }
+        AppEvent::ContentBlackProbe { tab_id, url, .. } => {
+            rebuild_black_tab(tab_id, url, state, chrome)
+        }
         AppEvent::ContentNavigationFailed {
             tab_id,
             url,
@@ -2054,7 +2266,12 @@ pub fn handle_app_event_inner(
             }
             let _ =
                 chrome.evaluate_script("window.__neura && window.__neura.setDownloadActive(true)");
+            // Push state first so the panel renders the new item, then play the
+            // download-start feedback (button pulse + brief non-blocking peek).
             state.push_state_to_chrome(chrome);
+            let _ = chrome.evaluate_script(
+                "window.__neura && window.__neura.flashDownloadStart && window.__neura.flashDownloadStart()",
+            );
             None
         }
         AppEvent::DownloadCompleted { url, path, success } => {

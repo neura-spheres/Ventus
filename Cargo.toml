@@ -1,6 +1,6 @@
 [package]
 name = "ventus"
-version = "1.0.15"
+version = "1.0.17"
 edition = "2021"
 description = "Ventus — a focused desktop browser with AI built in"
 license = "MIT"
@@ -36,7 +36,7 @@ async-trait = "0.1"
 base64 = "0.22"
 aes-gcm = "0.10"
 rand = "0.8"
-image = { version = "0.25", features = ["png"], default-features = false }
+image = { version = "0.25", features = ["png", "jpeg", "gif", "webp"], default-features = false }
 semver = "1"
 rfd = { version = "0.14", default-features = false }
 
@@ -52,6 +52,7 @@ windows = { version = "0.57", features = [
     "Win32_System_Memory",
     "Win32_System_Threading",
     "Win32_System_WinRT",
+    "Win32_System_DataExchange",
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging"

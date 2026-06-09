@@ -89,6 +89,27 @@ pub enum ChromeCommand {
     BookmarkRemove {
         url: String,
     },
+    BookmarkRemoveById {
+        id: String,
+    },
+    BookmarkCreateFolder {
+        bookmark_id_a: String,
+        bookmark_id_b: String,
+    },
+    BookmarkMoveToFolder {
+        bookmark_id: String,
+        folder_id: String,
+    },
+    BookmarkRemoveFromFolder {
+        bookmark_id: String,
+    },
+    BookmarkFolderRename {
+        folder_id: String,
+        name: String,
+    },
+    BookmarkFolderDelete {
+        folder_id: String,
+    },
     OpenSettings,
     CloseSettings,
     BrowseDownloadFolder,
@@ -188,6 +209,9 @@ pub enum ChromeCommand {
     ContextMenuSaveImage {
         url: String,
     },
+    CopyImage {
+        url: String,
+    },
     OpenInNewWindow {
         url: String,
     },
@@ -224,6 +248,10 @@ pub enum ChromeCommand {
     },
     FetchCurrencyRates,
     OpenIncognito,
+    /// A pointer/mouse press landed inside the page content (not the chrome overlay).
+    /// Used to dismiss chrome popovers that are clipped to their own rect (e.g. the
+    /// download panel) when the user clicks out into the live web page.
+    ContentPointerDown,
 }
 
 #[derive(Debug, Clone)]
@@ -277,6 +305,14 @@ pub enum AppEvent {
         url: String,
         watch: u64,
     },
+    /// Early "is this tab black?" probe, fired sooner than the full stall timeout.
+    /// Only rebuilds the controller if the active tab never committed a document
+    /// (pure black). A committed-but-slow page is left for the gentle stall path.
+    ContentBlackProbe {
+        tab_id: String,
+        url: String,
+        watch: u64,
+    },
     ContentNavigationFailed {
         tab_id: String,
         url: String,
@@ -315,6 +351,18 @@ pub enum AppEvent {
         url: String,
         path: Option<String>,
         success: bool,
+    },
+    /// Result of a "Copy image" operation (Win32 clipboard write).
+    CopyImageResult {
+        success: bool,
+    },
+    /// Result of a "Save image as" fetch performed inside the content WebView.
+    /// `data` is a base64 data URL when `ok`; otherwise empty. Matched to the
+    /// pending destination path by `id` in the main loop.
+    SaveImageData {
+        id: String,
+        ok: bool,
+        data: String,
     },
     UpdateCheckResult {
         available: bool,
