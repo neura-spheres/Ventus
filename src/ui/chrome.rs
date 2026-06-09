@@ -1003,7 +1003,7 @@ button,input,select,textarea{font-family:var(--font)}
   display:flex;align-items:center;gap:9px;
   padding:7px 8px;border-radius:8px;
   cursor:pointer;transition:background var(--transition);
-  position:relative;min-height:36px;
+  position:relative;min-height:36px;flex-shrink:0;
 }
 .tab-item:hover{background:var(--bg-hover)}
 .tab-item.active{background:var(--accent-dim)}
@@ -2367,6 +2367,17 @@ html:not([data-browser-font="system"]) #newtab-placeholder #newtab-clock{font-fa
 .bm-bar-fallback.hidden{display:none}
 .bm-bar-text{overflow:hidden;text-overflow:ellipsis}
 .bm-bar-empty{font-size:11px;color:var(--text-muted);padding:0 8px}
+/* Bookmarks bar overflow button + panel */
+.bm-bar-overflow-btn{display:none;align-items:center;gap:4px;padding:0 10px;height:100%;border:none;border-left:1px solid var(--border-subtle);background:transparent;color:var(--text-muted);font-size:11px;font-weight:500;cursor:pointer;flex-shrink:0;white-space:nowrap;transition:background var(--transition),color var(--transition)}
+.bm-bar-overflow-btn:hover{background:var(--bg-hover);color:var(--text)}
+.bm-bar-overflow-btn.active{background:var(--bg-active);color:var(--text)}
+#bm-bar-overflow-panel{position:fixed;z-index:9010;min-width:200px;max-width:280px;max-height:320px;overflow-y:auto;background:var(--modal-bg);border:1px solid var(--modal-border);border-radius:10px;box-shadow:0 8px 28px rgba(0,0,0,0.35);padding:4px;display:none;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+#bm-bar-overflow-panel.open{display:block}
+.bm-overflow-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;cursor:pointer;transition:background var(--transition);white-space:nowrap;overflow:hidden}
+.bm-overflow-item:hover{background:var(--bg-hover)}
+.bm-overflow-icon{width:14px;height:14px;border-radius:3px;flex-shrink:0;object-fit:contain}
+.bm-overflow-fallback{width:14px;height:14px;border-radius:3px;flex-shrink:0;background:var(--accent-dim);color:var(--accent);font-size:8px;font-weight:800;display:flex;align-items:center;justify-content:center}
+.bm-overflow-label{font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
 
 /* zoom toast */
 #zoom-toast{
@@ -2413,9 +2424,9 @@ html:not([data-browser-font="system"]) #newtab-placeholder #newtab-clock{font-fa
 .bm-item.bm-folder-target{border-color:var(--accent)!important;background:color-mix(in srgb,var(--accent) 10%,var(--bg))!important;box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 25%,transparent)}
 /* Bookmarks bar item delete */
 .bm-bar-item{position:relative}
-.bm-bar-del{position:absolute;top:-4px;right:-4px;width:16px;height:16px;border-radius:999px;border:none;background:var(--danger);color:#fff;font-size:9px;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity var(--transition);z-index:2;padding:0;line-height:1}
+.bm-bar-del{position:absolute;right:0;top:0;bottom:0;width:26px;border:none;background:transparent;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity var(--transition);z-index:2;padding:0}
 .bm-bar-item:hover .bm-bar-del{opacity:1}
-.bm-bar-del:hover{background:color-mix(in srgb,var(--danger) 80%,#000)}
+.bm-bar-item:hover::after{content:'';position:absolute;right:0;top:0;bottom:0;width:48px;background:linear-gradient(to right,transparent,var(--bg-hover) 55%);pointer-events:none;z-index:1}
 /* Folder modal */
 #folder-modal-backdrop{position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,0.45);backdrop-filter:blur(2px);display:none}
 #folder-modal-backdrop.open{display:block}
@@ -4035,6 +4046,9 @@ svg{display:block;flex-shrink:0}
 
 <!-- TOAST CONTAINER -->
 <div id="toast-container"></div>
+
+<!-- BOOKMARKS BAR OVERFLOW PANEL -->
+<div id="bm-bar-overflow-panel"></div>
 
 <!-- FOLDER MODAL -->
 <div id="folder-modal-backdrop" onclick="closeFolderModal()"></div>
@@ -8657,7 +8671,111 @@ function renderBookmarksBar() {
     </div>`;
   }).join('');
   bar.innerHTML = folderHtml + bmHtml;
+  requestAnimationFrame(() => updateBmBarOverflow());
 }
+
+// ============================================================
+// BOOKMARKS BAR OVERFLOW
+// ============================================================
+let _bmOverflowData = [];
+let _bmOverflowOpen = false;
+
+function updateBmBarOverflow() {
+  const bar = document.getElementById('bookmarks-bar');
+  if (!bar) return;
+  // Remove any existing overflow button
+  const old = bar.querySelector('.bm-bar-overflow-btn');
+  if (old) old.remove();
+  _bmOverflowData = [];
+  _bmOverflowOpen = false;
+  closeBmOverflowPanel();
+
+  const items = Array.from(bar.querySelectorAll('.bm-bar-item'));
+  if (!items.length) return;
+
+  // No overflow at all — done
+  if (bar.scrollWidth <= bar.clientWidth) return;
+
+  // Reserve ~42px for the overflow button and find items to pull out
+  const BTN_W = 42;
+  const availW = bar.clientWidth - BTN_W;
+  const toRemove = items.filter(item => item.offsetLeft + item.offsetWidth > availW);
+  if (!toRemove.length) return;
+
+  // Capture data before removing from DOM
+  _bmOverflowData = toRemove.map(item => ({
+    url: item.dataset.navUrl || '',
+    folderId: item.dataset.folderId || '',
+    label: item.querySelector('.bm-bar-text')?.textContent || '',
+    icon: item.querySelector('.bm-bar-icon')?.src || '',
+    initial: item.querySelector('.bm-bar-fallback')?.textContent || '',
+  }));
+  toRemove.forEach(el => el.remove());
+
+  // Inject overflow button
+  const btn = document.createElement('button');
+  btn.className = 'bm-bar-overflow-btn';
+  btn.title = `${_bmOverflowData.length} more bookmark${_bmOverflowData.length !== 1 ? 's' : ''}`;
+  btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg><span>${_bmOverflowData.length}</span>`;
+  btn.style.display = 'flex';
+  btn.onclick = e => { e.stopPropagation(); toggleBmOverflowPanel(btn); };
+  bar.appendChild(btn);
+}
+
+function toggleBmOverflowPanel(btn) {
+  if (_bmOverflowOpen) { closeBmOverflowPanel(); return; }
+  openBmOverflowPanel(btn);
+}
+
+function openBmOverflowPanel(btn) {
+  const panel = document.getElementById('bm-bar-overflow-panel');
+  if (!panel || !_bmOverflowData.length) return;
+  // Render items
+  panel.innerHTML = _bmOverflowData.map(d => {
+    if (d.folderId) {
+      const folderSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
+      return `<div class="bm-overflow-item" onclick="closeBmOverflowPanel();openFolderModal('${escAttr(d.folderId)}')">
+        <span class="bm-overflow-fallback" style="color:var(--accent)">${folderSvg}</span>
+        <span class="bm-overflow-label">${escHtml(d.label)}</span>
+      </div>`;
+    }
+    const img = d.icon ? `<img class="bm-overflow-icon" src="${escAttr(d.icon)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="bm-overflow-fallback" style="display:none">${escHtml(d.initial)}</span>` : `<span class="bm-overflow-fallback">${escHtml(d.initial)}</span>`;
+    return `<div class="bm-overflow-item" onclick="closeBmOverflowPanel();navigateToUrl('${escAttr(d.url)}')">
+      ${img}
+      <span class="bm-overflow-label">${escHtml(d.label)}</span>
+    </div>`;
+  }).join('');
+
+  // Position below the button
+  const r = btn.getBoundingClientRect();
+  panel.style.right = (window.innerWidth - r.right) + 'px';
+  panel.style.left = 'auto';
+  panel.style.top = (r.bottom + 4) + 'px';
+  panel.classList.add('open');
+  btn.classList.add('active');
+  _bmOverflowOpen = true;
+
+  // Expand clip region to cover the panel
+  send('SuggestionOverlay', {visible:true, x: r.right - panel.offsetWidth - 4, y: r.bottom + 4, width: Math.max(panel.offsetWidth, 200) + 8, height: 340});
+}
+
+function closeBmOverflowPanel() {
+  const panel = document.getElementById('bm-bar-overflow-panel');
+  if (panel) panel.classList.remove('open');
+  const btn = document.querySelector('.bm-bar-overflow-btn');
+  if (btn) btn.classList.remove('active');
+  if (_bmOverflowOpen) {
+    _bmOverflowOpen = false;
+    send('SuggestionOverlay', {visible:false, x:0, y:0, width:0, height:0});
+  }
+}
+
+// Close overflow panel on outside click
+document.addEventListener('click', e => {
+  if (_bmOverflowOpen && !e.target.closest('#bm-bar-overflow-panel') && !e.target.closest('.bm-bar-overflow-btn')) {
+    closeBmOverflowPanel();
+  }
+});
 
 // ============================================================
 // ZOOM
@@ -9462,7 +9580,8 @@ document.addEventListener('keydown', e => {
   else if (ctrl && e.key === '-') { e.preventDefault(); zoomOut(); }
   else if (ctrl && e.key === '0') { e.preventDefault(); zoomReset(); }
   else if (e.key === 'Escape') {
-    if (_activeFolderId) closeFolderModal();
+    if (_bmOverflowOpen) closeBmOverflowPanel();
+    else if (_activeFolderId) closeFolderModal();
     else if (spotlightOpen) closeSpotlight();
     else if (findOpen) closeFindBar(true);
     else if (document.getElementById('workspace-delete-modal').classList.contains('open')) closeWorkspaceDeleteModal();
