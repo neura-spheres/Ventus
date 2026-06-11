@@ -494,7 +494,6 @@ fn main() {
     let chrome_builder = chrome_builder
         .with_browser_accelerator_keys(false)
         .with_additional_browser_args(browser_args.clone());
-    let proxy_chrome_drop = proxy.clone();
     let chrome = match chrome_builder
         // Share the content profile's WebView2 environment so the chrome UI does NOT
         // spawn its own (duplicate) browser/GPU/utility process tree. Chrome is built
@@ -502,23 +501,6 @@ fn main() {
         // identical args (webview_args), so reusing chrome's environment is consistent.
         .with_web_context(content_web_context.as_mut().unwrap())
         .with_html(chrome_html())
-        .with_drag_drop_handler(move |event| {
-            let wry::DragDropEvent::Drop { paths, .. } = event else {
-                return false;
-            };
-            let mut opened = false;
-            for path in paths {
-                if !path.is_file() {
-                    continue;
-                }
-                if let Some(url) = path.to_str().and_then(|p| launch_url(p)) {
-                    let _ = proxy_chrome_drop
-                        .send_event(AppEvent::Chrome(ChromeCommand::OpenInNewTab { url }));
-                    opened = true;
-                }
-            }
-            opened
-        })
         .with_ipc_handler(move |req: wry::http::Request<String>| {
             let body = req.body();
             match serde_json::from_str::<ChromeCommand>(body) {

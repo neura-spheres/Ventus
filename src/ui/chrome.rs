@@ -4404,7 +4404,7 @@ window.__neura = {
       input.value = formatDisplayUrl(url);
     }
     updateLockIcon(url);
-    document.title = title || 'Ventus';
+    document.title = 'Ventus';
     checkNewtabPlaceholder(url);
     checkHttpWarningPlaceholder(url);
     checkAppsPlaceholder(url);
