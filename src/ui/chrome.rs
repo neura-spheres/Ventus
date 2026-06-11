@@ -8446,8 +8446,11 @@ function showUpdateToast(version, notes) {
   if (__updateToastTimer) clearTimeout(__updateToastTimer);
   __updateToastTimer = setTimeout(dismissUpdateToast, 15000);
   requestAnimationFrame(() => {
-    const rect = toast.getBoundingClientRect();
-    send('SuggestionOverlay', {visible:true, x:rect.left - 4, y:rect.top - 4, width:rect.width + 8, height:rect.height + 8});
+    const finalW = toast.offsetWidth;
+    const finalH = toast.offsetHeight;
+    const finalLeft = window.innerWidth - finalW - 24;
+    const finalTop = window.innerHeight - finalH - 24;
+    send('SuggestionOverlay', {visible:true, x:finalLeft - 4, y:finalTop - 4, width:finalW + 8, height:finalH + 8});
   });
 }
 function dismissUpdateToast() {
