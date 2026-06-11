@@ -127,23 +127,19 @@ fn main() {
     repositories::seed_search_engines(&conn).expect("seed engines");
 
     let profile_cookie_db_found = webview_cookie_db_exists(&data_dir);
-    let startup_cookies: Vec<cookie_store::CookieRecord> = if profile_cookie_db_found {
-        tracing::info!("cookie_store: WebView2 profile found, skipping startup restore");
-        Vec::new()
-    } else {
-        match cookie_store::open(&data_dir) {
-            Ok(cs_conn) => {
-                let cookies = cookie_store::load_all(&cs_conn).unwrap_or_default();
-                tracing::info!(
-                    "cookie_store: loaded {} cookies for restoration",
-                    cookies.len()
-                );
-                cookies
-            }
-            Err(e) => {
-                tracing::warn!("cookie_store: failed to open for startup read: {}", e);
-                vec![]
-            }
+    let startup_cookies: Vec<cookie_store::CookieRecord> = match cookie_store::open(&data_dir) {
+        Ok(cs_conn) => {
+            let cookies = cookie_store::load_all(&cs_conn).unwrap_or_default();
+            tracing::info!(
+                "cookie_store: loaded {} backup cookies for startup heal (profile_db_found={})",
+                cookies.len(),
+                profile_cookie_db_found
+            );
+            cookies
+        }
+        Err(e) => {
+            tracing::warn!("cookie_store: failed to open for startup read: {}", e);
+            vec![]
         }
     };
 
@@ -314,7 +310,7 @@ fn main() {
         min_ai_sidebar_w: 280,
     };
 
-    let mut state = AppState::new(conn, settings);
+    let mut state = AppState::new(conn, settings, &data_dir);
     state.chrome_overlay_open = !onboarding_done;
     let mut restored_tabs: HashSet<String> = HashSet::new();
 
@@ -441,7 +437,6 @@ fn main() {
     let crash_sentinel: Option<std::path::PathBuf> = if !new_window {
         let p = data_dir.join("running.lock");
         if p.exists() {
-
             let roots = vec![webview_data_dir.as_path()];
             tracing::warn!(
                 target: "ventus::startup",
@@ -499,6 +494,7 @@ fn main() {
     let chrome_builder = chrome_builder
         .with_browser_accelerator_keys(false)
         .with_additional_browser_args(browser_args.clone());
+    let proxy_chrome_drop = proxy.clone();
     let chrome = match chrome_builder
         // Share the content profile's WebView2 environment so the chrome UI does NOT
         // spawn its own (duplicate) browser/GPU/utility process tree. Chrome is built
@@ -506,6 +502,23 @@ fn main() {
         // identical args (webview_args), so reusing chrome's environment is consistent.
         .with_web_context(content_web_context.as_mut().unwrap())
         .with_html(chrome_html())
+        .with_drag_drop_handler(move |event| {
+            let wry::DragDropEvent::Drop { paths, .. } = event else {
+                return false;
+            };
+            let mut opened = false;
+            for path in paths {
+                if !path.is_file() {
+                    continue;
+                }
+                if let Some(url) = path.to_str().and_then(|p| launch_url(p)) {
+                    let _ = proxy_chrome_drop
+                        .send_event(AppEvent::Chrome(ChromeCommand::OpenInNewTab { url }));
+                    opened = true;
+                }
+            }
+            opened
+        })
         .with_ipc_handler(move |req: wry::http::Request<String>| {
             let body = req.body();
             match serde_json::from_str::<ChromeCommand>(body) {
@@ -700,8 +713,7 @@ fn main() {
     let mut restore_maximized_after_fullscreen = false;
     let mut custom_maximized = false;
     if cloud::config::is_configured() {
-        if let Ok(Some(refresh_token)) =
-            storage::keychain::get_api_key(cloud::KEYCHAIN_REFRESH_KEY)
+        if let Ok(Some(refresh_token)) = storage::keychain::get_api_key(cloud::KEYCHAIN_REFRESH_KEY)
         {
             let proxy_restore = proxy.clone();
             let region = state.settings.region.clone();
@@ -967,6 +979,55 @@ fn main() {
                     "window.__neura && window.__neura.showError('Could not copy image')"
                 };
                 let _ = chrome.evaluate_script(js);
+            }
+
+            Event::UserEvent(AppEvent::PwdFillRequest {
+                ref tab_id,
+                ref origin,
+            }) => {
+                let creds = crate::storage::passwords::for_origin(
+                    &state.conn,
+                    &state.pwd_key,
+                    origin,
+                )
+                .unwrap_or_default();
+                if let (Some(c), Some(wv)) = (creds.first(), content_views.get(tab_id)) {
+                    let js = format!(
+                        "window.__ventusPwd && window.__ventusPwd.fill({},{})",
+                        serde_json::to_string(&c.username).unwrap_or_default(),
+                        serde_json::to_string(&c.password).unwrap_or_default()
+                    );
+                    let _ = wv.evaluate_script(&js);
+                    let _ = crate::storage::passwords::touch(&state.conn, origin, &c.username);
+                }
+            }
+
+            Event::UserEvent(AppEvent::PwdCapture {
+                ref origin,
+                ref username,
+                ref password,
+                ..
+            }) => {
+                if !username.is_empty() && !password.is_empty() {
+                    let stored = crate::storage::passwords::stored_password(
+                        &state.conn,
+                        &state.pwd_key,
+                        origin,
+                        username,
+                    )
+                    .unwrap_or(None);
+                    if stored.as_deref() != Some(password.as_str()) {
+                        let is_update = stored.is_some();
+                        state.pending_pwd_save =
+                            Some((origin.clone(), username.clone(), password.clone()));
+                        let _ = chrome.evaluate_script(&format!(
+                            "window.__neura && window.__neura.showSavePassword({},{},{})",
+                            serde_json::to_string(origin).unwrap_or_default(),
+                            serde_json::to_string(username).unwrap_or_default(),
+                            is_update
+                        ));
+                    }
+                }
             }
 
             // Image bytes (or failure) returned by the content WebView for a "Save image as".
@@ -1391,6 +1452,14 @@ fn main() {
                     _ => None,
                 };
                 let defer_session = matches!(&app_event, AppEvent::ContentMetadata { .. });
+                let nav_state_event = matches!(
+                    &app_event,
+                    AppEvent::ContentLoadStart { .. }
+                        | AppEvent::ContentLoadEnd { .. }
+                        | AppEvent::ContentNav { .. }
+                        | AppEvent::ContentNavState { .. }
+                        | AppEvent::ContentNavigationFailed { .. }
+                );
                 let auth_terminal = matches!(
                     &app_event,
                     AppEvent::AuthApplied { .. } | AppEvent::AuthError { .. }
@@ -1440,6 +1509,9 @@ fn main() {
                     if let Ok(mut guard) = shared_dl_dir.lock() {
                         *guard = download_prefs_from_settings(&state.settings);
                     }
+                }
+                if nav_state_event {
+                    refresh_nav_buttons(&chrome, &content_views, &mut state);
                 }
                 if let Some(action) = action_opt {
                     sync_active_ubol(
@@ -1708,6 +1780,20 @@ fn main() {
                         TabAction::ContentScriptOnTab { tab_id, js } => {
                             if let Some(wv) = content_views.get(&tab_id) {
                                 let _ = wv.evaluate_script(&js);
+                            }
+                        }
+                        TabAction::ContentGoBack => {
+                            if let Some(id) = &state.tab_manager.active_tab_id {
+                                if let Some(wv) = content_views.get(id) {
+                                    let _ = wv.go_back();
+                                }
+                            }
+                        }
+                        TabAction::ContentGoForward => {
+                            if let Some(id) = &state.tab_manager.active_tab_id {
+                                if let Some(wv) = content_views.get(id) {
+                                    let _ = wv.go_forward();
+                                }
                             }
                         }
                         TabAction::FindInPage {
@@ -2959,7 +3045,8 @@ fn relaunch_self(restore_session: bool) {
         return;
     };
     let mut cmd = std::process::Command::new(exe);
-    cmd.arg("--wait-for-pid").arg(std::process::id().to_string());
+    cmd.arg("--wait-for-pid")
+        .arg(std::process::id().to_string());
     if restore_session {
         cmd.arg("--restore-session");
     }
@@ -4139,9 +4226,14 @@ fn build_content_webview_once(
                         .get("can_back")
                         .and_then(|v| v.as_bool())
                         .unwrap_or(false);
+                    let can_forward = value
+                        .get("can_forward")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
                     let _ = proxy_ipc.send_event(AppEvent::ContentNavState {
                         tab_id: tab_id_ipc.clone(),
                         can_back,
+                        can_forward,
                     });
                     return;
                 }
@@ -4235,6 +4327,46 @@ fn build_content_webview_once(
                         .unwrap_or_default()
                         .to_string();
                     let _ = proxy_ipc.send_event(AppEvent::SaveImageData { id, ok, data });
+                    return;
+                }
+                if value.get("cmd").and_then(|v| v.as_str()) == Some("pwd_fill_request") {
+                    let origin = value
+                        .get("origin")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default()
+                        .to_string();
+                    if !origin.is_empty() {
+                        let _ = proxy_ipc.send_event(AppEvent::PwdFillRequest {
+                            tab_id: tab_id_ipc.clone(),
+                            origin,
+                        });
+                    }
+                    return;
+                }
+                if value.get("cmd").and_then(|v| v.as_str()) == Some("pwd_capture") {
+                    let origin = value
+                        .get("origin")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default()
+                        .to_string();
+                    let username = value
+                        .get("username")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default()
+                        .to_string();
+                    let password = value
+                        .get("password")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default()
+                        .to_string();
+                    if !origin.is_empty() {
+                        let _ = proxy_ipc.send_event(AppEvent::PwdCapture {
+                            tab_id: tab_id_ipc.clone(),
+                            origin,
+                            username,
+                            password,
+                        });
+                    }
                     return;
                 }
                 if value.get("cmd").and_then(|v| v.as_str()) == Some("content_pointer_down") {
@@ -5010,14 +5142,22 @@ fn content_initialization_script(
   const sendNavState = () => {
     if (!isTop) return;
     let canBack = false;
+    let canFwd = false;
     try {
-      if (window.navigation && window.navigation.currentEntry) {
-        canBack = window.navigation.currentEntry.index > 0;
+      const nav = window.navigation;
+      if (nav && typeof nav.canGoBack === 'boolean') {
+        canBack = nav.canGoBack;
+        canFwd = nav.canGoForward;
+      } else if (nav && nav.currentEntry) {
+        const idx = nav.currentEntry.index;
+        const len = nav.entries ? nav.entries().length : 0;
+        canBack = idx > 0;
+        canFwd = len > 0 && idx < len - 1;
       } else {
         canBack = history.length > 1;
       }
     } catch(_) {}
-    try { post({cmd:'content_nav_state', can_back: canBack}); } catch(_) {}
+    try { post({cmd:'content_nav_state', can_back: canBack, can_forward: canFwd}); } catch(_) {}
   };
 
   sendProgress(0.12);
@@ -5306,6 +5446,79 @@ fn content_initialization_script(
       document.querySelectorAll('audio,video').forEach(function(m) { m.muted = muted; });
     };
   }
+})();
+(() => {
+  try { if (window.top !== window) return; } catch (_) { return; }
+  if (window.__ventusPwd) return;
+  const post = (o) => { try { window.ipc && window.ipc.postMessage(JSON.stringify(o)); } catch (_) {} };
+  const vis = (el) => {
+    if (!el) return false;
+    const s = getComputedStyle(el);
+    if (s.display === 'none' || s.visibility === 'hidden') return false;
+    const r = el.getBoundingClientRect();
+    return r.width > 4 && r.height > 4;
+  };
+  const pwFields = () => Array.prototype.slice.call(document.querySelectorAll('input[type=password]')).filter(vis);
+  const userFor = (pw) => {
+    const scope = pw.form || document;
+    const inputs = Array.prototype.slice.call(scope.querySelectorAll('input'));
+    const pi = inputs.indexOf(pw);
+    for (let i = pi - 1; i >= 0; i--) {
+      const el = inputs[i];
+      const t = (el.type || 'text').toLowerCase();
+      if ((t === 'text' || t === 'email' || t === 'tel') && vis(el)) return el;
+    }
+    const g = scope.querySelector('input[autocomplete="username"], input[type="email"], input[name*="user" i], input[name*="email" i], input[id*="user" i], input[id*="email" i]');
+    return (g && vis(g)) ? g : null;
+  };
+  const setVal = (el, val) => {
+    if (!el) return;
+    try {
+      const proto = el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+      Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, val);
+    } catch (_) { el.value = val; }
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+  window.__ventusPwd = {
+    fill: (username, password) => {
+      const pws = pwFields();
+      if (!pws.length) return;
+      const pw = pws[0];
+      const u = userFor(pw);
+      if (u && username) setVal(u, username);
+      if (password) setVal(pw, password);
+    }
+  };
+  let asked = '';
+  const ask = () => {
+    if (!pwFields().length) return;
+    if (asked === location.origin) return;
+    asked = location.origin;
+    post({ cmd: 'pwd_fill_request', origin: location.origin });
+  };
+  const capture = () => {
+    const pws = pwFields();
+    if (!pws.length) return;
+    const pw = pws.filter((p) => p.value)[0] || pws[0];
+    if (!pw.value) return;
+    const u = userFor(pw);
+    post({ cmd: 'pwd_capture', origin: location.origin, username: u ? u.value : '', password: pw.value });
+  };
+  document.addEventListener('submit', capture, true);
+  document.addEventListener('click', (e) => {
+    const t = e.target;
+    const b = t && t.closest && t.closest('button, input[type=submit], input[type=button], [role=button]');
+    if (b) setTimeout(capture, 60);
+  }, true);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.target && e.target.tagName === 'INPUT') setTimeout(capture, 60);
+  }, true);
+  const start = () => ask();
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+  else start();
+  let n = 0;
+  const iv = setInterval(() => { n++; ask(); if (n > 25) clearInterval(iv); }, 600);
 })();
 "#;
     format!("{ad_prefix}{privacy_prefix}{script}")
@@ -5674,6 +5887,42 @@ fn arm_cover_watch(
     });
 }
 
+fn refresh_nav_buttons(
+    chrome: &WebView,
+    content_views: &HashMap<String, WebView>,
+    state: &mut AppState,
+) {
+    let Some(id) = state.tab_manager.active_tab_id.clone() else {
+        return;
+    };
+    let Some(wv) = content_views.get(&id) else {
+        return;
+    };
+    #[cfg(windows)]
+    let (back, fwd) = (
+        wv.can_go_back().unwrap_or(false),
+        wv.can_go_forward().unwrap_or(false),
+    );
+    #[cfg(not(windows))]
+    let (back, fwd) = {
+        let _ = wv;
+        (false, false)
+    };
+    let loading = state
+        .tab_manager
+        .get_tab(&id)
+        .map(|t| t.status == crate::browser::tab::TabStatus::Loading)
+        .unwrap_or(false);
+    if let Some(tab) = state.tab_manager.get_tab_mut(&id) {
+        tab.engine_can_back = Some(back);
+        tab.engine_can_forward = Some(fwd);
+    }
+    let _ = chrome.evaluate_script(&format!(
+        "window.__neura && window.__neura.updateNavState({},{},{})",
+        back, fwd, loading
+    ));
+}
+
 fn webview_cookie_db_exists(data_dir: &std::path::Path) -> bool {
     let base = data_dir.join("webview_data");
     [
@@ -5685,14 +5934,6 @@ fn webview_cookie_db_exists(data_dir: &std::path::Path) -> bool {
     ]
     .iter()
     .any(|path| path.is_file())
-}
-
-fn should_restore_startup_cookies(
-    incognito: bool,
-    restored: bool,
-    cookies: &[cookie_store::CookieRecord],
-) -> bool {
-    !incognito && !restored && !cookies.is_empty()
 }
 
 fn ubol_dir() -> Option<std::path::PathBuf> {
@@ -5762,11 +6003,29 @@ fn restore_startup_cookies(
     cookies: &[cookie_store::CookieRecord],
     restored: &mut bool,
 ) {
-    if !should_restore_startup_cookies(incognito, *restored, cookies) {
+    if incognito || *restored || cookies.is_empty() {
         return;
     }
-    browser::cookie_manager::restore_cookies(wv, cookies);
     *restored = true;
+    let have = browser::cookie_manager::snapshot(wv, Duration::from_millis(1200));
+    let have_keys: HashSet<(String, String, String)> = have
+        .iter()
+        .map(|c| (c.domain.clone(), c.path.clone(), c.name.clone()))
+        .collect();
+    let missing: Vec<cookie_store::CookieRecord> = cookies
+        .iter()
+        .filter(|c| !have_keys.contains(&(c.domain.clone(), c.path.clone(), c.name.clone())))
+        .cloned()
+        .collect();
+    tracing::info!(
+        "cookie heal: webview loaded {} cookies, backup has {}, injecting {} missing",
+        have.len(),
+        cookies.len(),
+        missing.len()
+    );
+    if !missing.is_empty() {
+        browser::cookie_manager::restore_cookies(wv, &missing);
+    }
 }
 
 fn save_open_cookies(
@@ -7522,8 +7781,9 @@ fn account_set_photo(
     }
     let profile = state.user_profile.clone().unwrap_or_default();
     let proxy = proxy.clone();
-    let _ = chrome
-        .evaluate_script("window.__neura && window.__neura.authPending && window.__neura.authPending()");
+    let _ = chrome.evaluate_script(
+        "window.__neura && window.__neura.authPending && window.__neura.authPending()",
+    );
     rt.spawn(async move {
         let session = match cloud::ensure_fresh(session).await {
             Ok(s) => s,
@@ -8666,7 +8926,10 @@ fn sleep_threshold_ms(free_mb: u64) -> u64 {
 
 fn image_filename_from_url(url: &str) -> String {
     if url.starts_with("data:") {
-        let mime = url.get(5..).and_then(|s| s.split(';').next()).unwrap_or("image/png");
+        let mime = url
+            .get(5..)
+            .and_then(|s| s.split(';').next())
+            .unwrap_or("image/png");
         let ext = match mime {
             "image/jpeg" | "image/jpg" => "jpg",
             "image/gif" => "gif",
@@ -8682,9 +8945,11 @@ fn image_filename_from_url(url: &str) -> String {
         if let Some(last) = parsed.path_segments().and_then(|s| s.last()) {
             let name = last.split('?').next().unwrap_or(last);
             let lower = name.to_lowercase();
-            let known_ext = ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico", "avif"]
-                .iter()
-                .any(|e| lower.ends_with(&format!(".{}", e)));
+            let known_ext = [
+                "png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico", "avif",
+            ]
+            .iter()
+            .any(|e| lower.ends_with(&format!(".{}", e)));
             if known_ext && !name.is_empty() {
                 return name.to_string();
             }
@@ -8790,27 +9055,29 @@ fn write_image_to_clipboard(bytes: &[u8]) -> anyhow::Result<()> {
     let total = HDR + stride * height;
     let mut dib = vec![0u8; total];
 
-    dib[0..4].copy_from_slice(&40u32.to_le_bytes());            // biSize
-    dib[4..8].copy_from_slice(&(width as i32).to_le_bytes());   // biWidth
+    dib[0..4].copy_from_slice(&40u32.to_le_bytes()); // biSize
+    dib[4..8].copy_from_slice(&(width as i32).to_le_bytes()); // biWidth
     dib[8..12].copy_from_slice(&(height as i32).to_le_bytes()); // biHeight (positive = bottom-up)
-    dib[12..14].copy_from_slice(&1u16.to_le_bytes());           // biPlanes
-    dib[14..16].copy_from_slice(&24u16.to_le_bytes());          // biBitCount
-    // biCompression, biSizeImage, biX/YPelsPerMeter, biClrUsed, biClrImportant = 0
+    dib[12..14].copy_from_slice(&1u16.to_le_bytes()); // biPlanes
+    dib[14..16].copy_from_slice(&24u16.to_le_bytes()); // biBitCount
+                                                       // biCompression, biSizeImage, biX/YPelsPerMeter, biClrUsed, biClrImportant = 0
 
     for dib_row in 0..height {
         let img_row = height - 1 - dib_row; // flip: DIB row 0 = bottom of image
         let dst = HDR + dib_row * stride;
         let src = img_row * width * 4;
         for col in 0..width {
-            dib[dst + col * 3]     = pixels[src + col * 4 + 2]; // B
+            dib[dst + col * 3] = pixels[src + col * 4 + 2]; // B
             dib[dst + col * 3 + 1] = pixels[src + col * 4 + 1]; // G
-            dib[dst + col * 3 + 2] = pixels[src + col * 4];     // R
+            dib[dst + col * 3 + 2] = pixels[src + col * 4]; // R
         }
     }
 
     unsafe { OpenClipboard(HWND(0))? };
     let result = write_dib_to_open_clipboard(&dib);
-    unsafe { let _ = CloseClipboard(); }
+    unsafe {
+        let _ = CloseClipboard();
+    }
     result
 }
 
@@ -8838,7 +9105,9 @@ fn write_dib_to_open_clipboard(dib: &[u8]) -> anyhow::Result<()> {
 
 #[cfg(not(windows))]
 fn write_image_to_clipboard(_bytes: &[u8]) -> anyhow::Result<()> {
-    Err(anyhow::anyhow!("clipboard write not supported on this platform"))
+    Err(anyhow::anyhow!(
+        "clipboard write not supported on this platform"
+    ))
 }
 
 /// JS injected into the active content WebView to fetch an image the way the page itself

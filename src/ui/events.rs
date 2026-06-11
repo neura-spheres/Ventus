@@ -155,6 +155,15 @@ pub enum ChromeCommand {
     DeleteHistoryEntry {
         id: i64,
     },
+    PwdSaveConfirm,
+    PwdSaveDismiss,
+    PwdList,
+    PwdReveal {
+        id: String,
+    },
+    PwdDelete {
+        id: String,
+    },
     OpenFile {
         path: String,
     },
@@ -361,6 +370,16 @@ pub enum AppEvent {
         tab_id: String,
         text: String,
     },
+    PwdFillRequest {
+        tab_id: String,
+        origin: String,
+    },
+    PwdCapture {
+        tab_id: String,
+        origin: String,
+        username: String,
+        password: String,
+    },
     AiChunk {
         text: String,
         done: bool,
@@ -418,6 +437,7 @@ pub enum AppEvent {
     ContentNavState {
         tab_id: String,
         can_back: bool,
+        can_forward: bool,
     },
     ContentContextMenu {
         tab_id: String,

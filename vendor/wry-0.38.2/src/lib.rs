@@ -1487,6 +1487,18 @@ pub trait WebViewExtWindows {
 
   /// Attaches this webview to the given HWND and removes it from the current one.
   fn reparent(&self, hwnd: isize) -> Result<()>;
+
+  /// Navigate the webview back one entry in its session history.
+  fn go_back(&self) -> Result<()>;
+
+  /// Navigate the webview forward one entry in its session history.
+  fn go_forward(&self) -> Result<()>;
+
+  /// Whether the webview has a previous session-history entry to go back to.
+  fn can_go_back(&self) -> Result<bool>;
+
+  /// Whether the webview has a following session-history entry to go forward to.
+  fn can_go_forward(&self) -> Result<bool>;
 }
 
 #[cfg(target_os = "windows")]
@@ -1505,6 +1517,22 @@ impl WebViewExtWindows for WebView {
 
   fn reparent(&self, hwnd: isize) -> Result<()> {
     self.webview.reparent(hwnd)
+  }
+
+  fn go_back(&self) -> Result<()> {
+    self.webview.go_back()
+  }
+
+  fn go_forward(&self) -> Result<()> {
+    self.webview.go_forward()
+  }
+
+  fn can_go_back(&self) -> Result<bool> {
+    self.webview.can_go_back()
+  }
+
+  fn can_go_forward(&self) -> Result<bool> {
+    self.webview.can_go_forward()
   }
 }
 

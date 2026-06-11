@@ -27,6 +27,10 @@ pub struct Tab {
     pub is_essential: bool,
     pub can_go_back: bool,
     pub can_go_forward: bool,
+    #[serde(skip)]
+    pub engine_can_back: Option<bool>,
+    #[serde(skip)]
+    pub engine_can_forward: Option<bool>,
     pub nav_fwd_depth: i32,
     pub back_stack: Vec<String>,
     pub forward_stack: Vec<String>,
@@ -57,6 +61,8 @@ impl Tab {
             is_essential: false,
             can_go_back: false,
             can_go_forward: false,
+            engine_can_back: None,
+            engine_can_forward: None,
             nav_fwd_depth: 0,
             back_stack: Vec::new(),
             forward_stack: Vec::new(),
@@ -97,5 +103,13 @@ impl Tab {
         self.can_go_back = !self.back_stack.is_empty();
         self.can_go_forward = !self.forward_stack.is_empty();
         self.nav_fwd_depth = self.forward_stack.len() as i32;
+    }
+
+    pub fn nav_back(&self) -> bool {
+        self.engine_can_back.unwrap_or(self.can_go_back)
+    }
+
+    pub fn nav_forward(&self) -> bool {
+        self.engine_can_forward.unwrap_or(self.can_go_forward)
     }
 }

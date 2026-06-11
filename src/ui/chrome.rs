@@ -1624,6 +1624,53 @@ button,input,select,textarea{font-family:var(--font)}
 [data-theme="light"] .toast.error{background:#b42318}
 [data-theme="light"] .toast.info{background:#315ab8}
 
+.pwd-save-bar{
+  position:fixed;bottom:0;left:0;right:0;z-index:460;
+  display:flex;align-items:center;gap:10px;
+  padding:10px 16px;background:var(--bg-elevated);
+  border-top:1px solid var(--border);font-size:13px;color:var(--text);
+}
+.pwd-save-bar svg{color:var(--accent);flex-shrink:0}
+#pwd-save-text{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pwd-save-actions{display:flex;gap:6px;flex-shrink:0}
+.pwd-save-btn{padding:5px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);
+  background:var(--bg-hover);color:var(--text);font-size:12px;cursor:pointer}
+.pwd-save-btn:hover{background:var(--bg-active)}
+.pwd-save-btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.pwd-save-btn.primary:hover{background:var(--accent-hover);border-color:var(--accent-hover)}
+.pwd-manager-overlay{
+  position:fixed;inset:0;z-index:700;background:var(--overlay-bg);
+  display:flex;align-items:center;justify-content:center;
+}
+.pwd-manager{
+  background:var(--modal-bg);border:1px solid var(--modal-border);
+  border-radius:var(--radius-lg);box-shadow:var(--modal-shadow);
+  width:480px;max-width:92vw;max-height:72vh;display:flex;flex-direction:column;overflow:hidden;
+}
+.pwd-manager-head{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 16px;border-bottom:1px solid var(--border);font-size:14px;font-weight:600;
+}
+.pwd-manager-close{background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:18px;padding:0 4px}
+.pwd-manager-close:hover{color:var(--text)}
+.pwd-manager-list{overflow-y:auto;flex:1;padding:8px}
+.pwd-row{
+  display:flex;align-items:center;gap:8px;padding:8px 6px;
+  border-radius:var(--radius-sm);
+}
+.pwd-row:hover{background:var(--bg-hover)}
+.pwd-row-info{flex:1;min-width:0}
+.pwd-row-site{font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pwd-row-user{font-size:11px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pwd-row-pass{width:130px;font-size:12px;background:var(--bg-active);border:1px solid var(--border);
+  border-radius:var(--radius-sm);padding:3px 6px;color:var(--text);flex-shrink:0}
+.pwd-row-btn{padding:4px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);
+  background:var(--bg-hover);color:var(--text);font-size:11px;cursor:pointer;flex-shrink:0}
+.pwd-row-btn:hover{background:var(--bg-active)}
+.pwd-row-btn.danger{color:var(--danger)}
+.pwd-row-btn.danger:hover{background:var(--danger-dim)}
+.pwd-empty{padding:24px;text-align:center;color:var(--text-muted);font-size:13px}
+
 #newtab-placeholder{
   position:absolute;top:0;right:0;bottom:0;
   left:calc(var(--sidebar-w) + var(--frame-side-w,5px));
@@ -2818,7 +2865,7 @@ svg{display:block;flex-shrink:0}
     </span>
     <input id="url-input" type="text" placeholder="Search or enter a URL"
       onkeydown="handleUrlKey(event)"
-      oninput="handleUrlInput(this.value)"
+      oninput="handleUrlInput(event)"
       onfocus="handleUrlFocus()"
       onblur="handleUrlBlur()">
     <button class="ab-icon-btn" id="btn-bookmark" onclick="event.stopPropagation();toggleBookmark()" title="Bookmark (Ctrl+D)">
@@ -4112,6 +4159,20 @@ svg{display:block;flex-shrink:0}
 
 <!-- TOAST CONTAINER -->
 <div id="toast-container"></div>
+<div id="pwd-save-bar" class="pwd-save-bar" style="display:none">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+  <span id="pwd-save-text"></span>
+  <div class="pwd-save-actions">
+    <button class="pwd-save-btn primary" onclick="confirmSavePassword()">Save</button>
+    <button class="pwd-save-btn" onclick="dismissSavePassword()">Not now</button>
+  </div>
+</div>
+<div id="pwd-manager-overlay" class="pwd-manager-overlay" style="display:none" onclick="if(event.target===this)closePasswordManager()">
+  <div class="pwd-manager">
+    <div class="pwd-manager-head"><span>Saved passwords</span><button class="pwd-manager-close" onclick="closePasswordManager()">&times;</button></div>
+    <div id="pwd-manager-list" class="pwd-manager-list"></div>
+  </div>
+</div>
 
 <!-- BOOKMARKS BAR OVERFLOW PANEL -->
 <div id="bm-bar-overflow-panel"></div>
@@ -4274,6 +4335,10 @@ window.__neura = {
   },
   showError(msg) { toast(msg, 'error'); finishAiBusy(); },
   showSuccess(msg) { toast(msg, 'success'); },
+  showSavePassword(origin, username, isUpdate) { showSavePasswordBanner(origin, username, isUpdate); },
+  hideSavePassword() { hideSavePasswordBanner(); },
+  setPasswords(list) { renderPasswords(list || []); },
+  revealPassword(id, password) { revealPasswordRow(id, password); },
   setAccount(a) {
     state.account = a || {};
     accountPending = false;
@@ -5833,6 +5898,52 @@ function setAddressLoadProgress(progress) {
 // ============================================================
 // ADDRESS BAR
 // ============================================================
+function showSavePasswordBanner(origin, username, isUpdate) {
+  const bar = document.getElementById('pwd-save-bar');
+  if (!bar) return;
+  let host = origin;
+  try { host = new URL(origin).hostname.replace(/^www\./, ''); } catch (_) {}
+  document.getElementById('pwd-save-text').textContent =
+    (isUpdate ? 'Update password for ' : 'Save password for ') + host + (username ? '  ' + username : '');
+  bar.style.display = 'flex';
+}
+function hideSavePasswordBanner() {
+  const bar = document.getElementById('pwd-save-bar');
+  if (bar) bar.style.display = 'none';
+}
+function confirmSavePassword() { send('PwdSaveConfirm'); }
+function dismissSavePassword() { send('PwdSaveDismiss'); }
+function openPasswordManager() {
+  const o = document.getElementById('pwd-manager-overlay');
+  if (o) { o.style.display = 'flex'; send('PwdList'); }
+}
+function closePasswordManager() {
+  const o = document.getElementById('pwd-manager-overlay');
+  if (o) o.style.display = 'none';
+}
+function renderPasswords(list) {
+  const wrap = document.getElementById('pwd-manager-list');
+  if (!wrap) return;
+  if (!list.length) { wrap.innerHTML = '<div class="pwd-empty">No saved passwords yet.</div>'; return; }
+  wrap.innerHTML = list.map(function(c) {
+    let host = c.origin;
+    try { host = new URL(c.origin).hostname.replace(/^www\./, ''); } catch (_) {}
+    return '<div class="pwd-row" data-id="' + escAttr(c.id) + '">' +
+      '<div class="pwd-row-info"><div class="pwd-row-site">' + escHtml(host) + '</div>' +
+      '<div class="pwd-row-user">' + escHtml(c.username || '') + '</div></div>' +
+      '<input class="pwd-row-pass" type="password" value="passwordmask" readonly>' +
+      '<button class="pwd-row-btn" onclick="send(\'PwdReveal\',{id:\'' + escAttr(c.id) + '\'})">Show</button>' +
+      '<button class="pwd-row-btn danger" onclick="send(\'PwdDelete\',{id:\'' + escAttr(c.id) + '\'})">Delete</button>' +
+      '</div>';
+  }).join('');
+}
+function revealPasswordRow(id, password) {
+  const esc = (window.CSS && CSS.escape) ? CSS.escape(id) : id;
+  const row = document.querySelector('.pwd-row[data-id="' + esc + '"]');
+  if (!row) return;
+  const inp = row.querySelector('.pwd-row-pass');
+  if (inp) { inp.type = 'text'; inp.value = password; }
+}
 function focusUrl() {
   const input = document.getElementById('url-input');
   input.focus();
@@ -5848,15 +5959,16 @@ function handleUrlFocus() {
   renderSuggestions('url', '');
   send('GetHistory', {q: ''});
 }
-function handleUrlInput(value) {
+function handleUrlInput(e) {
   const input = document.getElementById('url-input');
+  const value = input.value;
   delete input.dataset.showingCurrent;
   if (!searchSuggestionsEnabled()) {
     hideSuggestions();
     return;
   }
-  // Inline completion: find best frecency domain match, show as selected ghost text.
-  if (value.length >= 2 && !value.includes(' ')) {
+  const typingForward = !e || e.inputType === 'insertText';
+  if (typingForward && value.length >= 2 && !value.includes(' ')) {
     const completion = findInlineCompletion(value);
     if (completion && completion.length > value.length) {
       input.value = completion;
@@ -9665,12 +9777,8 @@ function showContextMenu(x, y, items) {
   if (rect.right > window.innerWidth) menu.style.left = Math.max(0, x - rect.width) + 'px';
   // Flip up if menu would overflow the window's bottom edge
   if (rect.bottom > window.innerHeight) menu.style.top = Math.max(0, y - rect.height) + 'px';
-  // Expand the Win32 SetWindowRgn clip region to cover the menu's actual bounding rect.
-  // Without this, any part of the menu that falls outside the sidebar's painted region
-  // is invisibly clipped at the OS level regardless of CSS positioning.
-  const r = menu.getBoundingClientRect();
   _ctxOverlayActive = true;
-  send('SuggestionOverlay', {visible:true, x:r.left - 2, y:r.top - 2, width:r.width + 4, height:r.height + 4});
+  send('SuggestionOverlay', {visible:true, x:0, y:0, width:window.innerWidth, height:window.innerHeight});
 }
 document.addEventListener('click', () => { _hideCtxMenu(); });
 document.addEventListener('contextmenu', e => {

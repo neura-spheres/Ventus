@@ -10,7 +10,7 @@ use crate::adblock::AdBlockEngine;
 use crate::browser::downloads::DownloadManager;
 use crate::browser::tab_manager::TabManager;
 use crate::config::{AppSettings, SecureDnsMode, SecureDnsProvider};
-use crate::storage::{keychain, repositories, settings_store};
+use crate::storage::{keychain, passwords, repositories, settings_store};
 use crate::ui::events::{AppEvent, ChromeCommand};
 
 const WEB_ERROR_CONNECTION_ABORTED: i32 = 9;
@@ -84,10 +84,12 @@ pub struct AppState {
     /// Used to deduplicate the multiple ContentMetadata events fired per page load and to
     /// update the title row when a better title arrives after the initial save.
     pub history_last_saved: HashMap<String, (String, i64)>,
+    pub pwd_key: [u8; 32],
+    pub pending_pwd_save: Option<(String, String, String)>,
 }
 
 impl AppState {
-    pub fn new(conn: Connection, settings: AppSettings) -> Self {
+    pub fn new(conn: Connection, settings: AppSettings, data_dir: &std::path::Path) -> Self {
         let ai_provider = settings.ai.default_provider.clone();
         let ad_block_enabled = settings.privacy.ad_blocker_enabled;
         let ad_block_exceptions = settings.privacy.ad_blocker_exceptions.clone();
@@ -100,7 +102,8 @@ impl AppState {
         downloads.reverse();
         let cached_search_engines = repositories::list_search_engines(&conn).unwrap_or_default();
         let cached_bookmarks = repositories::list_bookmarks(&conn).unwrap_or_default();
-        let cached_bookmark_folders = repositories::list_bookmark_folders(&conn).unwrap_or_default();
+        let cached_bookmark_folders =
+            repositories::list_bookmark_folders(&conn).unwrap_or_default();
         let cached_history = repositories::list_history(&conn, 30).unwrap_or_default();
         Self {
             tab_manager: TabManager::new(),
@@ -139,6 +142,8 @@ impl AppState {
             auth: None,
             user_profile: None,
             history_last_saved: HashMap::new(),
+            pwd_key: crate::storage::crypto::store_key(data_dir).unwrap_or([0u8; 32]),
+            pending_pwd_save: None,
         }
     }
 
@@ -240,8 +245,8 @@ impl AppState {
             "active_workspace_id": self.tab_manager.active_workspace_id,
             "active_url": active_url,
             "active_title": active_tab.map(|t| t.title.as_str()).unwrap_or(""),
-            "can_go_back": active_tab.map(|t| t.can_go_back).unwrap_or(false),
-            "can_go_fwd": active_tab.map(|t| t.can_go_forward).unwrap_or(false),
+            "can_go_back": active_tab.map(|t| t.nav_back()).unwrap_or(false),
+            "can_go_fwd": active_tab.map(|t| t.nav_forward()).unwrap_or(false),
             "is_loading": active_tab.map(|t| t.status == crate::browser::tab::TabStatus::Loading).unwrap_or(false),
             "settings": settings_value,
             "search_engines": &self.cached_search_engines,
@@ -284,6 +289,8 @@ pub enum TabAction {
     },
     SetZoomAll(f64),
     ContentNavigate(String),
+    ContentGoBack,
+    ContentGoForward,
     ReloadContent {
         tab_id: String,
         url: String,
@@ -349,48 +356,14 @@ pub fn handle_chrome_command(
             navigate_current_tab(url, state, chrome).or(Some(TabAction::SyncViews))
         }
         ChromeCommand::Back => {
-            if let Some(tab_id) = state.tab_manager.active_tab_id.clone() {
-                if let Some(url) = state.tab_manager.go_back(&tab_id) {
-                    let raw_url = url;
-                    let url = secure_nav_url(&raw_url, state);
-                    track_https_upgrade(state, &tab_id, &raw_url, &url);
-                    begin_user_nav(state, chrome, &tab_id);
-                    if finish_internal_nav(&tab_id, &url, state, chrome) {
-                        return Some(TabAction::ContentNavigate(url));
-                    }
-                    clear_loading_favicon(state, &tab_id);
-                    state.load_recoveries.remove(&load_key(&tab_id, &url));
-                    state.load_progress.insert(tab_id.clone(), 0.0);
-                    state.pending_nav_urls.insert(tab_id, url.clone());
-                    let _ = chrome
-                        .evaluate_script("window.__neura && window.__neura.startLoadProgress()");
-                    state.push_state_to_chrome(chrome);
-                    return Some(TabAction::ContentNavigate(url));
-                }
-            }
-            Some(TabAction::ContentScript("history.back()".into()))
+            let tab_id = state.tab_manager.active_tab_id.clone()?;
+            begin_user_nav(state, chrome, &tab_id);
+            Some(TabAction::ContentGoBack)
         }
         ChromeCommand::Forward => {
-            if let Some(tab_id) = state.tab_manager.active_tab_id.clone() {
-                if let Some(url) = state.tab_manager.go_forward(&tab_id) {
-                    let raw_url = url;
-                    let url = secure_nav_url(&raw_url, state);
-                    track_https_upgrade(state, &tab_id, &raw_url, &url);
-                    begin_user_nav(state, chrome, &tab_id);
-                    if finish_internal_nav(&tab_id, &url, state, chrome) {
-                        return Some(TabAction::ContentNavigate(url));
-                    }
-                    clear_loading_favicon(state, &tab_id);
-                    state.load_recoveries.remove(&load_key(&tab_id, &url));
-                    state.load_progress.insert(tab_id.clone(), 0.0);
-                    state.pending_nav_urls.insert(tab_id, url.clone());
-                    let _ = chrome
-                        .evaluate_script("window.__neura && window.__neura.startLoadProgress()");
-                    state.push_state_to_chrome(chrome);
-                    return Some(TabAction::ContentNavigate(url));
-                }
-            }
-            Some(TabAction::ContentScript("history.forward()".into()))
+            let tab_id = state.tab_manager.active_tab_id.clone()?;
+            begin_user_nav(state, chrome, &tab_id);
+            Some(TabAction::ContentGoForward)
         }
         ChromeCommand::Reload => reload_current_tab(state, chrome),
         ChromeCommand::Stop => Some(TabAction::ContentScript("window.stop()".into())),
@@ -403,6 +376,8 @@ pub fn handle_chrome_command(
                 url = tab.url.clone();
             }
             state.push_state_to_chrome(chrome);
+            let _ = chrome.focus();
+            let _ = chrome.evaluate_script("focusUrl()");
             Some(TabAction::Create { tab_id, url })
         }
         ChromeCommand::CloseTab { id } => {
@@ -412,6 +387,17 @@ pub fn handle_chrome_command(
             state.native_nav_ids.remove(&id);
             state.history_last_saved.remove(&id);
             state.push_state_to_chrome(chrome);
+            let ws_id = state.tab_manager.active_workspace_id.clone();
+            let landed_on_lone_newtab = state.tab_manager.workspace_tabs(&ws_id).count() == 1
+                && state
+                    .tab_manager
+                    .active_tab()
+                    .map(|t| t.url == "neura://newtab")
+                    .unwrap_or(false);
+            if landed_on_lone_newtab {
+                let _ = chrome.focus();
+                let _ = chrome.evaluate_script("focusUrl()");
+            }
             Some(TabAction::Remove(id))
         }
         ChromeCommand::SwitchTab { id } => {
@@ -616,24 +602,44 @@ pub fn handle_chrome_command(
             None
         }
         ChromeCommand::BookmarkRemoveById { id } => {
-            let _ = state.conn.execute("DELETE FROM bookmarks WHERE id = ?1", [&id]);
+            let _ = state
+                .conn
+                .execute("DELETE FROM bookmarks WHERE id = ?1", [&id]);
             state.cached_bookmarks = repositories::list_bookmarks(&state.conn).unwrap_or_default();
-            state.cached_bookmark_folders = repositories::list_bookmark_folders(&state.conn).unwrap_or_default();
-            if state.tab_manager.active_tab().map(|t| {
-                !state.cached_bookmarks.iter().any(|b| b.url == t.url)
-            }).unwrap_or(false) {
-                let _ = chrome.evaluate_script("window.__neura && window.__neura.setBookmarked(false)");
+            state.cached_bookmark_folders =
+                repositories::list_bookmark_folders(&state.conn).unwrap_or_default();
+            if state
+                .tab_manager
+                .active_tab()
+                .map(|t| !state.cached_bookmarks.iter().any(|b| b.url == t.url))
+                .unwrap_or(false)
+            {
+                let _ =
+                    chrome.evaluate_script("window.__neura && window.__neura.setBookmarked(false)");
             }
             state.push_state_to_chrome(chrome);
             None
         }
-        ChromeCommand::BookmarkCreateFolder { bookmark_id_a, bookmark_id_b } => {
+        ChromeCommand::BookmarkCreateFolder {
+            bookmark_id_a,
+            bookmark_id_b,
+        } => {
             match repositories::add_bookmark_folder(&state.conn, "New Folder") {
                 Ok(folder) => {
-                    let _ = repositories::set_bookmark_folder(&state.conn, &bookmark_id_a, Some(&folder.id));
-                    let _ = repositories::set_bookmark_folder(&state.conn, &bookmark_id_b, Some(&folder.id));
-                    state.cached_bookmarks = repositories::list_bookmarks(&state.conn).unwrap_or_default();
-                    state.cached_bookmark_folders = repositories::list_bookmark_folders(&state.conn).unwrap_or_default();
+                    let _ = repositories::set_bookmark_folder(
+                        &state.conn,
+                        &bookmark_id_a,
+                        Some(&folder.id),
+                    );
+                    let _ = repositories::set_bookmark_folder(
+                        &state.conn,
+                        &bookmark_id_b,
+                        Some(&folder.id),
+                    );
+                    state.cached_bookmarks =
+                        repositories::list_bookmarks(&state.conn).unwrap_or_default();
+                    state.cached_bookmark_folders =
+                        repositories::list_bookmark_folders(&state.conn).unwrap_or_default();
                     state.push_state_to_chrome(chrome);
                     let js = format!(
                         "window.__neura && window.__neura.openFolderModalAndRename('{}')",
@@ -645,7 +651,10 @@ pub fn handle_chrome_command(
             }
             None
         }
-        ChromeCommand::BookmarkMoveToFolder { bookmark_id, folder_id } => {
+        ChromeCommand::BookmarkMoveToFolder {
+            bookmark_id,
+            folder_id,
+        } => {
             let _ = repositories::set_bookmark_folder(&state.conn, &bookmark_id, Some(&folder_id));
             state.cached_bookmarks = repositories::list_bookmarks(&state.conn).unwrap_or_default();
             state.push_state_to_chrome(chrome);
@@ -659,14 +668,16 @@ pub fn handle_chrome_command(
         }
         ChromeCommand::BookmarkFolderRename { folder_id, name } => {
             let _ = repositories::rename_bookmark_folder(&state.conn, &folder_id, &name);
-            state.cached_bookmark_folders = repositories::list_bookmark_folders(&state.conn).unwrap_or_default();
+            state.cached_bookmark_folders =
+                repositories::list_bookmark_folders(&state.conn).unwrap_or_default();
             state.push_state_to_chrome(chrome);
             None
         }
         ChromeCommand::BookmarkFolderDelete { folder_id } => {
             let _ = repositories::delete_bookmark_folder(&state.conn, &folder_id);
             state.cached_bookmarks = repositories::list_bookmarks(&state.conn).unwrap_or_default();
-            state.cached_bookmark_folders = repositories::list_bookmark_folders(&state.conn).unwrap_or_default();
+            state.cached_bookmark_folders =
+                repositories::list_bookmark_folders(&state.conn).unwrap_or_default();
             state.push_state_to_chrome(chrome);
             None
         }
@@ -884,6 +895,41 @@ pub fn handle_chrome_command(
         // OpenDevtools is handled directly in main.rs (calls wv.open_devtools() on
         // the active content WebView). Nothing to do here at the app-state level.
         ChromeCommand::OpenDevtools => None,
+        ChromeCommand::PwdSaveConfirm => {
+            if let Some((origin, username, password)) = state.pending_pwd_save.take() {
+                let _ = passwords::save(&state.conn, &state.pwd_key, &origin, &username, &password);
+            }
+            let _ = chrome.evaluate_script("window.__neura && window.__neura.hideSavePassword()");
+            None
+        }
+        ChromeCommand::PwdSaveDismiss => {
+            state.pending_pwd_save = None;
+            let _ = chrome.evaluate_script("window.__neura && window.__neura.hideSavePassword()");
+            None
+        }
+        ChromeCommand::PwdList => {
+            push_passwords_list(state, chrome);
+            None
+        }
+        ChromeCommand::PwdReveal { id } => {
+            let pw = passwords::list(&state.conn, &state.pwd_key)
+                .unwrap_or_default()
+                .into_iter()
+                .find(|c| c.id == id)
+                .map(|c| c.password)
+                .unwrap_or_default();
+            let _ = chrome.evaluate_script(&format!(
+                "window.__neura && window.__neura.revealPassword({}, {})",
+                serde_json::to_string(&id).unwrap_or_default(),
+                serde_json::to_string(&pw).unwrap_or_default()
+            ));
+            None
+        }
+        ChromeCommand::PwdDelete { id } => {
+            let _ = passwords::delete(&state.conn, &id);
+            push_passwords_list(state, chrome);
+            None
+        }
         ChromeCommand::GetHistory { q } => {
             // Always use frecency ranking for omnibox — most-visited sites surface first.
             let results =
@@ -1188,8 +1234,8 @@ pub fn handle_chrome_command(
             state.auth = None;
             state.user_profile = None;
             state.push_account(chrome);
-            let _ =
-                chrome.evaluate_script("window.__neura && window.__neura.authSuccess('Signed out')");
+            let _ = chrome
+                .evaluate_script("window.__neura && window.__neura.authSuccess('Signed out')");
             None
         }
         _ => None,
@@ -1733,7 +1779,7 @@ fn drop_failed_load(
         let active = state
             .tab_manager
             .active_tab()
-            .map(|t| (t.can_go_back, t.can_go_forward));
+            .map(|t| (t.nav_back(), t.nav_forward()));
         if let Some((back, fwd)) = active {
             let _ = chrome.evaluate_script(&format!(
                 "window.__neura && window.__neura.updateNavState({},{},false)",
@@ -1766,6 +1812,19 @@ fn web_security_signature(
         settings.privacy.fingerprint_protection,
         settings.privacy.strict_permissions,
     )
+}
+
+fn push_passwords_list(state: &AppState, chrome: &WebView) {
+    let creds = passwords::list(&state.conn, &state.pwd_key).unwrap_or_default();
+    let items: Vec<serde_json::Value> = creds
+        .iter()
+        .map(|c| serde_json::json!({"id": c.id, "origin": c.origin, "username": c.username}))
+        .collect();
+    let json = serde_json::to_string(&items).unwrap_or_default();
+    let _ = chrome.evaluate_script(&format!(
+        "window.__neura && window.__neura.setPasswords({})",
+        json
+    ));
 }
 
 pub fn handle_app_event_inner(
@@ -1913,7 +1972,7 @@ pub fn handle_app_event_inner(
                 let active = state
                     .tab_manager
                     .active_tab()
-                    .map(|t| (t.can_go_back, t.can_go_forward));
+                    .map(|t| (t.nav_back(), t.nav_forward()));
                 let (back, fwd) = active.unwrap_or((false, false));
                 let _ = chrome.evaluate_script(&format!(
                     "window.__neura && window.__neura.updateNavState({},{},true)",
@@ -1994,7 +2053,7 @@ pub fn handle_app_event_inner(
                 let active = state
                     .tab_manager
                     .active_tab()
-                    .map(|t| (t.can_go_back, t.can_go_forward));
+                    .map(|t| (t.nav_back(), t.nav_forward()));
                 if let Some((back, fwd)) = active {
                     let _ = chrome.evaluate_script(&format!(
                         "window.__neura && window.__neura.updateNavState({},{},false)",
@@ -2078,7 +2137,7 @@ pub fn handle_app_event_inner(
                     let active = state
                         .tab_manager
                         .active_tab()
-                        .map(|t| (t.can_go_back, t.can_go_forward));
+                        .map(|t| (t.nav_back(), t.nav_forward()));
                     if let Some((back, fwd)) = active {
                         let _ = chrome.evaluate_script(&format!(
                             "window.__neura && window.__neura.updateNavState({},{},false)",
@@ -2270,10 +2329,8 @@ pub fn handle_app_event_inner(
                                         saved_id,
                                         &safe_title,
                                     );
-                                    if let Some(e) = state
-                                        .cached_history
-                                        .iter_mut()
-                                        .find(|e| e.id == saved_id)
+                                    if let Some(e) =
+                                        state.cached_history.iter_mut().find(|e| e.id == saved_id)
                                     {
                                         e.title = safe_title.clone();
                                     }
@@ -2568,28 +2625,7 @@ pub fn handle_app_event_inner(
             ));
             None
         }
-        AppEvent::ContentNavState { tab_id, can_back } => {
-            if let Some(tab) = state.tab_manager.get_tab_mut(&tab_id) {
-                tab.sync_nav_flags();
-                if can_back && tab.back_stack.is_empty() {
-                    tab.can_go_back = true;
-                }
-            }
-            if state.tab_manager.active_tab_id.as_deref() == Some(tab_id.as_str()) {
-                let active = state
-                    .tab_manager
-                    .active_tab()
-                    .map(|t| (t.can_go_back, t.can_go_forward));
-                if let Some((back, fwd)) = active {
-                    let _ = chrome.evaluate_script(&format!(
-                        "window.__neura && window.__neura.updateNavState({},{},false)",
-                        back, fwd
-                    ));
-                }
-                state.push_state_to_chrome(chrome);
-            }
-            None
-        }
+        AppEvent::ContentNavState { .. } => None,
         AppEvent::AuthApplied {
             session,
             profile,
@@ -2610,8 +2646,10 @@ pub fn handle_app_event_inner(
         }
         AppEvent::AuthError { message } => {
             let m = serde_json::to_string(&message).unwrap_or_default();
-            let _ = chrome
-                .evaluate_script(&format!("window.__neura && window.__neura.authError({})", m));
+            let _ = chrome.evaluate_script(&format!(
+                "window.__neura && window.__neura.authError({})",
+                m
+            ));
             state.push_account(chrome);
             None
         }

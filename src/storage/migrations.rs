@@ -123,4 +123,16 @@ CREATE TABLE IF NOT EXISTS keyboard_shortcuts (
     action TEXT PRIMARY KEY NOT NULL,
     shortcut TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS credentials (
+    id TEXT PRIMARY KEY NOT NULL,
+    origin TEXT NOT NULL,
+    username TEXT NOT NULL,
+    password TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    last_used INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_credentials_origin ON credentials(origin);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_credentials_origin_user ON credentials(origin, username);
 "#;

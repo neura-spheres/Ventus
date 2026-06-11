@@ -770,7 +770,8 @@ impl InnerWebView {
 
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("wry::ipc::handle").entered();
-        ipc_handler(Request::builder().uri(url).body(js).unwrap());
+        let uri = url.parse::<http::Uri>().unwrap_or_default();
+        ipc_handler(Request::builder().uri(uri).body(js).unwrap());
 
         Ok(())
       })),
@@ -1204,6 +1205,26 @@ impl InnerWebView {
 
   pub fn load_url_with_headers(&self, url: &str, headers: http::HeaderMap) -> Result<()> {
     load_url_with_headers(&self.webview, &self.env, url, headers)
+  }
+
+  pub fn go_back(&self) -> Result<()> {
+    unsafe { self.webview.GoBack() }.map_err(Into::into)
+  }
+
+  pub fn go_forward(&self) -> Result<()> {
+    unsafe { self.webview.GoForward() }.map_err(Into::into)
+  }
+
+  pub fn can_go_back(&self) -> Result<bool> {
+    let mut value = BOOL::default();
+    unsafe { self.webview.CanGoBack(&mut value) }?;
+    Ok(value.as_bool())
+  }
+
+  pub fn can_go_forward(&self) -> Result<bool> {
+    let mut value = BOOL::default();
+    unsafe { self.webview.CanGoForward(&mut value) }?;
+    Ok(value.as_bool())
   }
 
   pub fn bounds(&self) -> Result<Rect> {
