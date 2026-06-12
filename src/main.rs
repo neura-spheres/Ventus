@@ -767,6 +767,7 @@ fn main() {
                 let js = state.chrome_state_json();
                 let _ = chrome
                     .evaluate_script(&format!("window.__neura&&window.__neura.setState({})", js));
+                sync_window_maximized(&chrome, custom_maximized || window.is_maximized());
                 state.push_newtab_wallpaper_to_chrome(&chrome);
                 if state.content_cover_open {
                     let _ = chrome.evaluate_script(
@@ -1122,6 +1123,7 @@ fn main() {
                 }
                 custom_maximized = window.is_maximized();
                 toggle_window_maximized(&window, &mut custom_maximized);
+                sync_window_maximized(&chrome, custom_maximized);
                 apply_layout(
                     &chrome,
                     chrome_hwnd,
@@ -2640,6 +2642,7 @@ state.settings.privacy.default_permissions.clone(),
                 }
                 if restore_maximized_after_fullscreen {
                     set_window_maximized(&window, true, &mut custom_maximized);
+                    sync_window_maximized(&chrome, custom_maximized);
                     restore_maximized_after_fullscreen = false;
                 }
                 if sync_fullscreen_layout {
@@ -2821,6 +2824,7 @@ state.settings.privacy.default_permissions.clone(),
                 ..
             } => {
                 custom_maximized = window.is_maximized();
+                sync_window_maximized(&chrome, custom_maximized);
                 if state.content_fullscreen {
                     set_fullscreen_z(&window, true);
                 } else {
@@ -6849,6 +6853,13 @@ fn bookmark_shortcut(state: &AppState) -> Option<ChromeCommand> {
 
 fn toggle_window_maximized(window: &tao::window::Window, maxed: &mut bool) {
     set_window_maximized(window, !*maxed, maxed);
+}
+
+fn sync_window_maximized(chrome: &WebView, maxed: bool) {
+    let _ = chrome.evaluate_script(&format!(
+        "window.__neura&&window.__neura.setWindowMaximized({})",
+        maxed
+    ));
 }
 
 #[cfg(windows)]

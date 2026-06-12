@@ -3000,6 +3000,7 @@ svg{display:block;flex-shrink:0}
       onkeydown="handleUrlKey(event)"
       oninput="handleUrlInput(event)"
       onfocus="handleUrlFocus()"
+      oncopy="handleUrlCopy(event)"
       onblur="handleUrlBlur()">
     <button class="ab-icon-btn" id="btn-bookmark" onclick="event.stopPropagation();toggleBookmark()" title="Bookmark (Ctrl+D)">
       <svg id="bm-icon-empty" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>
@@ -3027,7 +3028,7 @@ svg{display:block;flex-shrink:0}
     <button class="win-btn" onclick="send('WindowMinimize')" title="Minimize">
       <svg width="11" height="11" viewBox="0 0 11 11" fill="currentColor"><path d="M11 4.399V5.5H0V4.399h11z"/></svg>
     </button>
-    <button class="win-btn" id="win-btn-max" onclick="send('WindowMaximize')" title="Maximize / Restore">
+    <button class="win-btn" id="win-btn-max" onclick="send('WindowMaximize')" title="Maximize">
       <svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" stroke-width="1"><rect x="0.5" y="0.5" width="10" height="10"/></svg>
     </button>
     <button class="win-btn win-btn-close" onclick="send('WindowClose')" title="Close">
@@ -4462,6 +4463,7 @@ window.__neura = {
     if (frameSideW != null) root.style.setProperty('--frame-side-w', frameSideW + 'px');
     if (frameBottomH != null) root.style.setProperty('--frame-bottom-h', frameBottomH + 'px');
   },
+  setWindowMaximized(v) { setWindowMaximized(!!v); },
   focusSpotlight() { focusSpotlightSoon(); },
   appendAiChunk(text, done) {
     if (done && !text && !currentStreamEl) {
@@ -5699,6 +5701,14 @@ function handleToolbarDblClick(e) {
   if (e.target.closest(DRAG_EXEMPT)) return;
   send('WindowMaximize');
 }
+function setWindowMaximized(v) {
+  const btn = document.getElementById('win-btn-max');
+  if (!btn) return;
+  btn.title = v ? 'Restore' : 'Maximize';
+  btn.innerHTML = v
+    ? '<svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" stroke-width="1"><path d="M3.5 0.5h7v7h-3"/><rect x="0.5" y="3.5" width="7" height="7"/></svg>'
+    : '<svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" stroke-width="1"><rect x="0.5" y="0.5" width="10" height="10"/></svg>';
+}
 
 function _syncSidebarBtnState() {
   const btn = document.getElementById('sidebar-toggle-btn');
@@ -6209,6 +6219,26 @@ function handleUrlKey(e) {
 function restoreDisplayUrl() {
   const tab = state.tabs && state.tabs.find(t => t.id === state.active_tab_id);
   if (tab) document.getElementById('url-input').value = formatDisplayUrl(tab.url);
+}
+function currentTabUrl() {
+  const tab = state.tabs && state.tabs.find(t => t.id === state.active_tab_id);
+  return tab && tab.url ? tab.url : '';
+}
+function fullUrlForCopy(input) {
+  const url = currentTabUrl();
+  if (!url || url.startsWith('neura://')) return '';
+  const start = input.selectionStart || 0;
+  const end = input.selectionEnd || 0;
+  if (start !== 0 || end !== input.value.length) return '';
+  const display = formatDisplayUrl(url);
+  if (input.value !== display && input.value !== url) return '';
+  return url;
+}
+function handleUrlCopy(e) {
+  const url = fullUrlForCopy(e.target);
+  if (!url || !e.clipboardData) return;
+  e.clipboardData.setData('text/plain', url);
+  e.preventDefault();
 }
 function formatDisplayUrl(url) {
   if (!url || url === 'about:blank') return '';
