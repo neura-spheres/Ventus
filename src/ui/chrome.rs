@@ -69,6 +69,7 @@ pub fn chrome_html() -> String {
   --nt-vignette:linear-gradient(transparent,transparent);
   --nt-panel:rgba(14,14,14,0.72);
   --nt-panel-strong:rgba(14,14,14,0.88);
+  --nt-suggestion-surface:rgba(14,14,14,0.96);
   --nt-glass:rgba(255,255,255,0.10);
   --nt-glass-strong:rgba(255,255,255,0.18);
   --nt-glass-border:rgba(255,255,255,0.16);
@@ -192,14 +193,15 @@ pub fn chrome_html() -> String {
   --nt-vignette:linear-gradient(transparent,transparent);
   --nt-panel:rgba(255,255,255,0.72);
   --nt-panel-strong:rgba(255,255,255,0.92);
+  --nt-suggestion-surface:rgba(255,255,255,0.96);
   --nt-glass:rgba(255,255,255,0.56);
   --nt-glass-strong:rgba(255,255,255,0.78);
   --nt-glass-border:rgba(85,87,232,0.18);
-  --nt-white:#1a1b2e;
-  --nt-soft:#5c6082;
-  --nt-muted:#7a7fa0;
-  --nt-news-white:#1a1b2e;
-  --nt-news-soft:#5c6082;
+  --nt-white:#f0f0f0;
+  --nt-soft:#cccccc;
+  --nt-muted:rgba(240,240,240,0.64);
+  --nt-news-white:#f0f0f0;
+  --nt-news-soft:#cccccc;
   --nt-shadow:0 24px 70px rgba(30,40,100,0.16);
   --nt-hero-shadow:0 30px 100px rgba(30,40,100,0.12);
   --nt-clock-shadow:0 18px 70px rgba(30,40,100,0.20);
@@ -214,16 +216,16 @@ pub fn chrome_html() -> String {
   --nt-shortcut-bg-hover:rgba(255,255,255,0.82);
   --nt-shortcut-icon-bg:rgba(255,255,255,0.70);
   --nt-shortcut-shadow:0 14px 36px rgba(30,40,100,0.10),inset 0 1px 0 rgba(255,255,255,0.62);
-  --nt-clock-muted:rgba(26,27,46,0.62);
-  --nt-hero-text:#1a1b2e;
-  --nt-hero-soft:rgba(26,27,46,0.84);
-  --nt-clock-text-shadow:0 2px 10px rgba(255,255,255,0.68),0 18px 56px rgba(255,255,255,0.38);
-  --nt-caption-text-shadow:0 2px 8px rgba(255,255,255,0.62),0 10px 30px rgba(255,255,255,0.32);
-  --nt-label-text-shadow:0 1px 2px rgba(255,255,255,0.52);
+  --nt-clock-muted:rgba(255,255,255,0.64);
+  --nt-hero-text:#f0f0f0;
+  --nt-hero-soft:rgba(240,240,240,0.84);
+  --nt-clock-text-shadow:0 2px 10px rgba(0,0,0,0.58),0 18px 56px rgba(0,0,0,0.34);
+  --nt-caption-text-shadow:0 2px 8px rgba(0,0,0,0.52),0 10px 30px rgba(0,0,0,0.30);
+  --nt-label-text-shadow:0 1px 2px rgba(0,0,0,0.44);
   --nt-shortcut-hover-bg:rgba(255,255,255,0.18);
   --nt-top-readable-bg:rgba(255,255,255,0.72);
   --nt-top-readable-bg-hover:rgba(85,87,232,0.10);
-  --nt-top-readable-divider:rgba(26,27,46,0.11);
+  --nt-top-readable-divider:rgba(255,255,255,0.18);
   --nt-top-icon-filter:none;
   --nt-news-empty:linear-gradient(135deg,rgba(255,255,255,0.92),rgba(238,240,253,0.86));
   --nt-news-empty-overlay:radial-gradient(circle at top left,rgba(85,87,232,0.13),transparent 42%),linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.28));
@@ -1767,20 +1769,21 @@ button,input,select,textarea{font-family:var(--font)}
   display:none;
 }
 .newtab-shell{position:relative;z-index:1;width:min(1280px,100%);max-width:100%;min-width:0;margin:0 auto;display:flex;flex-direction:column;gap:24px;min-height:100%}
-.newtab-top{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:36px}
-.newtab-brand{display:flex;align-items:center;gap:10px;color:var(--nt-hero-text);font-size:12px;font-weight:500;text-shadow:var(--nt-label-text-shadow)}
-.newtab-logo{width:28px;height:28px;object-fit:contain;filter:drop-shadow(0 8px 18px rgba(0,0,0,0.28))}
-.newtab-top-actions{display:flex;align-items:center;gap:2px;padding:4px;border-radius:999px;background:var(--nt-top-readable-bg);box-shadow:none;backdrop-filter:saturate(180%) blur(18px)}
-.newtab-settings-btn{width:30px;height:30px;border-radius:999px;border:0;background:transparent;color:var(--nt-hero-text);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:transform var(--transition),background var(--transition),color var(--transition)}
-.newtab-settings-btn svg{filter:var(--nt-top-icon-filter)}
+.newtab-top{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:42px}
+.newtab-brand{display:flex;align-items:center;gap:12px;color:var(--nt-hero-text);font-size:14px;font-weight:650;text-shadow:var(--nt-label-text-shadow)}
+.newtab-logo{width:36px;height:36px;object-fit:contain;filter:drop-shadow(0 8px 18px rgba(0,0,0,0.28))}
+.newtab-top-actions{display:flex;align-items:center;gap:4px;padding:4px;border-radius:999px;background:transparent;box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none}
+.newtab-settings-btn{width:36px;height:36px;border-radius:999px;border:0;background:transparent;color:var(--nt-hero-text);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:transform var(--transition),background var(--transition),color var(--transition)}
+.newtab-settings-btn svg{width:19px;height:19px;filter:var(--nt-top-icon-filter)}
 .newtab-settings-btn:hover{background:var(--nt-top-readable-bg-hover);color:var(--nt-hero-text);transform:translateY(-1px)}
 .newtab-settings-btn:focus-visible{outline:2px solid var(--nt-focus-ring);outline-offset:2px}
-.newtab-date{height:30px;display:flex;align-items:center;font-size:12px;font-weight:600;color:var(--nt-hero-text);text-shadow:none;white-space:nowrap;padding:0 12px 0 10px;margin-right:2px;border-right:1px solid var(--nt-top-readable-divider)}
+.newtab-date{height:36px;display:flex;align-items:center;font-size:14px;font-weight:700;color:var(--nt-hero-text);text-shadow:none;white-space:nowrap;padding:0 14px 0 10px;margin-right:2px;border-right:1px solid var(--nt-top-readable-divider)}
 .newtab-hero{display:flex;flex-direction:column;align-items:center;gap:14px;padding-top:clamp(18px,8vh,98px);filter:drop-shadow(var(--nt-hero-shadow))}
 .newtab-search-wrap{
   width:min(650px,100%);
   position:relative;
 }
+.newtab-search-wrap.suggestions-open{filter:drop-shadow(0 24px 66px rgba(0,0,0,0.28))}
 #newtab-placeholder .newtab-search{
   width:100%;height:52px;display:flex;align-items:center;gap:10px;
   background:var(--nt-search-bg);border:1px solid var(--nt-glass-border);
@@ -1790,6 +1793,15 @@ button,input,select,textarea{font-family:var(--font)}
   transition:border-color var(--transition),box-shadow var(--transition),background var(--transition);
 }
 #newtab-placeholder .newtab-search:focus-within{border-color:var(--nt-focus-ring);background:var(--nt-search-bg-focus);box-shadow:var(--nt-search-focus-shadow)}
+#newtab-placeholder .newtab-search-wrap.suggestions-open .newtab-search,
+#newtab-placeholder .newtab-search-wrap.suggestions-open .newtab-search:focus-within{
+  border-radius:26px 26px 0 0;
+  border-bottom-color:transparent;
+  box-shadow:none;
+  background:var(--nt-suggestion-surface);
+  -webkit-backdrop-filter:none;
+  backdrop-filter:none;
+}
 #newtab-input{
   flex:1;border:none;background:transparent;color:var(--nt-white);
   font-size:16px;font-weight:500;outline:none;font-family:var(--font);
@@ -1801,14 +1813,18 @@ button,input,select,textarea{font-family:var(--font)}
   position:absolute;
   left:0;
   right:0;
-  top:calc(100% + 10px);
+  top:100%;
   max-height:320px;
   overflow-y:auto;
-  padding:6px;
+  padding:7px 6px 8px;
   text-align:left;
-  background:var(--nt-panel-strong);
+  background:var(--nt-suggestion-surface);
+  border-top:0;
+  border-radius:0 0 24px 24px;
   border-color:var(--nt-glass-border);
-  backdrop-filter:saturate(180%) blur(24px);
+  box-shadow:none;
+  -webkit-backdrop-filter:none;
+  backdrop-filter:none;
 }
 .newtab-greeting{font-size:14px;line-height:1.3;font-weight:500;color:var(--nt-hero-soft);text-align:center;letter-spacing:0;max-width:calc(100% - 48px);text-shadow:none;overflow-wrap:anywhere}
 .newtab-sub{display:none}
@@ -1926,9 +1942,19 @@ html:not([data-browser-font="system"]) #newtab-placeholder #newtab-clock{font-fa
   background:rgba(255,255,255,0.92);backdrop-filter:none;
   box-shadow:0 4px 24px rgba(30,40,100,0.12),0 0 0 1px rgba(0,0,0,0.06);
 }
+[data-theme="light"] #newtab-placeholder .newtab-search>svg{stroke:#7a7fa0}
+[data-theme="light"] #newtab-placeholder .newtab-search #newtab-input{color:#1a1b2e}
+[data-theme="light"] #newtab-placeholder .newtab-search #newtab-input::placeholder{color:#7a7fa0}
 [data-theme="light"] #newtab-placeholder .newtab-search:focus-within{
   background:rgba(255,255,255,0.96);
   box-shadow:0 4px 24px rgba(30,40,100,0.14),0 0 0 3px rgba(85,87,232,0.12),0 0 0 1px rgba(85,87,232,0.26);
+}
+[data-theme="light"] #newtab-placeholder .newtab-search-wrap.suggestions-open .newtab-search,
+[data-theme="light"] #newtab-placeholder .newtab-search-wrap.suggestions-open .newtab-search:focus-within{
+  background:var(--nt-suggestion-surface);
+  border-bottom-color:transparent;
+  border-radius:26px 26px 0 0;
+  box-shadow:none;
 }
 /* ── Newtab theme: INFORMATIVE is the default (no overrides) */
 
@@ -1982,6 +2008,7 @@ html:not([data-browser-font="system"]) #newtab-placeholder #newtab-clock{font-fa
   width:42px;height:42px;border-radius:14px;display:flex;align-items:center;justify-content:center;
   background:var(--accent-dim);color:var(--accent);flex-shrink:0;
 }
+.update-modal-icon.is-plain{background:transparent}
 .update-modal-copy{flex:1;min-width:0}
 .update-modal-title{font-size:18px;font-weight:700;letter-spacing:-0.3px;color:var(--text)}
 .update-modal-sub{font-size:12px;color:var(--text-muted);line-height:1.5;margin-top:4px}
@@ -2736,11 +2763,13 @@ html:not([data-browser-font="system"]) #newtab-placeholder #newtab-clock{font-fa
 }
 .about-update-left{display:flex;align-items:center;gap:12px}
 .about-update-icon{
-  width:36px;height:36px;border-radius:10px;
-  background:rgba(99,102,241,0.12);
+  width:38px;height:38px;border-radius:11px;
+  background:transparent;
+  border:0;
   display:flex;align-items:center;justify-content:center;
   color:var(--accent);flex-shrink:0;
 }
+.about-update-icon svg{width:19px;height:19px}
 .about-update-title{font-size:13px;font-weight:600;color:var(--text);letter-spacing:-0.1px}
 .about-update-sub{font-size:11px;color:var(--text-muted);margin-top:2px}
 
@@ -4030,7 +4059,7 @@ svg{display:block;flex-shrink:0}
         <div class="about-update-card">
           <div class="about-update-left">
             <div class="about-update-icon">
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v6m0 0 3-3m-3 3L9 5"/><path d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>
             </div>
             <div>
               <div class="about-update-title">Software updates</div>
@@ -5306,7 +5335,7 @@ function effectiveTheme() {
 }
 
 function defaultNewtabFontColor() {
-  return effectiveTheme() === 'dark' ? '#f0f0f0' : '#1a1b2e';
+  return '#f0f0f0';
 }
 
 function normalizeHexColor(value) {
@@ -5948,7 +5977,7 @@ function syncNewtabSettingsUI() {
   document.querySelectorAll('.nt-clock-card').forEach(c => {
     c.classList.toggle('selected', c.dataset.clock === clock);
   });
-  const src = nt.wallpaper_source || 'nature';
+  const src = nt.wallpaper_source || 'none';
   syncWallpaperSourceUI(src, nt);
   const fc = customNewtabFontColor(nt.font_color);
   const fcInput = document.getElementById('nt-font-color-input');
@@ -6734,7 +6763,7 @@ const NT_NATURE_PHOTOS = [
 ];
 
 function initWallpaper(nt) {
-  const src = (nt && nt.wallpaper_source) || 'nature';
+  const src = (nt && nt.wallpaper_source) || 'none';
   const root = document.getElementById('newtab-placeholder');
   if (!root) return;
   if (src !== 'daily') newtabBgSeed = '';
@@ -6981,6 +7010,7 @@ function hideSuggestions() {
   activeSuggestions = [];
   document.getElementById('url-suggestions').classList.remove('open');
   document.getElementById('newtab-suggestions').classList.remove('open');
+  document.querySelector('.newtab-search-wrap')?.classList.remove('suggestions-open');
   syncSuggestionOverlay(null);
 }
 
@@ -7003,10 +7033,12 @@ function renderSuggestions(target, rawQuery) {
   const input = getSuggestionInput(target);
   const panel = document.getElementById(target === 'newtab' ? 'newtab-suggestions' : 'url-suggestions');
   if (!input || !panel) return;
+  const newtabWrap = target === 'newtab' ? panel.closest('.newtab-search-wrap') : null;
   const query = (rawQuery || '').trim();
   activeSuggestions = buildSuggestions(query);
   if (!activeSuggestions.length) {
     panel.classList.remove('open');
+    if (newtabWrap) newtabWrap.classList.remove('suggestions-open');
     panel.innerHTML = '';
     syncSuggestionOverlay(null);
     return;
@@ -7020,6 +7052,7 @@ function renderSuggestions(target, rawQuery) {
   });
   if (target === 'url') positionUrlSuggestions(panel);
   panel.classList.add('open');
+  if (newtabWrap) newtabWrap.classList.add('suggestions-open');
   syncSuggestionOverlay(panel);
 }
 
@@ -8719,6 +8752,7 @@ function updateModalCopy(status, data) {
   return {title: 'Checking for updates', sub: 'This should only take a moment.'};
 }
 function setUpdateModalIcon(status) {
+  const icon = document.getElementById('update-modal-icon');
   const svg = document.getElementById('update-modal-icon-svg');
   if (!svg) return;
   let html = '<path d="M21 12a9 9 0 1 1-6.219-8.56"/>';
@@ -8727,13 +8761,14 @@ function setUpdateModalIcon(status) {
   if (status === 'error') html = '<circle cx="12" cy="12" r="9"/><path d="M12 8v5"/><path d="M12 16h.01"/>';
   svg.innerHTML = html;
   svg.classList.toggle('update-spin', status === 'checking' || status === 'downloading' || status === 'installing');
+  if (icon) icon.classList.toggle('is-plain', status === 'up_to_date');
 }
 function setUpdateModalActions(status) {
   const actions = document.getElementById('update-modal-actions');
   if (!actions) return;
   let html = '';
   if (status === 'available') html = '<button class="ob-btn-secondary" onclick="closeUpdateModal(true)">Later</button><button class="ob-btn-primary" onclick="installUpdate()">Update now</button>';
-  if (status === 'up_to_date' || status === 'error') html = '<button class="ob-btn-primary" onclick="closeUpdateModal(false)">Done</button>';
+  if (status === 'error') html = '<button class="ob-btn-primary" onclick="closeUpdateModal(false)">Done</button>';
   actions.innerHTML = html;
   actions.style.display = html ? 'flex' : 'none';
 }

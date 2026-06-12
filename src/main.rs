@@ -5233,6 +5233,20 @@ fn load_settings(conn: &rusqlite::Connection) -> config::AppSettings {
             _ => config::StartupBehavior::NewTab,
         };
     }
+    let migrated_new_tab_background =
+        settings_store::get::<bool>(conn, "new_tab_background_default_migrated")
+            .unwrap_or(None)
+            .unwrap_or(false);
+    if !migrated_new_tab_background {
+        if settings.new_tab.wallpaper_source == "nature"
+            && settings.new_tab.wallpaper_url.trim().is_empty()
+            && settings.new_tab.wallpaper_data.trim().is_empty()
+        {
+            settings.new_tab.wallpaper_source = "none".to_string();
+            settings.new_tab.show_background = false;
+        }
+        let _ = settings_store::set(conn, "new_tab_background_default_migrated", &true);
+    }
     settings.homepage = app::normalize_homepage(&settings.homepage);
     let _ = settings_store::set(conn, "app_settings", &settings);
     settings
