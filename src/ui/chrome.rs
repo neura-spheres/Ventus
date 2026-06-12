@@ -3924,7 +3924,7 @@ svg{display:block;flex-shrink:0}
         <div class="settings-toggle">
           <div class="settings-toggle-info">
             <div class="toggle-title">Strict site permissions</div>
-            <div class="toggle-desc">Block camera, mic, location, and clipboard requests by default.</div>
+            <div class="toggle-desc">Ask for camera and mic. Block location and clipboard reads by default.</div>
           </div>
           <div class="toggle-switch on" id="toggle-strict-permissions" onclick="toggleSetting('strict_permissions')"></div>
         </div>
@@ -4410,7 +4410,7 @@ const SITE_PERMISSION_DEFS = [
   ['microphone', 'Microphone'],
   ['geolocation', 'Location'],
   ['notifications', 'Notifications'],
-  ['clipboard', 'Clipboard'],
+  ['clipboard', 'Clipboard reads'],
   ['sensors', 'Motion sensors'],
   ['downloads', 'Automatic downloads'],
   ['file_system', 'Files'],
@@ -6362,6 +6362,7 @@ function sitePermissionSub(origin, key) {
   const dflt = (priv.default_permissions || {})[key];
   if (dflt === 'allow') return 'Default: Allow';
   if (dflt === 'block') return 'Default: Block';
+  if (key === 'camera' || key === 'microphone') return 'Default: Ask';
   const strict = priv.strict_permissions !== false;
   return strict ? 'Default: Block' : 'Default: Ask';
 }

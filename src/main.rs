@@ -3545,6 +3545,35 @@ fn site_permission_state(value: &str) -> Wv2PermState {
 }
 
 #[cfg(windows)]
+fn permission_asks_by_default(key: &str) -> bool {
+    matches!(key, "microphone" | "camera")
+}
+
+#[cfg(windows)]
+fn permission_action<'a>(
+    strict: bool,
+    site_permissions: &'a config::SitePermissionMap,
+    default_permissions: &'a config::SitePermissions,
+    origin: &str,
+    key: &str,
+) -> &'a str {
+    site_permissions
+        .get(origin)
+        .and_then(|p| p.get_explicit(key))
+        .filter(|s| *s == "allow" || *s == "block")
+        .or_else(|| {
+            default_permissions
+                .get_explicit(key)
+                .filter(|s| *s == "allow" || *s == "block")
+        })
+        .unwrap_or(if strict && !permission_asks_by_default(key) {
+            "block"
+        } else {
+            "ask"
+        })
+}
+
+#[cfg(windows)]
 fn normalize_webview_origin(raw: &str) -> Option<String> {
     let url = url::Url::parse(raw).ok()?;
     if url.scheme() != "https" && url.scheme() != "http" {
@@ -3660,16 +3689,13 @@ fn attach_permission_handler(
                     key: key.to_string(),
                 });
             }
-            let action = site_permissions
-                .get(&origin)
-                .and_then(|p| p.get_explicit(key))
-                .filter(|s| *s == "allow" || *s == "block")
-                .or_else(|| {
-                    default_permissions
-                        .get_explicit(key)
-                        .filter(|s| *s == "allow" || *s == "block")
-                })
-                .unwrap_or(if strict { "block" } else { "ask" });
+            let action = permission_action(
+                strict,
+                &site_permissions,
+                &default_permissions,
+                &origin,
+                key,
+            );
             if action == "allow" {
                 args.SetState(COREWEBVIEW2_PERMISSION_STATE_ALLOW)?;
             } else if action == "block" {
@@ -6143,25 +6169,9 @@ fn privacy_initialization_script(
     }
   } catch (_) {}
   try {
-    if (navigator.mediaDevices) {
-      const gum = navigator.mediaDevices.getUserMedia && navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
-      if (gum) {
-        navigator.mediaDevices.getUserMedia = function(constraints) {
-          const wantsAudio = constraints === true || !!(constraints && constraints.audio);
-          const wantsVideo = constraints === true || !!(constraints && constraints.video);
-          if ((wantsAudio && isBlocked('microphone')) || (wantsVideo && isBlocked('camera'))) return blocked();
-          return gum(constraints);
-        };
-      }
-      if (isBlocked('microphone') && isBlocked('camera')) navigator.mediaDevices.enumerateDevices = () => Promise.resolve([]);
-    }
-  } catch (_) {}
-  try {
     if (navigator.clipboard && isBlocked('clipboard')) {
       navigator.clipboard.read = blocked;
       navigator.clipboard.readText = blocked;
-      navigator.clipboard.write = blocked;
-      navigator.clipboard.writeText = blocked;
     }
   } catch (_) {}
   try {
@@ -9012,6 +9022,85 @@ mod webview_arg_tests {
         let settings = config::AppSettings::default();
         let args = webview_args(&settings);
         assert!(!args.contains("dns-over-https"));
+    }
+
+    #[test]
+    fn strict_permissions_keep_clipboard_copy_available() {
+        let sites = config::SitePermissionMap::new();
+        let defaults = config::SitePermissions::default();
+        let script = privacy_initialization_script(false, true, &sites, &defaults);
+        assert!(script.contains("navigator.clipboard.read = blocked;"));
+        assert!(script.contains("navigator.clipboard.readText = blocked;"));
+        assert!(!script.contains("navigator.clipboard.write = blocked;"));
+        assert!(!script.contains("navigator.clipboard.writeText = blocked;"));
+    }
+
+    #[test]
+    fn strict_permissions_keep_media_devices_available() {
+        let sites = config::SitePermissionMap::new();
+        let defaults = config::SitePermissions::default();
+        let script = privacy_initialization_script(false, true, &sites, &defaults);
+        assert!(!script.contains("getUserMedia = function"));
+        assert!(!script.contains("enumerateDevices = () => Promise.resolve([])"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn strict_permissions_ask_for_media_by_default() {
+        let sites = config::SitePermissionMap::new();
+        let defaults = config::SitePermissions::default();
+        assert_eq!(
+            permission_action(
+                true,
+                &sites,
+                &defaults,
+                "https://meet.google.com",
+                "microphone"
+            ),
+            "ask"
+        );
+        assert_eq!(
+            permission_action(true, &sites, &defaults, "https://meet.google.com", "camera"),
+            "ask"
+        );
+        assert_eq!(
+            permission_action(
+                true,
+                &sites,
+                &defaults,
+                "https://meet.google.com",
+                "geolocation"
+            ),
+            "block"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn explicit_media_permission_rules_win() {
+        let mut sites = config::SitePermissionMap::new();
+        let defaults = config::SitePermissions::default();
+        let mut perms = config::SitePermissions::default();
+        assert!(perms.set("microphone", "block"));
+        sites.insert("https://meet.google.com".to_string(), perms);
+        assert_eq!(
+            permission_action(
+                true,
+                &sites,
+                &defaults,
+                "https://meet.google.com",
+                "microphone"
+            ),
+            "block"
+        );
+
+        let sites = config::SitePermissionMap::new();
+        let mut defaults = config::SitePermissions::default();
+        assert!(defaults.set("camera", "allow"));
+        assert_eq!(
+            permission_action(true, &sites, &defaults, "https://meet.google.com", "camera"),
+            "allow"
+        );
     }
 
     #[test]
