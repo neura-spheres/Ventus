@@ -79,6 +79,7 @@ const MAX_LIVE_WEBVIEWS: usize = 8;
 const SESSION_SAVE_DELAY: Duration = Duration::from_secs(3);
 const WEBVIEW_PROFILE_RELEASE_TIMEOUT: Duration = Duration::from_secs(12);
 const WEBVIEW_PROFILE_RELEASE_POLL: u64 = 50;
+const CONTENT_BG: (u8, u8, u8, u8) = (255, 255, 255, 255);
 #[cfg(windows)]
 const APP_ID: &str = "NeuraSpheres.Ventus";
 const COOKIE_SAVE_EVERY: Duration = Duration::from_secs(5 * 60);
@@ -4260,13 +4261,13 @@ fn build_popup_content_webview(
     // the new-window handoff is accepted.
     let builder = WebViewBuilder::new_as_child(window)
         .with_bounds(rect)
-        .with_background_color((6, 7, 9, 255))
+        .with_background_color(CONTENT_BG)
         .with_incognito(incognito)
         .with_user_agent(&browser_user_agent())
         .with_browser_accelerator_keys(false)
         .with_additional_browser_args(browser_args.to_string());
     let wv = builder.with_web_context(web_context).build().ok()?;
-    let _ = wv.set_background_color((6, 7, 9, 255));
+    let _ = wv.set_background_color(CONTENT_BG);
     Some(wv)
 }
 
@@ -4615,7 +4616,7 @@ fn build_content_webview_once(
 
     let builder = WebViewBuilder::new_as_child(window)
         .with_bounds(rect)
-        .with_background_color((6, 7, 9, 255))
+        .with_background_color(CONTENT_BG)
         .with_incognito(incognito)
         .with_user_agent(&browser_user_agent())
         .with_initialization_script(&content_initialization_script(
@@ -4975,7 +4976,7 @@ fn build_content_webview_once(
     } else {
         builder.with_web_context(web_context).build()?
     };
-    let _ = wv.set_background_color((6, 7, 9, 255));
+    let _ = wv.set_background_color(CONTENT_BG);
     let _ = wv.zoom(global_zoom);
     #[cfg(windows)]
     attach_accelerators(&wv, proxy.clone());
@@ -9022,6 +9023,11 @@ mod webview_arg_tests {
         let settings = config::AppSettings::default();
         let args = webview_args(&settings);
         assert!(!args.contains("dns-over-https"));
+    }
+
+    #[test]
+    fn content_background_matches_browser_default() {
+        assert_eq!(CONTENT_BG, (255, 255, 255, 255));
     }
 
     #[test]
