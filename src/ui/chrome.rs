@@ -462,12 +462,22 @@ button,input,select,textarea{font-family:var(--font)}
 #address-bar .ab-icon-btn:hover{background:var(--bg-hover);color:var(--text)}
 #address-bar .ab-icon-btn:active{background:var(--bg-active)}
 #url-input{
-  flex:1;border:none;background:transparent;color:var(--text);
+  width:100%;height:100%;border:none;background:transparent;color:var(--text);
   font-size:13px;outline:none;font-family:var(--font);
   min-width:0;
+  position:relative;z-index:2;
 }
 #url-input::placeholder{color:var(--text-dim)}
 #url-input:focus::placeholder{color:var(--text-muted)}
+#url-field{flex:1;min-width:0;height:100%;position:relative;display:flex;align-items:center}
+#url-field:not(.editing) #url-input{color:transparent;caret-color:transparent}
+#url-field.editing #url-display{display:none}
+#url-display{
+  position:absolute;inset:0;display:flex;align-items:center;
+  color:var(--text);font-size:13px;font-family:var(--font);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;
+}
+#url-display .subdomain{opacity:.7}
 #active-favicon[draggable="true"]{cursor:grab}
 #active-favicon[draggable="true"]:active{cursor:grabbing}
 .site-info-btn{
@@ -921,42 +931,42 @@ button,input,select,textarea{font-family:var(--font)}
 .ws-dot:hover{transform:scale(1.08)}
 
 /* ── Emoji picker (workspace modal) ─────────────────────────── */
-.ws-emoji-row{display:flex;align-items:flex-start;gap:12px;width:100%}
+.ws-emoji-row{display:flex;align-items:flex-start;gap:10px;width:100%}
 .ws-emoji-preview{
-  width:52px;height:52px;border-radius:14px;flex-shrink:0;
+  width:40px;height:40px;border-radius:10px;flex-shrink:0;
   display:flex;align-items:center;justify-content:center;
-  font-size:26px;line-height:1;
-  background:var(--modal-bg-2);border:1.5px solid var(--modal-border);
+  font-size:21px;line-height:1;
+  background:var(--modal-bg-2);border:1px solid var(--modal-border);
 }
 .ws-emoji-grid{
   display:grid;grid-template-columns:repeat(8,1fr);
-  gap:3px;flex:1;
+  gap:2px;flex:1;
 }
 .ws-emoji-opt{
-  aspect-ratio:1;border:2px solid transparent;border-radius:7px;
-  background:transparent;font-size:17px;cursor:pointer;
+  aspect-ratio:1;border:1px solid transparent;border-radius:6px;
+  background:transparent;font-size:15px;cursor:pointer;
   display:flex;align-items:center;justify-content:center;
   transition:background 0.1s ease;padding:0;line-height:1;
 }
 .ws-emoji-opt:hover{background:var(--bg-hover)}
 .ws-emoji-opt.selected{background:var(--accent-dim);border-color:var(--accent)}
-.ws-color-row{display:flex;align-items:center;gap:12px;width:100%}
+.ws-color-row{display:flex;align-items:center;gap:10px;width:100%}
 .ws-color-preview{
-  width:52px;height:42px;border-radius:14px;flex-shrink:0;
+  width:40px;height:34px;border-radius:10px;flex-shrink:0;
   background:linear-gradient(135deg,rgba(var(--ws-picker-rgb),0.92),rgba(var(--ws-picker-rgb),0.34));
-  border:1px solid var(--modal-border);box-shadow:0 14px 32px rgba(var(--ws-picker-rgb),0.24);
+  border:1px solid var(--modal-border);box-shadow:0 8px 22px rgba(var(--ws-picker-rgb),0.20);
 }
-.ws-color-main{flex:1;display:flex;align-items:center;gap:8px;min-width:0}
-.ws-color-swatches{display:flex;flex-wrap:wrap;gap:6px;flex:1}
+.ws-color-main{flex:1;display:flex;align-items:center;gap:7px;min-width:0}
+.ws-color-swatches{display:flex;flex-wrap:wrap;gap:5px;flex:1}
 .ws-color-opt{
-  width:24px;height:24px;border-radius:999px;border:2px solid transparent;
-  background:rgb(var(--swatch-rgb));cursor:pointer;padding:0;box-shadow:0 6px 16px rgba(var(--swatch-rgb),0.22);
+  width:20px;height:20px;border-radius:999px;border:1px solid transparent;
+  background:rgb(var(--swatch-rgb));cursor:pointer;padding:0;box-shadow:0 4px 12px rgba(var(--swatch-rgb),0.18);
   transition:transform var(--transition),border-color var(--transition),box-shadow var(--transition);
 }
-.ws-color-opt:hover{transform:translateY(-1px);box-shadow:0 8px 20px rgba(var(--swatch-rgb),0.30)}
-.ws-color-opt.selected{border-color:var(--text);box-shadow:0 0 0 3px var(--accent-dim),0 8px 20px rgba(var(--swatch-rgb),0.30)}
+.ws-color-opt:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(var(--swatch-rgb),0.26)}
+.ws-color-opt.selected{border-color:var(--text);box-shadow:0 0 0 2px var(--accent-dim),0 6px 16px rgba(var(--swatch-rgb),0.26)}
 #ws-color-input{
-  width:34px;height:34px;border:none;background:transparent;cursor:pointer;
+  width:28px;height:28px;border:none;background:transparent;cursor:pointer;
   padding:0;flex-shrink:0;
 }
 
@@ -980,59 +990,59 @@ button,input,select,textarea{font-family:var(--font)}
 }
 #workspace-modal.open{display:flex}
 .workspace-dialog{
-  width:min(440px,calc(100vw - 32px));
+  width:min(390px,calc(100vw - 32px));
   background:var(--modal-bg);border:1px solid var(--modal-border);
-  border-radius:20px;
+  border-radius:16px;
   box-shadow:var(--modal-shadow);
-  padding:28px;display:flex;flex-direction:column;gap:20px;
+  padding:20px;display:flex;flex-direction:column;gap:14px;
   animation:ventus-scale-in 0.2s cubic-bezier(0.16,1,0.3,1);
 }
 [data-theme="light"] .workspace-dialog{box-shadow:0 24px 60px rgba(30,40,100,0.16),0 0 0 1px rgba(0,0,0,0.05)}
-.workspace-dialog-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
-.workspace-dialog-title{font-size:17px;font-weight:700;color:var(--text);letter-spacing:-0.2px}
+.workspace-dialog-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.workspace-dialog-title{font-size:15px;font-weight:650;color:var(--text);letter-spacing:0}
 .workspace-dialog-close{
-  width:30px;height:30px;border:none;border-radius:8px;
+  width:26px;height:26px;border:none;border-radius:7px;
   background:transparent;color:var(--text-muted);cursor:pointer;
   display:flex;align-items:center;justify-content:center;
   transition:background var(--transition),color var(--transition);
 }
 .workspace-dialog-close:hover{background:var(--soft-btn-bg-hover);color:var(--text)}
-.workspace-form{display:flex;flex-direction:column;gap:16px}
-.workspace-field{display:flex;flex-direction:column;gap:7px}
-.workspace-field label{font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em}
+.workspace-form{display:flex;flex-direction:column;gap:12px}
+.workspace-field{display:flex;flex-direction:column;gap:6px}
+.workspace-field label{font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.07em}
 .workspace-field input{
-  width:100%;height:42px;border:1px solid var(--modal-border);border-radius:10px;
+  width:100%;height:36px;border:1px solid var(--modal-border);border-radius:9px;
   background:var(--modal-bg-2);color:var(--text);font-family:var(--font);
-  font-size:14px;outline:none;padding:0 14px;
+  font-size:13px;outline:none;padding:0 12px;
   transition:border-color var(--transition),box-shadow var(--transition);
 }
 .workspace-field input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-dim)}
 .workspace-field input::placeholder{color:var(--text-dim)}
-.workspace-error{min-height:14px;color:var(--danger);font-size:11px;font-weight:600}
-.workspace-actions{display:flex;justify-content:flex-end;gap:8px}
+.workspace-error{min-height:12px;color:var(--danger);font-size:11px;font-weight:600}
+.workspace-actions{display:flex;justify-content:flex-end;gap:7px}
 .workspace-btn{
-  height:38px;padding:0 18px;border-radius:10px;
+  height:32px;padding:0 15px;border-radius:9px;
   border:1px solid var(--modal-border);background:transparent;
-  color:var(--text-muted);font-family:var(--font);font-size:13px;font-weight:500;
-  cursor:pointer;display:inline-flex;align-items:center;gap:6px;
-  transition:all var(--transition);
+  color:var(--text-muted);font-family:var(--font);font-size:12px;font-weight:500;
+  cursor:pointer;display:inline-flex;align-items:center;justify-content:center;
+  transition:background var(--transition),color var(--transition),border-color var(--transition),box-shadow var(--transition);
 }
 .workspace-btn:hover{background:var(--soft-btn-bg);color:var(--text)}
 .workspace-btn-primary{
-  border:none;background:var(--accent-gradient);color:#fff;font-weight:600;
-  letter-spacing:0.01em;box-shadow:0 2px 12px var(--accent-glow);
+  border:1px solid rgba(255,255,255,0.82);background:#fff;color:#111;font-weight:600;
+  box-shadow:0 1px 4px rgba(0,0,0,0.18);
 }
-.workspace-btn-primary:hover{opacity:0.88;transform:translateY(-1px)}
+.workspace-btn-primary:hover{background:#fff;color:#111;box-shadow:0 2px 8px rgba(0,0,0,0.22)}
 .workspace-field input[type="checkbox"]{
   appearance:none;-webkit-appearance:none;
-  width:18px;height:18px;min-width:18px;border:1.5px solid var(--modal-border);
-  border-radius:5px;background:var(--modal-bg-2);cursor:pointer;
+  width:16px;height:16px;min-width:16px;border:1px solid var(--modal-border);
+  border-radius:4px;background:var(--modal-bg-2);cursor:pointer;
   position:relative;transition:all var(--transition);margin:0;
 }
 .workspace-field input[type="checkbox"]:checked{background:var(--accent);border-color:var(--accent)}
 .workspace-field input[type="checkbox"]:checked::after{
   content:'';display:block;position:absolute;
-  left:5px;top:1px;width:5px;height:9px;
+  left:5px;top:2px;width:4px;height:8px;
   border:2px solid #fff;border-top:none;border-left:none;
   transform:rotate(45deg);
 }
@@ -2996,12 +3006,15 @@ svg{display:block;flex-shrink:0}
     <span id="active-loading-icon" class="favicon" style="display:none">
       <svg width="14" height="14" viewBox="0 0 14 14"><circle class="ld-ring" cx="7" cy="7" r="5.5" fill="none" stroke="currentColor" stroke-width="1.4" opacity=".22"/><circle class="ld-arc" cx="7" cy="7" r="5.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="10 24"/><circle class="ld-dot" cx="7" cy="1.5" r="1.3" fill="currentColor"/></svg>
     </span>
-    <input id="url-input" type="text" placeholder="Search or enter a URL"
-      onkeydown="handleUrlKey(event)"
-      oninput="handleUrlInput(event)"
-      onfocus="handleUrlFocus()"
-      oncopy="handleUrlCopy(event)"
-      onblur="handleUrlBlur()">
+    <div id="url-field">
+      <div id="url-display"></div>
+      <input id="url-input" type="text" placeholder="Search or enter a URL"
+        onkeydown="handleUrlKey(event)"
+        oninput="handleUrlInput(event)"
+        onfocus="handleUrlFocus()"
+        oncopy="handleUrlCopy(event)"
+        onblur="handleUrlBlur()">
+    </div>
     <button class="ab-icon-btn" id="btn-bookmark" onclick="event.stopPropagation();toggleBookmark()" title="Bookmark (Ctrl+D)">
       <svg id="bm-icon-empty" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>
       <svg id="bm-icon-filled" width="13" height="13" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;color:var(--accent)"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>
@@ -3264,13 +3277,25 @@ svg{display:block;flex-shrink:0}
           <div class="ws-color-main">
             <div class="ws-color-swatches" id="ws-color-swatches">
               <button type="button" class="ws-color-opt" data-color="#8b5cf6" style="--swatch-rgb:139,92,246" onclick="selectWsColor('#8b5cf6',true)"></button>
+              <button type="button" class="ws-color-opt" data-color="#6366f1" style="--swatch-rgb:99,102,241" onclick="selectWsColor('#6366f1',true)"></button>
               <button type="button" class="ws-color-opt" data-color="#3b82f6" style="--swatch-rgb:59,130,246" onclick="selectWsColor('#3b82f6',true)"></button>
+              <button type="button" class="ws-color-opt" data-color="#0ea5e9" style="--swatch-rgb:14,165,233" onclick="selectWsColor('#0ea5e9',true)"></button>
               <button type="button" class="ws-color-opt" data-color="#06b6d4" style="--swatch-rgb:6,182,212" onclick="selectWsColor('#06b6d4',true)"></button>
+              <button type="button" class="ws-color-opt" data-color="#14b8a6" style="--swatch-rgb:20,184,166" onclick="selectWsColor('#14b8a6',true)"></button>
+              <button type="button" class="ws-color-opt" data-color="#10b981" style="--swatch-rgb:16,185,129" onclick="selectWsColor('#10b981',true)"></button>
               <button type="button" class="ws-color-opt" data-color="#22c55e" style="--swatch-rgb:34,197,94" onclick="selectWsColor('#22c55e',true)"></button>
+              <button type="button" class="ws-color-opt" data-color="#84cc16" style="--swatch-rgb:132,204,22" onclick="selectWsColor('#84cc16',true)"></button>
               <button type="button" class="ws-color-opt" data-color="#eab308" style="--swatch-rgb:234,179,8" onclick="selectWsColor('#eab308',true)"></button>
+              <button type="button" class="ws-color-opt" data-color="#f59e0b" style="--swatch-rgb:245,158,11" onclick="selectWsColor('#f59e0b',true)"></button>
               <button type="button" class="ws-color-opt" data-color="#f97316" style="--swatch-rgb:249,115,22" onclick="selectWsColor('#f97316',true)"></button>
               <button type="button" class="ws-color-opt" data-color="#ef4444" style="--swatch-rgb:239,68,68" onclick="selectWsColor('#ef4444',true)"></button>
+              <button type="button" class="ws-color-opt" data-color="#f43f5e" style="--swatch-rgb:244,63,94" onclick="selectWsColor('#f43f5e',true)"></button>
               <button type="button" class="ws-color-opt" data-color="#ec4899" style="--swatch-rgb:236,72,153" onclick="selectWsColor('#ec4899',true)"></button>
+              <button type="button" class="ws-color-opt" data-color="#d946ef" style="--swatch-rgb:217,70,239" onclick="selectWsColor('#d946ef',true)"></button>
+              <button type="button" class="ws-color-opt" data-color="#a855f7" style="--swatch-rgb:168,85,247" onclick="selectWsColor('#a855f7',true)"></button>
+              <button type="button" class="ws-color-opt" data-color="#64748b" style="--swatch-rgb:100,116,139" onclick="selectWsColor('#64748b',true)"></button>
+              <button type="button" class="ws-color-opt" data-color="#6b7280" style="--swatch-rgb:107,114,128" onclick="selectWsColor('#6b7280',true)"></button>
+              <button type="button" class="ws-color-opt" data-color="#71717a" style="--swatch-rgb:113,113,122" onclick="selectWsColor('#71717a',true)"></button>
             </div>
             <input type="color" id="ws-color-input" value="#8b5cf6" oninput="selectWsColor(this.value,true)">
           </div>
@@ -3288,7 +3313,6 @@ svg{display:block;flex-shrink:0}
       <div class="workspace-actions">
         <button class="workspace-btn" type="button" onclick="closeWorkspaceModal()">Cancel</button>
         <button class="workspace-btn workspace-btn-primary" type="submit">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14m-7-7h14"/></svg>
           <span id="workspace-submit-label">Create</span>
         </button>
       </div>
@@ -4572,6 +4596,7 @@ window.__neura = {
     if (document.activeElement !== input) {
       input.value = formatDisplayUrl(url);
     }
+    syncAddressDisplay(url);
     updateLockIcon(url);
     document.title = 'Ventus';
     checkNewtabPlaceholder(url);
@@ -5111,6 +5136,7 @@ function renderAddressBar() {
   if (document.activeElement !== input) {
     input.value = formatDisplayUrl(tab.url);
   }
+  syncAddressDisplay(tab.url);
   updateLockIcon(tab.url);
   checkNewtabPlaceholder(tab.url);
   checkHttpWarningPlaceholder(tab.url);
@@ -6150,8 +6176,13 @@ function focusUrl() {
   input.focus();
   input.select();
 }
+function setUrlEditing(v) {
+  const field = document.getElementById('url-field');
+  if (field) field.classList.toggle('editing', !!v);
+}
 function handleUrlFocus() {
   const input = document.getElementById('url-input');
+  setUrlEditing(true);
   input.select();
   input.dataset.showingCurrent = '1';
   if (!searchSuggestionsEnabled()) return;
@@ -6163,6 +6194,7 @@ function handleUrlFocus() {
 function handleUrlInput(e) {
   const input = document.getElementById('url-input');
   const value = input.value;
+  setUrlEditing(true);
   delete input.dataset.showingCurrent;
   if (!searchSuggestionsEnabled()) {
     hideSuggestions();
@@ -6218,7 +6250,10 @@ function handleUrlKey(e) {
 }
 function restoreDisplayUrl() {
   const tab = state.tabs && state.tabs.find(t => t.id === state.active_tab_id);
-  if (tab) document.getElementById('url-input').value = formatDisplayUrl(tab.url);
+  if (!tab) return;
+  document.getElementById('url-input').value = formatDisplayUrl(tab.url);
+  syncAddressDisplay(tab.url);
+  setUrlEditing(false);
 }
 function currentTabUrl() {
   const tab = state.tabs && state.tabs.find(t => t.id === state.active_tab_id);
@@ -6247,6 +6282,37 @@ function formatDisplayUrl(url) {
     const u = new URL(url);
     return u.hostname + (u.pathname !== '/' ? u.pathname : '') + u.search;
   } catch { return url; }
+}
+function syncAddressDisplay(url) {
+  const display = document.getElementById('url-display');
+  if (!display) return;
+  display.innerHTML = formatDisplayUrlHtml(url);
+}
+function formatDisplayUrlHtml(url) {
+  const text = formatDisplayUrl(url);
+  if (!text || !url || url.startsWith('neura://')) return escHtml(text);
+  try {
+    const u = new URL(url);
+    const host = u.hostname;
+    if (!host || !host.includes('.') || /^[\d.]+$/.test(host)) return escHtml(text);
+    const rest = text.slice(host.length);
+    const i = subdomainEnd(host);
+    if (i <= 0) return escHtml(text);
+    return '<span class="subdomain">' + escHtml(host.slice(0, i)) + '</span>' + escHtml(host.slice(i) + rest);
+  } catch {
+    return escHtml(text);
+  }
+}
+function subdomainEnd(host) {
+  const parts = host.split('.');
+  if (parts.length <= 2) return 0;
+  let root = 2;
+  const second = parts[parts.length - 2];
+  const last = parts[parts.length - 1];
+  const secondLevel = new Set(['ac','co','com','edu','gov','net','org']);
+  if (last.length === 2 && secondLevel.has(second)) root = 3;
+  if (parts.length <= root) return 0;
+  return parts.slice(0, parts.length - root).join('.').length + 1;
 }
 function siteDomain(url) {
   if (!url || url.startsWith('neura://')) return url || '';
