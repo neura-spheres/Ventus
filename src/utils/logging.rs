@@ -4,9 +4,8 @@ use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 pub fn init() {
     // NOTE: the crate is `ventus`, so its log target is `ventus::*`. The old default only
     // enabled `neura_browser`, which silently suppressed every one of our own logs.
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-        EnvFilter::new("ventus=debug,neura_browser=debug,wry=warn,tao=warn")
-    });
+    let filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new("ventus=debug,neura_browser=debug,wry=warn,tao=warn"));
 
     // Mirror logs to a file in the data dir so they can be inspected even in release
     // builds (which have no console because of `windows_subsystem = "windows"`).

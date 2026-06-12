@@ -1,5 +1,5 @@
 #ifndef MyAppVersion
-  #define MyAppVersion "1.0.21"
+  #define MyAppVersion "1.0.22"
 #endif
 
 #define MyAppName      "Ventus"

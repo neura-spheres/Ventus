@@ -6,6 +6,7 @@ use uuid::Uuid;
 pub enum DownloadStatus {
     Pending,
     Downloading,
+    Paused,
     Complete,
     Failed,
     Cancelled,
@@ -73,7 +74,9 @@ impl DownloadManager {
     pub fn update_progress(&mut self, id: &str, received: u64, total: Option<u64>) {
         if let Some(d) = self.downloads.iter_mut().find(|d| d.id == id) {
             d.received_bytes = received;
-            d.total_bytes = total;
+            if total.is_some() {
+                d.total_bytes = total;
+            }
             d.status = DownloadStatus::Downloading;
         }
     }
@@ -90,5 +93,22 @@ impl DownloadManager {
         if let Some(d) = self.downloads.iter_mut().find(|d| d.id == id) {
             d.status = DownloadStatus::Failed;
         }
+    }
+
+    pub fn pause(&mut self, id: &str) {
+        if let Some(d) = self.downloads.iter_mut().find(|d| d.id == id) {
+            d.status = DownloadStatus::Paused;
+        }
+    }
+
+    pub fn cancel(&mut self, id: &str) {
+        if let Some(d) = self.downloads.iter_mut().find(|d| d.id == id) {
+            d.status = DownloadStatus::Cancelled;
+            d.completed_at = Some(chrono::Utc::now().timestamp_millis());
+        }
+    }
+
+    pub fn find_mut(&mut self, id: &str) -> Option<&mut Download> {
+        self.downloads.iter_mut().find(|d| d.id == id)
     }
 }

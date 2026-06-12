@@ -1,5 +1,7 @@
 pub fn chrome_html() -> String {
     let logo = crate::ui::assets::logo_data_url();
+    let logo_text_white = crate::ui::assets::logo_text_white_data_url();
+    let logo_text_black = crate::ui::assets::logo_text_black_data_url();
     let version = crate::version::APP_VERSION;
     let html = r##"<!DOCTYPE html>
 <html lang="en" data-theme="dark">
@@ -364,6 +366,14 @@ button,input,select,textarea{font-family:var(--font)}
 .tb-btn:disabled{opacity:0.3;cursor:default;pointer-events:none}
 .tb-btn.active{color:var(--accent);background:var(--accent-dim)}
 
+#url-group{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  margin:0 auto;
+  pointer-events:none;
+}
+#url-group #site-info-btn{pointer-events:auto}
 #address-bar{
   --address-fill:var(--bg);
   display:flex;
@@ -378,8 +388,7 @@ button,input,select,textarea{font-family:var(--font)}
   cursor:text;
   overflow:hidden;
   pointer-events:auto;
-  width:clamp(220px,calc(100% - 520px),560px);
-  margin:0 auto;
+  width:clamp(220px,calc(100vw - 560px),560px);
   flex-shrink:0;
   position:relative;
   isolation:isolate;
@@ -459,8 +468,65 @@ button,input,select,textarea{font-family:var(--font)}
 #url-input:focus::placeholder{color:var(--text-muted)}
 #active-favicon[draggable="true"]{cursor:grab}
 #active-favicon[draggable="true"]:active{cursor:grabbing}
-#lock-icon{color:var(--success);flex-shrink:0}
-#insecure-icon{color:var(--warning);flex-shrink:0}
+.site-info-btn{
+  width:24px;height:24px;border-radius:999px;
+  display:flex;align-items:center;justify-content:center;
+  border:none;background:var(--bg-hover);color:var(--text-muted);
+  cursor:pointer;transition:background var(--transition),color var(--transition),box-shadow var(--transition);
+  flex-shrink:0;
+}
+.site-info-btn:hover{background:var(--bg-active);color:var(--text)}
+.site-info-btn.secure{color:var(--success);background:var(--success-dim)}
+.site-info-btn.insecure{color:var(--warning);background:var(--warning-dim)}
+.site-info-btn.internal{color:var(--accent);background:var(--accent-dim)}
+#lock-icon,#insecure-icon,#site-info-icon{display:none;flex-shrink:0}
+.site-info-btn.secure #lock-icon{display:flex}
+.site-info-btn.insecure #insecure-icon{display:flex}
+.site-info-btn.internal #site-info-icon,.site-info-btn.other #site-info-icon{display:flex}
+
+#site-info-popover{
+  position:fixed;display:none;flex-direction:column;
+  width:320px;max-width:calc(100vw - 16px);
+  background:var(--bg-elevated);
+  border:1px solid var(--border);
+  border-radius:10px;
+  box-shadow:var(--popover-shadow);
+  z-index:290;
+  overflow:hidden;
+  color:var(--text);
+}
+#site-info-popover.open{display:flex}
+.site-pop-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 12px 10px;border-bottom:1px solid var(--border-subtle)}
+.site-pop-title{font-size:13px;font-weight:650;line-height:1.2;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.site-pop-close{width:24px;height:24px;border-radius:6px;border:none;background:transparent;color:var(--text-muted);display:flex;align-items:center;justify-content:center;cursor:pointer}
+.site-pop-close:hover{background:var(--bg-hover);color:var(--text)}
+.site-pop-section{display:flex;flex-direction:column;padding:6px 0}
+.site-pop-row{display:grid;grid-template-columns:22px minmax(0,1fr) auto;align-items:center;gap:10px;padding:8px 12px;min-height:38px}
+.site-pop-icon{width:22px;height:22px;border-radius:999px;display:flex;align-items:center;justify-content:center;color:var(--text-muted)}
+.site-pop-icon.secure{color:var(--success);background:var(--success-dim)}
+.site-pop-icon.warn{color:var(--warning);background:var(--warning-dim)}
+.site-pop-icon.info{color:var(--accent);background:var(--accent-dim)}
+.site-pop-main{display:flex;flex-direction:column;gap:2px;min-width:0}
+.site-pop-label{font-size:12px;font-weight:620;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.site-pop-sub{font-size:11px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.site-pop-divider{height:1px;background:var(--border-subtle);margin:0}
+.site-perm-select{
+  min-width:86px;height:28px;border-radius:7px;
+  border:1px solid var(--border);
+  background:var(--bg-card);
+  color:var(--text);
+  font-size:12px;
+  outline:none;
+  padding:0 8px;
+}
+.site-perm-select:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-dim)}
+.site-pop-action{border:none;background:transparent;color:var(--text-muted);font-size:12px;cursor:pointer;padding:6px 8px;border-radius:7px}
+.site-pop-action:hover{background:var(--bg-hover);color:var(--text)}
+.default-perms{margin:0 0 12px;padding:10px 12px;background:var(--bg);border-radius:var(--radius-sm);border:1px solid var(--border-subtle)}
+.default-perms-head{margin:0 0 8px}
+.default-perm-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid var(--border-subtle)}
+.default-perm-row:first-of-type{border-top:none}
+.default-perm-label{font-size:12.5px;color:var(--text)}
 
 .suggestions-panel{
   display:none;
@@ -712,14 +778,16 @@ button,input,select,textarea{font-family:var(--font)}
   flex-shrink:0;
 }
 .sidebar-brand-left{
-  display:flex;align-items:center;gap:9px;min-width:0;flex:1;overflow:hidden;
-  cursor:pointer;border-radius:7px;padding:2px 4px;margin:-2px -4px;
+  display:flex;align-items:center;gap:9px;
+  cursor:pointer;border-radius:8px;padding:6px 9px;
   transition:background var(--transition);
 }
 .sidebar-brand-left:hover{background:var(--bg-hover)}
-.sidebar-brand-logo{width:24px;height:24px;object-fit:contain;flex-shrink:0}
-.sidebar-brand-info{display:flex;flex-direction:column;min-width:0;overflow:hidden}
-.sidebar-brand-name{font-size:13px;font-weight:700;color:var(--text);letter-spacing:-0.3px;white-space:nowrap;overflow:hidden;line-height:1.2}
+.sidebar-brand-logo{width:24px;height:24px;object-fit:contain;flex-shrink:0;display:none}
+.sidebar-brand-wordmark{height:14px;width:auto;max-width:100%;object-fit:contain;flex-shrink:0;display:block}
+.wm-light{display:none}
+[data-theme="light"] .wm-dark{display:none}
+[data-theme="light"] .wm-light{display:block}
 .sidebar-brand-add{
   width:26px;height:26px;border:none;border-radius:8px;
   background:transparent;color:var(--text-dim);cursor:pointer;
@@ -731,9 +799,9 @@ button,input,select,textarea{font-family:var(--font)}
 .sidebar-brand-add:active{background:var(--bg-active)}
 #app.sidebar-collapsed .sidebar-brand{justify-content:center;padding:10px 0;gap:0}
 #app.sidebar-collapsed .sidebar-brand-left{justify-content:center;gap:0}
-#app.sidebar-collapsed .sidebar-brand-info{display:none}
+#app.sidebar-collapsed .sidebar-brand-wordmark{display:none}
 #app.sidebar-collapsed .sidebar-brand-add{display:none}
-#app.sidebar-collapsed .sidebar-brand-logo{width:28px;height:28px}
+#app.sidebar-collapsed .sidebar-brand-logo{display:block;width:28px;height:28px}
 
 .newtab-logo{width:56px;height:56px;object-fit:contain}
 
@@ -2133,6 +2201,7 @@ html:not([data-browser-font="system"]) #newtab-placeholder #newtab-clock{font-fa
 .dl-pi-status-badge.done{background:var(--success-dim);color:var(--success)}
 .dl-pi-status-badge.failed{background:rgba(239,68,68,0.12);color:#f87171}
 .dl-pi-status-badge.active{background:var(--accent-dim);color:var(--accent)}
+.dl-pi-status-badge.paused{background:var(--bg-active);color:var(--text-muted)}
 .dl-pi-meta{font-size:10.5px;color:var(--text-dim);line-height:1.3}
 .dl-pi-bar{
   height:3px;background:var(--bg-active);
@@ -2148,7 +2217,15 @@ html:not([data-browser-font="system"]) #newtab-placeholder #newtab-clock{font-fa
   0%{background-position:100% 0}
   100%{background-position:-100% 0}
 }
-.dl-pi-actions{display:flex;gap:4px;flex-shrink:0}
+.dl-pi-bar.paused .dl-pi-bar-fill{animation:none;background:var(--text-dim)}
+.dl-pi-bar.indeterminate .dl-pi-bar-fill{
+  width:35%;animation:dl-indeterminate 1.1s ease-in-out infinite;
+}
+@keyframes dl-indeterminate{
+  0%{margin-left:-35%}
+  100%{margin-left:100%}
+}
+.dl-pi-actions{display:flex;gap:4px;flex-shrink:0;align-items:center}
 .dl-pi-btn{
   background:var(--bg-hover);border:none;
   color:var(--text-muted);cursor:pointer;border-radius:7px;
@@ -2157,6 +2234,8 @@ html:not([data-browser-font="system"]) #newtab-placeholder #newtab-clock{font-fa
   display:flex;align-items:center;
 }
 .dl-pi-btn:hover{background:var(--bg-active);color:var(--text)}
+.dl-pi-btn.icon{width:26px;padding:0;justify-content:center}
+.dl-pi-btn.icon svg{display:block}
 .dl-pi-btn.danger:hover{background:rgba(239,68,68,0.12);color:#f87171}
 .dl-panel-foot{
   padding:12px 18px;
@@ -2466,6 +2545,7 @@ html:not([data-browser-font="system"]) #newtab-placeholder #newtab-clock{font-fa
   flex-shrink:0;
 }
 .bm-bar-item:hover{background:var(--bg-hover);color:var(--text)}
+.bm-bar-item.icon-only{padding:4px 6px;max-width:none}
 .bm-bar-icon,.bm-bar-fallback{width:14px;height:14px;border-radius:3px;flex-shrink:0}
 .bm-bar-icon{object-fit:contain}
 .bm-bar-fallback{display:flex;align-items:center;justify-content:center;background:var(--accent-dim);color:var(--accent);font-size:8px;font-weight:800}
@@ -2515,6 +2595,10 @@ html:not([data-browser-font="system"]) #newtab-placeholder #newtab-clock{font-fa
 .bm-item-info{flex:1;min-width:0}
 .bm-item-title{font-size:12px;font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bm-item-url{font-size:11px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Bookmarks section header + new-folder button */
+.bm-section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.bm-newfolder-btn{display:inline-flex;align-items:center;gap:6px;flex-shrink:0;border:1px solid var(--modal-border);background:var(--modal-bg-2);color:var(--text);border-radius:8px;padding:6px 12px;font-size:11px;font-weight:500;font-family:var(--font);cursor:pointer;white-space:nowrap;transition:all var(--transition)}
+.bm-newfolder-btn:hover{border-color:var(--accent);background:var(--accent-dim);color:var(--accent)}
 /* Folder item */
 .bm-folder-item{background:color-mix(in srgb,var(--accent) 4%,var(--bg))}
 .bm-folder-item:hover{background:color-mix(in srgb,var(--accent) 8%,var(--bg-hover))}
@@ -2523,33 +2607,46 @@ html:not([data-browser-font="system"]) #newtab-placeholder #newtab-clock{font-fa
 .bm-folder-grid span{border-radius:2px;background:currentColor;opacity:0.7}
 .bm-folder-grid span:first-child{opacity:1}
 /* Drag-over-folder target highlight */
-.bm-item.bm-folder-target{border-color:var(--accent)!important;background:color-mix(in srgb,var(--accent) 10%,var(--bg))!important;box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 25%,transparent)}
+.bm-item.bm-folder-target,.bm-bar-item.bm-folder-target{border-color:var(--accent)!important;background:color-mix(in srgb,var(--accent) 12%,var(--bg))!important;box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 25%,transparent)}
 .bm-bar-item{position:relative}
+.bm-item.bm-merge-pending,.bm-bar-item.bm-merge-pending{position:relative;border-color:var(--accent)!important}
+.bm-item.bm-merge-pending::after,.bm-bar-item.bm-merge-pending::after{content:"";position:absolute;left:0;bottom:0;height:2.5px;width:0;background:var(--accent);border-radius:2px;animation:bmMergeFill 800ms linear forwards}
+.bm-item.bm-merge-armed,.bm-bar-item.bm-merge-armed{border-color:var(--accent)!important;background:color-mix(in srgb,var(--accent) 18%,var(--bg))!important;animation:bmMergePulse 0.9s ease-in-out infinite}
+@keyframes bmMergeFill{from{width:0}to{width:100%}}
+@keyframes bmMergePulse{0%,100%{box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 45%,transparent)}50%{box-shadow:0 0 0 5px color-mix(in srgb,var(--accent) 18%,transparent)}}
+#bm-merge-hint{position:fixed;z-index:9300;pointer-events:none;display:none;align-items:center;gap:6px;padding:5px 11px;border-radius:9px;background:var(--modal-bg);border:1px solid var(--accent);color:var(--text);font-size:11px;font-weight:600;white-space:nowrap;box-shadow:0 10px 28px rgba(0,0,0,0.45);transform:translateX(-50%)}
+#bm-merge-hint.show{display:flex}
+#bm-merge-hint svg{color:var(--accent)}
 /* Folder modal */
-#folder-modal-backdrop{position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,0.45);backdrop-filter:blur(2px);display:none}
-#folder-modal-backdrop.open{display:block}
-#folder-modal{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:9001;width:340px;max-height:70vh;display:flex;flex-direction:column;border-radius:14px;background:var(--modal-bg);border:1px solid var(--modal-border);box-shadow:0 24px 60px rgba(0,0,0,0.45);overflow:hidden;display:none}
+#folder-modal-backdrop{position:fixed;inset:0;z-index:9000;display:none}
+#folder-modal{position:fixed;left:0;top:0;z-index:9011;width:260px;max-width:calc(100vw - 16px);max-height:min(360px,calc(100vh - 16px));display:none;flex-direction:column;border-radius:8px;background:var(--modal-bg);border:1px solid var(--modal-border);box-shadow:0 14px 36px rgba(0,0,0,0.35);overflow:hidden}
 #folder-modal.open{display:flex}
+/* Rename bookmark modal */
+#bm-edit-backdrop{position:fixed;inset:0;z-index:9100;background:rgba(0,0,0,0.45);backdrop-filter:blur(2px);display:none}
+#bm-edit-backdrop.open{display:block}
+#bm-edit-modal{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:9101;width:340px;border-radius:14px;background:var(--modal-bg);border:1px solid var(--modal-border);box-shadow:0 24px 60px rgba(0,0,0,0.45);overflow:hidden;display:none}
+#bm-edit-modal.open{display:block}
 .fm-header{display:flex;align-items:center;gap:10px;padding:14px 14px 12px;border-bottom:1px solid var(--border-subtle)}
 .fm-header-icon{width:34px;height:34px;border-radius:9px;background:color-mix(in srgb,var(--accent) 14%,var(--bg));display:flex;align-items:center;justify-content:center;color:var(--accent);flex-shrink:0}
 .fm-name{flex:1;border:none;background:transparent;color:var(--text);font-size:13px;font-weight:600;outline:none;padding:4px 6px;border-radius:5px;transition:background var(--transition)}
+.fm-name[readonly]{pointer-events:none}
 .fm-name:hover{background:var(--bg-hover)}
 .fm-name:focus{background:var(--bg-active);outline:1px solid var(--accent)}
 .fm-close{width:26px;height:26px;border:none;background:transparent;color:var(--text-muted);cursor:pointer;border-radius:6px;display:flex;align-items:center;justify-content:center;transition:background var(--transition)}
 .fm-close:hover{background:var(--bg-hover);color:var(--text)}
-.fm-body{flex:1;overflow-y:auto;padding:10px;scrollbar-width:thin;scrollbar-color:var(--border) transparent;display:flex;flex-direction:column;gap:4px}
-.fm-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;transition:background var(--transition)}
+.fm-body{flex:1;overflow-y:auto;padding:4px;scrollbar-width:thin;scrollbar-color:var(--border) transparent;display:flex;flex-direction:column;gap:1px}
+.fm-item{display:flex;align-items:center;gap:7px;padding:6px 8px;border-radius:6px;cursor:pointer;transition:background var(--transition)}
+.fm-item[draggable="true"]{cursor:grab}
+.fm-item.dragging-url{opacity:0.55}
 .fm-item:hover{background:var(--bg-hover)}
 .fm-item-info{flex:1;min-width:0}
 .fm-item-title{font-size:12px;font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.fm-item-url{font-size:11px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fm-item-url{display:none}
 .fm-item-remove{width:22px;height:22px;border:none;background:transparent;color:var(--text-dim);cursor:pointer;border-radius:4px;display:flex;align-items:center;justify-content:center;transition:all var(--transition);opacity:0;flex-shrink:0}
 .fm-item:hover .fm-item-remove{opacity:1}
 .fm-item-remove:hover{background:var(--danger-dim);color:var(--danger)}
-.fm-empty{color:var(--text-muted);font-size:12px;text-align:center;padding:24px 0}
+.fm-empty{color:var(--text-muted);font-size:12px;text-align:center;padding:18px 0}
 .fm-footer{padding:10px 14px;border-top:1px solid var(--border-subtle)}
-.fm-delete-btn{width:100%;padding:7px;border-radius:7px;border:1px solid color-mix(in srgb,var(--danger) 30%,transparent);background:transparent;color:var(--danger);font-size:12px;cursor:pointer;transition:background var(--transition)}
-.fm-delete-btn:hover{background:var(--danger-dim)}
 
 .hist-item{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:var(--radius-sm);transition:background var(--transition);cursor:pointer}
 .hist-item:hover{background:var(--bg-hover)}
@@ -2572,6 +2669,7 @@ html:not([data-browser-font="system"]) #newtab-placeholder #newtab-clock{font-fa
 .dl-item-actions{display:flex;gap:4px;flex-shrink:0}
 .dl-action-btn{width:26px;height:26px;border:none;background:var(--bg-hover);color:var(--text-muted);cursor:pointer;border-radius:3px;display:flex;align-items:center;justify-content:center;transition:all var(--transition)}
 .dl-action-btn:hover{background:var(--bg-active);color:var(--text)}
+.dl-action-btn.danger:hover{background:rgba(239,68,68,0.12);color:#f87171}
 
 /* ── About section ─────────────────────────────────────────────────────────── */
 .about-identity-card{
@@ -2848,16 +2946,22 @@ svg{display:block;flex-shrink:0}
   </div>
 
   <div id="toolbar-url-area">
+  <div id="url-group">
+  <button id="site-info-btn" class="site-info-btn other" onclick="event.stopPropagation();toggleSiteInfo()" title="Site info">
+    <span id="lock-icon">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+    </span>
+    <span id="insecure-icon">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    </span>
+    <span id="site-info-icon">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+    </span>
+  </button>
   <div id="address-bar" onclick="focusUrl()">
     <span id="toolbar-incognito-badge" onclick="event.stopPropagation()" title="Incognito workspace - history not saved">
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="2" y1="2" x2="22" y2="22"/></svg>
       Incognito
-    </span>
-    <span id="lock-icon" style="display:none">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-    </span>
-    <span id="insecure-icon" style="display:none">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
     </span>
     <img id="active-favicon" class="favicon" style="display:none" src="" alt="" draggable="true" title="Drag to bookmark or open in new tab">
     <span id="active-loading-icon" class="favicon" style="display:none">
@@ -2876,6 +2980,7 @@ svg{display:block;flex-shrink:0}
       <svg id="adblock-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
       <svg id="adblock-icon-off" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="2" y1="2" x2="22" y2="22"/></svg>
     </button>
+  </div>
   </div>
   </div>
 
@@ -2905,6 +3010,7 @@ svg{display:block;flex-shrink:0}
 <div id="bookmarks-bar"></div>
 </div>
 <div id="url-suggestions" class="suggestions-panel"></div>
+<div id="site-info-popover"></div>
 <div id="find-bar">
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-muted)"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
   <input id="find-input" type="text" placeholder="Find in page" autocomplete="off" spellcheck="false" oninput="queueFind()" onkeydown="handleFindKey(event)">
@@ -3044,13 +3150,12 @@ svg{display:block;flex-shrink:0}
 <!-- SIDEBAR -->
 <div id="sidebar">
 
-  <!-- Brand: logo + title + new tab — unchanged -->
+  <!-- Brand: wordmark (expanded) / icon (collapsed) + new tab -->
   <div class="sidebar-brand">
     <div class="sidebar-brand-left" onclick="send('NewTab')" title="New tab">
-      <img class="sidebar-brand-logo" src="__LOGO_URL__" alt="">
-      <div class="sidebar-brand-info">
-        <span class="sidebar-brand-name">Ventus</span>
-      </div>
+      <img class="sidebar-brand-logo" src="__LOGO_URL__" alt="Ventus">
+      <img class="sidebar-brand-wordmark wm-dark" src="__LOGO_TEXT_WHITE__" alt="Ventus">
+      <img class="sidebar-brand-wordmark wm-light" src="__LOGO_TEXT_BLACK__" alt="Ventus">
     </div>
     <button class="sidebar-brand-add" onclick="openNewTabSpotlight()" title="New tab (Ctrl+T)">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14m-7-7h14"/></svg>
@@ -3654,8 +3759,13 @@ svg{display:block;flex-shrink:0}
       </div>
 
       <div class="settings-section" id="section-bookmarks">
-        <h2>Bookmarks</h2>
-        <p class="subtitle">Your saved pages</p>
+        <div class="bm-section-head">
+          <div>
+            <h2>Bookmarks</h2>
+            <p class="subtitle">Your saved pages</p>
+          </div>
+          <button class="bm-newfolder-btn" onclick="newBookmarkFolder()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>New folder</button>
+        </div>
         <div id="bookmarks-list" style="display:flex;flex-direction:column;gap:4px">
           <div style="color:var(--text-muted);font-size:12px;text-align:center;padding:24px 0">No bookmarks yet. Hit the bookmark icon in the address bar to save a page.</div>
         </div>
@@ -3788,6 +3898,13 @@ svg{display:block;flex-shrink:0}
             <div class="toggle-desc">Block camera, mic, location, and clipboard requests by default.</div>
           </div>
           <div class="toggle-switch on" id="toggle-strict-permissions" onclick="toggleSetting('strict_permissions')"></div>
+        </div>
+        <div class="default-perms">
+          <div class="default-perms-head">
+            <div class="toggle-title">Site permissions</div>
+            <div class="toggle-desc">Default for every site. A site can still be changed on its own from the address bar lock.</div>
+          </div>
+          <div id="default-perms-list"></div>
         </div>
         <div class="settings-toggle">
           <div class="settings-toggle-info">
@@ -4180,18 +4297,24 @@ svg{display:block;flex-shrink:0}
 <!-- FOLDER MODAL -->
 <div id="folder-modal-backdrop" onclick="closeFolderModal()"></div>
 <div id="folder-modal">
-  <div class="fm-header">
-    <div class="fm-header-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></div>
-    <input class="fm-name" id="fm-name-input" type="text" placeholder="Folder name"
-      onblur="saveFolderName(this.value)"
-      onkeydown="if(event.key==='Enter')this.blur();else if(event.key==='Escape'){this.value=_fmOrigName;this.blur();}">
-    <button class="fm-close" onclick="closeFolderModal()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
-  </div>
   <div class="fm-body" id="fm-body"></div>
+</div>
+
+<!-- RENAME BOOKMARK MODAL -->
+<div id="bm-edit-backdrop" onclick="closeBmEdit()"></div>
+<div id="bm-edit-modal">
+  <div class="fm-header">
+    <div class="fm-header-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></div>
+    <input class="fm-name" id="bm-edit-name" type="text" placeholder="Bookmark name" maxlength="200"
+      onkeydown="if(event.key==='Enter')saveBmEdit();else if(event.key==='Escape')closeBmEdit();">
+    <button class="fm-close" onclick="closeBmEdit()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+  </div>
   <div class="fm-footer">
-    <button class="fm-delete-btn" onclick="deleteFolderAndClose()">Delete folder</button>
+    <button class="settings-btn-sm" style="width:100%" onclick="saveBmEdit()">Save</button>
   </div>
 </div>
+
+<div id="bm-merge-hint"></div>
 
 <script>
 // ============================================================
@@ -4251,7 +4374,22 @@ let newtabBgSeed = '';
 let newtabBgCss = '';
 let newtabWallpaperData = '';
 let settingDrafts = {};
+let siteInfoOpen = false;
 const trendingSearches = ['AI news', 'technology', 'Indonesia news', 'startup funding', 'web design'];
+const SITE_PERMISSION_DEFS = [
+  ['camera', 'Camera'],
+  ['microphone', 'Microphone'],
+  ['geolocation', 'Location'],
+  ['notifications', 'Notifications'],
+  ['clipboard', 'Clipboard'],
+  ['sensors', 'Motion sensors'],
+  ['downloads', 'Automatic downloads'],
+  ['file_system', 'Files'],
+  ['autoplay', 'Autoplay'],
+  ['local_fonts', 'Local fonts'],
+  ['midi', 'MIDI devices'],
+  ['window_management', 'Window placement']
+];
 
 // ============================================================
 // IPC  (auto-converts PascalCase cmd to snake_case for Rust)
@@ -4416,6 +4554,15 @@ window.__neura = {
     refreshMoreAttention();
   },
   flashDownloadStart() { flashDownloadStart(); },
+  updateDownload(id, received, total, status, speed) {
+    const d = (state.downloads || []).find(x => x.id === id);
+    if (!d) return;
+    d.received_bytes = received;
+    if (total != null) d.total_bytes = total;
+    d.status = status;
+    d.speed_bps = speed;
+    refreshDownloadViews();
+  },
   onContentPointerDown() { onContentPointerDown(); },
   setHistory(items) {
     state.history = items || [];
@@ -4424,13 +4571,18 @@ window.__neura = {
   },
   clearTransientUi() {
     hideSuggestions();
+    closeSiteInfo();
     if (findOpen) closeFindBar(true);
     const updateModal = document.getElementById('update-modal');
     if (updateModal && updateModal.classList.contains('open')) closeUpdateModal(false);
-    ['settings-overlay','tab-search-modal','workspace-modal','workspace-delete-modal','context-menu','adblock-modal','adblock-backdrop','download-panel','model-modal','tab-spotlight-overlay','update-modal'].forEach(id => {
+    ['settings-overlay','tab-search-modal','workspace-modal','workspace-delete-modal','context-menu','adblock-modal','adblock-backdrop','download-panel','model-modal','tab-spotlight-overlay','update-modal','folder-modal','bm-edit-backdrop','bm-edit-modal','site-info-popover'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.classList.remove('open');
     });
+    _activeFolderId = null;
+    _activeFolderAnchor = null;
+    _bmEditId = null;
+    _folderEditId = null;
     // Download panel: also drop its peek state + auto-dismiss timer (clip is reset Rust-side).
     clearTimeout(_dlPeekTimer);
     const dlp = document.getElementById('download-panel');
@@ -4559,7 +4711,11 @@ function render() {
   renderIncognitoBadge();
   renderSearchSettings();
   renderBookmarks();
-  if (_activeFolderId) renderFolderModalBody(_activeFolderId);
+  if (_activeFolderId) {
+    const folder = (state.bookmark_folders || []).find(f => f.id === _activeFolderId);
+    if (folder) renderFolderModalBody(_activeFolderId);
+    else closeFolderModal();
+  }
   renderDownloads();
   applyNewtabSettings();
   if (document.getElementById('download-panel') && document.getElementById('download-panel').classList.contains('open')) {
@@ -4572,11 +4728,16 @@ function render() {
   applyTheme();
   applyFontFamily();
   applySidebarMode();
+  if (_activeFolderId) requestAnimationFrame(() => {
+    _activeFolderAnchor = folderAnchor(_activeFolderId, _activeFolderAnchor);
+    placeFolderModal(_activeFolderAnchor);
+  });
   if (document.getElementById('settings-overlay').classList.contains('open')) {
     populateSettingsPanel();
   }
   window.__neura.updateNavState(!!state.can_go_back, !!state.can_go_fwd, !!state.is_loading);
   renderAdBlockBtn();
+  if (siteInfoOpen) renderSiteInfoPopover();
   _syncAdBlockModal();
   refreshMoreAttention();
   // renderBookmarksBar is called inside applySidebarMode after class toggle
@@ -5749,6 +5910,7 @@ function populateSettingsPanel() {
   setToggleEl('toggle-storage-partitioning', priv.storage_partitioning !== false);
   setToggleEl('toggle-fingerprint-protection', priv.fingerprint_protection !== false);
   setToggleEl('toggle-strict-permissions', priv.strict_permissions !== false);
+  renderDefaultPermissions();
   setToggleEl('toggle-secure-dns-enabled', !!priv.secure_dns_enabled);
   setSelectValue('set-secure-dns-provider', priv.secure_dns_provider || 'cloudflare');
   setSelectValue('set-secure-dns-mode', priv.secure_dns_mode || 'secure');
@@ -6119,39 +6281,251 @@ function findInlineCompletion(typed) {
   }
   return null;
 }
+function activeTab() {
+  return state.tabs && state.tabs.find(t => t.id === state.active_tab_id);
+}
+function activePageUrl() {
+  const tab = activeTab();
+  return (tab && tab.url) || state.active_url || '';
+}
+function siteOrigin(url) {
+  try {
+    const u = new URL(url);
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return '';
+    return u.origin;
+  } catch (_) {
+    return '';
+  }
+}
+function siteHostLabel(url) {
+  try {
+    const u = new URL(url);
+    return (u.hostname || u.protocol.replace(':','')).replace(/^www\./, '') || 'This page';
+  } catch (_) {
+    return url && url.startsWith('neura://') ? 'Ventus' : 'This page';
+  }
+}
+function siteConnection(url) {
+  if (url && url.startsWith('https://')) return {cls:'secure', label:'Connection is secure', sub:'Your data is encrypted on this page'};
+  if (url && url.startsWith('http://')) return {cls:'warn', label:'Connection is not secure', sub:'This page uses HTTP'};
+  if (url && url.startsWith('file://')) return {cls:'info', label:'Local file', sub:'Opened from your device'};
+  if (url && url.startsWith('neura://')) return {cls:'info', label:'Ventus page', sub:'Built into the browser'};
+  return {cls:'info', label:'Page info', sub:'No site connection details'};
+}
+function siteRules(origin) {
+  const priv = ((state.settings || {}).privacy) || {};
+  const all = priv.site_permissions || {};
+  return (origin && all[origin]) || {};
+}
+function siteRequestedPermissions(origin) {
+  const all = state.requested_permissions || {};
+  return (origin && all[origin]) || [];
+}
+function sitePermissionValue(origin, key) {
+  const value = siteRules(origin)[key];
+  return ['ask','allow','block'].includes(value) ? value : 'ask';
+}
+function sitePermissionSub(origin, key) {
+  const value = sitePermissionValue(origin, key);
+  if (value === 'allow') return 'Allowed for this site';
+  if (value === 'block') return 'Blocked for this site';
+  const priv = ((state.settings || {}).privacy) || {};
+  const dflt = (priv.default_permissions || {})[key];
+  if (dflt === 'allow') return 'Default: Allow';
+  if (dflt === 'block') return 'Default: Block';
+  const strict = priv.strict_permissions !== false;
+  return strict ? 'Default: Block' : 'Default: Ask';
+}
+function siteInfoSvg(kind) {
+  if (kind === 'secure') return '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>';
+  if (kind === 'warn') return '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+  if (kind === 'shield') return '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>';
+  return '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>';
+}
+function updateSiteInfoButton(url) {
+  const btn = document.getElementById('site-info-btn');
+  if (!btn) return;
+  let cls = 'other';
+  if (url && url.startsWith('https://')) cls = 'secure';
+  else if (url && url.startsWith('http://')) cls = 'insecure';
+  else if (url && url.startsWith('neura://')) cls = 'internal';
+  btn.className = 'site-info-btn ' + cls;
+  const c = siteConnection(url);
+  btn.title = c.label;
+}
+function toggleSiteInfo() {
+  const pop = document.getElementById('site-info-popover');
+  if (pop && pop.classList.contains('open')) closeSiteInfo();
+  else openSiteInfo();
+}
+function openSiteInfo() {
+  hideSuggestions();
+  closeAdBlockModal();
+  closeMoreMenu();
+  const pop = document.getElementById('site-info-popover');
+  if (!pop) return;
+  siteInfoOpen = true;
+  renderSiteInfoPopover();
+  pop.classList.add('open');
+  syncSiteInfoPopover();
+  setTimeout(() => document.addEventListener('click', siteInfoOutside, {once:true, capture:true}), 0);
+}
+function closeSiteInfo() {
+  const pop = document.getElementById('site-info-popover');
+  siteInfoOpen = false;
+  if (pop) pop.classList.remove('open');
+  send('SuggestionOverlay', {visible:false, x:0, y:0, width:0, height:0});
+  document.removeEventListener('click', siteInfoOutside, true);
+}
+function siteInfoOutside(e) {
+  const pop = document.getElementById('site-info-popover');
+  const btn = document.getElementById('site-info-btn');
+  if (pop && pop.contains(e.target)) {
+    setTimeout(() => document.addEventListener('click', siteInfoOutside, {once:true, capture:true}), 0);
+    return;
+  }
+  if (btn && btn.contains(e.target)) return;
+  closeSiteInfo();
+}
+function syncSiteInfoPopover() {
+  const pop = document.getElementById('site-info-popover');
+  const btn = document.getElementById('site-info-btn');
+  if (!pop || !btn || !pop.classList.contains('open')) return;
+  const r = btn.getBoundingClientRect();
+  const w = Math.min(320, window.innerWidth - 16);
+  let left = r.left;
+  if (left + w > window.innerWidth - 8) left = window.innerWidth - w - 8;
+  if (left < 8) left = 8;
+  pop.style.width = w + 'px';
+  pop.style.left = left + 'px';
+  pop.style.top = (r.bottom + 8) + 'px';
+  requestAnimationFrame(() => {
+    const pr = pop.getBoundingClientRect();
+    send('SuggestionOverlay', {visible:true, x:pr.left - 8, y:pr.top - 8, width:pr.width + 16, height:pr.height + 16});
+  });
+}
+function renderSiteInfoPopover() {
+  const pop = document.getElementById('site-info-popover');
+  if (!pop) return;
+  const url = activePageUrl();
+  const origin = siteOrigin(url);
+  const host = siteHostLabel(url);
+  const c = siteConnection(url);
+  const connIcon = c.cls === 'warn' ? 'warn' : c.cls === 'secure' ? 'secure' : 'info';
+  const canPerm = !!origin;
+  const rules = siteRules(origin);
+  const requested = siteRequestedPermissions(origin);
+  const shownPerms = SITE_PERMISSION_DEFS.filter(([key]) =>
+    requested.includes(key) || rules[key] === 'allow' || rules[key] === 'block');
+  const emptyPermRow = msg => `<div class="site-pop-row"><div class="site-pop-icon info">${siteInfoSvg('info')}</div><div class="site-pop-main"><div class="site-pop-label">Permissions</div><div class="site-pop-sub">${escHtml(msg)}</div></div><div></div></div>`;
+  let permRows;
+  if (!canPerm) permRows = emptyPermRow('No site permissions for this page');
+  else if (!shownPerms.length) permRows = emptyPermRow("This site hasn't asked for anything");
+  else permRows = shownPerms.map(([key, label]) => {
+      const value = sitePermissionValue(origin, key);
+      return `<div class="site-pop-row">
+        <div class="site-pop-icon info">${siteInfoSvg('info')}</div>
+        <div class="site-pop-main"><div class="site-pop-label">${escHtml(label)}</div><div class="site-pop-sub">${escHtml(sitePermissionSub(origin, key))}</div></div>
+        <select class="site-perm-select" onchange="setSitePermission('${escAttr(origin)}','${escAttr(key)}',this.value)">
+          <option value="ask"${value === 'ask' ? ' selected' : ''}>Default</option>
+          <option value="allow"${value === 'allow' ? ' selected' : ''}>Allow</option>
+          <option value="block"${value === 'block' ? ' selected' : ''}>Block</option>
+        </select>
+      </div>`;
+    }).join('');
+  const tracking = renderSiteTrackingRow(canPerm);
+  pop.innerHTML = `<div class="site-pop-head">
+    <div class="site-pop-title">About ${escHtml(host)}</div>
+    <button class="site-pop-close" onclick="closeSiteInfo()" title="Close"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+  </div>
+  <div class="site-pop-section">
+    <div class="site-pop-row">
+      <div class="site-pop-icon ${connIcon}">${siteInfoSvg(connIcon)}</div>
+      <div class="site-pop-main"><div class="site-pop-label">${escHtml(c.label)}</div><div class="site-pop-sub">${escHtml(c.sub)}</div></div>
+      <button class="site-pop-action" onclick="closeSiteInfo();openSettings('privacy')">Settings</button>
+    </div>
+  </div>
+  <div class="site-pop-divider"></div>
+  <div class="site-pop-section">${permRows}</div>
+  ${tracking}`;
+  syncSiteInfoPopover();
+}
+function renderSiteTrackingRow(canPerm) {
+  if (!canPerm) return '';
+  const active = !!state.ad_blocker_active;
+  const excepted = !!state.ad_blocker_site_excepted;
+  const label = !active ? 'Off globally' : excepted ? 'Paused for this site' : 'Active on this page';
+  const action = !active ? 'Settings' : excepted ? 'Resume' : 'Pause';
+  const click = !active ? "closeSiteInfo();openSettings('privacy')" : 'toggleSiteTracking()';
+  return `<div class="site-pop-divider"></div><div class="site-pop-section">
+    <div class="site-pop-row">
+      <div class="site-pop-icon info">${siteInfoSvg('shield')}</div>
+      <div class="site-pop-main"><div class="site-pop-label">Tracking protection</div><div class="site-pop-sub">${escHtml(label)}</div></div>
+      <button class="site-pop-action" onclick="${click}">${action}</button>
+    </div>
+  </div>`;
+}
+function setSitePermission(origin, key, value) {
+  if (!origin) return;
+  if (!state.settings) state.settings = {};
+  if (!state.settings.privacy) state.settings.privacy = {};
+  if (!state.settings.privacy.site_permissions) state.settings.privacy.site_permissions = {};
+  if (!state.settings.privacy.site_permissions[origin]) state.settings.privacy.site_permissions[origin] = {};
+  state.settings.privacy.site_permissions[origin][key] = value;
+  renderSiteInfoPopover();
+  send('SetSitePermission', {origin, permission:key, value});
+}
+function renderDefaultPermissions() {
+  const list = document.getElementById('default-perms-list');
+  if (!list) return;
+  const defaults = (((state.settings || {}).privacy) || {}).default_permissions || {};
+  list.innerHTML = SITE_PERMISSION_DEFS.map(([key, label]) => {
+    const value = ['allow', 'block'].includes(defaults[key]) ? defaults[key] : 'ask';
+    return `<div class="default-perm-row">
+      <div class="default-perm-label">${escHtml(label)}</div>
+      <select class="site-perm-select" onchange="setDefaultPermission('${escAttr(key)}',this.value)">
+        <option value="ask"${value === 'ask' ? ' selected' : ''}>Default</option>
+        <option value="allow"${value === 'allow' ? ' selected' : ''}>Allow</option>
+        <option value="block"${value === 'block' ? ' selected' : ''}>Block</option>
+      </select>
+    </div>`;
+  }).join('');
+}
+function setDefaultPermission(key, value) {
+  if (!state.settings) state.settings = {};
+  if (!state.settings.privacy) state.settings.privacy = {};
+  if (!state.settings.privacy.default_permissions) state.settings.privacy.default_permissions = {};
+  state.settings.privacy.default_permissions[key] = value;
+  send('SetDefaultPermission', {permission:key, value});
+}
+function toggleSiteTracking() {
+  state.ad_blocker_site_excepted = !state.ad_blocker_site_excepted;
+  renderSiteInfoPopover();
+  renderAdBlockBtn();
+  send('AdBlockToggleSite');
+}
 function updateLockIcon(url) {
-  const lock = document.getElementById('lock-icon');
-  const warn = document.getElementById('insecure-icon');
   const favicon = document.getElementById('active-favicon');
   const loadingIcon = document.getElementById('active-loading-icon');
   const tab = state.tabs && state.tabs.find(t => t.id === state.active_tab_id);
+  updateSiteInfoButton(url);
   if (tab && tab.status === 'loading') {
     loadingIcon.style.display = 'flex';
     favicon.style.display = 'none';
-    lock.style.display = 'none';
-    warn.style.display = 'none';
   } else if (tab && tab.favicon) {
     favicon.src = tab.favicon;
     favicon.dataset.navUrl = url || '';
     favicon.style.display = 'block';
     loadingIcon.style.display = 'none';
-    lock.style.display = 'none';
-    warn.style.display = 'none';
   } else if (url && url.startsWith('https://')) {
-    lock.style.display = 'flex';
-    warn.style.display = 'none';
     favicon.style.display = 'none';
     delete favicon.dataset.navUrl;
     loadingIcon.style.display = 'none';
   } else if (url && url.startsWith('http://')) {
-    warn.style.display = 'flex';
-    lock.style.display = 'none';
     favicon.style.display = 'none';
     delete favicon.dataset.navUrl;
     loadingIcon.style.display = 'none';
   } else {
-    lock.style.display = 'none';
-    warn.style.display = 'none';
     favicon.style.display = 'none';
     delete favicon.dataset.navUrl;
     loadingIcon.style.display = 'none';
@@ -8321,7 +8695,7 @@ let __updateModalVersion = null;
 let updateAvailable = false;
 function refreshMoreAttention() {
   const dls = state.downloads || [];
-  const dlActive = dls.some(d => d.status === 'downloading' || d.status === 'pending');
+  const dlActive = dls.some(d => d.status === 'downloading' || d.status === 'pending' || d.status === 'paused');
   const btn = document.getElementById('btn-more');
   if (btn) btn.classList.toggle('has-attention', dlActive || updateAvailable);
   const dlItem = document.getElementById('more-item-downloads');
@@ -8496,7 +8870,7 @@ function renderBookmarks() {
   folders.forEach(f => {
     const items = bms.filter(b => b.folder_id === f.id);
     const count = items.length;
-    html += `<div class="bm-item bm-folder-item" data-folder-id="${escAttr(f.id)}" onclick="openFolderModal('${escAttr(f.id)}')" oncontextmenu="bmFolderContextMenu(event,this)">
+    html += `<div class="bm-item bm-folder-item" data-folder-id="${escAttr(f.id)}" onclick="openFolderModal('${escAttr(f.id)}',this)" oncontextmenu="bmFolderContextMenu(event,this)">
       <div class="bm-folder-icon">${folderSvg}</div>
       <div class="bm-item-info">
         <div class="bm-item-title">${escHtml(f.name)}</div>
@@ -8547,36 +8921,43 @@ function renderDownloads() {
   }
   list.innerHTML = dls.slice().reverse().map(d => {
     const isDone = d.status === 'complete';
-    const isFail = d.status === 'failed';
+    const isPaused = d.status === 'paused';
+    const isLive = dlIsActive(d) || isPaused;
     const isPdf = isPdfFile(d.local_path || d.filename);
-    const statusColor = isDone ? 'var(--success)' : isFail ? 'var(--danger)' : 'var(--text-muted)';
-    const pct = (d.total_bytes && d.total_bytes > 0)
-      ? Math.round((d.received_bytes / d.total_bytes) * 100)
-      : null;
-    const metaText = isDone
-      ? `Done${d.local_path ? ' · ' + escHtml(d.local_path.split(/[\\/]/).pop()) : ''}`
-      : isFail ? 'Failed'
-      : pct !== null ? `${pct}% of ${formatBytes(d.total_bytes)}`
-      : 'Downloading…';
-    const progressHtml = (!isDone && !isFail && pct !== null)
-      ? `<div class="dl-item-progress"><div class="dl-item-progress-bar" style="width:${pct}%"></div></div>`
-      : '';
-    const actionBtns = isDone && d.local_path ? `
-      <button class="dl-action-btn" title="${isPdf ? 'Read PDF' : 'Open file'}" data-open-file-path="${escAttr(d.local_path)}">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5z"/><polyline points="14 2 14 8 20 8"/></svg>
-      </button>
-      <button class="dl-action-btn" title="Show in folder" data-reveal-file-path="${escAttr(d.local_path)}">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-      </button>` : '';
+    const statusColor = isDone ? 'var(--success)'
+      : (d.status === 'failed' || d.status === 'cancelled') ? 'var(--danger)'
+      : 'var(--text-muted)';
+    const metaText = isDone && d.local_path
+      ? `${dlMeta(d)} · ${escHtml(d.local_path.split(/[\\/]/).pop())}`
+      : dlMeta(d);
+    const id = escAttr(d.id);
+    let actionBtns = '';
+    if (d.status === 'paused') {
+      actionBtns = `<button class="dl-action-btn" title="Resume" data-dl-resume="${id}">${DL_SVG_PLAY}</button>
+        <button class="dl-action-btn danger" title="Cancel" data-dl-cancel="${id}">${DL_SVG_X}</button>`;
+    } else if (dlIsActive(d)) {
+      actionBtns = `<button class="dl-action-btn" title="Pause" data-dl-pause="${id}">${DL_SVG_PAUSE}</button>
+        <button class="dl-action-btn danger" title="Cancel" data-dl-cancel="${id}">${DL_SVG_X}</button>`;
+    } else {
+      if (isDone && d.local_path) {
+        actionBtns = `<button class="dl-action-btn" title="${isPdf ? 'Read PDF' : 'Open file'}" data-open-file-path="${escAttr(d.local_path)}">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5z"/><polyline points="14 2 14 8 20 8"/></svg>
+          </button>
+          <button class="dl-action-btn" title="Show in folder" data-reveal-file-path="${escAttr(d.local_path)}">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          </button>`;
+      }
+      actionBtns += `<button class="dl-action-btn danger" title="Remove" data-del-dl-id="${id}">${DL_SVG_X}</button>`;
+    }
     return `
-    <div class="dl-item" data-nav-url="${escAttr(d.url)}">
+    <div class="dl-item"${isLive ? '' : ` data-nav-url="${escAttr(d.url)}"`}>
       <div class="dl-item-icon">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       </div>
       <div class="dl-item-info">
         <div class="dl-item-name">${escHtml(d.filename)}</div>
         <div class="dl-item-meta" style="color:${statusColor}">${metaText}</div>
-        ${progressHtml}
+        ${dlProgressHtml(d)}
       </div>
       <div class="dl-item-actions">${actionBtns}</div>
     </div>`;
@@ -8717,6 +9098,12 @@ document.addEventListener('mousedown', e => {
   if (more && more.classList.contains('open') && !more.contains(e.target) && moreBtn && !moreBtn.contains(e.target)) {
     closeMoreMenu();
   }
+  const fm = document.getElementById('folder-modal');
+  const ctxMenu = document.getElementById('ctx-menu');
+  const bmEdit = document.getElementById('bm-edit-modal');
+  if (_activeFolderId && fm && fm.classList.contains('open') && !fm.contains(e.target) && !e.target.closest('[data-folder-id]') && !(ctxMenu && ctxMenu.contains(e.target)) && !(bmEdit && bmEdit.contains(e.target))) {
+    closeFolderModal();
+  }
 }, true);
 
 // Suppress browser's own context menu on the chrome overlay
@@ -8830,6 +9217,8 @@ function flashDownloadStart() {
 function onContentPointerDown() {
   const panel = document.getElementById('download-panel');
   if (panel && panel.classList.contains('open')) closeDownloadPanel();
+  if (siteInfoOpen) closeSiteInfo();
+  if (_activeFolderId) closeFolderModal();
 }
 
 function isPdfFile(name) {
@@ -8869,29 +9258,23 @@ function renderDownloadPanel() {
   }
   list.innerHTML = dls.map(d => {
     const isDone = d.status === 'complete';
-    const isFail = d.status === 'failed';
-    const isActive = !isDone && !isFail;
+    const isPaused = d.status === 'paused';
+    const isLive = dlIsActive(d) || isPaused;
     const isPdf = isPdfFile(d.local_path || d.filename);
-    const pct = (d.total_bytes && d.total_bytes > 0)
-      ? Math.round((d.received_bytes / d.total_bytes) * 100)
-      : null;
-    const metaText = isDone ? (d.total_bytes ? formatBytes(d.total_bytes) : '')
-      : isFail ? ''
-      : pct !== null ? `${pct}% of ${formatBytes(d.total_bytes)}`
-      : '';
-    const badgeClass = isDone ? 'done' : isFail ? 'failed' : 'active';
-    const badgeText = isDone ? 'Done' : isFail ? 'Failed' : 'Downloading';
-    const progressHtml = isActive && pct !== null
-      ? `<div class="dl-pi-bar"><div class="dl-pi-bar-fill" style="width:${pct}%"></div></div>`
-      : '';
-    const ftClass = isActive ? 'ft-active' : dlFileTypeClass(d.filename);
-    const iconContent = isActive
+    const [badgeClass, badgeText] = dlBadge(d);
+    const metaText = dlMeta(d);
+    const ftClass = dlIsActive(d) ? 'ft-active' : dlFileTypeClass(d.filename);
+    const iconContent = dlIsActive(d)
       ? `<span class="dl-spin"></span>`
       : `<span style="font-size:9px;font-weight:800;letter-spacing:0.03em">${dlFileTypeIcon(ftClass)}</span>`;
-    const actionsHtml = `
-      ${isDone && d.local_path ? `<button class="dl-pi-btn" data-open-file-path="${escAttr(d.local_path)}">${isPdf ? 'Read' : 'Open'}</button>
-      <button class="dl-pi-btn" data-reveal-file-path="${escAttr(d.local_path)}">Show</button>` : ''}
-      ${!isActive ? `<button class="dl-pi-btn danger" data-del-dl-id="${escAttr(d.id)}" title="Remove">✕</button>` : ''}`;
+    const fileBtns = isDone && d.local_path
+      ? `<button class="dl-pi-btn" data-open-file-path="${escAttr(d.local_path)}">${isPdf ? 'Read' : 'Open'}</button>
+         <button class="dl-pi-btn" data-reveal-file-path="${escAttr(d.local_path)}">Show</button>`
+      : '';
+    const removeBtn = !isLive
+      ? `<button class="dl-pi-btn icon danger" data-del-dl-id="${escAttr(d.id)}" title="Remove">${DL_SVG_X}</button>`
+      : '';
+    const actionsHtml = dlControlBtns(d) + fileBtns + removeBtn;
     return `<div class="dl-panel-item">
       <div class="dl-pi-icon-wrap ${ftClass}">${iconContent}</div>
       <div class="dl-pi-body">
@@ -8900,7 +9283,7 @@ function renderDownloadPanel() {
           <span class="dl-pi-status-badge ${badgeClass}">${badgeText}</span>
           ${metaText ? `<span class="dl-pi-meta">${escHtml(metaText)}</span>` : ''}
         </div>
-        ${progressHtml}
+        ${dlProgressHtml(d)}
       </div>
       <div class="dl-pi-actions">${actionsHtml}</div>
     </div>`;
@@ -8916,6 +9299,12 @@ document.getElementById('download-panel').addEventListener('click', e => {
   if (openBtn) { e.stopPropagation(); send('OpenFile', {path: openBtn.dataset.openFilePath}); return; }
   const revBtn = e.target.closest('[data-reveal-file-path]');
   if (revBtn) { e.stopPropagation(); send('RevealFile', {path: revBtn.dataset.revealFilePath}); return; }
+  const pauseBtn = e.target.closest('[data-dl-pause]');
+  if (pauseBtn) { e.stopPropagation(); send('PauseDownload', {id: pauseBtn.dataset.dlPause}); return; }
+  const resumeBtn = e.target.closest('[data-dl-resume]');
+  if (resumeBtn) { e.stopPropagation(); send('ResumeDownload', {id: resumeBtn.dataset.dlResume}); return; }
+  const cancelBtn = e.target.closest('[data-dl-cancel]');
+  if (cancelBtn) { e.stopPropagation(); send('CancelDownload', {id: cancelBtn.dataset.dlCancel}); return; }
   const delBtn = e.target.closest('[data-del-dl-id]');
   if (delBtn) { e.stopPropagation(); send('DeleteDownload', {id: delBtn.dataset.delDlId}); return; }
 });
@@ -9000,7 +9389,7 @@ function renderBookmarksBar() {
   const folderSvg = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
   const folderHtml = folders.map(f => {
     const label = f.name.length > 18 ? f.name.slice(0,16)+'...' : f.name;
-    return `<div class="bm-bar-item" data-folder-id="${escAttr(f.id)}" title="${escAttr(f.name)}" onclick="openFolderModal('${escAttr(f.id)}')" oncontextmenu="bmFolderContextMenu(event,this)">
+    return `<div class="bm-bar-item" data-folder-id="${escAttr(f.id)}" data-label="${escAttr(f.name)}" title="${escAttr(f.name)}" onclick="openFolderModal('${escAttr(f.id)}',this)" oncontextmenu="bmFolderContextMenu(event,this)">
       <span style="display:flex;align-items:center;gap:4px;opacity:0.75">${folderSvg}</span>
       <span class="bm-bar-text">${escHtml(label)}</span>
     </div>`;
@@ -9011,12 +9400,13 @@ function renderBookmarksBar() {
     const icon = bookmarkIconUrl(b.url);
     const img = icon ? `<img class="bm-bar-icon" src="${escAttr(icon)}" alt="" onerror="this.style.display='none';this.nextElementSibling.classList.remove('hidden')">` : '';
     const fallback = `<span class="bm-bar-fallback ${icon ? 'hidden' : ''}">${escHtml(siteInitial(title))}</span>`;
-    return `<div class="bm-bar-item" draggable="true" data-reorder-id="${escAttr(b.id)}" title="${escAttr(tip)}" data-nav-url="${escAttr(b.url)}" onclick="navigateToUrl('${escAttr(b.url)}')" oncontextmenu="bmItemContextMenu(event,this)">
-      ${img}${fallback}
-      <span class="bm-bar-text">${escHtml(title.length > 24 ? title.slice(0,22)+'...' : title)}</span>
+    const text = b.icon_only ? '' : `<span class="bm-bar-text">${escHtml(title.length > 24 ? title.slice(0,22)+'...' : title)}</span>`;
+    return `<div class="bm-bar-item ${b.icon_only ? 'icon-only' : ''}" draggable="true" data-reorder-id="${escAttr(b.id)}" data-label="${escAttr(title)}" title="${escAttr(tip)}" data-nav-url="${escAttr(b.url)}" onclick="navigateToUrl('${escAttr(b.url)}')" oncontextmenu="bmItemContextMenu(event,this)">
+      ${img}${fallback}${text}
     </div>`;
   }).join('');
   bar.innerHTML = folderHtml + bmHtml;
+  setupBookmarkFolderDrop(bar);
   requestAnimationFrame(() => updateBmBarOverflow());
 }
 
@@ -9052,7 +9442,7 @@ function updateBmBarOverflow() {
   _bmOverflowData = toRemove.map(item => ({
     url: item.dataset.navUrl || '',
     folderId: item.dataset.folderId || '',
-    label: item.querySelector('.bm-bar-text')?.textContent || '',
+    label: item.dataset.label || item.querySelector('.bm-bar-text')?.textContent || '',
     icon: item.querySelector('.bm-bar-icon')?.src || '',
     initial: item.querySelector('.bm-bar-fallback')?.textContent || '',
   }));
@@ -9080,7 +9470,7 @@ function openBmOverflowPanel(btn) {
   panel.innerHTML = _bmOverflowData.map(d => {
     if (d.folderId) {
       const folderSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
-      return `<div class="bm-overflow-item" onclick="closeBmOverflowPanel();openFolderModal('${escAttr(d.folderId)}')">
+      return `<div class="bm-overflow-item" onclick="const b=document.querySelector('.bm-bar-overflow-btn');closeBmOverflowPanel();openFolderModal('${escAttr(d.folderId)}',b)">
         <span class="bm-overflow-fallback" style="color:var(--accent)">${folderSvg}</span>
         <span class="bm-overflow-label">${escHtml(d.label)}</span>
       </div>`;
@@ -9189,13 +9579,29 @@ function bmItemContextMenu(ev, el) {
   const url = item?.dataset.navUrl;
   const bmId = item?.dataset.reorderId;
   if (!url) return;
-  showContextMenu(ev.clientX, ev.clientY, [
+  const bm = bmId ? (state.bookmarks || []).find(b => b.id === bmId) : null;
+  const onBar = !!el.closest('#bookmarks-bar');
+  const items = [
     { label: 'Open', action: () => navigateToUrl(url) },
     { label: 'Open in new tab', action: () => send('OpenInNewTab', {url}) },
     { label: 'Copy URL', action: () => copyToClipboard(url) },
-    { sep: true },
-    { label: 'Delete bookmark', danger: true, action: () => bmId ? send('BookmarkRemoveById', {id: bmId}) : send('BookmarkRemove', {url}) },
-  ]);
+  ];
+  if (bmId) {
+    items.push({ sep: true });
+    items.push({ label: 'Rename', action: () => openBmEdit(bmId) });
+    if (onBar) {
+      const iconOnly = !!(bm && bm.icon_only);
+      items.push({ label: iconOnly ? 'Show icon and label' : 'Show icon only', action: () => send('BookmarkSetIconOnly', {id: bmId, icon_only: !iconOnly}) });
+    }
+    items.push({ sep: true });
+    (state.bookmark_folders || []).forEach(f => {
+      items.push({ label: 'Move to ' + (f.name || 'folder'), action: () => send('BookmarkMoveToFolder', {bookmark_id: bmId, folder_id: f.id}) });
+    });
+    items.push({ label: 'Move to new folder', action: () => send('BookmarkCreateFolder', {bookmark_id_a: bmId, bookmark_id_b: bmId}) });
+  }
+  items.push({ sep: true });
+  items.push({ label: 'Delete bookmark', danger: true, action: () => bmId ? send('BookmarkRemoveById', {id: bmId}) : send('BookmarkRemove', {url}) });
+  showContextMenu(ev.clientX, ev.clientY, items);
 }
 
 function bmFolderContextMenu(ev, el) {
@@ -9205,8 +9611,8 @@ function bmFolderContextMenu(ev, el) {
   const folderId = item?.dataset.folderId;
   if (!folderId) return;
   showContextMenu(ev.clientX, ev.clientY, [
-    { label: 'Open folder', action: () => openFolderModal(folderId) },
-    { label: 'Rename', action: () => openFolderModalAndRename(folderId) },
+    { label: 'Open folder', action: () => openFolderModal(folderId, item) },
+    { label: 'Rename folder', action: () => renameBookmarkFolder(folderId) },
     { sep: true },
     { label: 'Delete folder', danger: true, action: () => deleteFolderById(folderId) },
   ]);
@@ -9217,31 +9623,127 @@ function bmFolderContextMenu(ev, el) {
 // ============================================================
 let _activeFolderId = null;
 let _fmOrigName = '';
+let _activeFolderAnchor = null;
 
-function openFolderModal(folderId) {
-  _activeFolderId = folderId;
-  const folder = (state.bookmark_folders || []).find(f => f.id === folderId);
-  if (!folder) return;
-  _fmOrigName = folder.name;
-  document.getElementById('fm-name-input').value = folder.name;
-  renderFolderModalBody(folderId);
-  document.getElementById('folder-modal-backdrop').classList.add('open');
-  document.getElementById('folder-modal').classList.add('open');
-  send('SuggestionOverlay', {visible:true, x:0, y:0, width:window.innerWidth, height:window.innerHeight});
-  // Focus name input after a tick so modal is painted
-  setTimeout(() => {
-    const inp = document.getElementById('fm-name-input');
-    if (inp) { inp.focus(); inp.select(); }
-  }, 80);
+function newBookmarkFolder() {
+  send('BookmarkNewFolder');
 }
 
-function openFolderModalAndRename(folderId) {
-  openFolderModal(folderId);
+let _bmEditId = null;
+let _folderEditId = null;
+function openBmEdit(bmId) {
+  const bm = (state.bookmarks || []).find(b => b.id === bmId);
+  if (!bm) return;
+  _bmEditId = bmId;
+  _folderEditId = null;
+  const inp = document.getElementById('bm-edit-name');
+  inp.placeholder = 'Bookmark name';
+  inp.value = bm.title || bm.url;
+  document.getElementById('bm-edit-backdrop').classList.add('open');
+  document.getElementById('bm-edit-modal').classList.add('open');
+  send('SuggestionOverlay', {visible:true, x:0, y:0, width:window.innerWidth, height:window.innerHeight});
+  setTimeout(() => { inp.focus(); inp.select(); }, 80);
+}
+
+function openFolderEdit(folderId) {
+  const folder = (state.bookmark_folders || []).find(f => f.id === folderId);
+  if (!folder) return;
+  _bmEditId = null;
+  _folderEditId = folderId;
+  const inp = document.getElementById('bm-edit-name');
+  inp.placeholder = 'Folder name';
+  inp.value = folder.name || '';
+  document.getElementById('bm-edit-backdrop').classList.add('open');
+  document.getElementById('bm-edit-modal').classList.add('open');
+  send('SuggestionOverlay', {visible:true, x:0, y:0, width:window.innerWidth, height:window.innerHeight});
+  setTimeout(() => { inp.focus(); inp.select(); }, 80);
+}
+
+function closeBmEdit() {
+  _bmEditId = null;
+  _folderEditId = null;
+  document.getElementById('bm-edit-backdrop').classList.remove('open');
+  document.getElementById('bm-edit-modal').classList.remove('open');
+  if (_activeFolderId) syncFolderModalClip();
+  else send('SuggestionOverlay', {visible:false, x:0, y:0, width:0, height:0});
+}
+
+function saveBmEdit() {
+  const name = document.getElementById('bm-edit-name').value.trim();
+  if (_bmEditId && name) send('BookmarkRename', {id: _bmEditId, title: name});
+  if (_folderEditId && name) send('BookmarkFolderRename', {folder_id: _folderEditId, name});
+  closeBmEdit();
+}
+
+function folderAnchor(folderId, anchor) {
+  if (anchor && anchor.getBoundingClientRect) {
+    const r = anchor.getBoundingClientRect();
+    if (r.width > 0 && r.height > 0) return anchor;
+  }
+  const id = String(folderId || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  const nodes = [...document.querySelectorAll(`[data-folder-id="${id}"]`)].filter(el => {
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  });
+  const settingsOpen = document.getElementById('settings-overlay')?.classList.contains('open');
+  if (settingsOpen) {
+    const inSettings = nodes.find(el => el.closest('#bookmarks-list'));
+    if (inSettings) return inSettings;
+  }
+  return nodes.find(el => el.closest('#bookmarks-bar')) || nodes[0] || null;
+}
+
+function syncFolderModalClip() {
+  const modal = document.getElementById('folder-modal');
+  if (!modal || !modal.classList.contains('open')) return;
+  const r = modal.getBoundingClientRect();
+  send('SuggestionOverlay', {visible:true, x:r.left - 8, y:r.top - 8, width:r.width + 16, height:r.height + 16});
+}
+
+function placeFolderModal(anchor) {
+  const modal = document.getElementById('folder-modal');
+  if (!modal || !modal.classList.contains('open')) return;
+  modal.style.visibility = 'hidden';
+  modal.style.left = '0px';
+  modal.style.top = '0px';
+  const gap = 6;
+  const r = anchor ? anchor.getBoundingClientRect() : null;
+  const w = modal.offsetWidth || 320;
+  const h = Math.min(modal.offsetHeight || 260, window.innerHeight - 16);
+  let left = r ? r.left : 16;
+  let top = r ? r.bottom + gap : 64;
+  left = Math.min(Math.max(8, left), Math.max(8, window.innerWidth - w - 8));
+  if (top + h > window.innerHeight - 8 && r) top = r.top - h - gap;
+  top = Math.min(Math.max(8, top), Math.max(8, window.innerHeight - h - 8));
+  modal.style.left = left + 'px';
+  modal.style.top = top + 'px';
+  modal.style.visibility = '';
+  syncFolderModalClip();
+}
+
+function openFolderModal(folderId, anchor, rename) {
+  const folder = (state.bookmark_folders || []).find(f => f.id === folderId);
+  if (!folder) return;
+  _activeFolderId = folderId;
+  _activeFolderAnchor = folderAnchor(folderId, anchor);
+  _fmOrigName = folder.name;
+  renderFolderModalBody(folderId);
+  document.getElementById('folder-modal').classList.add('open');
+  requestAnimationFrame(() => placeFolderModal(_activeFolderAnchor));
+  if (rename) setTimeout(() => openFolderEdit(folderId), 40);
+}
+
+function openFolderModalAndRename(folderId, anchor) {
+  openFolderModal(folderId, anchor, true);
+}
+
+function renameBookmarkFolder(folderId) {
+  openFolderEdit(folderId);
 }
 
 function closeFolderModal() {
   _activeFolderId = null;
-  document.getElementById('folder-modal-backdrop').classList.remove('open');
+  _activeFolderAnchor = null;
   document.getElementById('folder-modal').classList.remove('open');
   send('SuggestionOverlay', {visible:false, x:0, y:0, width:0, height:0});
 }
@@ -9250,7 +9752,6 @@ function renderFolderModalBody(folderId) {
   const body = document.getElementById('fm-body');
   if (!body) return;
   const bms = (state.bookmarks || []).filter(b => b.folder_id === folderId);
-  const xSvg = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
   if (!bms.length) {
     body.innerHTML = '<div class="fm-empty">No bookmarks in this folder</div>';
     return;
@@ -9258,97 +9759,127 @@ function renderFolderModalBody(folderId) {
   body.innerHTML = bms.map(b => {
     const icon = bookmarkIconUrl(b.url);
     const img = icon ? `<img style="width:14px;height:14px;border-radius:3px;flex-shrink:0" src="${escAttr(icon)}" alt="" onerror="this.style.display='none'">` : '';
-    return `<div class="fm-item" data-nav-url="${escAttr(b.url)}" onclick="closeFolderModal();navigateToUrl('${escAttr(b.url)}')">
+    return `<div class="fm-item" draggable="true" data-reorder-id="${escAttr(b.id)}" data-folder-source="${escAttr(folderId)}" data-nav-url="${escAttr(b.url)}" onclick="closeFolderModal();navigateToUrl('${escAttr(b.url)}')" oncontextmenu="bmItemContextMenu(event,this)">
       ${img}
       <div class="fm-item-info">
         <div class="fm-item-title">${escHtml(b.title || b.url)}</div>
         <div class="fm-item-url">${escHtml(b.url)}</div>
       </div>
-      <button class="fm-item-remove" title="Remove from folder" onclick="event.stopPropagation();removeFromFolder('${escAttr(b.id)}')">${xSvg}</button>
     </div>`;
   }).join('');
-}
-
-function saveFolderName(name) {
-  if (!_activeFolderId || !name.trim()) return;
-  if (name.trim() === _fmOrigName) return;
-  _fmOrigName = name.trim();
-  send('BookmarkFolderRename', {folder_id: _activeFolderId, name: name.trim()});
-}
-
-function removeFromFolder(bookmarkId) {
-  send('BookmarkRemoveFromFolder', {bookmark_id: bookmarkId});
-  // Optimistically update modal body
-  if (_activeFolderId) renderFolderModalBody(_activeFolderId);
-}
-
-function deleteFolderAndClose() {
-  if (!_activeFolderId) return;
-  deleteFolderById(_activeFolderId);
-  closeFolderModal();
 }
 
 function deleteFolderById(folderId) {
   send('BookmarkFolderDelete', {folder_id: folderId});
 }
 
-// Drag-to-folder: delegated listeners on the bookmarks list.
-// Dropping a bookmark ON another bookmark's center zone creates/assigns a folder.
 let _bmFolderDropTimer = null;
+let _bmMergeTarget = null;
+let _bmMergeArmed = false;
+const BM_MERGE_MS = 800;
+const _bmFolderHintSvg = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
 
-function setupBookmarkFolderDrop(list) {
-  // Remove old listeners by cloning (simple approach since list is re-rendered)
-  list.addEventListener('dragover', _bmDragOver);
-  list.addEventListener('dragleave', _bmDragLeave);
-  list.addEventListener('drop', _bmDrop);
+function setupBookmarkFolderDrop(container) {
+  if (!container || container.dataset.bmFolderDrop === '1') return;
+  container.dataset.bmFolderDrop = '1';
+  container.addEventListener('dragover', _bmDragOver);
+  container.addEventListener('dragleave', _bmDragLeave);
+  container.addEventListener('drop', _bmDrop);
+}
+
+function _showMergeHint(target, text) {
+  const hint = document.getElementById('bm-merge-hint');
+  if (!hint) return;
+  hint.innerHTML = _bmFolderHintSvg + '<span>' + escHtml(text) + '</span>';
+  hint.classList.add('show');
+  const r = target.getBoundingClientRect();
+  hint.style.left = (r.left + r.width / 2) + 'px';
+  if (target.closest('#bookmarks-bar')) {
+    hint.style.top = (r.top - 4) + 'px';
+    hint.style.transform = 'translate(-50%,-100%)';
+  } else {
+    hint.style.top = (r.bottom + 8) + 'px';
+    hint.style.transform = 'translateX(-50%)';
+  }
 }
 
 function _clearFolderTarget() {
-  document.querySelectorAll('.bm-folder-target').forEach(el => el.classList.remove('bm-folder-target'));
+  document.querySelectorAll('.bm-folder-target,.bm-merge-pending,.bm-merge-armed')
+    .forEach(el => el.classList.remove('bm-folder-target','bm-merge-pending','bm-merge-armed'));
   if (_bmFolderDropTimer) { clearTimeout(_bmFolderDropTimer); _bmFolderDropTimer = null; }
+  _bmMergeTarget = null;
+  _bmMergeArmed = false;
+  const hint = document.getElementById('bm-merge-hint');
+  if (hint) hint.classList.remove('show');
+}
+
+function _clearDzLines(el) {
+  const box = el.closest('#bookmarks-bar,#bookmarks-list');
+  if (box) box.querySelectorAll('.dz-line,.dz-line-end').forEach(e => e.classList.remove('dz-line','dz-line-end'));
 }
 
 function _bmDragOver(e) {
   if (dragKind !== 'bookmark') return;
-  const item = e.target.closest('.bm-item:not(.bm-folder-item)');
-  if (!item || item.dataset.reorderId === dragId) return;
-  const rect = item.getBoundingClientRect();
-  const relY = e.clientY - rect.top;
-  // Only trigger folder merge when hovering the CENTER 50% of the item height
-  if (relY < rect.height * 0.25 || relY > rect.height * 0.75) {
+  const target = e.target.closest('[data-folder-id],[data-reorder-id]');
+  if (!target) { _clearFolderTarget(); return; }
+
+  if (target.dataset.folderId) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    _clearDzLines(target);
+    if (_bmMergeTarget === target) return;
     _clearFolderTarget();
+    _bmMergeTarget = target;
+    target.classList.add('bm-folder-target');
+    _showMergeHint(target, 'Drop to add to folder');
     return;
   }
+
+  const id = target.dataset.reorderId;
+  if (!id || id === dragId) { _clearFolderTarget(); return; }
+
+  const onBar = !!target.closest('#bookmarks-bar');
+  const rect = target.getBoundingClientRect();
+  const rel = onBar ? (e.clientX - rect.left) / rect.width : (e.clientY - rect.top) / rect.height;
+  if (rel < 0.25 || rel > 0.75) { _clearFolderTarget(); return; }
+
   e.preventDefault();
   e.stopPropagation();
   e.dataTransfer.dropEffect = 'move';
-  if (!item.classList.contains('bm-folder-target')) {
-    _clearFolderTarget();
-    item.classList.add('bm-folder-target');
-  }
+  _clearDzLines(target);
+  if (_bmMergeTarget === target) return;
+
+  _clearFolderTarget();
+  _bmMergeTarget = target;
+  target.classList.add('bm-merge-pending');
+  _showMergeHint(target, 'Hold to make a folder');
+  _bmFolderDropTimer = setTimeout(() => {
+    if (_bmMergeTarget !== target) return;
+    target.classList.remove('bm-merge-pending');
+    target.classList.add('bm-merge-armed');
+    _bmMergeArmed = true;
+    _showMergeHint(target, 'Release to make a folder');
+  }, BM_MERGE_MS);
 }
 
 function _bmDragLeave(e) {
-  const item = e.target.closest('.bm-item');
-  if (item) item.classList.remove('bm-folder-target');
+  if (!e.currentTarget.contains(e.relatedTarget)) _clearFolderTarget();
 }
 
 function _bmDrop(e) {
-  const target = e.target.closest('.bm-folder-target');
-  if (!target) return;
+  const folderTarget = (_bmMergeTarget && _bmMergeTarget.dataset.folderId) ? _bmMergeTarget : null;
+  const armedTarget = _bmMergeArmed ? _bmMergeTarget : null;
+  if (!folderTarget && !armedTarget) { _clearFolderTarget(); return; }
   e.preventDefault();
   e.stopPropagation();
-  const targetId = target.dataset.reorderId;
-  const targetFolderId = target.dataset.folderId;
-  _clearFolderTarget();
-  if (!dragId) return;
-  if (targetFolderId) {
-    // Dropped onto a folder item → move bookmark into folder
-    send('BookmarkMoveToFolder', {bookmark_id: dragId, folder_id: targetFolderId});
-  } else if (targetId && targetId !== dragId) {
-    // Dropped onto a regular bookmark → create new folder with both
-    send('BookmarkCreateFolder', {bookmark_id_a: dragId, bookmark_id_b: targetId});
+  if (folderTarget && dragId) {
+    send('BookmarkMoveToFolder', {bookmark_id: dragId, folder_id: folderTarget.dataset.folderId});
+  } else if (armedTarget && dragId) {
+    const targetId = armedTarget.dataset.reorderId;
+    if (targetId && targetId !== dragId) send('BookmarkCreateFolder', {bookmark_id_a: dragId, bookmark_id_b: targetId});
   }
+  _clearFolderTarget();
 }
 
 function clearHistory() {
@@ -9381,6 +9912,70 @@ function formatBytes(bytes) {
   return (bytes / 1073741824).toFixed(2) + ' GB';
 }
 
+const DL_SVG_PAUSE = '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>';
+const DL_SVG_PLAY = '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5l12 7-12 7z"/></svg>';
+const DL_SVG_X = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>';
+
+function dlIsActive(d) { return d.status === 'downloading' || d.status === 'pending'; }
+function dlPct(d) {
+  return (d.total_bytes && d.total_bytes > 0)
+    ? Math.round((d.received_bytes / d.total_bytes) * 100)
+    : null;
+}
+function formatSpeed(bps) {
+  if (!bps || bps <= 0) return '';
+  return formatBytes(bps) + '/s';
+}
+function formatDuration(s) {
+  if (s < 60) return Math.max(1, Math.round(s)) + 's';
+  if (s < 3600) return Math.round(s / 60) + 'm';
+  return Math.floor(s / 3600) + 'h ' + Math.round((s % 3600) / 60) + 'm';
+}
+function formatEta(d) {
+  if (!d.speed_bps || !d.total_bytes) return '';
+  const remain = d.total_bytes - d.received_bytes;
+  if (remain <= 0) return '';
+  return formatDuration(remain / d.speed_bps) + ' left';
+}
+function dlBadge(d) {
+  if (d.status === 'complete') return ['done', 'Done'];
+  if (d.status === 'failed') return ['failed', 'Failed'];
+  if (d.status === 'cancelled') return ['failed', 'Canceled'];
+  if (d.status === 'paused') return ['paused', 'Paused'];
+  return ['active', 'Downloading'];
+}
+function dlMeta(d) {
+  if (d.status === 'complete') return d.total_bytes ? formatBytes(d.total_bytes) : (formatBytes(d.received_bytes) || 'Done');
+  if (d.status === 'failed') return 'Download failed';
+  if (d.status === 'cancelled') return 'Canceled';
+  const pct = dlPct(d);
+  const sizePart = pct !== null ? pct + '%' : formatBytes(d.received_bytes);
+  if (d.status === 'paused') return ['Paused', sizePart].filter(Boolean).join(' · ');
+  return [sizePart, formatSpeed(d.speed_bps), formatEta(d)].filter(Boolean).join(' · ');
+}
+function dlProgressHtml(d) {
+  const isPaused = d.status === 'paused';
+  if (!dlIsActive(d) && !isPaused) return '';
+  const pct = dlPct(d);
+  if (pct === null && !isPaused) return '<div class="dl-pi-bar indeterminate"><div class="dl-pi-bar-fill"></div></div>';
+  return `<div class="dl-pi-bar${isPaused ? ' paused' : ''}"><div class="dl-pi-bar-fill" style="width:${pct === null ? 0 : pct}%"></div></div>`;
+}
+function dlControlBtns(d) {
+  const id = escAttr(d.id);
+  if (d.status === 'paused')
+    return `<button class="dl-pi-btn icon" data-dl-resume="${id}" title="Resume">${DL_SVG_PLAY}</button><button class="dl-pi-btn icon danger" data-dl-cancel="${id}" title="Cancel">${DL_SVG_X}</button>`;
+  if (dlIsActive(d))
+    return `<button class="dl-pi-btn icon" data-dl-pause="${id}" title="Pause">${DL_SVG_PAUSE}</button><button class="dl-pi-btn icon danger" data-dl-cancel="${id}" title="Cancel">${DL_SVG_X}</button>`;
+  return '';
+}
+function refreshDownloadViews() {
+  const panel = document.getElementById('download-panel');
+  if (panel && panel.classList.contains('open')) renderDownloadPanel();
+  const sec = document.getElementById('section-downloads');
+  if (sec && sec.classList.contains('active')) renderDownloads();
+  refreshMoreAttention();
+}
+
 function handleDelegatedListClick(e) {
   const openFile = e.target.closest('[data-open-file-path]');
   if (openFile) {
@@ -9394,6 +9989,34 @@ function handleDelegatedListClick(e) {
     e.preventDefault();
     e.stopPropagation();
     send('RevealFile', {path: revealFile.dataset.revealFilePath});
+    return;
+  }
+  const dlPause = e.target.closest('[data-dl-pause]');
+  if (dlPause) {
+    e.preventDefault();
+    e.stopPropagation();
+    send('PauseDownload', {id: dlPause.dataset.dlPause});
+    return;
+  }
+  const dlResume = e.target.closest('[data-dl-resume]');
+  if (dlResume) {
+    e.preventDefault();
+    e.stopPropagation();
+    send('ResumeDownload', {id: dlResume.dataset.dlResume});
+    return;
+  }
+  const dlCancel = e.target.closest('[data-dl-cancel]');
+  if (dlCancel) {
+    e.preventDefault();
+    e.stopPropagation();
+    send('CancelDownload', {id: dlCancel.dataset.dlCancel});
+    return;
+  }
+  const dlDelete = e.target.closest('[data-del-dl-id]');
+  if (dlDelete) {
+    e.preventDefault();
+    e.stopPropagation();
+    send('DeleteDownload', {id: dlDelete.dataset.delDlId});
     return;
   }
   const removeBookmark = e.target.closest('[data-remove-bookmark-url]');
@@ -9753,7 +10376,8 @@ function _hideCtxMenu() {
   document.getElementById('ctx-menu').style.display = 'none';
   if (_ctxOverlayActive) {
     _ctxOverlayActive = false;
-    send('SuggestionOverlay', {visible:false, x:0, y:0, width:0, height:0});
+    if (_activeFolderId) syncFolderModalClip();
+    else send('SuggestionOverlay', {visible:false, x:0, y:0, width:0, height:0});
   }
 }
 function showContextMenu(x, y, items) {
@@ -9952,7 +10576,8 @@ document.addEventListener('keydown', e => {
   else if (ctrl && e.key === '-') { e.preventDefault(); zoomOut(); }
   else if (ctrl && e.key === '0') { e.preventDefault(); zoomReset(); }
   else if (e.key === 'Escape') {
-    if (_bmOverflowOpen) closeBmOverflowPanel();
+    if (_bmEditId || _folderEditId) closeBmEdit();
+    else if (_bmOverflowOpen) closeBmOverflowPanel();
     else if (_activeFolderId) closeFolderModal();
     else if (spotlightOpen) closeSpotlight();
     else if (findOpen) closeFindBar(true);
@@ -9964,6 +10589,7 @@ document.addEventListener('keydown', e => {
     else if (document.getElementById('more-menu').classList.contains('open')) closeMoreMenu();
     else if (document.getElementById('download-panel').classList.contains('open')) closeDownloadPanel();
     else if (document.getElementById('model-modal').classList.contains('open')) closeModelModal();
+    else if (siteInfoOpen) closeSiteInfo();
     else if (document.getElementById('update-modal').classList.contains('open')) closeUpdateModal(false);
     else if (document.getElementById('settings-overlay').classList.contains('open')) closeSettings();
     else if (document.getElementById('tab-search-modal').classList.contains('open')) closeTabSearch();
@@ -9979,6 +10605,11 @@ window.addEventListener('resize', () => {
   refreshSuggestionOverlayBounds();
   syncFindOverlay();
   syncUpdateModalClip();
+  syncSiteInfoPopover();
+  if (_activeFolderId) {
+    _activeFolderAnchor = folderAnchor(_activeFolderId, _activeFolderAnchor);
+    placeFolderModal(_activeFolderAnchor);
+  }
   // Keep the download panel's chrome clip aligned with its (right-anchored) position.
   const dlp = document.getElementById('download-panel');
   if (dlp && dlp.classList.contains('open')) {
@@ -10072,12 +10703,14 @@ let dragKind = null;   // 'tab' | 'bookmark' | 'url'
 let dragId = null;
 let dragPinned = false;
 let dragTitle = '';
+let dragFolderId = '';
 function clearAllDropFeedback() {
   document.querySelectorAll('.dz-line,.dz-line-end').forEach((e) => e.classList.remove('dz-line','dz-line-end'));
   document.querySelectorAll('.dz-save').forEach((e) => e.classList.remove('dz-save'));
   document.querySelectorAll('.dragging-url').forEach((e) => e.classList.remove('dragging-url'));
   const bar = document.getElementById('address-bar');
   if (bar) bar.classList.remove('drag-over');
+  _clearFolderTarget();
 }
 document.addEventListener('dragstart', function(e) {
   // URL input has its own dedicated handler below that sets dataTransfer before this fires.
@@ -10091,12 +10724,15 @@ document.addEventListener('dragstart', function(e) {
     dragKind = 'tab'; dragId = el.dataset.reorderId; dragPinned = el.classList.contains('pinned');
     const t = (state.tabs || []).find((x) => x.id === dragId);
     dragTitle = (t && t.title) || '';
-  } else if (el.classList.contains('bm-item') || el.classList.contains('bm-bar-item')) {
+  } else if (el.dataset.reorderId && (el.classList.contains('bm-item') || el.classList.contains('bm-bar-item') || el.classList.contains('fm-item'))) {
     dragKind = 'bookmark'; dragId = el.dataset.reorderId; dragPinned = false;
-    const lbl = el.querySelector('.bm-item-title,.bm-bar-text');
-    dragTitle = (lbl && lbl.textContent) || '';
+    const bm = (state.bookmarks || []).find(b => b.id === dragId);
+    dragFolderId = el.dataset.folderSource || (bm && bm.folder_id) || '';
+    const lbl = el.querySelector('.bm-item-title,.bm-bar-text,.fm-item-title');
+    dragTitle = (lbl && lbl.textContent) || (bm && bm.title) || '';
   } else {
     dragKind = 'url'; dragId = null; dragPinned = false;
+    dragFolderId = '';
     // For favicon drags from the address bar, use the current page title.
     dragTitle = el.closest('#address-bar') ? (state.active_title || '') : '';
   }
@@ -10107,7 +10743,7 @@ document.addEventListener('dragstart', function(e) {
 }, false);
 document.addEventListener('dragend', function() {
   clearAllDropFeedback();
-  dragKind = null; dragId = null; dragPinned = false; dragTitle = '';
+  dragKind = null; dragId = null; dragPinned = false; dragTitle = ''; dragFolderId = '';
 }, false);
 
 // Generic reorderable / droppable zone. Reorders when the drag source kind matches
@@ -10152,9 +10788,10 @@ function setupDropZone(container, cfg) {
   }, false);
   container.addEventListener('drop', function(e) {
     if (e.defaultPrevented) return;
+    const reorder = dragKind === cfg.reorderKind && dragId;
+    if (reorder && cfg.folderDrop && _bmMergeTarget) return;
     e.preventDefault();
     e.stopPropagation();
-    const reorder = dragKind === cfg.reorderKind && dragId;
     if (reorder) {
       const before = computeBefore(e);
       const beforeId = before ? before.dataset.reorderId : null;
@@ -10166,6 +10803,11 @@ function setupDropZone(container, cfg) {
       if (url) cfg.onExternal(url);
     }
   }, false);
+}
+
+function moveBookmarkToBar(id, before) {
+  if (dragFolderId) send('BookmarkRemoveFromFolder', {bookmark_id: id});
+  send('MoveBookmark', {id, before});
 }
 
 // ── Address bar: drop → paste URL, focus, open suggestions ───────────────────
@@ -10215,6 +10857,7 @@ function setupDropZone(container, cfg) {
     dragKind = 'url';
     dragId = null;
     dragPinned = false;
+    dragFolderId = '';
     dragTitle = state.active_title || '';
     e.dataTransfer.effectAllowed = 'copyMove';
     e.dataTransfer.setData('text/uri-list', url);
@@ -10231,14 +10874,30 @@ setupDropZone(document.getElementById('sb-page'), {
   onExternal: (url) => send('OpenInNewTab', {url}),
 });
 setupDropZone(document.getElementById('bookmarks-bar'), {
-  reorderKind: 'bookmark', item: '.bm-bar-item', axis: 'x',
-  onReorder: (id, before) => send('MoveBookmark', {id, before}),
+  reorderKind: 'bookmark', item: '.bm-bar-item[data-reorder-id]', axis: 'x',
+  onReorder: moveBookmarkToBar,
   onExternal: (url) => send('BookmarkAddUrl', {url, title: dragTitle || ''}),
+  folderDrop: true,
 });
+(function() {
+  const bmBar = document.getElementById('bookmarks-bar');
+  if (!bmBar) return;
+  bmBar.addEventListener('contextmenu', function(e) {
+    if (e.target.closest('.bm-bar-item')) return;
+    e.preventDefault();
+    showContextMenu(e.clientX, e.clientY, [
+      { label: 'New folder', action: () => send('BookmarkNewFolder') },
+      { label: 'Add this page', action: () => send('BookmarkAdd') },
+      { sep: true },
+      { label: 'Hide bookmarks bar', action: () => toggleSetting('show_bookmarks_bar') },
+    ]);
+  });
+})();
 setupDropZone(document.getElementById('bookmarks-list'), {
-  reorderKind: 'bookmark', item: '.bm-item', axis: 'y',
-  onReorder: (id, before) => send('MoveBookmark', {id, before}),
+  reorderKind: 'bookmark', item: '.bm-item[data-reorder-id]', axis: 'y',
+  onReorder: moveBookmarkToBar,
   onExternal: (url) => send('BookmarkAddUrl', {url, title: dragTitle || ''}),
+  folderDrop: true,
 });
 
 // ── Global fallback: drop a URL anywhere in chrome → new tab ─────────────────
@@ -10396,6 +11055,8 @@ if (window.__neura_show_onboarding) {
 </body>
 </html>"##;
     html.replace("__LOGO_URL__", &logo)
+        .replace("__LOGO_TEXT_WHITE__", &logo_text_white)
+        .replace("__LOGO_TEXT_BLACK__", &logo_text_black)
         .replace("__APP_VERSION__", version)
 }
 

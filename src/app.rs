@@ -1,6 +1,6 @@
 use rusqlite::Connection;
 use std::{
-    collections::HashMap,
+    collections::{BTreeSet, HashMap},
     sync::{Arc, Mutex},
 };
 use tokio::sync::oneshot;
@@ -9,7 +9,10 @@ use wry::WebView;
 use crate::adblock::AdBlockEngine;
 use crate::browser::downloads::DownloadManager;
 use crate::browser::tab_manager::TabManager;
-use crate::config::{AppSettings, SecureDnsMode, SecureDnsProvider};
+use crate::config::{
+    valid_site_permission_key, valid_site_permission_value, AppSettings, SecureDnsMode,
+    SecureDnsProvider, SitePermissions,
+};
 use crate::storage::{keychain, passwords, repositories, settings_store};
 use crate::ui::events::{AppEvent, ChromeCommand};
 
@@ -86,6 +89,12 @@ pub struct AppState {
     pub history_last_saved: HashMap<String, (String, i64)>,
     pub pwd_key: [u8; 32],
     pub pending_pwd_save: Option<(String, String, String)>,
+    /// Per-origin set of permission keys the site has actually requested this session.
+    /// Drives the site-info popover so it lists only what a page asked for.
+    pub requested_permissions: HashMap<String, BTreeSet<String>>,
+    /// Per-download speed sampling: (sample time ms, bytes at that sample). Used to
+    /// turn raw byte-count ticks into a smoothed bytes/sec figure for the UI.
+    pub download_samples: HashMap<String, (i64, u64)>,
 }
 
 impl AppState {
@@ -144,7 +153,31 @@ impl AppState {
             history_last_saved: HashMap::new(),
             pwd_key: crate::storage::crypto::store_key(data_dir).unwrap_or([0u8; 32]),
             pending_pwd_save: None,
+            requested_permissions: HashMap::new(),
+            download_samples: HashMap::new(),
         }
+    }
+
+    fn download_speed(&mut self, id: &str, received: u64) -> u64 {
+        let now = chrono::Utc::now().timestamp_millis();
+        let entry = self
+            .download_samples
+            .entry(id.to_string())
+            .or_insert((now, received));
+        let (t0, b0) = *entry;
+        let dt = now - t0;
+        if dt <= 0 {
+            return 0;
+        }
+        let speed = if received >= b0 {
+            (received - b0) * 1000 / dt as u64
+        } else {
+            0
+        };
+        if dt >= 600 {
+            *entry = (now, received);
+        }
+        speed
     }
 
     pub fn account_state_json(&self) -> String {
@@ -265,9 +298,17 @@ impl AppState {
             "ad_blocker_active": ad_blocker_active,
             "ad_blocker_site_excepted": ad_blocker_site_excepted,
             "ad_blocker_kills": self.adblock_page_kills,
+            "requested_permissions": &self.requested_permissions,
         }))
         .unwrap_or_default()
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum DownloadCtl {
+    Pause,
+    Resume,
+    Cancel,
 }
 
 pub enum TabAction {
@@ -322,6 +363,11 @@ pub enum TabAction {
     },
     ApplyWebSecurity,
     DownloadUpdate(String),
+    DownloadControl {
+        id: String,
+        action: DownloadCtl,
+    },
+    DownloadCancelAll,
     SaveImageAs {
         url: String,
     },
@@ -620,6 +666,25 @@ pub fn handle_chrome_command(
             state.push_state_to_chrome(chrome);
             None
         }
+        ChromeCommand::BookmarkRename { id, title } => {
+            let title = title.trim();
+            if !title.is_empty() {
+                let _ = repositories::rename_bookmark(&state.conn, &id, title);
+                state.cached_bookmarks =
+                    repositories::list_bookmarks(&state.conn).unwrap_or_default();
+                state.push_state_to_chrome(chrome);
+                let _ = chrome.evaluate_script(
+                    "window.__neura && window.__neura.showSuccess('Bookmark renamed')",
+                );
+            }
+            None
+        }
+        ChromeCommand::BookmarkSetIconOnly { id, icon_only } => {
+            let _ = repositories::set_bookmark_icon_only(&state.conn, &id, icon_only);
+            state.cached_bookmarks = repositories::list_bookmarks(&state.conn).unwrap_or_default();
+            state.push_state_to_chrome(chrome);
+            None
+        }
         ChromeCommand::BookmarkCreateFolder {
             bookmark_id_a,
             bookmark_id_b,
@@ -679,6 +744,20 @@ pub fn handle_chrome_command(
             state.cached_bookmark_folders =
                 repositories::list_bookmark_folders(&state.conn).unwrap_or_default();
             state.push_state_to_chrome(chrome);
+            None
+        }
+        ChromeCommand::BookmarkNewFolder => {
+            match repositories::add_bookmark_folder(&state.conn, "New folder") {
+                Ok(_) => {
+                    state.cached_bookmark_folders =
+                        repositories::list_bookmark_folders(&state.conn).unwrap_or_default();
+                    state.push_state_to_chrome(chrome);
+                    let _ = chrome.evaluate_script(
+                        "window.__neura && window.__neura.showSuccess('New folder added')",
+                    );
+                }
+                Err(e) => tracing::warn!("BookmarkNewFolder failed: {}", e),
+            }
             None
         }
         ChromeCommand::HistoryClear => {
@@ -752,6 +831,14 @@ pub fn handle_chrome_command(
                 return None;
             }
             None
+        }
+        ChromeCommand::SetSitePermission {
+            origin,
+            permission,
+            value,
+        } => set_site_permission(origin, permission, value, state, chrome),
+        ChromeCommand::SetDefaultPermission { permission, value } => {
+            set_default_permission(permission, value, state, chrome)
         }
         ChromeCommand::TabAudioState { tab_id, playing } => {
             if let Some(tab) = state.tab_manager.tabs.iter_mut().find(|t| t.id == tab_id) {
@@ -1092,15 +1179,32 @@ pub fn handle_chrome_command(
         ChromeCommand::ClearDownloads => {
             let _ = repositories::clear_downloads(&state.conn);
             state.downloads.downloads.clear();
+            state.download_samples.clear();
             state.push_state_to_chrome(chrome);
-            None
+            Some(TabAction::DownloadCancelAll)
         }
         ChromeCommand::DeleteDownload { id } => {
             let _ = repositories::delete_download(&state.conn, &id);
             state.downloads.downloads.retain(|d| d.id != id);
+            state.download_samples.remove(&id);
             state.push_state_to_chrome(chrome);
-            None
+            Some(TabAction::DownloadControl {
+                id,
+                action: DownloadCtl::Cancel,
+            })
         }
+        ChromeCommand::PauseDownload { id } => Some(TabAction::DownloadControl {
+            id,
+            action: DownloadCtl::Pause,
+        }),
+        ChromeCommand::ResumeDownload { id } => Some(TabAction::DownloadControl {
+            id,
+            action: DownloadCtl::Resume,
+        }),
+        ChromeCommand::CancelDownload { id } => Some(TabAction::DownloadControl {
+            id,
+            action: DownloadCtl::Cancel,
+        }),
         ChromeCommand::InstallUpdate => {
             if let Some(url) = state.pending_update_url.clone() {
                 let _ = chrome.evaluate_script(
@@ -1814,6 +1918,108 @@ fn web_security_signature(
     )
 }
 
+fn normalize_site_origin(origin: &str) -> Option<String> {
+    let url = url::Url::parse(origin).ok()?;
+    if url.scheme() != "https" && url.scheme() != "http" {
+        return None;
+    }
+    let host = url.host_str()?.to_ascii_lowercase();
+    let port = url.port().map(|p| format!(":{p}")).unwrap_or_default();
+    Some(format!("{}://{}{}", url.scheme(), host, port))
+}
+
+fn tab_site_origin(url: &str) -> Option<String> {
+    normalize_site_origin(url)
+}
+
+fn set_site_permission(
+    origin: String,
+    permission: String,
+    value: String,
+    state: &mut AppState,
+    chrome: &WebView,
+) -> Option<TabAction> {
+    let Some(origin) = normalize_site_origin(&origin) else {
+        let _ = chrome.evaluate_script(
+            "window.__neura && window.__neura.showError('This page has no site permissions')",
+        );
+        return None;
+    };
+    if !valid_site_permission_key(&permission) || !valid_site_permission_value(&value) {
+        let _ = chrome.evaluate_script(
+            "window.__neura && window.__neura.showError('Permission was not saved')",
+        );
+        return None;
+    }
+    let mut perms = state
+        .settings
+        .privacy
+        .site_permissions
+        .get(&origin)
+        .cloned()
+        .unwrap_or_else(SitePermissions::default);
+    if !perms.set(&permission, &value) {
+        let _ = chrome.evaluate_script(
+            "window.__neura && window.__neura.showError('Permission was not saved')",
+        );
+        return None;
+    }
+    state
+        .settings
+        .privacy
+        .site_permissions
+        .insert(origin.clone(), perms);
+    let _ = settings_store::set(&state.conn, "app_settings", &state.settings);
+    state.push_state_to_chrome(chrome);
+    let _ = chrome
+        .evaluate_script("window.__neura && window.__neura.showSuccess('Site permission saved')");
+    let Some(tab_id) = state.tab_manager.active_tab_id.clone() else {
+        return None;
+    };
+    let Some(tab) = state.tab_manager.get_tab(&tab_id) else {
+        return None;
+    };
+    let url = tab.url.clone();
+    if tab_site_origin(&url).as_deref() != Some(origin.as_str()) {
+        return None;
+    }
+    Some(TabAction::RebuildContent { tab_id, url })
+}
+
+fn set_default_permission(
+    permission: String,
+    value: String,
+    state: &mut AppState,
+    chrome: &WebView,
+) -> Option<TabAction> {
+    if !valid_site_permission_key(&permission) || !valid_site_permission_value(&value) {
+        let _ = chrome.evaluate_script(
+            "window.__neura && window.__neura.showError('Permission was not saved')",
+        );
+        return None;
+    }
+    if !state
+        .settings
+        .privacy
+        .default_permissions
+        .set(&permission, &value)
+    {
+        let _ = chrome.evaluate_script(
+            "window.__neura && window.__neura.showError('Permission was not saved')",
+        );
+        return None;
+    }
+    let _ = settings_store::set(&state.conn, "app_settings", &state.settings);
+    state.push_state_to_chrome(chrome);
+    let _ = chrome.evaluate_script(
+        "window.__neura && window.__neura.showSuccess('Default permission saved')",
+    );
+    let tab_id = state.tab_manager.active_tab_id.clone()?;
+    let tab = state.tab_manager.get_tab(&tab_id)?;
+    let url = tab.url.clone();
+    Some(TabAction::RebuildContent { tab_id, url })
+}
+
 fn push_passwords_list(state: &AppState, chrome: &WebView) {
     let creds = passwords::list(&state.conn, &state.pwd_key).unwrap_or_default();
     let items: Vec<serde_json::Value> = creds
@@ -1846,6 +2052,20 @@ pub fn handle_app_event_inner(
             None
         }
         AppEvent::SaveSession { .. } => None,
+        AppEvent::PermissionRequested { origin, key } => {
+            if origin.is_empty() || !valid_site_permission_key(&key) {
+                return None;
+            }
+            let added = state
+                .requested_permissions
+                .entry(origin)
+                .or_default()
+                .insert(key);
+            if added {
+                state.push_state_to_chrome(chrome);
+            }
+            None
+        }
         AppEvent::ContentNav { tab_id, url, title } => {
             if state.tab_manager.active_tab_id.as_deref() == Some(tab_id.as_str()) {
                 state.adblock_page_kills = 0;
@@ -2456,13 +2676,23 @@ pub fn handle_app_event_inner(
             None
         }
         AppEvent::DownloadStarted {
+            id,
             url,
             filename,
             path,
+            total,
         } => {
             let mut dl = crate::browser::downloads::Download::new(&url, &filename);
+            if let Some(id) = id {
+                dl.id = id;
+            }
             dl.local_path = Some(path);
+            dl.total_bytes = total;
+            dl.status = crate::browser::downloads::DownloadStatus::Downloading;
             let dl = state.downloads.add(dl).clone();
+            state
+                .download_samples
+                .insert(dl.id.clone(), (dl.started_at, 0));
             if let Err(e) = repositories::save_download(&state.conn, &dl) {
                 tracing::warn!("save download start failed: {}", e);
             }
@@ -2490,6 +2720,7 @@ pub fn handle_app_event_inner(
             }
         }
         AppEvent::DownloadCompleted { url, path, success } => {
+            let mut done_id = None;
             if let Some(dl) = state.downloads.downloads.iter_mut().rev().find(|d| {
                 d.url == url || (path.is_some() && d.local_path.as_deref() == path.as_deref())
             }) {
@@ -2503,9 +2734,62 @@ pub fn handle_app_event_inner(
                     dl.status = crate::browser::downloads::DownloadStatus::Failed;
                     dl.completed_at = Some(chrono::Utc::now().timestamp_millis());
                 }
+                done_id = Some(dl.id.clone());
                 if let Err(e) = repositories::save_download(&state.conn, dl) {
                     tracing::warn!("save download completion failed: {}", e);
                 }
+            }
+            if let Some(id) = done_id {
+                state.download_samples.remove(&id);
+            }
+            state.push_state_to_chrome(chrome);
+            None
+        }
+        AppEvent::DownloadProgress {
+            id,
+            received,
+            total,
+        } => {
+            let speed = state.download_speed(&id, received);
+            state.downloads.update_progress(&id, received, total);
+            let total_js = match total {
+                Some(t) => t.to_string(),
+                None => "null".to_string(),
+            };
+            let _ = chrome.evaluate_script(&format!(
+                "window.__neura && window.__neura.updateDownload({},{},{},'downloading',{})",
+                serde_json::to_string(&id).unwrap_or_default(),
+                received,
+                total_js,
+                speed
+            ));
+            None
+        }
+        AppEvent::DownloadPaused { id } => {
+            state.downloads.pause(&id);
+            state.download_samples.remove(&id);
+            if let Some(dl) = state.downloads.find_mut(&id) {
+                let _ = repositories::save_download(&state.conn, dl);
+            }
+            state.push_state_to_chrome(chrome);
+            None
+        }
+        AppEvent::DownloadDone {
+            id,
+            success,
+            canceled,
+        } => {
+            state.download_samples.remove(&id);
+            if let Some(dl) = state.downloads.find_mut(&id) {
+                dl.status = if success {
+                    crate::browser::downloads::DownloadStatus::Complete
+                } else if canceled {
+                    crate::browser::downloads::DownloadStatus::Cancelled
+                } else {
+                    crate::browser::downloads::DownloadStatus::Failed
+                };
+                dl.completed_at = Some(chrono::Utc::now().timestamp_millis());
+                let _ = repositories::save_download(&state.conn, dl);
             }
             state.push_state_to_chrome(chrome);
             None
@@ -2722,7 +3006,7 @@ fn merge_cloud_bookmarks(state: &AppState, blob: &str) {
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
             let _ = state.conn.execute(
-                "INSERT OR IGNORE INTO bookmarks(id, url, title, folder_id, position, created_at) VALUES(?1,?2,?3,?4,?5,?6)",
+                "INSERT OR IGNORE INTO bookmarks(id, url, title, folder_id, position, created_at, icon_only) VALUES(?1,?2,?3,?4,?5,?6,?7)",
                 rusqlite::params![
                     id,
                     url,
@@ -2730,6 +3014,7 @@ fn merge_cloud_bookmarks(state: &AppState, blob: &str) {
                     b["folder_id"].as_str(),
                     b["position"].as_i64().unwrap_or(0),
                     b["created_at"].as_i64().unwrap_or_else(|| chrono::Utc::now().timestamp_millis()),
+                    b["icon_only"].as_bool().unwrap_or(false),
                 ],
             );
         }

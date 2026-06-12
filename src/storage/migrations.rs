@@ -7,6 +7,8 @@ pub fn run(conn: &Connection) -> Result<()> {
     let _ = conn.execute_batch(
         "ALTER TABLE workspaces ADD COLUMN is_incognito INTEGER NOT NULL DEFAULT 0;",
     );
+    let _ = conn
+        .execute_batch("ALTER TABLE bookmarks ADD COLUMN icon_only INTEGER NOT NULL DEFAULT 0;");
     Ok(())
 }
 
@@ -46,6 +48,7 @@ CREATE TABLE IF NOT EXISTS bookmarks (
     folder_id TEXT,
     position INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL,
+    icon_only INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY (folder_id) REFERENCES bookmark_folders(id) ON DELETE SET NULL
 );
 

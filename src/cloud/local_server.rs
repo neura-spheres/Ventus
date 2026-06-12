@@ -26,7 +26,13 @@ pub async fn serve(listener: TcpListener, html: String, tx: oneshot::Sender<Stri
             break;
         };
         let Some((method, path, body)) = read_request(&mut stream).await else {
-            respond(&mut stream, "400 Bad Request", "text/plain; charset=utf-8", "bad request").await;
+            respond(
+                &mut stream,
+                "400 Bad Request",
+                "text/plain; charset=utf-8",
+                "bad request",
+            )
+            .await;
             continue;
         };
         if method == "POST" && path.starts_with("/complete") {
@@ -36,11 +42,23 @@ pub async fn serve(listener: TcpListener, html: String, tx: oneshot::Sender<Stri
             }
             break;
         } else if method == "OPTIONS" {
-            respond(&mut stream, "204 No Content", "text/plain; charset=utf-8", "").await;
+            respond(
+                &mut stream,
+                "204 No Content",
+                "text/plain; charset=utf-8",
+                "",
+            )
+            .await;
         } else if method == "GET" {
             respond(&mut stream, "200 OK", "text/html; charset=utf-8", &html).await;
         } else {
-            respond(&mut stream, "404 Not Found", "text/plain; charset=utf-8", "not found").await;
+            respond(
+                &mut stream,
+                "404 Not Found",
+                "text/plain; charset=utf-8",
+                "not found",
+            )
+            .await;
         }
     }
 }

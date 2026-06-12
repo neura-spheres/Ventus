@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -296,6 +297,122 @@ impl SecureDnsMode {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+pub struct SitePermissions {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub camera: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub microphone: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub geolocation: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub notifications: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub clipboard: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sensors: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub downloads: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_system: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub autoplay: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub local_fonts: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub midi: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub window_management: Option<String>,
+}
+
+impl Default for SitePermissions {
+    fn default() -> Self {
+        Self {
+            camera: None,
+            microphone: None,
+            geolocation: None,
+            notifications: None,
+            clipboard: None,
+            sensors: None,
+            downloads: None,
+            file_system: None,
+            autoplay: None,
+            local_fonts: None,
+            midi: None,
+            window_management: None,
+        }
+    }
+}
+
+impl SitePermissions {
+    pub fn get_explicit(&self, key: &str) -> Option<&str> {
+        match key {
+            "camera" => self.camera.as_deref(),
+            "microphone" => self.microphone.as_deref(),
+            "geolocation" => self.geolocation.as_deref(),
+            "notifications" => self.notifications.as_deref(),
+            "clipboard" => self.clipboard.as_deref(),
+            "sensors" => self.sensors.as_deref(),
+            "downloads" => self.downloads.as_deref(),
+            "file_system" => self.file_system.as_deref(),
+            "autoplay" => self.autoplay.as_deref(),
+            "local_fonts" => self.local_fonts.as_deref(),
+            "midi" => self.midi.as_deref(),
+            "window_management" => self.window_management.as_deref(),
+            _ => None,
+        }
+    }
+
+    pub fn set(&mut self, key: &str, value: &str) -> bool {
+        if !valid_site_permission_value(value) {
+            return false;
+        }
+        let value = Some(value.to_string());
+        match key {
+            "camera" => self.camera = value,
+            "microphone" => self.microphone = value,
+            "geolocation" => self.geolocation = value,
+            "notifications" => self.notifications = value,
+            "clipboard" => self.clipboard = value,
+            "sensors" => self.sensors = value,
+            "downloads" => self.downloads = value,
+            "file_system" => self.file_system = value,
+            "autoplay" => self.autoplay = value,
+            "local_fonts" => self.local_fonts = value,
+            "midi" => self.midi = value,
+            "window_management" => self.window_management = value,
+            _ => return false,
+        }
+        true
+    }
+}
+
+pub type SitePermissionMap = BTreeMap<String, SitePermissions>;
+
+pub const SITE_PERMISSION_KEYS: [&str; 12] = [
+    "camera",
+    "microphone",
+    "geolocation",
+    "notifications",
+    "clipboard",
+    "sensors",
+    "downloads",
+    "file_system",
+    "autoplay",
+    "local_fonts",
+    "midi",
+    "window_management",
+];
+
+pub fn valid_site_permission_key(key: &str) -> bool {
+    SITE_PERMISSION_KEYS.contains(&key)
+}
+
+pub fn valid_site_permission_value(value: &str) -> bool {
+    matches!(value, "ask" | "allow" | "block")
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct PrivacySettings {
     pub disable_history: bool,
     pub do_not_track: bool,
@@ -313,6 +430,10 @@ pub struct PrivacySettings {
     pub ad_blocker_enabled: bool,
     #[serde(default)]
     pub ad_blocker_exceptions: Vec<String>,
+    #[serde(default)]
+    pub site_permissions: SitePermissionMap,
+    #[serde(default)]
+    pub default_permissions: SitePermissions,
     pub secure_dns_enabled: bool,
     pub secure_dns_provider: SecureDnsProvider,
     pub secure_dns_mode: SecureDnsMode,
@@ -331,6 +452,8 @@ impl Default for PrivacySettings {
             strict_permissions: true,
             ad_blocker_enabled: true,
             ad_blocker_exceptions: Vec::new(),
+            site_permissions: BTreeMap::new(),
+            default_permissions: SitePermissions::default(),
             secure_dns_enabled: false,
             secure_dns_provider: SecureDnsProvider::default(),
             secure_dns_mode: SecureDnsMode::default(),

@@ -35,12 +35,17 @@ async fn parse_auth_response(resp: reqwest::Response) -> Result<AuthSession> {
     let status = resp.status();
     let data: Value = resp.json().await?;
     if !status.is_success() {
-        let msg = data["error"]["message"].as_str().unwrap_or("Authentication failed");
+        let msg = data["error"]["message"]
+            .as_str()
+            .unwrap_or("Authentication failed");
         return Err(anyhow!(friendly_error(msg)));
     }
     let uid = data["localId"].as_str().unwrap_or_default().to_string();
     let id_token = data["idToken"].as_str().unwrap_or_default().to_string();
-    let refresh_token = data["refreshToken"].as_str().unwrap_or_default().to_string();
+    let refresh_token = data["refreshToken"]
+        .as_str()
+        .unwrap_or_default()
+        .to_string();
     let email = data["email"].as_str().unwrap_or_default().to_string();
     let expires_at_ms = expires_at(data["expiresIn"].as_str().unwrap_or("3600"));
     if uid.is_empty() || id_token.is_empty() || refresh_token.is_empty() {
@@ -56,7 +61,12 @@ async fn parse_auth_response(resp: reqwest::Response) -> Result<AuthSession> {
 }
 
 async fn identity_call(method: &str, body: Value) -> Result<reqwest::Response> {
-    let url = format!("{}{}?key={}", IDENTITY_BASE, method, config::FIREBASE_API_KEY);
+    let url = format!(
+        "{}{}?key={}",
+        IDENTITY_BASE,
+        method,
+        config::FIREBASE_API_KEY
+    );
     let resp = Client::new().post(&url).json(&body).send().await?;
     Ok(resp)
 }

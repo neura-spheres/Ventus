@@ -36,7 +36,7 @@ use tao::platform::windows::{EventLoopBuilderExtWindows, WindowExtWindows};
 #[cfg(windows)]
 use wry::{WebViewBuilderExtWindows, WebViewExtWindows};
 
-use app::{handle_app_event_inner, tab_zoom, AppState, TabAction};
+use app::{handle_app_event_inner, tab_zoom, AppState, DownloadCtl, TabAction};
 use image::GenericImageView;
 use storage::{cookie_store, database, migrations, repositories, settings_store};
 use ui::chrome::chrome_html;
@@ -77,7 +77,7 @@ const TAB_SLEEP_CHECK_EVERY: Duration = Duration::from_secs(20);
 const HEAL_CONTENT_EVERY: Duration = Duration::from_millis(750);
 const MAX_LIVE_WEBVIEWS: usize = 8;
 const SESSION_SAVE_DELAY: Duration = Duration::from_secs(3);
-const WEBVIEW_PROFILE_RELEASE_TIMEOUT: Duration = Duration::from_secs(5);
+const WEBVIEW_PROFILE_RELEASE_TIMEOUT: Duration = Duration::from_secs(12);
 const WEBVIEW_PROFILE_RELEASE_POLL: u64 = 50;
 #[cfg(windows)]
 const APP_ID: &str = "NeuraSpheres.Ventus";
@@ -478,53 +478,83 @@ fn main() {
     encrypt_app_storage(&webview_data_dir);
     #[cfg(windows)]
     sync_webview_secure_dns_prefs(&webview_data_dir, &state.settings);
+    #[cfg(windows)]
+    if !new_window
+        && !wait_for_webview_profiles_released(
+            &[webview_data_dir.as_path()],
+            WEBVIEW_PROFILE_RELEASE_TIMEOUT,
+        )
+    {
+        tracing::warn!(
+            target: "ventus::startup",
+            "[STARTUP] WebView2 profile still locked after waiting; chrome build will retry"
+        );
+    }
     let mut content_web_context = Some(wry::WebContext::new(Some(webview_data_dir.clone())));
 
-    let proxy_chrome = proxy.clone();
-    let proxy_chrome_load = proxy.clone();
-    let chrome_builder = WebViewBuilder::new_as_child(&window)
-        .with_bounds(Rect {
-            x: 0,
-            y: 0,
-            width: win_size.width,
-            height: win_size.height,
-        })
-        .with_transparent(true);
-    #[cfg(windows)]
-    let chrome_builder = chrome_builder
-        .with_browser_accelerator_keys(false)
-        .with_additional_browser_args(browser_args.clone());
-    let chrome = match chrome_builder
-        // Share the content profile's WebView2 environment so the chrome UI does NOT
-        // spawn its own (duplicate) browser/GPU/utility process tree. Chrome is built
-        // first, so its browser args define the shared environment; content tabs use the
-        // identical args (webview_args), so reusing chrome's environment is consistent.
-        .with_web_context(content_web_context.as_mut().unwrap())
-        .with_html(chrome_html())
-        .with_ipc_handler(move |req: wry::http::Request<String>| {
-            let body = req.body();
-            match serde_json::from_str::<ChromeCommand>(body) {
-                Ok(cmd) => {
-                    let _ = proxy_chrome.send_event(AppEvent::Chrome(cmd));
+    let chrome = {
+        const MAX_CHROME_ATTEMPTS: u32 = 24;
+        let mut attempt = 0u32;
+        loop {
+            attempt += 1;
+            let proxy_chrome = proxy.clone();
+            let proxy_chrome_load = proxy.clone();
+            let builder = WebViewBuilder::new_as_child(&window)
+                .with_bounds(Rect {
+                    x: 0,
+                    y: 0,
+                    width: win_size.width,
+                    height: win_size.height,
+                })
+                .with_transparent(true);
+            #[cfg(windows)]
+            let builder = builder
+                .with_browser_accelerator_keys(false)
+                .with_additional_browser_args(browser_args.clone());
+            let built = builder
+                .with_web_context(content_web_context.as_mut().unwrap())
+                .with_html(chrome_html())
+                .with_ipc_handler(move |req: wry::http::Request<String>| {
+                    let body = req.body();
+                    match serde_json::from_str::<ChromeCommand>(body) {
+                        Ok(cmd) => {
+                            let _ = proxy_chrome.send_event(AppEvent::Chrome(cmd));
+                        }
+                        Err(e) => tracing::warn!("IPC parse: {} | body: {}", e, body),
+                    }
+                })
+                .with_on_page_load_handler(move |event, _url: String| {
+                    if let wry::PageLoadEvent::Finished = event {
+                        let _ = proxy_chrome_load.send_event(AppEvent::ChromeReady);
+                    }
+                })
+                .build();
+            match built {
+                Ok(chrome) => break chrome,
+                Err(e) if attempt < MAX_CHROME_ATTEMPTS && is_busy_message(&e.to_string()) => {
+                    tracing::warn!(
+                        target: "ventus::startup",
+                        attempt,
+                        error = %e,
+                        "[STARTUP] chrome WebView profile busy (locked); retrying"
+                    );
+                    std::thread::sleep(Duration::from_millis(500));
                 }
-                Err(e) => tracing::warn!("IPC parse: {} | body: {}", e, body),
+                Err(e) => {
+                    tracing::error!("build chrome webview: {}", e);
+                    if is_busy_message(&e.to_string()) {
+                        show_startup_error(
+                            "Ventus is still closing from the last time it ran.\n\nGive it a few seconds, then open it again.",
+                        );
+                    } else {
+                        show_startup_error(&format!(
+                            "Ventus could not start because WebView2 is missing or broken.\n\nRun the installer again, or install Microsoft Edge WebView2 Runtime from Microsoft.\n\n{}",
+                            e
+                        ));
+                    }
+                    return;
+                }
             }
-        })
-        .with_on_page_load_handler(move |event, _url: String| {
-            if let wry::PageLoadEvent::Finished = event {
-                let _ = proxy_chrome_load.send_event(AppEvent::ChromeReady);
-            }
-        })
-        .build()
-    {
-        Ok(chrome) => chrome,
-        Err(e) => {
-            tracing::error!("build chrome webview: {}", e);
-            show_startup_error(&format!(
-                "Ventus could not start because WebView2 is missing or broken.\n\nRun the installer again, or install Microsoft Edge WebView2 Runtime from Microsoft.\n\n{}",
-                e
-            ));
-            return;
         }
     };
     #[cfg(windows)]
@@ -605,6 +635,8 @@ fn main() {
             first_ad_script,
             state.settings.privacy.fingerprint_protection,
             state.settings.privacy.strict_permissions,
+            state.settings.privacy.site_permissions.clone(),
+            state.settings.privacy.default_permissions.clone(),
             state.settings.privacy.https_only,
             false,
         ) {
@@ -1113,6 +1145,7 @@ fn main() {
                 close_chrome_controller(&chrome);
                 shutdown_webview2(
                     crash_sentinel.as_deref(),
+                    &[webview_data_dir.as_path(), incognito_data_dir.as_path()],
                     &mut content_views,
                     &mut content_hwnds,
                     &mut content_web_context,
@@ -1284,6 +1317,8 @@ fn main() {
                     ad_script,
                     state.settings.privacy.fingerprint_protection,
                     state.settings.privacy.strict_permissions,
+                    state.settings.privacy.site_permissions.clone(),
+state.settings.privacy.default_permissions.clone(),
                     state.settings.privacy.https_only,
                     false,
                 ) {
@@ -1576,6 +1611,8 @@ fn main() {
                                     ad_script,
                                     state.settings.privacy.fingerprint_protection,
                                     state.settings.privacy.strict_permissions,
+                                    state.settings.privacy.site_permissions.clone(),
+state.settings.privacy.default_permissions.clone(),
                                     state.settings.privacy.https_only,
                                     false,
                                 ) {
@@ -1692,6 +1729,8 @@ fn main() {
                                                 ad_script,
                                                 state.settings.privacy.fingerprint_protection,
                                                 state.settings.privacy.strict_permissions,
+                                                state.settings.privacy.site_permissions.clone(),
+state.settings.privacy.default_permissions.clone(),
                                                 state.settings.privacy.https_only,
                                                 false,
                                             ) {
@@ -1883,6 +1922,8 @@ fn main() {
                                         ad_script,
                                         state.settings.privacy.fingerprint_protection,
                                         state.settings.privacy.strict_permissions,
+                                        state.settings.privacy.site_permissions.clone(),
+state.settings.privacy.default_permissions.clone(),
                                         state.settings.privacy.https_only,
                                         false,
                                     ) {
@@ -2015,6 +2056,8 @@ fn main() {
                                     ad_script,
                                     state.settings.privacy.fingerprint_protection,
                                     state.settings.privacy.strict_permissions,
+                                    state.settings.privacy.site_permissions.clone(),
+state.settings.privacy.default_permissions.clone(),
                                     state.settings.privacy.https_only,
                                     false,
                                 ) {
@@ -2131,6 +2174,8 @@ fn main() {
                                     ad_script,
                                     state.settings.privacy.fingerprint_protection,
                                     state.settings.privacy.strict_permissions,
+                                    state.settings.privacy.site_permissions.clone(),
+state.settings.privacy.default_permissions.clone(),
                                     state.settings.privacy.https_only,
                                     false,
                                 ) {
@@ -2214,6 +2259,8 @@ fn main() {
                                 ad_script,
                                 state.settings.privacy.fingerprint_protection,
                                 state.settings.privacy.strict_permissions,
+                                state.settings.privacy.site_permissions.clone(),
+state.settings.privacy.default_permissions.clone(),
                                 state.settings.privacy.https_only,
                                 false,
                             ) {
@@ -2279,6 +2326,7 @@ fn main() {
                                 close_chrome_controller(&chrome);
                                 shutdown_webview2(
                                     crash_sentinel.as_deref(),
+                                    &[webview_data_dir.as_path(), incognito_data_dir.as_path()],
                                     &mut content_views,
                                     &mut content_hwnds,
                                     &mut content_web_context,
@@ -2286,6 +2334,18 @@ fn main() {
                                 );
                                 *control_flow = ControlFlow::Exit;
                             }
+                        }
+                        TabAction::DownloadControl { id, action } => {
+                            #[cfg(windows)]
+                            control_download(&id, action);
+                            #[cfg(not(windows))]
+                            {
+                                let _ = (&id, action);
+                            }
+                        }
+                        TabAction::DownloadCancelAll => {
+                            #[cfg(windows)]
+                            cancel_all_downloads();
                         }
                         TabAction::DownloadUpdate(download_url) => {
                             let proxy_dl = proxy_main.clone();
@@ -2349,9 +2409,11 @@ fn main() {
                                     .to_string();
                                 // Show the download immediately (panel + feedback animation).
                                 let _ = proxy_main.send_event(AppEvent::DownloadStarted {
+                                    id: None,
                                     url: url.clone(),
                                     filename: fname,
                                     path: dest_str.clone(),
+                                    total: None,
                                 });
                                 if url.starts_with("data:") {
                                     // Self-contained — decode and write without involving the page.
@@ -2828,6 +2890,7 @@ fn main() {
                 close_chrome_controller(&chrome);
                 shutdown_webview2(
                     crash_sentinel.as_deref(),
+                    &[webview_data_dir.as_path(), incognito_data_dir.as_path()],
                     &mut content_views,
                     &mut content_hwnds,
                     &mut content_web_context,
@@ -3196,36 +3259,33 @@ fn wait_for_previous_instance(sentinel: &std::path::Path, profiles: &[&std::path
             match handle {
                 Ok(h) if !h.is_invalid() => {
                     tracing::debug!("waiting for previous Ventus PID {} to exit", pid);
-                    let result = unsafe { WaitForSingleObject(h, 3000) };
+                    let result = unsafe { WaitForSingleObject(h, 8_000) };
                     unsafe {
                         let _ = CloseHandle(h);
                     }
-                    if result == WAIT_OBJECT_0 {
-                        let _ = wait_for_webview_profiles_released(
-                            profiles,
-                            Duration::from_millis(500),
-                        );
-                    } else {
+                    if result != WAIT_OBJECT_0 {
                         tracing::warn!(
-                            "previous instance (PID {}) did not exit within 3 s; proceeding anyway",
+                            "previous instance (PID {}) did not exit within 8 s; waiting for profile release anyway",
                             pid
                         );
-                        let _ = wait_for_webview_profiles_released(
-                            profiles,
-                            Duration::from_millis(500),
-                        );
                     }
+                    let _ = wait_for_webview_profiles_released(
+                        profiles,
+                        WEBVIEW_PROFILE_RELEASE_TIMEOUT,
+                    );
                     return;
                 }
                 _ => {
                     tracing::debug!("previous Ventus instance already gone");
-                    let _ =
-                        wait_for_webview_profiles_released(profiles, Duration::from_millis(2_500));
+                    let _ = wait_for_webview_profiles_released(
+                        profiles,
+                        WEBVIEW_PROFILE_RELEASE_TIMEOUT,
+                    );
                     return;
                 }
             }
         }
-        let _ = wait_for_webview_profiles_released(profiles, Duration::from_millis(800));
+        let _ = wait_for_webview_profiles_released(profiles, WEBVIEW_PROFILE_RELEASE_TIMEOUT);
     }
     #[cfg(not(windows))]
     {
@@ -3309,11 +3369,6 @@ fn wait_for_webview_profiles_released(
     }
 }
 
-/// Close the chrome WebView's controller so the shared WebView2 browser process can flush
-/// its cookie database and exit cleanly. Chrome now shares the content profile's single
-/// environment, so without this it keeps msedgewebview2.exe alive past content teardown and
-/// `process::exit()` hard-kills it before the final cookie flush — losing the last cookies
-/// set before close. Must run AFTER `save_open_cookies` and BEFORE `shutdown_webview2`.
 #[cfg(windows)]
 fn close_chrome_controller(chrome: &WebView) {
     unsafe {
@@ -3323,37 +3378,44 @@ fn close_chrome_controller(chrome: &WebView) {
 #[cfg(not(windows))]
 fn close_chrome_controller(_chrome: &WebView) {}
 
-/// Explicitly release all WebView2 resources before TAO calls process::exit().
-/// TAO's run() is `-> !` and calls process::exit() which skips Rust Drop, so without this
-/// call the WebView2 browser process outlives Ventus, holds the profile lock, and the next
-/// launch silently falls back to ephemeral temp storage — losing all persistent cookies.
 fn shutdown_webview2(
     crash_sentinel: Option<&std::path::Path>,
+    profile_roots: &[&std::path::Path],
     content_views: &mut HashMap<String, WebView>,
     content_hwnds: &mut HashMap<String, isize>,
     content_web_context: &mut Option<wry::WebContext>,
     incognito_web_context: &mut Option<wry::WebContext>,
 ) {
-    // Remove crash sentinel first — clean shutdown path. New-window instances have no sentinel.
-    if let Some(sentinel) = crash_sentinel {
-        let _ = std::fs::remove_file(sentinel);
-    }
-    // Drain the Win32 message queue so that any pending COM callbacks (e.g. the
-    // GetCookies completion from the final trigger_save call) can execute before
-    // we destroy the WebView2 objects they reference.  300 ms is enough for the
-    // round-trip to msedgewebview2.exe on all tested hardware.
     #[cfg(windows)]
     drain_message_queue_ms(300);
-    // Drop all WebViews (releases ICoreWebView2Controller references).
     content_views.clear();
     content_hwnds.clear();
-    // Drop WebContexts (releases ICoreWebView2Environment references). Once both
-    // reach zero, msedgewebview2.exe flushes its cookie DB and exits.
     drop(content_web_context.take());
     drop(incognito_web_context.take());
-    // Give WebView2 ~800 ms to flush the SQLite cookie database before process::exit().
-    // 300 ms was too tight on slower machines; the cookie DB flush needs more headroom.
-    std::thread::sleep(Duration::from_millis(800));
+    #[cfg(windows)]
+    let free = if crash_sentinel.is_some() {
+        drain_message_queue_ms(300);
+        wait_for_webview_profiles_released(profile_roots, WEBVIEW_PROFILE_RELEASE_TIMEOUT)
+    } else {
+        true
+    };
+    #[cfg(not(windows))]
+    let free = {
+        let _ = profile_roots;
+        std::thread::sleep(Duration::from_millis(800));
+        true
+    };
+    if let Some(sentinel) = crash_sentinel {
+        if free {
+            let _ = std::fs::remove_file(sentinel);
+        } else {
+            tracing::warn!(
+                target: "ventus::shutdown",
+                lock = %sentinel.display(),
+                "WebView2 profile still busy after shutdown wait; keeping running lock for next launch"
+            );
+        }
+    }
 }
 
 #[cfg(windows)]
@@ -3411,16 +3473,161 @@ fn attach_process_failed_handler(
 }
 
 #[cfg(windows)]
-fn attach_permission_handler(wv: &WebView) {
+type Wv2PermKind = webview2_com::Microsoft::Web::WebView2::Win32::COREWEBVIEW2_PERMISSION_KIND;
+
+#[cfg(windows)]
+type Wv2PermState = webview2_com::Microsoft::Web::WebView2::Win32::COREWEBVIEW2_PERMISSION_STATE;
+
+#[cfg(windows)]
+const SITE_PERMISSION_KEYS: [&str; 12] = [
+    "microphone",
+    "camera",
+    "geolocation",
+    "notifications",
+    "sensors",
+    "clipboard",
+    "downloads",
+    "file_system",
+    "autoplay",
+    "local_fonts",
+    "midi",
+    "window_management",
+];
+
+#[cfg(windows)]
+fn site_permission_kind(key: &str) -> Option<Wv2PermKind> {
+    use webview2_com::Microsoft::Web::WebView2::Win32::{
+        COREWEBVIEW2_PERMISSION_KIND_AUTOPLAY, COREWEBVIEW2_PERMISSION_KIND_CAMERA,
+        COREWEBVIEW2_PERMISSION_KIND_CLIPBOARD_READ, COREWEBVIEW2_PERMISSION_KIND_FILE_READ_WRITE,
+        COREWEBVIEW2_PERMISSION_KIND_GEOLOCATION, COREWEBVIEW2_PERMISSION_KIND_LOCAL_FONTS,
+        COREWEBVIEW2_PERMISSION_KIND_MICROPHONE,
+        COREWEBVIEW2_PERMISSION_KIND_MIDI_SYSTEM_EXCLUSIVE_MESSAGES,
+        COREWEBVIEW2_PERMISSION_KIND_MULTIPLE_AUTOMATIC_DOWNLOADS,
+        COREWEBVIEW2_PERMISSION_KIND_NOTIFICATIONS, COREWEBVIEW2_PERMISSION_KIND_OTHER_SENSORS,
+        COREWEBVIEW2_PERMISSION_KIND_WINDOW_MANAGEMENT,
+    };
+    Some(match key {
+        "microphone" => COREWEBVIEW2_PERMISSION_KIND_MICROPHONE,
+        "camera" => COREWEBVIEW2_PERMISSION_KIND_CAMERA,
+        "geolocation" => COREWEBVIEW2_PERMISSION_KIND_GEOLOCATION,
+        "notifications" => COREWEBVIEW2_PERMISSION_KIND_NOTIFICATIONS,
+        "sensors" => COREWEBVIEW2_PERMISSION_KIND_OTHER_SENSORS,
+        "clipboard" => COREWEBVIEW2_PERMISSION_KIND_CLIPBOARD_READ,
+        "downloads" => COREWEBVIEW2_PERMISSION_KIND_MULTIPLE_AUTOMATIC_DOWNLOADS,
+        "file_system" => COREWEBVIEW2_PERMISSION_KIND_FILE_READ_WRITE,
+        "autoplay" => COREWEBVIEW2_PERMISSION_KIND_AUTOPLAY,
+        "local_fonts" => COREWEBVIEW2_PERMISSION_KIND_LOCAL_FONTS,
+        "midi" => COREWEBVIEW2_PERMISSION_KIND_MIDI_SYSTEM_EXCLUSIVE_MESSAGES,
+        "window_management" => COREWEBVIEW2_PERMISSION_KIND_WINDOW_MANAGEMENT,
+        _ => return None,
+    })
+}
+
+#[cfg(windows)]
+fn site_permission_key(kind: Wv2PermKind) -> Option<&'static str> {
+    SITE_PERMISSION_KEYS
+        .iter()
+        .copied()
+        .find(|key| site_permission_kind(key) == Some(kind))
+}
+
+#[cfg(windows)]
+fn site_permission_state(value: &str) -> Wv2PermState {
+    use webview2_com::Microsoft::Web::WebView2::Win32::{
+        COREWEBVIEW2_PERMISSION_STATE_ALLOW, COREWEBVIEW2_PERMISSION_STATE_DEFAULT,
+        COREWEBVIEW2_PERMISSION_STATE_DENY,
+    };
+    match value {
+        "allow" => COREWEBVIEW2_PERMISSION_STATE_ALLOW,
+        "block" => COREWEBVIEW2_PERMISSION_STATE_DENY,
+        _ => COREWEBVIEW2_PERMISSION_STATE_DEFAULT,
+    }
+}
+
+#[cfg(windows)]
+fn normalize_webview_origin(raw: &str) -> Option<String> {
+    let url = url::Url::parse(raw).ok()?;
+    if url.scheme() != "https" && url.scheme() != "http" {
+        return None;
+    }
+    let host = url.host_str()?.to_ascii_lowercase();
+    let port = url.port().map(|p| format!(":{p}")).unwrap_or_default();
+    Some(format!("{}://{}{}", url.scheme(), host, port))
+}
+
+#[cfg(windows)]
+fn site_permission_profile(
+    webview: &webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2,
+) -> Option<webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Profile4> {
+    use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2_13;
+    use wv2core::Interface;
+    let webview13: ICoreWebView2_13 = webview.cast().ok()?;
+    let profile = unsafe { webview13.Profile().ok()? };
+    profile.cast().ok()
+}
+
+#[cfg(windows)]
+fn pcwstr(s: &str) -> (wv2core::PCWSTR, Vec<u16>) {
+    let mut v: Vec<u16> = s.encode_utf16().collect();
+    v.push(0);
+    (wv2core::PCWSTR(v.as_ptr()), v)
+}
+
+#[cfg(windows)]
+fn apply_profile_site_permissions(
+    webview: &webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2,
+    site_permissions: &config::SitePermissionMap,
+) {
+    use webview2_com::SetPermissionStateCompletedHandler;
+    let Some(profile) = site_permission_profile(webview) else {
+        return;
+    };
+    for (origin, perms) in site_permissions {
+        for key in SITE_PERMISSION_KEYS {
+            let Some(kind) = site_permission_kind(key) else {
+                continue;
+            };
+            let Some(value) = perms.get_explicit(key) else {
+                continue;
+            };
+            let state = site_permission_state(value);
+            let (origin_ptr, _origin_buf) = pcwstr(origin);
+            let origin_log = origin.clone();
+            let key_log = key.to_string();
+            let handler = SetPermissionStateCompletedHandler::create(Box::new(move |err| {
+                if let Err(e) = err {
+                    tracing::warn!(
+                        "permission state failed for {} {}: {}",
+                        origin_log,
+                        key_log,
+                        e
+                    );
+                }
+                Ok(())
+            }));
+            unsafe {
+                let _ = profile.SetPermissionState(kind, origin_ptr, state, &handler);
+            }
+        }
+    }
+}
+
+#[cfg(windows)]
+fn attach_permission_handler(
+    wv: &WebView,
+    proxy: tao::event_loop::EventLoopProxy<AppEvent>,
+    strict: bool,
+    site_permissions: config::SitePermissionMap,
+    default_permissions: config::SitePermissions,
+) {
     use webview2_com::{
         Microsoft::Web::WebView2::Win32::{
-            ICoreWebView2, COREWEBVIEW2_PERMISSION_KIND_CAMERA,
-            COREWEBVIEW2_PERMISSION_KIND_CLIPBOARD_READ, COREWEBVIEW2_PERMISSION_KIND_GEOLOCATION,
-            COREWEBVIEW2_PERMISSION_KIND_LOCAL_FONTS, COREWEBVIEW2_PERMISSION_KIND_MICROPHONE,
-            COREWEBVIEW2_PERMISSION_KIND_OTHER_SENSORS, COREWEBVIEW2_PERMISSION_STATE_DENY,
+            ICoreWebView2, ICoreWebView2PermissionRequestedEventArgs3,
+            COREWEBVIEW2_PERMISSION_STATE_ALLOW, COREWEBVIEW2_PERMISSION_STATE_DENY,
         },
         PermissionRequestedEventHandler,
     };
+    use wv2core::{Interface, PWSTR};
 
     let controller = wv.controller();
     let webview: ICoreWebView2 = unsafe {
@@ -3429,21 +3636,43 @@ fn attach_permission_handler(wv: &WebView) {
             Err(_) => return,
         }
     };
+    apply_profile_site_permissions(&webview, &site_permissions);
 
     let handler = PermissionRequestedEventHandler::create(Box::new(move |_sender, args| {
         let Some(args) = args else {
             return Ok(());
         };
         unsafe {
+            if let Ok(args3) = args.cast::<ICoreWebView2PermissionRequestedEventArgs3>() {
+                let _ = args3.SetSavesInProfile(false);
+            }
             let mut kind = Default::default();
             args.PermissionKind(&mut kind)?;
-            if kind == COREWEBVIEW2_PERMISSION_KIND_CAMERA
-                || kind == COREWEBVIEW2_PERMISSION_KIND_MICROPHONE
-                || kind == COREWEBVIEW2_PERMISSION_KIND_GEOLOCATION
-                || kind == COREWEBVIEW2_PERMISSION_KIND_CLIPBOARD_READ
-                || kind == COREWEBVIEW2_PERMISSION_KIND_OTHER_SENSORS
-                || kind == COREWEBVIEW2_PERMISSION_KIND_LOCAL_FONTS
-            {
+            let Some(key) = site_permission_key(kind) else {
+                return Ok(());
+            };
+            let mut ptr = PWSTR::null();
+            args.Uri(&mut ptr)?;
+            let origin = normalize_webview_origin(&take_pwstr(ptr)).unwrap_or_default();
+            if !origin.is_empty() {
+                let _ = proxy.send_event(AppEvent::PermissionRequested {
+                    origin: origin.clone(),
+                    key: key.to_string(),
+                });
+            }
+            let action = site_permissions
+                .get(&origin)
+                .and_then(|p| p.get_explicit(key))
+                .filter(|s| *s == "allow" || *s == "block")
+                .or_else(|| {
+                    default_permissions
+                        .get_explicit(key)
+                        .filter(|s| *s == "allow" || *s == "block")
+                })
+                .unwrap_or(if strict { "block" } else { "ask" });
+            if action == "allow" {
+                args.SetState(COREWEBVIEW2_PERMISSION_STATE_ALLOW)?;
+            } else if action == "block" {
                 args.SetState(COREWEBVIEW2_PERMISSION_STATE_DENY)?;
             }
         }
@@ -3457,6 +3686,222 @@ fn attach_permission_handler(wv: &WebView) {
 }
 
 #[cfg(windows)]
+#[cfg(windows)]
+thread_local! {
+    static DOWNLOAD_OPS: std::cell::RefCell<
+        HashMap<String, webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2DownloadOperation>,
+    > = std::cell::RefCell::new(HashMap::new());
+}
+
+#[cfg(windows)]
+fn control_download(id: &str, action: DownloadCtl) {
+    let op = DOWNLOAD_OPS.with(|m| m.borrow().get(id).cloned());
+    let Some(op) = op else { return };
+    unsafe {
+        let _ = match action {
+            DownloadCtl::Pause => op.Pause(),
+            DownloadCtl::Resume => op.Resume(),
+            DownloadCtl::Cancel => op.Cancel(),
+        };
+    }
+}
+
+#[cfg(windows)]
+fn cancel_all_downloads() {
+    let ops: Vec<_> = DOWNLOAD_OPS.with(|m| m.borrow().values().cloned().collect());
+    for op in ops {
+        unsafe {
+            let _ = op.Cancel();
+        }
+    }
+    DOWNLOAD_OPS.with(|m| m.borrow_mut().clear());
+}
+
+#[cfg(windows)]
+fn attach_download_handler(
+    wv: &WebView,
+    proxy: tao::event_loop::EventLoopProxy<AppEvent>,
+    dl_dir: std::sync::Arc<std::sync::Mutex<DownloadPrefs>>,
+) {
+    use webview2_com::Microsoft::Web::WebView2::Win32::{
+        ICoreWebView2, ICoreWebView2_4, COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON,
+        COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON_USER_CANCELED,
+        COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON_USER_PAUSED, COREWEBVIEW2_DOWNLOAD_STATE,
+        COREWEBVIEW2_DOWNLOAD_STATE_COMPLETED, COREWEBVIEW2_DOWNLOAD_STATE_IN_PROGRESS,
+    };
+    use webview2_com::{
+        BytesReceivedChangedEventHandler, DownloadStartingEventHandler, StateChangedEventHandler,
+    };
+    use wv2core::{Interface, PWSTR};
+    use wv2win::Win32::Foundation::BOOL;
+
+    let controller = wv.controller();
+    let webview: ICoreWebView2 = unsafe {
+        match controller.CoreWebView2() {
+            Ok(w) => w,
+            Err(_) => return,
+        }
+    };
+    let webview4: ICoreWebView2_4 = match webview.cast() {
+        Ok(w) => w,
+        Err(_) => return,
+    };
+
+    let handler = DownloadStartingEventHandler::create(Box::new(move |_sender, args| {
+        let Some(args) = args else {
+            return Ok(());
+        };
+        unsafe {
+            let op = args.DownloadOperation()?;
+
+            let mut uri = PWSTR::null();
+            op.Uri(&mut uri)?;
+            let url = take_pwstr(uri);
+
+            let mut rp = PWSTR::null();
+            args.ResultFilePath(&mut rp)?;
+            let default_name = std::path::Path::new(&take_pwstr(rp))
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("download")
+                .to_string();
+
+            let prefs = dl_dir.lock().unwrap_or_else(|e| e.into_inner()).clone();
+            let target = if prefs.ask {
+                let mut dlg = rfd::FileDialog::new()
+                    .set_title("Save file")
+                    .set_file_name(&default_name);
+                if prefs.dir.exists() {
+                    dlg = dlg.set_directory(&prefs.dir);
+                }
+                match dlg.save_file() {
+                    Some(p) => p,
+                    None => {
+                        args.SetCancel(BOOL::from(true))?;
+                        return Ok(());
+                    }
+                }
+            } else {
+                unique_download_path(&prefs.dir, &default_name)
+            };
+            if let Some(parent) = target.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            let (path_pcwstr, _buf) = pcwstr(&target.to_string_lossy());
+            args.SetResultFilePath(path_pcwstr)?;
+            args.SetHandled(BOOL::from(true))?;
+
+            let id = uuid::Uuid::new_v4().to_string();
+            let filename = target
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or(&default_name)
+                .to_string();
+            let path_str = target.to_string_lossy().to_string();
+            let total = read_download_total(&op);
+
+            let proxy_p = proxy.clone();
+            let id_p = id.clone();
+            let last_emit =
+                std::cell::Cell::new(std::time::Instant::now() - std::time::Duration::from_secs(1));
+            let bytes_handler = BytesReceivedChangedEventHandler::create(Box::new(move |op, _| {
+                let Some(op) = op else {
+                    return Ok(());
+                };
+                let now = std::time::Instant::now();
+                if now.duration_since(last_emit.get()) < std::time::Duration::from_millis(150) {
+                    return Ok(());
+                }
+                last_emit.set(now);
+                let mut recv = 0i64;
+                op.BytesReceived(&mut recv)?;
+                let _ = proxy_p.send_event(AppEvent::DownloadProgress {
+                    id: id_p.clone(),
+                    received: recv.max(0) as u64,
+                    total: read_download_total(&op),
+                });
+                Ok(())
+            }));
+            let mut bt = Default::default();
+            op.add_BytesReceivedChanged(&bytes_handler, &mut bt)?;
+
+            let proxy_s = proxy.clone();
+            let id_s = id.clone();
+            let state_handler = StateChangedEventHandler::create(Box::new(move |op, _| {
+                let Some(op) = op else {
+                    return Ok(());
+                };
+                let mut st = COREWEBVIEW2_DOWNLOAD_STATE::default();
+                op.State(&mut st)?;
+                if st == COREWEBVIEW2_DOWNLOAD_STATE_IN_PROGRESS {
+                    let mut recv = 0i64;
+                    op.BytesReceived(&mut recv)?;
+                    let _ = proxy_s.send_event(AppEvent::DownloadProgress {
+                        id: id_s.clone(),
+                        received: recv.max(0) as u64,
+                        total: read_download_total(&op),
+                    });
+                    return Ok(());
+                }
+                if st == COREWEBVIEW2_DOWNLOAD_STATE_COMPLETED {
+                    DOWNLOAD_OPS.with(|m| m.borrow_mut().remove(&id_s));
+                    let _ = proxy_s.send_event(AppEvent::DownloadDone {
+                        id: id_s.clone(),
+                        success: true,
+                        canceled: false,
+                    });
+                    return Ok(());
+                }
+                let mut reason = COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON::default();
+                let _ = op.InterruptReason(&mut reason);
+                if reason == COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON_USER_PAUSED {
+                    let _ = proxy_s.send_event(AppEvent::DownloadPaused { id: id_s.clone() });
+                    return Ok(());
+                }
+                let canceled = reason == COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON_USER_CANCELED;
+                DOWNLOAD_OPS.with(|m| m.borrow_mut().remove(&id_s));
+                let _ = proxy_s.send_event(AppEvent::DownloadDone {
+                    id: id_s.clone(),
+                    success: false,
+                    canceled,
+                });
+                Ok(())
+            }));
+            let mut st_tok = Default::default();
+            op.add_StateChanged(&state_handler, &mut st_tok)?;
+
+            DOWNLOAD_OPS.with(|m| m.borrow_mut().insert(id.clone(), op.clone()));
+            let _ = proxy.send_event(AppEvent::DownloadStarted {
+                id: Some(id),
+                url,
+                filename,
+                path: path_str,
+                total,
+            });
+        }
+        Ok(())
+    }));
+    let mut token = Default::default();
+    unsafe {
+        let _ = webview4.add_DownloadStarting(&handler, &mut token);
+    }
+}
+
+#[cfg(windows)]
+fn read_download_total(
+    op: &webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2DownloadOperation,
+) -> Option<u64> {
+    let mut total = 0i64;
+    unsafe {
+        let _ = op.TotalBytesToReceive(&mut total);
+    }
+    if total > 0 {
+        Some(total as u64)
+    } else {
+        None
+    }
+}
+
 fn attach_navigation_handler(
     wv: &WebView,
     proxy: tao::event_loop::EventLoopProxy<AppEvent>,
@@ -3791,6 +4236,7 @@ fn build_popup_content_webview(
         .with_bounds(rect)
         .with_background_color((6, 7, 9, 255))
         .with_incognito(incognito)
+        .with_user_agent(&browser_user_agent())
         .with_browser_accelerator_keys(false)
         .with_additional_browser_args(browser_args.to_string());
     let wv = builder.with_web_context(web_context).build().ok()?;
@@ -4057,6 +4503,8 @@ fn build_content_webview(
     ad_block_script: String,
     fingerprint: bool,
     strict: bool,
+    site_permissions: config::SitePermissionMap,
+    default_permissions: config::SitePermissions,
     https_only: bool,
     load_now: bool,
 ) -> anyhow::Result<WebView> {
@@ -4078,6 +4526,8 @@ fn build_content_webview(
             ad_block_script.clone(),
             fingerprint,
             strict,
+            site_permissions.clone(),
+            default_permissions.clone(),
             https_only,
             load_now,
         );
@@ -4100,10 +4550,12 @@ fn build_content_webview(
 /// True when a WebView2 build error is the transient "user-data profile is locked / in use"
 /// failure (ERROR_BUSY, 0x800700AA) that a short retry can clear.
 fn is_profile_busy_error(err: &anyhow::Error) -> bool {
-    let msg = err.to_string().to_lowercase();
-    msg.contains("0x800700aa")
-        || msg.contains("requested resource is in use")
-        || msg.contains("class not registered")
+    is_busy_message(&err.to_string())
+}
+
+fn is_busy_message(msg: &str) -> bool {
+    let m = msg.to_lowercase();
+    m.contains("0x800700aa") || m.contains("requested resource is in use")
 }
 
 fn build_content_webview_once(
@@ -4120,6 +4572,8 @@ fn build_content_webview_once(
     ad_block_script: String,
     fingerprint: bool,
     strict: bool,
+    site_permissions: config::SitePermissionMap,
+    default_permissions: config::SitePermissions,
     https_only: bool,
     load_now: bool,
 ) -> anyhow::Result<WebView> {
@@ -4127,22 +4581,24 @@ fn build_content_webview_once(
     let proxy_ipc = proxy.clone();
     #[cfg(not(windows))]
     let proxy_load = proxy.clone();
-    let proxy_dl_start = proxy.clone();
-    let proxy_dl_complete = proxy.clone();
     let tab_id_ipc = tab_id.to_string();
     #[cfg(not(windows))]
     let tab_id_str = tab_id.to_string();
-    let dl_dir_arc = std::sync::Arc::clone(&download_dir);
+    #[cfg(not(windows))]
+    let _ = &download_dir;
 
     let builder = WebViewBuilder::new_as_child(window)
         .with_bounds(rect)
         .with_background_color((6, 7, 9, 255))
         .with_incognito(incognito)
+        .with_user_agent(&browser_user_agent())
         .with_initialization_script(&content_initialization_script(
             global_zoom,
             &ad_block_script,
             fingerprint,
             strict,
+            &site_permissions,
+            &default_permissions,
         ));
     #[cfg(windows)]
     let builder = builder
@@ -4478,54 +4934,7 @@ fn build_content_webview_once(
                     });
                 }
             }
-        })
-        .with_download_started_handler(move |url: String, path: &mut std::path::PathBuf| {
-            let filename = path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("download")
-                .to_string();
-            let prefs = dl_dir_arc.lock().unwrap_or_else(|e| e.into_inner()).clone();
-            let target_path = if prefs.ask {
-                let mut dlg = rfd::FileDialog::new()
-                    .set_title("Save file")
-                    .set_file_name(&filename);
-                if prefs.dir.exists() {
-                    dlg = dlg.set_directory(&prefs.dir);
-                }
-                match dlg.save_file() {
-                    Some(path) => path,
-                    None => return false,
-                }
-            } else {
-                unique_download_path(&prefs.dir, &filename)
-            };
-            if let Some(parent) = target_path.parent() {
-                let _ = std::fs::create_dir_all(parent);
-            }
-            *path = target_path.clone();
-            let path_str = target_path.to_string_lossy().to_string();
-            let filename = target_path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or(filename.as_str())
-                .to_string();
-            let _ = proxy_dl_start.send_event(AppEvent::DownloadStarted {
-                url,
-                filename,
-                path: path_str,
-            });
-            true
-        })
-        .with_download_completed_handler(
-            move |url: String, path: Option<std::path::PathBuf>, success: bool| {
-                let _ = proxy_dl_complete.send_event(AppEvent::DownloadCompleted {
-                    url,
-                    path: path.map(|p| p.to_string_lossy().to_string()),
-                    success,
-                });
-            },
-        );
+        });
 
     let wv = if is_neura {
         builder
@@ -4551,9 +4960,14 @@ fn build_content_webview_once(
         attach_process_failed_handler(&wv, proxy.clone(), tab_id.to_string());
         attach_navigation_handler(&wv, proxy.clone(), tab_id.to_string());
         attach_new_window_handler(&wv, proxy.clone(), incognito);
-        if strict {
-            attach_permission_handler(&wv);
-        }
+        attach_permission_handler(
+            &wv,
+            proxy.clone(),
+            strict,
+            site_permissions.clone(),
+            default_permissions.clone(),
+        );
+        attach_download_handler(&wv, proxy.clone(), std::sync::Arc::clone(&download_dir));
     }
 
     tracing::info!(target: "ventus::nav", tab = %tab_id, url = %url, load_now, incognito, "content WebView built");
@@ -4637,6 +5051,48 @@ fn webview_args(settings: &config::AppSettings) -> String {
         args.push(format!("--enable-features={}", enable_features.join(",")));
     }
     args.join(" ")
+}
+
+fn browser_user_agent() -> String {
+    let (_, reduced, _) = chromium_versions();
+    format!(
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{reduced} Safari/537.36 Ventus/{reduced}"
+    )
+}
+
+fn chromium_versions() -> (String, String, String) {
+    let raw = wry::webview_version().ok().unwrap_or_default();
+    chromium_versions_from_raw(&raw).unwrap_or_else(|| {
+        let full = "0.0.0.0".to_string();
+        (full.clone(), full, "0".to_string())
+    })
+}
+
+fn chromium_versions_from_raw(raw: &str) -> Option<(String, String, String)> {
+    let tokens = raw
+        .trim()
+        .split(|c: char| !(c.is_ascii_digit() || c == '.'))
+        .map(|p| p.trim_matches('.'))
+        .filter(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit() || c == '.'))
+        .collect::<Vec<_>>();
+    let version = tokens
+        .iter()
+        .find(|p| p.contains('.'))
+        .or_else(|| tokens.first())?;
+    let parts = version
+        .split('.')
+        .filter(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()))
+        .take(4)
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+    let Some(major) = parts.first().cloned() else {
+        return None;
+    };
+    let mut full = parts;
+    while full.len() < 4 {
+        full.push("0".to_string());
+    }
+    Some((full.join("."), format!("{major}.0.0.0"), major))
 }
 
 fn doh_feature_arg(url: &str, mode: &config::SecureDnsMode) -> String {
@@ -4837,13 +5293,17 @@ fn content_initialization_script(
     ad_block_script: &str,
     fingerprint: bool,
     strict: bool,
+    site_permissions: &config::SitePermissionMap,
+    default_permissions: &config::SitePermissions,
 ) -> String {
     let ad_prefix = if ad_block_script.is_empty() {
         String::new()
     } else {
         format!("{}\n", ad_block_script)
     };
-    let privacy_prefix = privacy_initialization_script(fingerprint, strict);
+    let identity_prefix = browser_identity_script();
+    let privacy_prefix =
+        privacy_initialization_script(fingerprint, strict, site_permissions, default_permissions);
     let script = r#"
 (() => {
   let isTop = false;
@@ -5503,10 +5963,64 @@ fn content_initialization_script(
   const iv = setInterval(() => { n++; ask(); if (n > 25) clearInterval(iv); }, 600);
 })();
 "#;
-    format!("{ad_prefix}{privacy_prefix}{script}")
+    format!("{identity_prefix}{ad_prefix}{privacy_prefix}{script}")
 }
 
-fn privacy_initialization_script(fingerprint: bool, strict: bool) -> String {
+fn browser_identity_script() -> String {
+    let (full, _, major) = chromium_versions();
+    let full = serde_json::to_string(&full).unwrap_or_else(|_| "\"0.0.0.0\"".to_string());
+    let major = serde_json::to_string(&major).unwrap_or_else(|_| "\"0\"".to_string());
+    format!(
+        r#"
+(() => {{
+  if (window.__ventusIdentity) return;
+  window.__ventusIdentity = true;
+  const major = {major};
+  const fullVersion = {full};
+  const low = () => [
+    {{brand:'Ventus', version:major}},
+    {{brand:'Chromium', version:major}},
+    {{brand:'Not:A-Brand', version:'24'}}
+  ];
+  const high = () => [
+    {{brand:'Ventus', version:fullVersion}},
+    {{brand:'Chromium', version:fullVersion}},
+    {{brand:'Not:A-Brand', version:'24.0.0.0'}}
+  ];
+  const data = {{}};
+  try {{
+    Object.defineProperties(data, {{
+      brands: {{get: low}},
+      mobile: {{get: () => false}},
+      platform: {{get: () => 'Windows'}},
+      getHighEntropyValues: {{value: async hints => {{
+        const out = {{brands: low(), mobile: false, platform: 'Windows'}};
+        for (const hint of hints || []) {{
+          if (hint === 'architecture') out.architecture = 'x86';
+          if (hint === 'bitness') out.bitness = '64';
+          if (hint === 'fullVersionList') out.fullVersionList = high();
+          if (hint === 'model') out.model = '';
+          if (hint === 'platformVersion') out.platformVersion = '10.0.0';
+          if (hint === 'uaFullVersion') out.uaFullVersion = fullVersion;
+          if (hint === 'wow64') out.wow64 = false;
+        }}
+        return out;
+      }}}},
+      toJSON: {{value: () => ({{brands: low(), mobile: false, platform: 'Windows'}})}}
+    }});
+    Object.defineProperty(Navigator.prototype, 'userAgentData', {{get: () => data, configurable: true}});
+  }} catch (_) {{}}
+}})();
+"#
+    )
+}
+
+fn privacy_initialization_script(
+    fingerprint: bool,
+    strict: bool,
+    site_permissions: &config::SitePermissionMap,
+    default_permissions: &config::SitePermissions,
+) -> String {
     let fingerprint_script = if fingerprint {
         r#"
 (() => {
@@ -5582,14 +6096,28 @@ fn privacy_initialization_script(fingerprint: bool, strict: bool) -> String {
     } else {
         ""
     };
-    let strict_script = if strict {
+    let site_permissions_json =
+        serde_json::to_string(site_permissions).unwrap_or_else(|_| "{}".to_string());
+    let default_permissions_json =
+        serde_json::to_string(default_permissions).unwrap_or_else(|_| "{}".to_string());
+    let has_default = default_permissions_json != "{}";
+    let strict_script = if strict || !site_permissions.is_empty() || has_default {
         r#"
 (() => {
   if (window.__neuraPrivacyPerms) return;
   window.__neuraPrivacyPerms = true;
+  const sitePermissions = __SITE_PERMISSIONS__;
+  const defaultPermissions = __DEFAULT_PERMISSIONS__;
+  const strictDefault = __STRICT__;
+  const rules = (() => {
+    try { return sitePermissions[location.origin] || {}; } catch (_) { return {}; }
+  })();
+  const decisive = v => (v === 'allow' || v === 'block') ? v : null;
+  const action = key => decisive(rules[key]) || decisive(defaultPermissions[key]) || (strictDefault ? 'block' : 'ask');
+  const isBlocked = key => action(key) === 'block';
   const blocked = () => Promise.reject(new DOMException('Blocked by Ventus strict permissions', 'NotAllowedError'));
   try {
-    if (navigator.geolocation) {
+    if (navigator.geolocation && isBlocked('geolocation')) {
       navigator.geolocation.getCurrentPosition = function(_, err) {
         if (typeof err === 'function') setTimeout(() => err({code:1, message:'Blocked by Ventus strict permissions'}), 0);
       };
@@ -5602,22 +6130,55 @@ fn privacy_initialization_script(fingerprint: bool, strict: bool) -> String {
   } catch (_) {}
   try {
     if (navigator.mediaDevices) {
-      navigator.mediaDevices.getUserMedia = blocked;
-      navigator.mediaDevices.enumerateDevices = () => Promise.resolve([]);
+      const gum = navigator.mediaDevices.getUserMedia && navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+      if (gum) {
+        navigator.mediaDevices.getUserMedia = function(constraints) {
+          const wantsAudio = constraints === true || !!(constraints && constraints.audio);
+          const wantsVideo = constraints === true || !!(constraints && constraints.video);
+          if ((wantsAudio && isBlocked('microphone')) || (wantsVideo && isBlocked('camera'))) return blocked();
+          return gum(constraints);
+        };
+      }
+      if (isBlocked('microphone') && isBlocked('camera')) navigator.mediaDevices.enumerateDevices = () => Promise.resolve([]);
     }
   } catch (_) {}
   try {
-    if (navigator.clipboard) {
+    if (navigator.clipboard && isBlocked('clipboard')) {
       navigator.clipboard.read = blocked;
       navigator.clipboard.readText = blocked;
       navigator.clipboard.write = blocked;
       navigator.clipboard.writeText = blocked;
     }
   } catch (_) {}
+  try {
+    if (window.queryLocalFonts && isBlocked('local_fonts')) window.queryLocalFonts = blocked;
+  } catch (_) {}
+  try {
+    if (navigator.requestMIDIAccess && isBlocked('midi')) navigator.requestMIDIAccess = blocked;
+  } catch (_) {}
+  try {
+    if (window.getScreenDetails && isBlocked('window_management')) window.getScreenDetails = blocked;
+  } catch (_) {}
+  try {
+    if (window.showOpenFilePicker && isBlocked('file_system')) window.showOpenFilePicker = blocked;
+    if (window.showSaveFilePicker && isBlocked('file_system')) window.showSaveFilePicker = blocked;
+    if (window.showDirectoryPicker && isBlocked('file_system')) window.showDirectoryPicker = blocked;
+  } catch (_) {}
+  try {
+    if (window.Notification && Notification.requestPermission && isBlocked('notifications')) {
+      Notification.requestPermission = function(cb) {
+        if (typeof cb === 'function') setTimeout(() => cb('denied'), 0);
+        return Promise.resolve('denied');
+      };
+    }
+  } catch (_) {}
 })();
 "#
+        .replace("__SITE_PERMISSIONS__", &site_permissions_json)
+        .replace("__DEFAULT_PERMISSIONS__", &default_permissions_json)
+        .replace("__STRICT__", if strict { "true" } else { "false" })
     } else {
-        ""
+        String::new()
     };
     format!("{fingerprint_script}{strict_script}")
 }
@@ -7691,6 +8252,7 @@ fn spawn_auth_window(
         .with_bounds(rect)
         .with_background_color((13, 15, 19, 255))
         .with_url(&format!("http://localhost:{}/", port))
+        .with_user_agent(&browser_user_agent())
         .with_browser_accelerator_keys(false)
         .with_additional_browser_args(browser_args.to_string())
         .with_web_context(web_context)
@@ -8436,6 +8998,27 @@ mod webview_arg_tests {
         let settings = config::AppSettings::default();
         let args = webview_args(&settings);
         assert!(!args.contains("dns-over-https"));
+    }
+
+    #[test]
+    fn chromium_versions_parse_runtime_strings() {
+        assert_eq!(
+            chromium_versions_from_raw("149.0.3065.92").unwrap(),
+            (
+                "149.0.3065.92".to_string(),
+                "149.0.0.0".to_string(),
+                "149".to_string()
+            )
+        );
+        assert_eq!(
+            chromium_versions_from_raw("WebView2 Runtime 150.1").unwrap(),
+            (
+                "150.1.0.0".to_string(),
+                "150.0.0.0".to_string(),
+                "150".to_string()
+            )
+        );
+        assert!(chromium_versions_from_raw("runtime unavailable").is_none());
     }
 
     #[test]

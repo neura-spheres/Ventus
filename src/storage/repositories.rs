@@ -373,6 +373,7 @@ pub struct Bookmark {
     pub folder_id: Option<String>,
     pub position: i32,
     pub created_at: i64,
+    pub icon_only: bool,
 }
 
 pub fn add_bookmark(
@@ -402,7 +403,24 @@ pub fn add_bookmark(
         folder_id: folder_id.map(String::from),
         position,
         created_at: now,
+        icon_only: false,
     })
+}
+
+pub fn rename_bookmark(conn: &Connection, id: &str, title: &str) -> Result<()> {
+    conn.execute(
+        "UPDATE bookmarks SET title = ?1 WHERE id = ?2",
+        params![title, id],
+    )?;
+    Ok(())
+}
+
+pub fn set_bookmark_icon_only(conn: &Connection, id: &str, icon_only: bool) -> Result<()> {
+    conn.execute(
+        "UPDATE bookmarks SET icon_only = ?1 WHERE id = ?2",
+        params![icon_only, id],
+    )?;
+    Ok(())
 }
 
 pub fn remove_bookmark_by_url(conn: &Connection, url: &str) -> Result<()> {
@@ -442,7 +460,7 @@ pub fn is_bookmarked(conn: &Connection, url: &str) -> Result<bool> {
 
 pub fn list_bookmarks(conn: &Connection) -> Result<Vec<Bookmark>> {
     let mut stmt = conn.prepare(
-        "SELECT id, url, title, folder_id, position, created_at FROM bookmarks ORDER BY position ASC, created_at DESC",
+        "SELECT id, url, title, folder_id, position, created_at, icon_only FROM bookmarks ORDER BY position ASC, created_at DESC",
     )?;
     let rows = stmt.query_map([], |row| {
         Ok(Bookmark {
@@ -452,6 +470,7 @@ pub fn list_bookmarks(conn: &Connection) -> Result<Vec<Bookmark>> {
             folder_id: row.get(3)?,
             position: row.get(4)?,
             created_at: row.get(5)?,
+            icon_only: row.get(6)?,
         })
     })?;
     Ok(rows.collect::<rusqlite::Result<_>>()?)
@@ -460,7 +479,7 @@ pub fn list_bookmarks(conn: &Connection) -> Result<Vec<Bookmark>> {
 pub fn search_bookmarks(conn: &Connection, q: &str) -> Result<Vec<Bookmark>> {
     let pattern = format!("%{}%", q);
     let mut stmt = conn.prepare(
-        "SELECT id, url, title, folder_id, position, created_at FROM bookmarks WHERE title LIKE ?1 OR url LIKE ?1 ORDER BY position ASC, created_at DESC LIMIT 50"
+        "SELECT id, url, title, folder_id, position, created_at, icon_only FROM bookmarks WHERE title LIKE ?1 OR url LIKE ?1 ORDER BY position ASC, created_at DESC LIMIT 50"
     )?;
     let rows = stmt.query_map([&pattern], |row| {
         Ok(Bookmark {
@@ -470,6 +489,7 @@ pub fn search_bookmarks(conn: &Connection, q: &str) -> Result<Vec<Bookmark>> {
             folder_id: row.get(3)?,
             position: row.get(4)?,
             created_at: row.get(5)?,
+            icon_only: row.get(6)?,
         })
     })?;
     Ok(rows.collect::<rusqlite::Result<_>>()?)
@@ -498,7 +518,13 @@ pub fn add_bookmark_folder(conn: &Connection, name: &str) -> Result<BookmarkFold
         "INSERT INTO bookmark_folders(id, name, parent_id, position, created_at) VALUES(?1,?2,NULL,?3,?4)",
         params![id, name, position, now],
     )?;
-    Ok(BookmarkFolder { id, name: name.to_string(), parent_id: None, position, created_at: now })
+    Ok(BookmarkFolder {
+        id,
+        name: name.to_string(),
+        parent_id: None,
+        position,
+        created_at: now,
+    })
 }
 
 pub fn list_bookmark_folders(conn: &Connection) -> Result<Vec<BookmarkFolder>> {
@@ -517,7 +543,11 @@ pub fn list_bookmark_folders(conn: &Connection) -> Result<Vec<BookmarkFolder>> {
     Ok(rows.collect::<rusqlite::Result<_>>()?)
 }
 
-pub fn set_bookmark_folder(conn: &Connection, bookmark_id: &str, folder_id: Option<&str>) -> Result<()> {
+pub fn set_bookmark_folder(
+    conn: &Connection,
+    bookmark_id: &str,
+    folder_id: Option<&str>,
+) -> Result<()> {
     conn.execute(
         "UPDATE bookmarks SET folder_id = ?1 WHERE id = ?2",
         params![folder_id, bookmark_id],
@@ -526,7 +556,10 @@ pub fn set_bookmark_folder(conn: &Connection, bookmark_id: &str, folder_id: Opti
 }
 
 pub fn delete_bookmark_folder(conn: &Connection, id: &str) -> Result<()> {
-    conn.execute("UPDATE bookmarks SET folder_id = NULL WHERE folder_id = ?1", [id])?;
+    conn.execute(
+        "UPDATE bookmarks SET folder_id = NULL WHERE folder_id = ?1",
+        [id],
+    )?;
     conn.execute("DELETE FROM bookmark_folders WHERE id = ?1", [id])?;
     Ok(())
 }
@@ -660,6 +693,7 @@ fn download_status_to_str(status: &DownloadStatus) -> &'static str {
     match status {
         DownloadStatus::Pending => "pending",
         DownloadStatus::Downloading => "downloading",
+        DownloadStatus::Paused => "paused",
         DownloadStatus::Complete => "complete",
         DownloadStatus::Failed => "failed",
         DownloadStatus::Cancelled => "cancelled",
@@ -669,6 +703,7 @@ fn download_status_to_str(status: &DownloadStatus) -> &'static str {
 fn download_status_from_str(status: &str) -> DownloadStatus {
     match status {
         "downloading" => DownloadStatus::Downloading,
+        "paused" => DownloadStatus::Paused,
         "complete" => DownloadStatus::Complete,
         "failed" => DownloadStatus::Failed,
         "cancelled" => DownloadStatus::Cancelled,
@@ -744,7 +779,7 @@ pub fn clear_downloads(conn: &Connection) -> Result<()> {
 pub fn fail_stale_downloads(conn: &Connection) -> Result<()> {
     let now = chrono::Utc::now().timestamp_millis();
     conn.execute(
-        "UPDATE downloads SET status = 'failed', completed_at = ?1 WHERE status IN ('downloading','pending')",
+        "UPDATE downloads SET status = 'failed', completed_at = ?1 WHERE status IN ('downloading','pending','paused')",
         params![now],
     )?;
     Ok(())

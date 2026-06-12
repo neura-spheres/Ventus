@@ -12,7 +12,8 @@ pub struct GoogleResult {
 }
 
 pub fn parse_result(body: &str) -> Result<GoogleResult, String> {
-    let v: Value = serde_json::from_str(body).map_err(|_| "Invalid sign-in response".to_string())?;
+    let v: Value =
+        serde_json::from_str(body).map_err(|_| "Invalid sign-in response".to_string())?;
     if let Some(err) = v.get("error").and_then(|e| e.as_str()) {
         if !err.trim().is_empty() {
             return Err(err.to_string());

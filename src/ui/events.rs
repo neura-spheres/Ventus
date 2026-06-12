@@ -94,6 +94,14 @@ pub enum ChromeCommand {
     BookmarkRemoveById {
         id: String,
     },
+    BookmarkRename {
+        id: String,
+        title: String,
+    },
+    BookmarkSetIconOnly {
+        id: String,
+        icon_only: bool,
+    },
     BookmarkCreateFolder {
         bookmark_id_a: String,
         bookmark_id_b: String,
@@ -112,12 +120,22 @@ pub enum ChromeCommand {
     BookmarkFolderDelete {
         folder_id: String,
     },
+    BookmarkNewFolder,
     OpenSettings,
     CloseSettings,
     BrowseDownloadFolder,
     SaveSettings {
         key: String,
         value: serde_json::Value,
+    },
+    SetSitePermission {
+        origin: String,
+        permission: String,
+        value: String,
+    },
+    SetDefaultPermission {
+        permission: String,
+        value: String,
     },
     ReopenTab,
     WindowDragStart,
@@ -212,6 +230,15 @@ pub enum ChromeCommand {
     PeekSidebar,
     ClearDownloads,
     DeleteDownload {
+        id: String,
+    },
+    PauseDownload {
+        id: String,
+    },
+    ResumeDownload {
+        id: String,
+    },
+    CancelDownload {
         id: String,
     },
     OpenInNewTab {
@@ -370,6 +397,12 @@ pub enum AppEvent {
         tab_id: String,
         text: String,
     },
+    /// A content WebView's site requested a browser permission (camera, mic, etc.).
+    /// Recorded per-origin so the site-info popover can show only what was actually asked for.
+    PermissionRequested {
+        origin: String,
+        key: String,
+    },
     PwdFillRequest {
         tab_id: String,
         origin: String,
@@ -388,9 +421,29 @@ pub enum AppEvent {
         message: String,
     },
     DownloadStarted {
+        id: Option<String>,
         url: String,
         filename: String,
         path: String,
+        total: Option<u64>,
+    },
+    /// Live byte-count update for a native WebView2 download, keyed by the id handed
+    /// out in `DownloadStarted`. `total` may still be unknown early in the transfer.
+    DownloadProgress {
+        id: String,
+        received: u64,
+        total: Option<u64>,
+    },
+    /// A native download was paused by the user (WebView2 reports USER_PAUSED).
+    DownloadPaused {
+        id: String,
+    },
+    /// A native download reached a terminal state. `canceled` distinguishes a user
+    /// cancel from a real failure.
+    DownloadDone {
+        id: String,
+        success: bool,
+        canceled: bool,
     },
     DownloadCompleted {
         url: String,
