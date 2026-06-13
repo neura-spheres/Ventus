@@ -361,12 +361,15 @@ button,input,select,textarea{font-family:var(--font)}
   width:32px;height:32px;border-radius:var(--radius-sm);
   border:none;background:transparent;color:var(--text-muted);
   cursor:pointer;transition:background var(--transition),color var(--transition);
-  flex-shrink:0;
+  flex-shrink:0;position:relative;
 }
 .tb-btn:hover{background:var(--bg-hover);color:var(--text)}
 .tb-btn:active{background:var(--bg-active)}
 .tb-btn:disabled{opacity:0.3;cursor:default;pointer-events:none}
 .tb-btn.active{color:var(--accent);background:var(--accent-dim)}
+#toolbar-custom-actions{display:flex;align-items:center;gap:4px}
+.tb-btn.toolbar-hidden{display:none}
+#toolbar-custom-actions .tb-btn.has-attention::after{content:"";position:absolute;right:7px;top:7px;width:6px;height:6px;border-radius:50%;background:var(--accent)}
 
 #url-group{
   display:flex;
@@ -520,8 +523,6 @@ button,input,select,textarea{font-family:var(--font)}
 #site-info-popover.open{display:flex}
 .site-pop-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 12px 10px;border-bottom:1px solid var(--border-subtle)}
 .site-pop-title{font-size:13px;font-weight:650;line-height:1.2;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.site-pop-close{width:24px;height:24px;border-radius:6px;border:none;background:transparent;color:var(--text-muted);display:flex;align-items:center;justify-content:center;cursor:pointer}
-.site-pop-close:hover{background:var(--bg-hover);color:var(--text)}
 .site-pop-section{display:flex;flex-direction:column;padding:6px 0}
 .site-pop-row{display:grid;grid-template-columns:22px minmax(0,1fr) auto;align-items:center;gap:10px;padding:8px 12px;min-height:38px}
 .site-pop-icon{width:22px;height:22px;border-radius:999px;display:flex;align-items:center;justify-content:center;color:var(--text-muted)}
@@ -722,7 +723,7 @@ button,input,select,textarea{font-family:var(--font)}
   #btn-forward{display:none}
 }
 @media (max-width: 600px) {
-  #btn-ai{display:none}
+  #toolbar-custom-actions{display:none}
   .tb-btn{width:28px}
 }
 @media (max-width: 500px) {
@@ -1566,6 +1567,39 @@ button,input,select,textarea{font-family:var(--font)}
   box-shadow:0 1px 4px rgba(0,0,0,0.3);
 }
 .toggle-switch.on::after{transform:translateX(18px)}
+.toolbar-pick-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 8px}
+.toolbar-pick-count{font-size:11px;color:var(--text-muted);font-weight:500}
+.toolbar-pick-panel{display:flex;flex-direction:column;gap:10px}
+.toolbar-order-list{display:flex;flex-direction:column;gap:6px}
+.toolbar-order-item{
+  display:grid;grid-template-columns:24px minmax(0,1fr) auto;align-items:center;gap:8px;
+  min-height:40px;padding:7px 8px;border-radius:8px;
+  border:1px solid var(--modal-border);background:var(--modal-bg-2);
+  color:var(--text);transition:border-color var(--transition),background var(--transition),box-shadow var(--transition),opacity var(--transition);
+}
+.toolbar-order-item.dragging{opacity:.5}
+.toolbar-order-item.drop-before{box-shadow:inset 0 2px 0 var(--accent)}
+.toolbar-order-item.drop-after{box-shadow:inset 0 -2px 0 var(--accent)}
+.toolbar-drag-handle{display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:6px;color:var(--text-dim);cursor:grab}
+.toolbar-drag-handle:active{cursor:grabbing}
+.toolbar-order-name{display:flex;align-items:center;gap:9px;min-width:0;font-size:12px;font-weight:600;line-height:1.2}
+.toolbar-order-name svg,.toolbar-add-btn svg{width:15px;height:15px;flex-shrink:0}
+.toolbar-order-actions{display:flex;align-items:center;gap:2px}
+.toolbar-order-btn{width:24px;height:24px;border:0;border-radius:6px;background:transparent;color:var(--text-muted);display:flex;align-items:center;justify-content:center;cursor:pointer}
+.toolbar-order-btn:hover{background:var(--bg-hover);color:var(--text)}
+.toolbar-order-btn:disabled{opacity:.35;cursor:default;pointer-events:none}
+.toolbar-add-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.toolbar-add-btn{
+  display:flex;align-items:center;gap:9px;text-align:left;
+  min-height:38px;padding:8px 10px;border-radius:8px;
+  border:1px solid var(--modal-border);background:var(--modal-bg-2);
+  color:var(--text-muted);cursor:pointer;font-family:var(--font);
+  transition:border-color var(--transition),background var(--transition),color var(--transition),opacity var(--transition);
+}
+.toolbar-add-btn:hover{border-color:var(--accent);color:var(--text);background:var(--accent-dim)}
+.toolbar-add-btn:disabled{opacity:.48;cursor:not-allowed}
+.toolbar-add-btn:disabled:hover{border-color:var(--modal-border);color:var(--text-muted);background:var(--modal-bg-2)}
+.toolbar-empty{padding:9px 10px;border:1px dashed var(--modal-border);border-radius:8px;color:var(--text-muted);font-size:12px}
 
 .settings-close{
   position:absolute;top:18px;right:18px;
@@ -2171,8 +2205,8 @@ button,input,select,textarea{font-family:var(--font)}
   55%{transform:translateY(-1px) scale(1.02)}
   100%{transform:none}
 }
-#btn-more.dl-bounce{animation:dlBtnPulse .6s ease}
-#btn-more.dl-bounce svg{color:var(--accent)}
+#btn-more.dl-bounce,.tb-btn.dl-bounce{animation:dlBtnPulse .6s ease}
+#btn-more.dl-bounce svg,.tb-btn.dl-bounce svg{color:var(--accent)}
 /* Flare the existing downloads badge dot when a download begins. */
 #btn-more.dl-bounce #more-btn-badge{animation:dlDotFlare .7s ease}
 @keyframes dlDotFlare{
@@ -3016,7 +3050,7 @@ svg{display:block;flex-shrink:0}
     <span id="active-loading-icon" class="favicon" style="display:none">
       <svg width="14" height="14" viewBox="0 0 14 14"><circle class="ld-ring" cx="7" cy="7" r="5.5" fill="none" stroke="currentColor" stroke-width="1.4" opacity=".22"/><circle class="ld-arc" cx="7" cy="7" r="5.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="10 24"/><circle class="ld-dot" cx="7" cy="1.5" r="1.3" fill="currentColor"/></svg>
     </span>
-    <div id="url-field">
+    <div id="url-field" oncontextmenu="urlInputContextMenu(event)">
       <div id="url-display"></div>
       <input id="url-input" type="text" placeholder="Search or enter a URL"
         onkeydown="handleUrlKey(event)"
@@ -3038,9 +3072,23 @@ svg{display:block;flex-shrink:0}
   </div>
 
   <div id="toolbar-actions">
-  <button class="tb-btn" id="btn-ai" onclick="toggleAi()" title="AI sidebar (Ctrl+Shift+A)">
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.937A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.582a.5.5 0 0 1 0 .962L15.5 14.063A2 2 0 0 0 14.063 15.5l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4m2-2h-4"/><path d="M4 17v2m1-1H3"/></svg>
-  </button>
+  <div id="toolbar-custom-actions">
+    <button class="tb-btn" id="btn-ai" data-toolbar-action="ai" onclick="toggleAi()" title="AI sidebar (Ctrl+Shift+A)">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.937A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.582a.5.5 0 0 1 0 .962L15.5 14.063A2 2 0 0 0 14.063 15.5l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4m2-2h-4"/><path d="M4 17v2m1-1H3"/></svg>
+    </button>
+    <button class="tb-btn" id="btn-toolbar-downloads" data-toolbar-action="downloads" onclick="toggleDownloadPanel(event)" title="Downloads (Ctrl+J)">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    </button>
+    <button class="tb-btn" id="btn-toolbar-history" data-toolbar-action="history" onclick="openSettings('history')" title="History (Ctrl+H)">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+    </button>
+    <button class="tb-btn" id="btn-toolbar-bookmarks" data-toolbar-action="bookmarks" onclick="openSettings('bookmarks')" title="Bookmarks">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>
+    </button>
+    <button class="tb-btn" id="btn-toolbar-settings" data-toolbar-action="settings" onclick="openSettings('general')" title="Settings (Ctrl+,)">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06A2 2 0 0 1 4.27 3.5a2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+  </div>
   <button class="tb-btn" id="btn-more" onclick="toggleMoreMenu(event)" title="More options" aria-haspopup="true">
     <span id="more-btn-dots"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1.2" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.2" fill="currentColor" stroke="none"/></svg></span>
     <img id="more-btn-avatar" alt="">
@@ -3616,6 +3664,14 @@ svg{display:block;flex-shrink:0}
             <option value="compact">Compact</option>
             <option value="auto_hide">Auto-hide (float on hover)</option>
           </select>
+        </div>
+        <div class="settings-group">
+          <label>Top bar buttons</label>
+          <div class="toolbar-pick-head">
+            <div class="hint" style="margin:0">More options always stays visible</div>
+            <div class="toolbar-pick-count" id="toolbar-button-count">0 / 4 shown</div>
+          </div>
+          <div class="toolbar-pick-panel" id="toolbar-button-settings"></div>
         </div>
         <div class="settings-toggle">
           <div class="settings-toggle-info">
@@ -4448,6 +4504,14 @@ const SITE_PERMISSION_DEFS = [
   ['midi', 'MIDI devices'],
   ['window_management', 'Window placement']
 ];
+const TOOLBAR_BUTTON_LIMIT = 4;
+const TOOLBAR_ACTIONS = [
+  {id:'ai', label:'AI', buttonId:'btn-ai', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.937A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.582a.5.5 0 0 1 0 .962L15.5 14.063A2 2 0 0 0 14.063 15.5l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4m2-2h-4"/><path d="M4 17v2m1-1H3"/></svg>'},
+  {id:'downloads', label:'Downloads', buttonId:'btn-toolbar-downloads', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>'},
+  {id:'history', label:'History', buttonId:'btn-toolbar-history', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>'},
+  {id:'bookmarks', label:'Bookmarks', buttonId:'btn-toolbar-bookmarks', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>'},
+  {id:'settings', label:'Settings', buttonId:'btn-toolbar-settings', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06A2 2 0 0 1 4.27 3.5a2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>'}
+];
 
 // ============================================================
 // IPC  (auto-converts PascalCase cmd to snake_case for Rust)
@@ -4740,6 +4804,7 @@ window.__neura = {
     refreshMoreAttention();
   },
   showContextMenu(data) { showBrowserContextMenu(data); },
+  applyClipboardPaste(text) { applyClipboardPaste(text); },
   spotlightAiChunk(text, done) {
     if (!tspAiMode) return;
     const content = document.getElementById('tsp-ai-content');
@@ -4776,6 +4841,7 @@ function render() {
   renderTabs();
   renderAddressBar();
   renderIncognitoBadge();
+  renderToolbarButtons();
   renderSearchSettings();
   renderBookmarks();
   if (_activeFolderId) {
@@ -5449,6 +5515,193 @@ function applySidebarMode() {
   renderBookmarksBar();
 }
 
+function toolbarAction(id) {
+  return TOOLBAR_ACTIONS.find(action => action.id === id);
+}
+
+function cleanToolbarButtons(values) {
+  const raw = Array.isArray(values) ? values : ['ai'];
+  const out = [];
+  raw.forEach(value => {
+    const id = String(value || '').trim();
+    if (!toolbarAction(id)) return;
+    if (out.includes(id)) return;
+    out.push(id);
+  });
+  return out.slice(0, TOOLBAR_BUTTON_LIMIT);
+}
+
+function toolbarButtons() {
+  const app = (state.settings && state.settings.appearance) || {};
+  return cleanToolbarButtons(app.toolbar_buttons);
+}
+
+function setToolbarButtons(ids) {
+  const next = cleanToolbarButtons(ids);
+  if (!state.settings) state.settings = {};
+  if (!state.settings.appearance) state.settings.appearance = {};
+  state.settings.appearance.toolbar_buttons = next;
+  renderToolbarButtons();
+  renderToolbarButtonSettings();
+  send('SaveSettings', {key: 'toolbar_buttons', value: next});
+}
+
+function addToolbarButton(id) {
+  if (!toolbarAction(id)) return;
+  const buttons = toolbarButtons();
+  if (buttons.includes(id)) return;
+  if (buttons.length >= TOOLBAR_BUTTON_LIMIT) {
+    toast('Pick up to 4 buttons', 'error');
+    renderToolbarButtonSettings();
+    return;
+  }
+  setToolbarButtons([...buttons, id]);
+}
+
+function removeToolbarButton(id) {
+  setToolbarButtons(toolbarButtons().filter(button => button !== id));
+}
+
+function moveToolbarButton(id, dir) {
+  const buttons = toolbarButtons();
+  const index = buttons.indexOf(id);
+  const nextIndex = index + dir;
+  if (index < 0 || nextIndex < 0 || nextIndex >= buttons.length) return;
+  const next = [...buttons];
+  next.splice(index, 1);
+  next.splice(nextIndex, 0, id);
+  setToolbarButtons(next);
+}
+
+function renderToolbarButtons() {
+  const wrap = document.getElementById('toolbar-custom-actions');
+  if (!wrap) return;
+  const buttons = toolbarButtons();
+  const selected = new Set(buttons);
+  TOOLBAR_ACTIONS.forEach(action => {
+    const el = document.getElementById(action.buttonId);
+    if (el) el.classList.toggle('toolbar-hidden', !selected.has(action.id));
+  });
+  buttons.forEach(id => {
+    const action = toolbarAction(id);
+    const el = action && document.getElementById(action.buttonId);
+    if (el) wrap.appendChild(el);
+  });
+  applyAiSidebar();
+  refreshMoreAttention();
+}
+
+function renderToolbarButtonSettings() {
+  const box = document.getElementById('toolbar-button-settings');
+  const count = document.getElementById('toolbar-button-count');
+  if (!box) return;
+  const buttons = toolbarButtons();
+  const selected = new Set(buttons);
+  const full = buttons.length >= TOOLBAR_BUTTON_LIMIT;
+  if (count) count.textContent = buttons.length + ' / ' + TOOLBAR_BUTTON_LIMIT + ' shown';
+  const shown = buttons.map((id, index) => {
+    const action = toolbarAction(id);
+    if (!action) return '';
+    const first = index === 0;
+    const last = index === buttons.length - 1;
+    return `<div class="toolbar-order-item" draggable="true" data-toolbar-id="${action.id}" ondragstart="toolbarDragStart(event,'${action.id}')" ondragend="toolbarDragEnd(event)">
+      <div class="toolbar-drag-handle">${dragHandleIcon()}</div>
+      <div class="toolbar-order-name">${action.icon}<span>${escHtml(action.label)}</span></div>
+      <div class="toolbar-order-actions">
+        <button type="button" class="toolbar-order-btn" ${first ? 'disabled' : ''} onclick="moveToolbarButton('${action.id}',-1)" title="Move up">${chevronIcon('up')}</button>
+        <button type="button" class="toolbar-order-btn" ${last ? 'disabled' : ''} onclick="moveToolbarButton('${action.id}',1)" title="Move down">${chevronIcon('down')}</button>
+        <button type="button" class="toolbar-order-btn" onclick="removeToolbarButton('${action.id}')" title="Hide">${xIcon()}</button>
+      </div>
+    </div>`;
+  }).join('');
+  const hidden = TOOLBAR_ACTIONS.filter(action => !selected.has(action.id)).map(action => {
+    const disabled = full ? 'disabled' : '';
+    return `<button type="button" class="toolbar-add-btn" ${disabled} onclick="addToolbarButton('${action.id}')">${action.icon}<span>${escHtml(action.label)}</span></button>`;
+  }).join('');
+  const empty = '<div class="toolbar-empty">Only More is shown</div>';
+  box.innerHTML = `<div class="toolbar-order-list" ondragover="toolbarDragOver(event)" ondragleave="toolbarDragLeave(event)" ondrop="toolbarDrop(event)">${shown || empty}</div>${hidden ? `<div class="toolbar-add-grid">${hidden}</div>` : ''}`;
+}
+
+function toolbarAnchor(id) {
+  const action = toolbarAction(id);
+  const el = action && document.getElementById(action.buttonId);
+  if (!el || el.classList.contains('toolbar-hidden')) return null;
+  if (!el.offsetParent) return null;
+  return el;
+}
+
+function dragHandleIcon() {
+  return '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.4"/><circle cx="15" cy="6" r="1.4"/><circle cx="9" cy="12" r="1.4"/><circle cx="15" cy="12" r="1.4"/><circle cx="9" cy="18" r="1.4"/><circle cx="15" cy="18" r="1.4"/></svg>';
+}
+
+function chevronIcon(dir) {
+  const d = dir === 'up' ? 'm18 15-6-6-6 6' : 'm6 9 6 6 6-6';
+  return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg>`;
+}
+
+function xIcon() {
+  return '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+}
+
+let toolbarDragId = '';
+
+function toolbarDragStart(e, id) {
+  e.stopPropagation();
+  toolbarDragId = id;
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', id);
+  }
+  e.currentTarget.classList.add('dragging');
+}
+
+function toolbarDragEnd(e) {
+  if (e) e.stopPropagation();
+  toolbarDragId = '';
+  if (e && e.currentTarget) e.currentTarget.classList.remove('dragging');
+  clearToolbarDropMarks();
+}
+
+function toolbarDragOver(e) {
+  const row = e.target.closest('.toolbar-order-item');
+  if (!toolbarDragId || !row || row.dataset.toolbarId === toolbarDragId) return;
+  e.preventDefault();
+  e.stopPropagation();
+  clearToolbarDropMarks();
+  const rect = row.getBoundingClientRect();
+  row.classList.add(e.clientY < rect.top + rect.height / 2 ? 'drop-before' : 'drop-after');
+}
+
+function toolbarDragLeave(e) {
+  if (!e.currentTarget.contains(e.relatedTarget)) clearToolbarDropMarks();
+}
+
+function toolbarDrop(e) {
+  const row = e.target.closest('.toolbar-order-item');
+  if (!toolbarDragId || !row) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const before = row.classList.contains('drop-before');
+  reorderToolbarButton(toolbarDragId, row.dataset.toolbarId, before);
+  toolbarDragId = '';
+  clearToolbarDropMarks();
+}
+
+function reorderToolbarButton(id, target, before) {
+  if (!id || !target || id === target) return;
+  const next = toolbarButtons().filter(button => button !== id);
+  const index = next.indexOf(target);
+  if (index < 0) return;
+  next.splice(before ? index : index + 1, 0, id);
+  setToolbarButtons(next);
+}
+
+function clearToolbarDropMarks() {
+  document.querySelectorAll('.toolbar-order-item').forEach(row => {
+    row.classList.remove('drop-before', 'drop-after');
+  });
+}
+
 // ============================================================
 // ACTIONS
 // ============================================================
@@ -5734,6 +5987,7 @@ function handleToolbarDrag(e) {
   if (e.button !== 0) return;
   if (e.detail > 1) return;
   if (e.target.closest(DRAG_EXEMPT)) return;
+  if (siteInfoOpen) { closeSiteInfo(); return; }
   send('WindowDragStart');
 }
 function handleToolbarDblClick(e) {
@@ -5975,6 +6229,7 @@ function populateSettingsPanel() {
   setSelectValue('set-font-family', fontFamilyKey(app.font_family || 'system'));
   setToggleEl('toggle-show-bookmarks-bar', !!app.show_bookmarks_bar);
   setToggleEl('toggle-show-url', app.show_tab_url !== false);
+  renderToolbarButtonSettings();
   setToggleEl('toggle-suggestions', searchSuggestionsEnabled());
   setToggleEl('toggle-history', !priv.disable_history);
   setToggleEl('toggle-ad-blocker-enabled', priv.ad_blocker_enabled !== false);
@@ -6288,6 +6543,96 @@ function handleUrlCopy(e) {
   e.clipboardData.setData('text/plain', url);
   e.preventDefault();
 }
+function urlInputContextMenu(ev) {
+  ev.preventDefault();
+  ev.stopPropagation();
+  const input = document.getElementById('url-input');
+  if (!input) return;
+  let start = input.selectionStart || 0;
+  let end = input.selectionEnd || 0;
+  if (document.activeElement !== input) {
+    start = 0;
+    end = input.value.length;
+  }
+  const sel = {start, end, value: input.value};
+  const hasSel = sel.end > sel.start;
+  const hasText = sel.value.length > 0;
+  const items = [
+    {label: 'Cut',          disabled: !hasSel,  action: () => urlEditCut(sel)},
+    {label: 'Copy',         disabled: !hasSel,  action: () => urlEditCopy(sel)},
+    {label: 'Paste',                            action: () => urlEditPaste(sel, false)},
+    {label: 'Paste and go',                     action: () => urlEditPaste(sel, true)},
+    {sep: true},
+    {label: 'Delete',       disabled: !hasSel,  action: () => urlEditReplace(sel, '')},
+    {sep: true},
+    {label: 'Select all',   disabled: !hasText, action: () => urlEditSelectAll()},
+  ];
+  showContextMenu(ev.clientX, ev.clientY, items);
+}
+function urlEditCopy(sel) {
+  let text = sel.value.substring(sel.start, sel.end);
+  const whole = sel.start === 0 && sel.end === sel.value.length && sel.value.length > 0;
+  if (whole) {
+    const url = currentTabUrl();
+    if (url && !url.startsWith('neura://') && (sel.value === formatDisplayUrl(url) || sel.value === url)) {
+      text = url;
+    }
+  }
+  if (text) copyToClipboard(text);
+}
+function urlEditCut(sel) {
+  const text = sel.value.substring(sel.start, sel.end);
+  if (text) copyToClipboard(text);
+  urlEditReplace(sel, '');
+}
+function urlEditSelectAll() {
+  const input = document.getElementById('url-input');
+  if (!input) return;
+  setUrlEditing(true);
+  input.focus();
+  input.select();
+}
+let _omniboxPaste = null;
+function urlEditPaste(sel, go) {
+  _omniboxPaste = {sel, go};
+  send('OmniboxPaste');
+}
+function applyClipboardPaste(raw) {
+  const ctx = _omniboxPaste;
+  _omniboxPaste = null;
+  if (!ctx) return;
+  const text = (raw || '').replace(/[\r\n]+/g, ' ');
+  if (ctx.go) {
+    const url = text.trim();
+    if (!url) return;
+    recordOmniboxPick(url);
+    hideSuggestions();
+    send('Navigate', {url});
+    const input = document.getElementById('url-input');
+    if (input) input.blur();
+    return;
+  }
+  if (!text) return;
+  urlEditReplace(ctx.sel, text);
+}
+function urlEditReplace(sel, insert) {
+  const input = document.getElementById('url-input');
+  if (!input) return;
+  const next = sel.value.slice(0, sel.start) + insert + sel.value.slice(sel.end);
+  const caret = sel.start + insert.length;
+  setUrlEditing(true);
+  input.value = next;
+  input.focus();
+  input.setSelectionRange(caret, caret);
+  delete input.dataset.showingCurrent;
+  lastTypedOmnibox = next;
+  if (searchSuggestionsEnabled()) {
+    renderSuggestions('url', next);
+    send('OmniboxSuggest', {q: next});
+  } else {
+    hideSuggestions();
+  }
+}
 function formatDisplayUrl(url) {
   if (!url || url === 'about:blank') return '';
   if (url.startsWith('neura://')) return url;
@@ -6582,7 +6927,6 @@ function renderSiteInfoPopover() {
   const tracking = renderSiteTrackingRow(canPerm);
   pop.innerHTML = `<div class="site-pop-head">
     <div class="site-pop-title">About ${escHtml(host)}</div>
-    <button class="site-pop-close" onclick="closeSiteInfo()" title="Close"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
   </div>
   <div class="site-pop-section">
     <div class="site-pop-row">
@@ -8840,6 +9184,8 @@ function refreshMoreAttention() {
   const dlActive = dls.some(d => d.status === 'downloading' || d.status === 'pending' || d.status === 'paused');
   const btn = document.getElementById('btn-more');
   if (btn) btn.classList.toggle('has-attention', dlActive || updateAvailable);
+  const dlBtn = document.getElementById('btn-toolbar-downloads');
+  if (dlBtn) dlBtn.classList.toggle('has-attention', dlActive);
   const dlItem = document.getElementById('more-item-downloads');
   if (dlItem) dlItem.classList.toggle('has-dot', dlActive);
   const upItem = document.getElementById('more-item-update');
@@ -9294,7 +9640,7 @@ function toggleDownloadPanel(event) {
 function openDownloadPanel(peek) {
   const panel = document.getElementById('download-panel');
   if (!panel) return;
-  const btn = document.getElementById('btn-more');
+  const btn = toolbarAnchor('downloads') || document.getElementById('btn-more');
   const rect = btn ? btn.getBoundingClientRect() : {bottom: 48, right: window.innerWidth - 8};
   panel.style.top = rect.bottom + 4 + 'px';
   panel.style.right = (window.innerWidth - rect.right) + 'px';
@@ -9337,7 +9683,7 @@ function closeDownloadPanel() {
 // Visual feedback when any download starts: pulse the downloads button and briefly
 // peek the panel (non-blocking). Called from Rust via __neura.flashDownloadStart().
 function flashDownloadStart() {
-  const btn = document.getElementById('btn-more');
+  const btn = toolbarAnchor('downloads') || document.getElementById('btn-more');
   if (btn) {
     btn.classList.remove('dl-bounce');
     void btn.offsetWidth; // restart the animation if it's mid-flight
@@ -9456,8 +9802,8 @@ document.getElementById('download-panel').addEventListener('click', e => {
 // Close download panel on click outside (also on Escape — handled in keydown)
 document.addEventListener('click', e => {
   const panel = document.getElementById('download-panel');
-  const btn = document.getElementById('btn-more');
-  if (panel.classList.contains('open') && !panel.contains(e.target) && !(btn && btn.contains(e.target))) {
+  const dlBtn = toolbarAnchor('downloads') || document.getElementById('btn-more');
+  if (panel.classList.contains('open') && !panel.contains(e.target) && !(dlBtn && dlBtn.contains(e.target))) {
     closeDownloadPanel();
   }
   const menu = document.getElementById('more-menu');
@@ -10533,6 +10879,7 @@ function showContextMenu(x, y, items) {
   let idx = 0;
   menu.innerHTML = items.map(item => {
     if (item.sep) return '<div class="ctx-sep"></div>';
+    if (item.disabled) return `<div class="ctx-item ctx-disabled">${escHtml(item.label)}</div>`;
     const i = idx;
     _ctxActions.push(item.action);
     idx++;
@@ -10757,9 +11104,9 @@ window.addEventListener('resize', () => {
   // Keep the download panel's chrome clip aligned with its (right-anchored) position.
   const dlp = document.getElementById('download-panel');
   if (dlp && dlp.classList.contains('open')) {
-    const btn = document.getElementById('btn-more');
-    if (btn) {
-      const rect = btn.getBoundingClientRect();
+    const dlBtn = toolbarAnchor('downloads') || document.getElementById('btn-more');
+    if (dlBtn) {
+      const rect = dlBtn.getBoundingClientRect();
       dlp.style.top = rect.bottom + 4 + 'px';
       dlp.style.right = (window.innerWidth - rect.right) + 'px';
     }

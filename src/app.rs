@@ -10,8 +10,8 @@ use crate::adblock::AdBlockEngine;
 use crate::browser::downloads::DownloadManager;
 use crate::browser::tab_manager::TabManager;
 use crate::config::{
-    valid_site_permission_key, valid_site_permission_value, AppSettings, SecureDnsMode,
-    SecureDnsProvider, SitePermissions,
+    clean_toolbar_buttons, valid_site_permission_key, valid_site_permission_value, AppSettings,
+    SecureDnsMode, SecureDnsProvider, SitePermissions,
 };
 use crate::storage::{keychain, passwords, repositories, settings_store};
 use crate::ui::events::{AppEvent, ChromeCommand};
@@ -345,6 +345,7 @@ pub enum TabAction {
     ContentNavigate(String),
     ContentGoBack,
     ContentGoForward,
+    ReadClipboardForOmnibox,
     ReloadContent {
         tab_id: String,
         url: String,
@@ -417,15 +418,26 @@ pub fn handle_chrome_command(
         ChromeCommand::Back => {
             let tab_id = state.tab_manager.active_tab_id.clone()?;
             begin_user_nav(state, chrome, &tab_id);
-            Some(TabAction::ContentGoBack)
+            if is_neura_tab(state, &tab_id) {
+                let target = state.tab_manager.go_back(&tab_id)?;
+                commit_stack_nav(&tab_id, &target, state, chrome)
+            } else {
+                Some(TabAction::ContentGoBack)
+            }
         }
         ChromeCommand::Forward => {
             let tab_id = state.tab_manager.active_tab_id.clone()?;
             begin_user_nav(state, chrome, &tab_id);
-            Some(TabAction::ContentGoForward)
+            if is_neura_tab(state, &tab_id) {
+                let target = state.tab_manager.go_forward(&tab_id)?;
+                commit_stack_nav(&tab_id, &target, state, chrome)
+            } else {
+                Some(TabAction::ContentGoForward)
+            }
         }
         ChromeCommand::Reload => reload_current_tab(state, chrome),
         ChromeCommand::Stop => Some(TabAction::ContentScript("window.stop()".into())),
+        ChromeCommand::OmniboxPaste => Some(TabAction::ReadClipboardForOmnibox),
         ChromeCommand::NewTab => {
             let tab_id;
             let url;
@@ -1421,6 +1433,10 @@ fn finish_internal_nav(tab_id: &str, url: &str, state: &mut AppState, chrome: &W
     state.load_recoveries.remove(&load_key(tab_id, url));
     state.load_progress.remove(tab_id);
     state.tab_manager.set_tab_loading(tab_id, false);
+    if let Some(tab) = state.tab_manager.get_tab_mut(tab_id) {
+        tab.engine_can_back = None;
+        tab.engine_can_forward = None;
+    }
     let _ = chrome.evaluate_script("window.__neura && window.__neura.finishLoadProgress()");
     state.push_state_to_chrome(chrome);
     true
@@ -1485,6 +1501,34 @@ fn navigate_current_tab_with_policy(
     } else {
         None
     }
+}
+
+fn is_neura_tab(state: &AppState, tab_id: &str) -> bool {
+    state
+        .tab_manager
+        .get_tab(tab_id)
+        .map(|t| t.is_neura_page())
+        .unwrap_or(false)
+}
+
+fn commit_stack_nav(
+    tab_id: &str,
+    url: &str,
+    state: &mut AppState,
+    chrome: &WebView,
+) -> Option<TabAction> {
+    if finish_internal_nav(tab_id, url, state, chrome) {
+        return Some(TabAction::ContentNavigate(url.to_string()));
+    }
+    clear_loading_favicon(state, tab_id);
+    state.tab_manager.set_tab_loading(tab_id, true);
+    state.load_progress.insert(tab_id.to_string(), 0.0);
+    state
+        .pending_nav_urls
+        .insert(tab_id.to_string(), url.to_string());
+    let _ = chrome.evaluate_script("window.__neura && window.__neura.startLoadProgress()");
+    state.push_state_to_chrome(chrome);
+    Some(TabAction::ContentNavigate(url.to_string()))
 }
 
 fn reload_current_tab(state: &mut AppState, chrome: &WebView) -> Option<TabAction> {
@@ -3413,6 +3457,15 @@ fn handle_save_settings(
                     "segoe" | "aptos" | "rounded" | "serif" | "mono" => v.to_string(),
                     _ => "system".to_string(),
                 };
+            }
+        }
+        "toolbar_buttons" => {
+            if let Some(arr) = value.as_array() {
+                let buttons: Vec<String> = arr
+                    .iter()
+                    .filter_map(|item| item.as_str().map(|s| s.to_string()))
+                    .collect();
+                state.settings.appearance.toolbar_buttons = clean_toolbar_buttons(&buttons);
             }
         }
         "search_suggestions" => {

@@ -434,7 +434,18 @@ fn main() {
         .map(|t| t.url.clone())
         .unwrap_or_else(|| browser::tab::Tab::new_tab_url().to_string());
     let win_size = window.inner_size();
-    let webview_data_dir = data_dir.join("webview_data");
+    #[cfg(windows)]
+    if !new_window {
+        cleanup_secondary_webview_profiles(&data_dir);
+    }
+    let webview_data_dir = if new_window {
+        data_dir.join(format!("webview_data_window_{}", std::process::id()))
+    } else {
+        data_dir.join("webview_data")
+    };
+    if new_window {
+        std::fs::remove_dir_all(&webview_data_dir).ok();
+    }
     let crash_sentinel: Option<std::path::PathBuf> = if !new_window {
         let p = data_dir.join("running.lock");
         if p.exists() {
@@ -539,6 +550,11 @@ fn main() {
                         error = %e,
                         "[STARTUP] chrome WebView profile busy (locked); retrying"
                     );
+                    drop(content_web_context.take());
+                    #[cfg(windows)]
+                    drain_message_queue_ms(100);
+                    content_web_context =
+                        Some(wry::WebContext::new(Some(webview_data_dir.clone())));
                     std::thread::sleep(Duration::from_millis(500));
                 }
                 Err(e) => {
@@ -1162,6 +1178,9 @@ fn main() {
                     &mut content_web_context,
                     &mut incognito_web_context,
                 );
+                if new_window {
+                    std::fs::remove_dir_all(&webview_data_dir).ok();
+                }
                 *control_flow = ControlFlow::Exit;
             }
 
@@ -1827,6 +1846,15 @@ state.settings.privacy.default_permissions.clone(),
                                     let _ = wv.go_forward();
                                 }
                             }
+                        }
+                        TabAction::ReadClipboardForOmnibox => {
+                            let text = read_clipboard_text().unwrap_or_default();
+                            let json =
+                                serde_json::to_string(&text).unwrap_or_else(|_| "\"\"".into());
+                            let _ = chrome.evaluate_script(&format!(
+                                "window.__neura && window.__neura.applyClipboardPaste({})",
+                                json
+                            ));
                         }
                         TabAction::FindInPage {
                             tab_id,
@@ -2909,6 +2937,9 @@ state.settings.privacy.default_permissions.clone(),
                     &mut content_web_context,
                     &mut incognito_web_context,
                 );
+                if new_window {
+                    std::fs::remove_dir_all(&webview_data_dir).ok();
+                }
                 *control_flow = ControlFlow::Exit;
             }
 
@@ -3267,6 +3298,13 @@ fn wait_for_previous_instance(sentinel: &std::path::Path, profiles: &[&std::path
             .ok()
             .and_then(|s| s.trim().parse().ok());
 
+        if profiles
+            .iter()
+            .all(|profile_root| webview_profile_lock_released(profile_root))
+        {
+            return;
+        }
+
         if let Some(pid) = old_pid {
             let handle = unsafe { OpenProcess(PROCESS_SYNCHRONIZE, false, pid) };
             match handle {
@@ -3338,10 +3376,64 @@ fn drain_message_queue_ms(ms: u64) {
 }
 
 #[cfg(windows)]
-fn webview_profile_lock_paths(profile_root: &std::path::Path) -> [std::path::PathBuf; 2] {
-    [
+fn process_running(pid: u32) -> bool {
+    use windows::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0};
+    use windows::Win32::System::Threading::{
+        OpenProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE,
+    };
+
+    let handle = unsafe { OpenProcess(PROCESS_SYNCHRONIZE, false, pid) };
+    let Ok(handle) = handle else {
+        return false;
+    };
+    if handle.is_invalid() {
+        return false;
+    }
+    let result = unsafe { WaitForSingleObject(handle, 0) };
+    unsafe {
+        let _ = CloseHandle(handle);
+    }
+    result != WAIT_OBJECT_0
+}
+
+#[cfg(windows)]
+fn cleanup_secondary_webview_profiles(data_dir: &std::path::Path) {
+    let Ok(entries) = std::fs::read_dir(data_dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        let Some(pid) = name.strip_prefix("webview_data_window_") else {
+            continue;
+        };
+        let Ok(pid) = pid.parse::<u32>() else {
+            continue;
+        };
+        if process_running(pid) {
+            continue;
+        }
+        let _ = std::fs::remove_dir_all(entry.path());
+    }
+}
+
+#[cfg(windows)]
+fn webview_profile_lock_paths(profile_root: &std::path::Path) -> Vec<std::path::PathBuf> {
+    vec![
         profile_root.join("EBWebView").join("lockfile"),
         profile_root.join("EBWebView").join("LOCK"),
+        profile_root.join("EBWebView").join("Default").join("LOCK"),
+        profile_root
+            .join("EBWebView")
+            .join("Default")
+            .join("Local Storage")
+            .join("leveldb")
+            .join("LOCK"),
+        profile_root
+            .join("EBWebView")
+            .join("Default")
+            .join("Session Storage")
+            .join("LOCK"),
     ]
 }
 
@@ -9354,8 +9446,9 @@ mod webview_arg_tests {
     fn webview_profile_lock_paths_include_real_webview2_lockfile() {
         let root = std::path::PathBuf::from(r"C:\VentusProfile");
         let paths = webview_profile_lock_paths(&root);
-        assert_eq!(paths[0], root.join("EBWebView").join("lockfile"));
-        assert_eq!(paths[1], root.join("EBWebView").join("LOCK"));
+        assert!(paths.contains(&root.join("EBWebView").join("lockfile")));
+        assert!(paths.contains(&root.join("EBWebView").join("LOCK")));
+        assert!(paths.contains(&root.join("EBWebView").join("Default").join("LOCK")));
     }
 
     #[cfg(windows)]
@@ -9367,8 +9460,8 @@ mod webview_arg_tests {
             .join("target")
             .join("tmp")
             .join(format!("webview-profile-lock-test-{}", std::process::id()));
-        let lock_dir = root.join("EBWebView");
-        let lock_path = lock_dir.join("lockfile");
+        let lock_dir = root.join("EBWebView").join("Default");
+        let lock_path = lock_dir.join("LOCK");
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&lock_dir).unwrap();
         std::fs::write(&lock_path, b"").unwrap();
@@ -9386,6 +9479,26 @@ mod webview_arg_tests {
 
         drop(guard);
         assert!(webview_profile_lock_released(&root));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn wait_for_previous_instance_skips_pid_when_profile_is_free() {
+        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join("tmp")
+            .join(format!("startup-wait-test-{}", std::process::id()));
+        let profile = root.join("webview_data");
+        let sentinel = root.join("running.lock");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&profile).unwrap();
+        std::fs::write(&sentinel, std::process::id().to_string()).unwrap();
+
+        let started = Instant::now();
+        wait_for_previous_instance(&sentinel, &[profile.as_path()]);
+
+        assert!(started.elapsed() < Duration::from_millis(500));
         let _ = std::fs::remove_dir_all(&root);
     }
 }
@@ -9884,6 +9997,45 @@ fn write_image_to_clipboard(_bytes: &[u8]) -> anyhow::Result<()> {
     Err(anyhow::anyhow!(
         "clipboard write not supported on this platform"
     ))
+}
+
+#[cfg(windows)]
+fn read_clipboard_text() -> Option<String> {
+    use windows::Win32::Foundation::{HGLOBAL, HWND};
+    use windows::Win32::System::DataExchange::{CloseClipboard, GetClipboardData, OpenClipboard};
+    use windows::Win32::System::Memory::{GlobalLock, GlobalUnlock};
+
+    const CF_UNICODETEXT: u32 = 13;
+    unsafe {
+        if OpenClipboard(HWND(0)).is_err() {
+            return None;
+        }
+        let text = (|| {
+            let handle = GetClipboardData(CF_UNICODETEXT).ok()?;
+            if handle.0 == 0 {
+                return None;
+            }
+            let hglobal = HGLOBAL(handle.0 as *mut core::ffi::c_void);
+            let ptr = GlobalLock(hglobal) as *const u16;
+            if ptr.is_null() {
+                return None;
+            }
+            let mut len = 0usize;
+            while *ptr.add(len) != 0 {
+                len += 1;
+            }
+            let s = String::from_utf16_lossy(std::slice::from_raw_parts(ptr, len));
+            let _ = GlobalUnlock(hglobal);
+            Some(s)
+        })();
+        let _ = CloseClipboard();
+        text
+    }
+}
+
+#[cfg(not(windows))]
+fn read_clipboard_text() -> Option<String> {
+    None
 }
 
 /// JS injected into the active content WebView to fetch an image the way the page itself

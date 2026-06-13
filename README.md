@@ -86,12 +86,10 @@ cargo build
 cargo build --release
 ```
 
-If the debug executable is already running and blocks a rebuild:
+Cargo builds stop only this checkout's target executable before linking. To stop it without building:
 
 ```powershell
-$p = Get-Process ventus -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq "$PWD\target\debug\ventus.exe" }
-if ($p) { $p | Stop-Process -Force }
-cargo build
+.\scripts\stop-target-ventus.ps1
 ```
 
 ## Project Structure

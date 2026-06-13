@@ -54,6 +54,31 @@ fn default_font_family() -> String {
     "system".to_string()
 }
 
+pub const TOOLBAR_BUTTON_LIMIT: usize = 4;
+pub const TOOLBAR_BUTTON_IDS: [&str; 5] = ["ai", "downloads", "history", "bookmarks", "settings"];
+
+pub fn default_toolbar_buttons() -> Vec<String> {
+    vec!["ai".to_string()]
+}
+
+pub fn clean_toolbar_buttons(values: &[String]) -> Vec<String> {
+    let mut out = Vec::new();
+    for value in values {
+        let id = value.trim();
+        if !TOOLBAR_BUTTON_IDS.contains(&id) {
+            continue;
+        }
+        if out.iter().any(|item| item == id) {
+            continue;
+        }
+        out.push(id.to_string());
+        if out.len() >= TOOLBAR_BUTTON_LIMIT {
+            break;
+        }
+    }
+    out
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AppearanceSettings {
@@ -72,6 +97,8 @@ pub struct AppearanceSettings {
     pub new_tab_bg_color: String,
     #[serde(default = "default_zoom_level")]
     pub zoom_level: f64,
+    #[serde(default = "default_toolbar_buttons")]
+    pub toolbar_buttons: Vec<String>,
 }
 
 impl Default for AppearanceSettings {
@@ -90,6 +117,7 @@ impl Default for AppearanceSettings {
             new_tab_background: "default".to_string(),
             new_tab_bg_color: "#141414".to_string(),
             zoom_level: 1.0,
+            toolbar_buttons: default_toolbar_buttons(),
         }
     }
 }
@@ -608,6 +636,7 @@ mod tests {
         assert!(settings.privacy.storage_partitioning);
         assert!(settings.privacy.fingerprint_protection);
         assert!(settings.privacy.strict_permissions);
+        assert_eq!(settings.appearance.toolbar_buttons, vec!["ai".to_string()]);
         assert!(!settings.privacy.secure_dns_enabled);
         assert_eq!(
             settings.privacy.secure_dns_provider,
@@ -720,5 +749,27 @@ mod tests {
             privacy.secure_dns_template = invalid.to_string();
             assert_eq!(privacy.secure_dns_endpoint(), None);
         }
+    }
+
+    #[test]
+    fn toolbar_buttons_are_sanitized() {
+        let values = vec![
+            "ai".to_string(),
+            "history".to_string(),
+            "bogus".to_string(),
+            "ai".to_string(),
+            "downloads".to_string(),
+            "bookmarks".to_string(),
+            "settings".to_string(),
+        ];
+        assert_eq!(
+            super::clean_toolbar_buttons(&values),
+            vec![
+                "ai".to_string(),
+                "history".to_string(),
+                "downloads".to_string(),
+                "bookmarks".to_string()
+            ]
+        );
     }
 }

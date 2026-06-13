@@ -14,11 +14,13 @@ Write-Host "Building Ventus v$version"
 # Build
 if ($Debug) {
     Write-Host "Mode: debug"
+    & "$PSScriptRoot\stop-target-ventus.ps1"
     cargo build
     if ($LASTEXITCODE -ne 0) { Write-Error "cargo build failed"; exit 1 }
     $exeSource = "target\debug\ventus.exe"
 } else {
     Write-Host "Mode: release"
+    & "$PSScriptRoot\stop-target-ventus.ps1" -Release
     cargo build --release
     if ($LASTEXITCODE -ne 0) { Write-Error "cargo build failed"; exit 1 }
     $exeSource = "target\release\ventus.exe"

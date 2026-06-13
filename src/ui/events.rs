@@ -18,6 +18,7 @@ pub enum ChromeCommand {
     Forward,
     Reload,
     Stop,
+    OmniboxPaste,
     NewTab,
     CloseTab {
         id: String,
