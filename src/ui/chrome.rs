@@ -75,7 +75,7 @@ pub fn chrome_html() -> String {
   --nt-glass-border:rgba(255,255,255,0.16);
   --nt-white:#f0f0f0;
   --nt-soft:#cccccc;
-  --nt-muted:#888888;
+  --nt-muted:rgba(255,255,255,0.84);
   --nt-news-white:#f0f0f0;
   --nt-news-soft:#cccccc;
   --nt-news-empty:linear-gradient(135deg,rgba(21,31,48,0.94),rgba(37,55,84,0.78));
@@ -502,7 +502,7 @@ button,input,select,textarea{font-family:var(--font)}
   background:var(--bg-elevated);
   border:1px solid var(--border);
   border-radius:10px;
-  box-shadow:var(--popover-shadow);
+  box-shadow:0 14px 30px rgba(0,0,0,0.36),0 0 0 0.5px rgba(255,255,255,0.04);
   z-index:290;
   overflow:hidden;
   color:var(--text);
@@ -1836,7 +1836,7 @@ button,input,select,textarea{font-family:var(--font)}
   -webkit-backdrop-filter:none;
   backdrop-filter:none;
 }
-.newtab-greeting{font-size:14px;line-height:1.3;font-weight:500;color:var(--nt-hero-soft);text-align:center;letter-spacing:0;max-width:calc(100% - 48px);text-shadow:none;overflow-wrap:anywhere}
+.newtab-greeting{font-size:15px;line-height:1.3;font-weight:500;color:var(--nt-hero-soft);text-align:center;letter-spacing:0;max-width:calc(100% - 48px);text-shadow:none;overflow-wrap:anywhere}
 .newtab-sub{display:none}
 .newtab-shortcuts{display:grid;grid-template-columns:repeat(8,minmax(56px,1fr));gap:12px;width:min(650px,100%);margin:2px auto 0}
 .newtab-shortcut{
@@ -1910,7 +1910,6 @@ button,input,select,textarea{font-family:var(--font)}
 #newtab-placeholder.nt-clock-rounded #newtab-clock{font-family:'SF Pro Rounded','Aptos Rounded','Segoe UI Variable Display',var(--font);font-weight:300;letter-spacing:-0.055em}
 #newtab-placeholder.nt-clock-mono #newtab-clock{font-family:'SF Mono','Cascadia Code','Consolas',monospace;font-weight:300;letter-spacing:-0.08em;font-feature-settings:'tnum' 1,'zero' 1}
 #newtab-placeholder.nt-clock-serif #newtab-clock{font-family:'New York','Iowan Old Style','Georgia',serif;font-weight:400;letter-spacing:-0.055em}
-html:not([data-browser-font="system"]) #newtab-placeholder #newtab-clock{font-family:var(--font)}
 #newtab-placeholder.nt-theme-minimal .newtab-shell{justify-content:center;align-items:center;gap:0}
 #newtab-placeholder.nt-theme-minimal .newtab-top{display:none}
 #newtab-placeholder.nt-theme-minimal .newtab-feed{display:none!important}
@@ -1934,7 +1933,7 @@ html:not([data-browser-font="system"]) #newtab-placeholder #newtab-clock{font-fa
 #newtab-placeholder.nt-theme-focus .newtab-sub{display:none}
 #newtab-placeholder.nt-theme-focus .newtab-hero{gap:16px;padding:0}
 #newtab-placeholder.nt-theme-focus #newtab-clock{font-size:clamp(84px,9vw,136px)}
-#newtab-placeholder.nt-theme-focus .newtab-greeting{font-size:15px;font-weight:400;opacity:1}
+#newtab-placeholder.nt-theme-focus .newtab-greeting{font-size:16px;font-weight:400;opacity:1}
 #newtab-placeholder.nt-theme-focus .newtab-search-wrap{width:min(580px,100%)}
 #newtab-placeholder.nt-theme-focus .newtab-shortcuts{width:min(580px,100%)}
 /* ── Newtab theme: HORIZON (wallpaper, top bar, no feed) ──── */
@@ -5225,9 +5224,11 @@ function applyNewtabSettings() {
   const customFontColor = customNewtabFontColor(nt.font_color);
   if (customFontColor) {
     root.style.setProperty('--nt-hero-text', customFontColor);
+    root.style.setProperty('--nt-hero-soft', customFontColor);
     root.style.setProperty('--nt-white', customFontColor);
   } else {
     root.style.removeProperty('--nt-hero-text');
+    root.style.removeProperty('--nt-hero-soft');
     root.style.removeProperty('--nt-white');
   }
   initWallpaper(nt);
@@ -6527,7 +6528,14 @@ function syncSiteInfoPopover() {
   pop.style.top = (r.bottom + 8) + 'px';
   requestAnimationFrame(() => {
     const pr = pop.getBoundingClientRect();
-    send('SuggestionOverlay', {visible:true, x:pr.left - 8, y:pr.top - 8, width:pr.width + 16, height:pr.height + 16});
+    const shadowPad = 52;
+    send('SuggestionOverlay', {
+      visible:true,
+      x:pr.left - shadowPad,
+      y:pr.top - shadowPad,
+      width:pr.width + shadowPad * 2,
+      height:pr.height + shadowPad * 2
+    });
   });
 }
 function renderSiteInfoPopover() {
