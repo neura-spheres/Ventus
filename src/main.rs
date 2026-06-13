@@ -4109,7 +4109,7 @@ fn attach_new_window_handler(
             // main loop (which can create windows) builds the wrapper and hands our WebView
             // back via SetNewWindow. If anything fails, the deferral completes without a new
             // window and WebView2 falls back to its own popup — the opener never breaks.
-            if sized.as_bool() {
+            if sized.as_bool() || is_auth_popup_url(&url) {
                 if let Ok(deferral) = args.GetDeferral() {
                     PENDING_POPUPS.with(|q| {
                         q.borrow_mut().push(PendingPopup {
@@ -4142,6 +4142,38 @@ fn attach_new_window_handler(
     unsafe {
         let _ = webview.add_NewWindowRequested(&handler, &mut token);
     }
+}
+
+fn is_auth_popup_url(url: &str) -> bool {
+    let Ok(parsed) = url::Url::parse(url) else {
+        return false;
+    };
+    let host = parsed.host_str().unwrap_or("").to_ascii_lowercase();
+    let path = parsed.path().to_ascii_lowercase();
+    if host == "accounts.google.com" {
+        return true;
+    }
+    if host == "appleid.apple.com" {
+        return true;
+    }
+    if host == "login.live.com" || host == "login.microsoftonline.com" {
+        return true;
+    }
+    if host.ends_with(".facebook.com") && path.contains("/dialog/oauth") {
+        return true;
+    }
+    path.starts_with("/oauth")
+        || path.contains("/oauth/")
+        || path.contains("oauth20_authorize")
+        || path.starts_with("/authorize")
+        || path.contains("/authorize/")
+        || path.starts_with("/signin")
+        || path.contains("/signin/")
+        || path.starts_with("/sign-in")
+        || path.contains("/sign-in/")
+        || path.starts_with("/sign_in")
+        || path.contains("/sign_in/")
+        || path.contains("/single_sign_on")
 }
 
 // A wrapped popup window: a frameless Ventus-styled window with a slim top bar (origin +
@@ -9181,6 +9213,23 @@ mod webview_arg_tests {
             )
         );
         assert!(chromium_versions_from_raw("runtime unavailable").is_none());
+    }
+
+    #[test]
+    fn auth_popup_urls_stay_popups() {
+        assert!(is_auth_popup_url(
+            "https://accounts.google.com/gsi/confirm?client_id=abc"
+        ));
+        assert!(is_auth_popup_url(
+            "https://x.com/i/flow/single_sign_on?provider=google"
+        ));
+        assert!(is_auth_popup_url(
+            "https://login.live.com/oauth20_authorize.srf"
+        ));
+        assert!(!is_auth_popup_url(
+            "https://example.com/article/oauth-history"
+        ));
+        assert!(!is_auth_popup_url("about:blank"));
     }
 
     #[test]
