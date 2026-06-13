@@ -95,6 +95,13 @@ pub struct AppState {
     /// Per-download speed sampling: (sample time ms, bytes at that sample). Used to
     /// turn raw byte-count ticks into a smoothed bytes/sec figure for the UI.
     pub download_samples: HashMap<String, (i64, u64)>,
+    /// On-device learned ranker for address-bar suggestions. Updated each time the
+    /// user picks a suggestion, persisted to the settings table.
+    pub omnibox: crate::browser::omnibox::Model,
+    pub trends: Vec<crate::browser::omnibox::Trend>,
+    pub trends_region: String,
+    pub trends_fetched_at: i64,
+    pub trends_loading: bool,
 }
 
 impl AppState {
@@ -114,6 +121,7 @@ impl AppState {
         let cached_bookmark_folders =
             repositories::list_bookmark_folders(&conn).unwrap_or_default();
         let cached_history = repositories::list_history(&conn, 30).unwrap_or_default();
+        let omnibox = crate::browser::omnibox::load(&conn);
         Self {
             tab_manager: TabManager::new(),
             downloads: DownloadManager::with_downloads(downloads),
@@ -155,6 +163,11 @@ impl AppState {
             pending_pwd_save: None,
             requested_permissions: HashMap::new(),
             download_samples: HashMap::new(),
+            omnibox,
+            trends: Vec::new(),
+            trends_region: String::new(),
+            trends_fetched_at: 0,
+            trends_loading: false,
         }
     }
 
@@ -1028,6 +1041,21 @@ pub fn handle_chrome_command(
             ));
             None
         }
+        ChromeCommand::OmniboxSuggest { q } => {
+            let items =
+                crate::browser::omnibox::suggest(&state.conn, &state.omnibox, &q, &state.trends, 8);
+            let payload = serde_json::json!({ "q": q, "items": items }).to_string();
+            let _ = chrome.evaluate_script(&format!(
+                "window.__neura && window.__neura.setOmnibox({})",
+                payload
+            ));
+            None
+        }
+        ChromeCommand::OmniboxPick { q, url, shown } => {
+            crate::browser::omnibox::learn(&state.conn, &mut state.omnibox, &q, &url, &shown);
+            None
+        }
+        ChromeCommand::RefreshTrends => None,
         ChromeCommand::DeleteHistoryEntry { id } => {
             let _ = repositories::delete_history_entry(&state.conn, id);
             let results = repositories::list_history(&state.conn, 100).unwrap_or_default();
@@ -2848,6 +2876,26 @@ pub fn handle_app_event_inner(
             ));
             None
         }
+        AppEvent::TrendsLoaded {
+            region,
+            trends,
+            fetched_at,
+        } => {
+            state.trends = trends;
+            state.trends_region = region;
+            state.trends_fetched_at = fetched_at;
+            state.trends_loading = false;
+            let _ = chrome.evaluate_script(
+                "window.__neura && window.__neura.refreshOmnibox && window.__neura.refreshOmnibox()",
+            );
+            None
+        }
+        AppEvent::TrendsFailed { region } => {
+            if state.trends_region == region || state.trends_region.is_empty() {
+                state.trends_loading = false;
+            }
+            None
+        }
         AppEvent::UpdateDownloadProgress { received, total } => {
             let _ = chrome.evaluate_script(&format!(
                 "window.__neura && window.__neura.setUpdateState({{status:'downloading',received:{},total:{}}})",
@@ -3372,11 +3420,6 @@ fn handle_save_settings(
                 state.settings.search.suggestions_enabled = v;
             }
         }
-        "trending" => {
-            if let Some(v) = value.as_bool() {
-                state.settings.search.trending_enabled = v;
-            }
-        }
         "new_tab_show_search" => {
             if let Some(v) = value.as_bool() {
                 state.settings.new_tab.show_search = v;
@@ -3449,6 +3492,9 @@ fn handle_save_settings(
         "region" => {
             if let Some(v) = value.as_str() {
                 state.settings.region = v.to_string();
+                state.trends.clear();
+                state.trends_region.clear();
+                state.trends_fetched_at = 0;
             }
         }
         _ => {

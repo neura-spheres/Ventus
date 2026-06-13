@@ -101,8 +101,6 @@ pub struct SearchSettings {
     pub site_shortcuts_enabled: bool,
     #[serde(default = "default_true")]
     pub suggestions_enabled: bool,
-    #[serde(default = "default_true")]
-    pub trending_enabled: bool,
 }
 
 impl Default for SearchSettings {
@@ -111,7 +109,6 @@ impl Default for SearchSettings {
             default_engine: "google".to_string(),
             site_shortcuts_enabled: true,
             suggestions_enabled: true,
-            trending_enabled: true,
         }
     }
 }

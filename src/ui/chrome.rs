@@ -402,6 +402,15 @@ button,input,select,textarea{font-family:var(--font)}
   box-shadow:0 0 0 3px var(--accent-dim),0 0 12px var(--accent-glow);
   background:var(--address-fill);
 }
+#address-bar.suggestions-open,
+#address-bar.suggestions-open:focus-within{
+  --address-fill:var(--bg-elevated);
+  border-color:var(--border);
+  border-bottom-color:transparent;
+  border-radius:16px 16px 0 0;
+  box-shadow:none;
+  background:var(--address-fill);
+}
 @property --load-angle{
   syntax:"<angle>";
   inherits:false;
@@ -440,6 +449,7 @@ button,input,select,textarea{font-family:var(--font)}
   animation:none;
   opacity:0;
 }
+#address-bar.suggestions-open::before{opacity:0}
 @keyframes address-load-orbit{
   to{--load-angle:360deg}
 }
@@ -552,10 +562,11 @@ button,input,select,textarea{font-family:var(--font)}
 .suggestions-panel.open{display:block}
 #url-suggestions{
   position:fixed;
-  top:calc(var(--toolbar-h) + 6px);
   max-height:360px;
   overflow-y:auto;
-  padding:6px;
+  padding:7px 6px 8px;
+  border-top:0;
+  border-radius:0 0 16px 16px;
 }
 .suggestion-section{
   padding:6px 8px 4px;
@@ -3652,13 +3663,6 @@ svg{display:block;flex-shrink:0}
           </div>
           <div class="toggle-switch" id="toggle-suggestions" onclick="toggleSetting('search_suggestions')"></div>
         </div>
-        <div class="settings-toggle">
-          <div class="settings-toggle-info">
-            <div class="toggle-title">Trending searches</div>
-            <div class="toggle-desc">Show popular searches in the dropdown</div>
-          </div>
-          <div class="toggle-switch" id="toggle-trending" onclick="toggleSetting('trending')"></div>
-        </div>
       </div>
 
       <div class="settings-section" id="section-newtab">
@@ -4385,6 +4389,7 @@ let state = {
   bookmarks: [],
   bookmark_folders: [],
   history: [],
+  omnibox: [],
   downloads: [],
   search_engines: [],
   settings: {},
@@ -4429,7 +4434,7 @@ let newtabBgCss = '';
 let newtabWallpaperData = '';
 let settingDrafts = {};
 let siteInfoOpen = false;
-const trendingSearches = ['AI news', 'technology', 'Indonesia news', 'startup funding', 'web design'];
+let lastTypedOmnibox = '';
 const SITE_PERMISSION_DEFS = [
   ['camera', 'Camera'],
   ['microphone', 'Microphone'],
@@ -4624,6 +4629,13 @@ window.__neura = {
     state.history = items || [];
     renderHistory();
     renderSuggestionPanels();
+  },
+  setOmnibox(payload) {
+    state.omnibox = (payload && payload.items) || [];
+    renderSuggestionPanels();
+  },
+  refreshOmnibox() {
+    refreshOmnibox();
   },
   clearTransientUi() {
     hideSuggestions();
@@ -5940,10 +5952,6 @@ function searchSuggestionsEnabled() {
   return searchSettings().suggestions_enabled !== false;
 }
 
-function trendingEnabled() {
-  return searchSettings().trending_enabled !== false;
-}
-
 function populateSettingsPanel() {
   const s = state.settings || {};
   const app = s.appearance || {};
@@ -5967,7 +5975,6 @@ function populateSettingsPanel() {
   setToggleEl('toggle-show-bookmarks-bar', !!app.show_bookmarks_bar);
   setToggleEl('toggle-show-url', app.show_tab_url !== false);
   setToggleEl('toggle-suggestions', searchSuggestionsEnabled());
-  setToggleEl('toggle-trending', trendingEnabled());
   setToggleEl('toggle-history', !priv.disable_history);
   setToggleEl('toggle-ad-blocker-enabled', priv.ad_blocker_enabled !== false);
   setToggleEl('toggle-https-only', priv.https_only !== false);
@@ -6185,10 +6192,13 @@ function handleUrlFocus() {
   setUrlEditing(true);
   input.select();
   input.dataset.showingCurrent = '1';
+  lastTypedOmnibox = '';
   if (!searchSuggestionsEnabled()) return;
   activeSuggestionTarget = 'url';
   activeSuggestionIndex = -1;
   renderSuggestions('url', '');
+  send('RefreshTrends');
+  send('OmniboxSuggest', {q: ''});
   send('GetHistory', {q: ''});
 }
 function handleUrlInput(e) {
@@ -6196,6 +6206,7 @@ function handleUrlInput(e) {
   const value = input.value;
   setUrlEditing(true);
   delete input.dataset.showingCurrent;
+  lastTypedOmnibox = value;
   if (!searchSuggestionsEnabled()) {
     hideSuggestions();
     return;
@@ -6209,7 +6220,7 @@ function handleUrlInput(e) {
     }
   }
   renderSuggestions('url', value);
-  send('GetHistory', {q: value});
+  send('OmniboxSuggest', {q: value});
 }
 function handleUrlBlur() {
   delete document.getElementById('url-input').dataset.showingCurrent;
@@ -6222,6 +6233,7 @@ function handleUrlKey(e) {
     const raw = e.target.value.trim();
     if (!raw) return;
     const url = /^[a-z0-9-]+$/i.test(raw) ? 'https://www.' + raw + '.com' : raw;
+    recordOmniboxPick(url);
     hideSuggestions();
     send('Navigate', {url});
     e.target.blur();
@@ -6241,7 +6253,7 @@ function handleUrlKey(e) {
   }
   if (e.key === 'Enter') {
     const val = input.value.trim();
-    if (val) { hideSuggestions(); send('Navigate', {url: val}); input.blur(); }
+    if (val) { recordOmniboxPick(val); hideSuggestions(); send('Navigate', {url: val}); input.blur(); }
   } else if (e.key === 'Escape') {
     hideSuggestions();
     input.blur();
@@ -6792,20 +6804,25 @@ function handleNewtabKey(e) {
   if (handleSuggestionKey(e, 'newtab')) return;
   if (e.key === 'Enter') {
     const v = e.target.value.trim();
-    if (v) { send('Navigate', {url: v}); e.target.value = ''; hideSuggestions(); }
+    if (v) { recordOmniboxPick(v); send('Navigate', {url: v}); e.target.value = ''; hideSuggestions(); }
   }
 }
 function handleNewtabFocus() {
+  lastTypedOmnibox = '';
   if (!searchSuggestionsEnabled()) return;
   openSuggestions('newtab');
+  send('RefreshTrends');
+  send('OmniboxSuggest', {q: ''});
   send('GetHistory', {q: ''});
 }
 function handleNewtabInput(value) {
+  lastTypedOmnibox = value;
   if (!searchSuggestionsEnabled()) {
     hideSuggestions();
     return;
   }
   renderSuggestions('newtab', value);
+  send('OmniboxSuggest', {q: value});
 }
 function handleNewtabBlur() {
   scheduleSuggestionClose();
@@ -7105,10 +7122,33 @@ function hideSuggestions() {
   activeSuggestionTarget = null;
   activeSuggestionIndex = -1;
   activeSuggestions = [];
+  lastTypedOmnibox = '';
+  setUrlSuggestionsOpen(false);
   document.getElementById('url-suggestions').classList.remove('open');
   document.getElementById('newtab-suggestions').classList.remove('open');
   document.querySelector('.newtab-search-wrap')?.classList.remove('suggestions-open');
   syncSuggestionOverlay(null);
+}
+
+function setUrlSuggestionsOpen(open) {
+  const bar = document.getElementById('address-bar');
+  if (bar) bar.classList.toggle('suggestions-open', !!open);
+}
+
+function refreshOmnibox() {
+  if (!activeSuggestionTarget) return;
+  const input = getSuggestionInput(activeSuggestionTarget);
+  if (!input) return;
+  const q = activeSuggestionTarget === 'url' && input.dataset.showingCurrent === '1' ? '' : input.value;
+  send('OmniboxSuggest', {q});
+}
+
+function recordOmniboxPick(url) {
+  if (!url) return;
+  const q = (lastTypedOmnibox || '').trim();
+  if (!q) return;
+  const shown = (activeSuggestions || []).filter(s => s.predicted && s.url).map(s => s.url);
+  send('OmniboxPick', {q, url, shown});
 }
 
 function renderSuggestionPanels() {
@@ -7131,10 +7171,12 @@ function renderSuggestions(target, rawQuery) {
   const panel = document.getElementById(target === 'newtab' ? 'newtab-suggestions' : 'url-suggestions');
   if (!input || !panel) return;
   const newtabWrap = target === 'newtab' ? panel.closest('.newtab-search-wrap') : null;
+  if (target !== 'url') setUrlSuggestionsOpen(false);
   const query = (rawQuery || '').trim();
   activeSuggestions = buildSuggestions(query);
   if (!activeSuggestions.length) {
     panel.classList.remove('open');
+    if (target === 'url') setUrlSuggestionsOpen(false);
     if (newtabWrap) newtabWrap.classList.remove('suggestions-open');
     panel.innerHTML = '';
     syncSuggestionOverlay(null);
@@ -7147,16 +7189,25 @@ function renderSuggestions(target, rawQuery) {
       chooseSuggestion(index);
     });
   });
-  if (target === 'url') positionUrlSuggestions(panel);
+  if (target === 'url') {
+    positionUrlSuggestions(panel);
+    setUrlSuggestionsOpen(true);
+  } else {
+    setUrlSuggestionsOpen(false);
+  }
   panel.classList.add('open');
   if (newtabWrap) newtabWrap.classList.add('suggestions-open');
   syncSuggestionOverlay(panel);
 }
 
 function positionUrlSuggestions(panel) {
-  const rect = document.getElementById('address-bar').getBoundingClientRect();
+  const bar = document.getElementById('address-bar');
+  if (!bar) return;
+  const rect = bar.getBoundingClientRect();
   panel.style.left = rect.left + 'px';
   panel.style.width = rect.width + 'px';
+  panel.style.top = (rect.bottom - 1) + 'px';
+  panel.style.maxHeight = Math.max(180, window.innerHeight - rect.bottom - 10) + 'px';
 }
 
 function syncSuggestionOverlay(panel) {
@@ -7191,100 +7242,83 @@ function refreshSuggestionOverlayBounds() {
 }
 
 function buildSuggestions(query) {
-  const q = query.toLowerCase();
-  const items = [];
+  const q = (query || '').trim();
   const defaultEngine = getDefaultEngine();
-  if (query) {
-    if (looksLikeNavigableUrl(query)) {
-      items.push({
-        group: 'Recommendation',
-        title: `Go to ${query}`,
-        sub: 'Open address',
-        url: query,
-        icon: 'globe'
-      });
+  const items = [];
+  const predUrls = new Set();
+  const seenRows = new Set();
+
+  for (const p of (state.omnibox || [])) {
+    if (!p || !p.url) continue;
+    const isSearch = p.kind === 'search';
+    const isTrend = p.kind === 'trend';
+    const group = q ? 'Top picks' : 'Recommendations for you';
+    const item = {
+      group,
+      title: p.title || (isSearch ? p.url : friendlySiteName(p.url, '')),
+      sub: p.sub || (isSearch || isTrend ? (defaultEngine ? `Search ${defaultEngine.name}` : 'Search the web') : siteDomain(p.url)),
+      url: p.url,
+      icon: isSearch || isTrend ? 'search' : 'globe',
+      predicted: true
+    };
+    const row = suggestionRowKey(item);
+    if (seenRows.has(row)) continue;
+    seenRows.add(row);
+    items.push(item);
+    predUrls.add(suggestionUrlKey(p.url));
+  }
+
+  if (q) {
+    if (looksLikeNavigableUrl(q) && !predUrls.has(suggestionUrlKey(q))) {
+      const item = { group: 'Actions', title: `Go to ${q}`, sub: 'Open address', url: q, icon: 'globe' };
+      const row = suggestionRowKey(item);
+      if (!seenRows.has(row)) {
+        seenRows.add(row);
+        items.push(item);
+      }
     }
-    items.push({
-      group: 'Recommendation',
-      title: `Search ${defaultEngine ? defaultEngine.name : 'the web'} for "${query}"`,
-      sub: 'Press Enter to search',
-      url: query,
-      icon: 'search',
-      kbd: 'Enter'
-    });
-  } else {
-    items.push({
-      group: 'Recommendation',
-      title: 'Search the web',
-      sub: defaultEngine ? `${defaultEngine.name} is your default search engine` : 'Type a query and press Enter',
-      url: '',
-      icon: 'search'
-    });
+    if (!predUrls.has(suggestionUrlKey(q))) {
+      const item = {
+        group: 'Actions',
+        title: `Search ${defaultEngine ? defaultEngine.name : 'the web'} for "${q}"`,
+        sub: 'Press Enter to search',
+        url: q,
+        icon: 'search',
+        kbd: 'Enter'
+      };
+      const row = suggestionRowKey(item);
+      if (!seenRows.has(row)) {
+        seenRows.add(row);
+        items.push(item);
+      }
+    }
   }
 
-  if (!query && trendingEnabled()) {
-    items.push(...trendingSearches.map(term => ({
-      group: 'Trending searches',
-      title: term,
-      sub: defaultEngine ? `Search with ${defaultEngine.name}` : 'Search the web',
-      url: term,
-      icon: 'search'
-    })));
-  }
+  return items.filter(item => item.url || item.group === 'Actions');
+}
 
-  const recentSearches = uniqueRecentSearches()
-    .filter(s => !q || s.query.toLowerCase().includes(q))
-    .slice(0, 4)
-    .map(s => ({
-      group: 'Recent searches',
-      title: s.query,
-      sub: siteDomain(s.url),
-      url: s.query,
-      icon: 'clock'
-    }));
-  items.push(...recentSearches);
+function suggestionRowKey(item) {
+  if (!item) return '';
+  if (item.icon === 'search') return 'search:' + (item.url || '').trim().toLowerCase();
+  const title = (item.title || '').trim().toLowerCase();
+  const sub = (item.sub || '').trim().toLowerCase();
+  if (title && sub) return 'site:' + sub + ':' + title;
+  return suggestionUrlKey(item.url);
+}
 
-  // Split history into prefix matches (URL starts with query) vs. full-text matches.
-  // Prefix matches go before "Search for…" and "Go to…" for instant navigation.
-  const allHistory = uniqueHistory().filter(h =>
-    !q || (h.title || '').toLowerCase().includes(q) || (h.url || '').toLowerCase().includes(q)
-  );
-  const strippedQ = q.replace(/^https?:\/\/(www\.)?/, '');
-  const prefixHits = q ? allHistory.filter(h => {
-    const bare = (h.url || '').replace(/^https?:\/\/(www\.)?/, '').toLowerCase();
-    return bare.startsWith(strippedQ);
-  }).slice(0, 3) : [];
-  const prefixUrls = new Set(prefixHits.map(h => h.url));
-  const restHits = allHistory.filter(h => !prefixUrls.has(h.url)).slice(0, 5);
-
-  if (prefixHits.length) {
-    items.unshift(...prefixHits.map(h => ({
-      group: 'Best match',
-      title: h.title || friendlySiteName(h.url, h.title),
-      sub: siteDomain(h.url),
-      url: h.url,
-      icon: 'globe'
-    })));
-  }
-  const recentSites = restHits.map(h => ({
-    group: recentSearches.length ? 'Recent pages' : 'Recent',
-    title: h.title || friendlySiteName(h.url, h.title),
-    sub: siteDomain(h.url),
-    url: h.url,
-    icon: 'clock'
-  }));
-  items.push(...recentSites);
-
-  if (!query) {
-    items.push(...(state.search_engines || []).slice(0, 4).map(engine => ({
-      group: 'Search engines',
-      title: engine.name,
-      sub: engine.shortcut ? `Shortcut ${engine.shortcut}` : 'Search provider',
-      url: engineHomeUrl(engine),
-      icon: 'search'
-    })));
-  }
-  return items.filter(item => item.url || item.group === 'Recommendation');
+function suggestionUrlKey(url) {
+  const raw = (url || '').trim();
+  if (!raw) return '';
+  const value = !/^[a-z][a-z0-9+.-]*:\/\//i.test(raw) && looksLikeNavigableUrl(raw) ? 'https://' + raw : raw;
+  try {
+    const u = new URL(value);
+    if (u.protocol === 'http:' || u.protocol === 'https:') {
+      const host = u.hostname.replace(/^www\./, '').toLowerCase();
+      const path = u.pathname.replace(/\/+$/, '');
+      return host + path + u.search;
+    }
+  } catch {}
+  return raw.replace(/\/+$/, '').toLowerCase();
 }
 
 function renderSuggestionGroups(items) {
@@ -7295,7 +7329,7 @@ function renderSuggestionGroups(items) {
       : '';
     return `${groupHtml}
       <div class="suggestion-item" data-index="${index}">
-        <div class="suggestion-item-icon">${item.icon === 'clock' ? clockIconSvg() : searchIconSvg()}</div>
+        <div class="suggestion-item-icon">${suggestionIconSvg(item.icon)}</div>
         <div class="suggestion-item-info">
           <div class="suggestion-item-title">${escHtml(item.title)}</div>
           <div class="suggestion-item-sub">${escHtml(item.sub || '')}</div>
@@ -7346,6 +7380,7 @@ function navigateWithSuggestion(url) {
     getSuggestionInput(activeSuggestionTarget || 'url').focus();
     return;
   }
+  recordOmniboxPick(url);
   send('Navigate', {url});
   const input = getSuggestionInput(activeSuggestionTarget || 'url');
   if (input) input.value = '';
@@ -7373,43 +7408,8 @@ function uniqueHistory() {
   });
 }
 
-function uniqueRecentSearches() {
-  const seen = new Set();
-  const searches = [];
-  for (const h of uniqueHistory()) {
-    const query = extractSearchQuery(h.url);
-    if (!query || seen.has(query.toLowerCase())) continue;
-    seen.add(query.toLowerCase());
-    searches.push({query, url: h.url});
-  }
-  return searches;
-}
-
-function extractSearchQuery(url) {
-  try {
-    const u = new URL(url);
-    const host = u.hostname.replace(/^www\./, '');
-    if (host.includes('google.') || host.includes('bing.') || host.includes('brave.com') || host.includes('duckduckgo.com')) {
-      return u.searchParams.get('q') || '';
-    }
-    if (host.includes('perplexity.ai')) {
-      return u.searchParams.get('q') || u.searchParams.get('query') || '';
-    }
-  } catch {}
-  return '';
-}
-
 function looksLikeNavigableUrl(value) {
   return /^https?:\/\//i.test(value) || /^localhost(:|\/|$)/i.test(value) || /^\d{1,3}(\.\d{1,3}){3}(:|\/|$)/.test(value) || (!value.includes(' ') && value.includes('.'));
-}
-
-function engineHomeUrl(engine) {
-  try {
-    const u = new URL(engine.url_template.replace('{query}', ''));
-    return `${u.protocol}//${u.hostname}/`;
-  } catch {
-    return engine.url_template.replace('{query}', '');
-  }
 }
 
 function searchIconSvg() {
@@ -7418,6 +7418,16 @@ function searchIconSvg() {
 
 function clockIconSvg() {
   return '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>';
+}
+
+function globeIconSvg() {
+  return '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>';
+}
+
+function suggestionIconSvg(icon) {
+  if (icon === 'clock') return clockIconSvg();
+  if (icon === 'globe') return globeIconSvg();
+  return searchIconSvg();
 }
 
 // ============================================================
@@ -7995,12 +8005,6 @@ function toggleSetting(key) {
     if (!state.settings.search) state.settings.search = {};
     state.settings.search.suggestions_enabled = val;
     if (!val) hideSuggestions();
-  }
-  if (key === 'trending') {
-    if (!state.settings) state.settings = {};
-    if (!state.settings.search) state.settings.search = {};
-    state.settings.search.trending_enabled = val;
-    renderSuggestionPanels();
   }
   if (key === 'secure_dns_enabled') {
     if (!state.settings) state.settings = {};

@@ -138,4 +138,13 @@ CREATE TABLE IF NOT EXISTS credentials (
 );
 CREATE INDEX IF NOT EXISTS idx_credentials_origin ON credentials(origin);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_credentials_origin_user ON credentials(origin, username);
+
+CREATE TABLE IF NOT EXISTS omnibox_learn (
+    prefix TEXT NOT NULL,
+    url TEXT NOT NULL,
+    picks INTEGER NOT NULL DEFAULT 0,
+    last_pick INTEGER NOT NULL,
+    PRIMARY KEY (prefix, url)
+);
+CREATE INDEX IF NOT EXISTS idx_omnibox_prefix ON omnibox_learn(prefix);
 "#;

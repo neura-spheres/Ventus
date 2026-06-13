@@ -170,6 +170,16 @@ pub enum ChromeCommand {
     GetHistory {
         q: String,
     },
+    OmniboxSuggest {
+        q: String,
+    },
+    OmniboxPick {
+        q: String,
+        url: String,
+        #[serde(default)]
+        shown: Vec<String>,
+    },
+    RefreshTrends,
     DeleteHistoryEntry {
         id: i64,
     },
@@ -476,6 +486,14 @@ pub enum AppEvent {
     },
     NeuraFeedFailed {
         message: String,
+    },
+    TrendsLoaded {
+        region: String,
+        trends: Vec<crate::browser::omnibox::Trend>,
+        fetched_at: i64,
+    },
+    TrendsFailed {
+        region: String,
     },
     UpdateDownloadProgress {
         received: u64,

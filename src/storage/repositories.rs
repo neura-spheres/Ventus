@@ -679,6 +679,66 @@ pub fn search_history_frecency(
     Ok(rows.collect::<rusqlite::Result<_>>()?)
 }
 
+#[derive(Debug, Clone)]
+pub struct HistoryCandidate {
+    pub url: String,
+    pub title: String,
+    pub visits: i64,
+    pub last: i64,
+}
+
+pub fn history_candidates(
+    conn: &Connection,
+    q: &str,
+    limit: usize,
+) -> Result<Vec<HistoryCandidate>> {
+    let pattern = if q.is_empty() {
+        "%".to_string()
+    } else {
+        format!("%{}%", q)
+    };
+    let mut stmt = conn.prepare(
+        "SELECT url,
+                COALESCE(MAX(CASE WHEN title != '' THEN title ELSE NULL END), url),
+                COUNT(*), MAX(visited_at)
+         FROM history
+         WHERE (url LIKE ?1 OR title LIKE ?1)
+           AND url NOT LIKE 'neura://%'
+           AND url NOT LIKE 'about:%'
+         GROUP BY url
+         ORDER BY COUNT(*) * 1.0 / (1.0 + (strftime('%s','now') - MAX(visited_at)/1000) / 86400.0) DESC
+         LIMIT ?2",
+    )?;
+    let rows = stmt.query_map(params![pattern, limit as i64], |row| {
+        Ok(HistoryCandidate {
+            url: row.get(0)?,
+            title: row.get(1)?,
+            visits: row.get(2)?,
+            last: row.get(3)?,
+        })
+    })?;
+    Ok(rows.collect::<rusqlite::Result<_>>()?)
+}
+
+pub fn history_stats(conn: &Connection, url: &str) -> Result<Option<HistoryCandidate>> {
+    let mut stmt = conn.prepare(
+        "SELECT url,
+                COALESCE(MAX(CASE WHEN title != '' THEN title ELSE NULL END), url),
+                COUNT(*), MAX(visited_at)
+         FROM history WHERE url = ?1 GROUP BY url",
+    )?;
+    let mut rows = stmt.query([url])?;
+    let Some(row) = rows.next()? else {
+        return Ok(None);
+    };
+    Ok(Some(HistoryCandidate {
+        url: row.get(0)?,
+        title: row.get(1)?,
+        visits: row.get(2)?,
+        last: row.get(3)?,
+    }))
+}
+
 pub fn clear_history(conn: &Connection) -> Result<()> {
     conn.execute("DELETE FROM history", [])?;
     Ok(())

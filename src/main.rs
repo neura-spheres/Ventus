@@ -494,7 +494,7 @@ fn main() {
     let mut content_web_context = Some(wry::WebContext::new(Some(webview_data_dir.clone())));
 
     let chrome = {
-        const MAX_CHROME_ATTEMPTS: u32 = 24;
+        const MAX_CHROME_ATTEMPTS: u32 = 60;
         let mut attempt = 0u32;
         loop {
             attempt += 1;
@@ -543,9 +543,12 @@ fn main() {
                 }
                 Err(e) => {
                     tracing::error!("build chrome webview: {}", e);
+                    if let Some(ref sentinel) = crash_sentinel {
+                        let _ = std::fs::remove_file(sentinel);
+                    }
                     if is_busy_message(&e.to_string()) {
                         show_startup_error(
-                            "Ventus is still closing from the last time it ran.\n\nGive it a few seconds, then open it again.",
+                            "Ventus couldn't open because its browser engine profile is still in use.\n\nThis is usually antivirus scanning the profile after the last session closed. Wait a few seconds and open Ventus again.\n\nTo stop it happening, exclude this folder from your antivirus:\n%APPDATA%\\neura\\NeuraBrowser\\data",
                         );
                     } else {
                         show_startup_error(&format!(
@@ -798,6 +801,7 @@ fn main() {
                         v, n
                     ));
                 }
+                refresh_trends(&mut state, &proxy_main, &rt);
             }
 
             Event::UserEvent(AppEvent::Chrome(ChromeCommand::CheckForUpdate)) => {
@@ -864,6 +868,10 @@ fn main() {
                         }
                     }
                 });
+            }
+
+            Event::UserEvent(AppEvent::Chrome(ChromeCommand::RefreshTrends)) => {
+                refresh_trends(&mut state, &proxy_main, &rt);
             }
 
             Event::UserEvent(AppEvent::Chrome(ChromeCommand::FetchCurrencyRates)) => {
@@ -6233,6 +6241,40 @@ fn slim_feed_articles(json: &serde_json::Value) -> serde_json::Value {
             })
             .collect(),
     )
+}
+
+fn refresh_trends(
+    state: &mut AppState,
+    proxy: &tao::event_loop::EventLoopProxy<AppEvent>,
+    rt: &tokio::runtime::Runtime,
+) {
+    let region = browser::trends::clean_region(&state.settings.region);
+    let now = chrono::Utc::now().timestamp_millis();
+    if state.trends_loading {
+        return;
+    }
+    if state.trends_region == region
+        && now - state.trends_fetched_at < 600_000
+        && !state.trends.is_empty()
+    {
+        return;
+    }
+    state.trends_loading = true;
+    let proxy = proxy.clone();
+    rt.spawn(async move {
+        match browser::trends::fetch(&region).await {
+            Ok(trends) => {
+                let _ = proxy.send_event(AppEvent::TrendsLoaded {
+                    region,
+                    trends,
+                    fetched_at: chrono::Utc::now().timestamp_millis(),
+                });
+            }
+            Err(_) => {
+                let _ = proxy.send_event(AppEvent::TrendsFailed { region });
+            }
+        }
+    });
 }
 
 #[derive(Clone, Copy)]
