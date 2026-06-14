@@ -74,8 +74,10 @@ const LOAD_STALL_AFTER: u64 = 6;
 const BLACK_PROBE_AFTER: u64 = 3;
 const COVER_MAX_MS: u64 = 1000;
 const TAB_SLEEP_CHECK_EVERY: Duration = Duration::from_secs(20);
+const SUSPEND_IDLE_MS: i64 = 180_000;
 const HEAL_CONTENT_EVERY: Duration = Duration::from_millis(750);
-const MAX_LIVE_WEBVIEWS: usize = 8;
+const MAX_DOWNLOAD_RESUMES: u32 = 8;
+const DOWNLOAD_RESUME_DELAY: Duration = Duration::from_secs(2);
 const SESSION_SAVE_DELAY: Duration = Duration::from_secs(3);
 const WEBVIEW_PROFILE_RELEASE_TIMEOUT: Duration = Duration::from_secs(12);
 const WEBVIEW_PROFILE_RELEASE_POLL: u64 = 50;
@@ -601,6 +603,7 @@ fn main() {
     let mut incognito_web_context = Some(wry::WebContext::new(Some(incognito_data_dir.clone())));
 
     let mut content_views: HashMap<String, WebView> = HashMap::new();
+    let mut suspended_tabs: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut popups: HashMap<u64, PopupWindow> = HashMap::new();
     let mut next_popup_id: u64 = 1;
     #[cfg(windows)]
@@ -1313,12 +1316,14 @@ fn main() {
                 if state.tab_manager.active_tab_id.as_deref() != Some(tab_id.as_str()) {
                     content_views.remove(&tab_id);
                     content_hwnds.remove(&tab_id);
+                    suspended_tabs.remove(&tab_id);
                     clear_load_watches(&mut load_watches, &tab_id);
                     state.load_progress.remove(&tab_id);
                     return;
                 }
                 content_views.remove(&tab_id);
                 content_hwnds.remove(&tab_id);
+                suspended_tabs.remove(&tab_id);
                 clear_load_watches(&mut load_watches, &tab_id);
                 let layout = AppLayout::calculate(
                     layout_size(&window, &state),
@@ -1400,6 +1405,91 @@ state.settings.privacy.default_permissions.clone(),
                         &layout_config,
                         &window,
                     );
+                }
+            }
+
+            #[cfg(windows)]
+            Event::UserEvent(AppEvent::AccelProbe { id, url }) => {
+                let referer = state
+                    .tab_manager
+                    .active_tab()
+                    .map(|t| t.url.clone())
+                    .unwrap_or_default();
+                let ua = browser_user_agent();
+                let p = proxy_main.clone();
+                rt.spawn(async move {
+                    let res = browser::accel_download::probe(&url, &ua, &referer).await;
+                    let (accelerate, final_url, total) = match res {
+                        Some(pr) => (true, pr.final_url, pr.total),
+                        None => (false, url.clone(), 0),
+                    };
+                    let _ = p.send_event(AppEvent::AccelDecision {
+                        id,
+                        accelerate,
+                        url,
+                        final_url,
+                        total,
+                        referer,
+                    });
+                });
+            }
+
+            #[cfg(windows)]
+            Event::UserEvent(AppEvent::AccelDecision {
+                id,
+                accelerate,
+                url,
+                final_url,
+                total,
+                referer,
+            }) => {
+                use wv2win::Win32::Foundation::BOOL;
+                let entry = DOWNLOAD_DEFERRALS.with(|m| m.borrow_mut().remove(&id));
+                if let Some((deferral, args, default_name)) = entry {
+                    match resolve_download_target(&default_name, &shared_dl_dir) {
+                        None => unsafe {
+                            let _ = args.SetCancel(BOOL::from(true));
+                            let _ = deferral.Complete();
+                        },
+                        Some(target) if accelerate => {
+                            unsafe {
+                                let _ = args.SetCancel(BOOL::from(true));
+                                let _ = deferral.Complete();
+                            }
+                            let filename = target
+                                .file_name()
+                                .and_then(|n| n.to_str())
+                                .unwrap_or(&default_name)
+                                .to_string();
+                            let path_str = target.to_string_lossy().to_string();
+                            let ctl = browser::accel_download::AccelControl::new();
+                            ACCEL_DOWNLOADS.with(|m| m.borrow_mut().insert(id.clone(), ctl.clone()));
+                            let _ = proxy_main.send_event(AppEvent::DownloadStarted {
+                                id: Some(id.clone()),
+                                url,
+                                filename,
+                                path: path_str,
+                                total: Some(total),
+                            });
+                            tracing::info!(target: "ventus::dl", id = %id, total, "accelerated download started");
+                            rt.spawn(browser::accel_download::run(
+                                final_url,
+                                total,
+                                browser_user_agent(),
+                                referer,
+                                target,
+                                id,
+                                ctl,
+                                proxy_main.clone(),
+                            ));
+                        }
+                        Some(target) => {
+                            begin_native_download(&args, &target, url, &proxy_main);
+                            unsafe {
+                                let _ = deferral.Complete();
+                            }
+                        }
+                    }
                 }
             }
 
@@ -1685,6 +1775,7 @@ state.settings.privacy.default_permissions.clone(),
                         TabAction::Remove(id) => {
                             content_views.remove(&id);
                             content_hwnds.remove(&id);
+                            suspended_tabs.remove(&id);
                             clear_load_watches(&mut load_watches, &id);
                             apply_layout(
                                 &chrome,
@@ -1699,6 +1790,7 @@ state.settings.privacy.default_permissions.clone(),
                             for id in ids {
                                 content_views.remove(&id);
                                 content_hwnds.remove(&id);
+                                suspended_tabs.remove(&id);
                                 clear_load_watches(&mut load_watches, &id);
                             }
                             apply_layout(
@@ -2166,7 +2258,10 @@ state.settings.privacy.default_permissions.clone(),
                                 state.tab_manager.wake_tab(&tab_id);
                                 let _ = wv.focus();
                                 let _ = wv.zoom(tab_zoom(&state, &tab_id));
-                                if (restored || sleeping) && !is_loading {
+                                if suspended_tabs.remove(&tab_id) {
+                                    wake_content_webview(wv);
+                                    state.push_state_to_chrome(&chrome);
+                                } else if (restored || sleeping) && !is_loading {
                                     state.load_recoveries.remove(&app::load_key(&tab_id, &url));
                                     begin_native_load(&mut state, &chrome, &tab_id);
                                     state.push_state_to_chrome(&chrome);
@@ -2276,6 +2371,7 @@ state.settings.privacy.default_permissions.clone(),
                         TabAction::RebuildContent { tab_id, url } => {
                             content_views.remove(&tab_id);
                             content_hwnds.remove(&tab_id);
+                            suspended_tabs.remove(&tab_id);
                             clear_load_watches(&mut load_watches, &tab_id);
                             let is_incog = state.tab_manager.tab_is_incognito(&tab_id);
                             let ctx = if is_incog {
@@ -2710,53 +2806,85 @@ state.settings.privacy.default_permissions.clone(),
                     let now_ms = chrono::Utc::now().timestamp_millis();
                     let free_mb = available_memory_mb();
                     let threshold_ms = sleep_threshold_ms(free_mb) as i64;
+                    let max_live = max_live_webviews(free_mb);
                     let active = state.tab_manager.active_tab_id.clone().unwrap_or_default();
-                    let mut to_sleep: Vec<String> = state
+                    let to_suspend: Vec<String> = state
                         .tab_manager
                         .tabs
                         .iter()
                         .filter(|t| {
                             t.id != active
                                 && !t.is_neura_page()
-                                && !t.sleeping
                                 && t.status != crate::browser::tab::TabStatus::Loading
-                                && !t.is_audio_playing
+                                && !t.is_media_active
+                                && !tab_notifications_allowed(&t.url, &state.settings)
+                                && content_views.contains_key(&t.id)
+                                && !suspended_tabs.contains(&t.id)
+                                && (now_ms - t.last_active_at) >= SUSPEND_IDLE_MS
+                        })
+                        .map(|t| t.id.clone())
+                        .collect();
+                    for id in to_suspend {
+                        if let Some(wv) = content_views.get(&id) {
+                            suspend_content_webview(wv);
+                            suspended_tabs.insert(id.clone());
+                            tracing::debug!("tab_suspend: froze tab {} (free_mb={})", id, free_mb);
+                        }
+                    }
+
+                    let mut to_discard: Vec<String> = state
+                        .tab_manager
+                        .tabs
+                        .iter()
+                        .filter(|t| {
+                            t.id != active
+                                && !t.is_neura_page()
+                                && !t.pinned
+                                && !t.is_essential
+                                && t.status != crate::browser::tab::TabStatus::Loading
+                                && !t.is_media_active
+                                && !tab_notifications_allowed(&t.url, &state.settings)
                                 && content_views.contains_key(&t.id)
                                 && (now_ms - t.last_active_at) >= threshold_ms
                         })
                         .map(|t| t.id.clone())
                         .collect();
-                    if content_views.len() > MAX_LIVE_WEBVIEWS {
-                        let need = content_views.len() - MAX_LIVE_WEBVIEWS;
-                        let mut extra: Vec<(String, i64)> = state
+                    if content_views.len() > max_live {
+                        let need = content_views.len() - max_live;
+                        let mut extra: Vec<(String, bool, i64)> = state
                             .tab_manager
                             .tabs
                             .iter()
                             .filter(|t| {
                                 t.id != active
                                     && !t.is_neura_page()
-                                    && !t.sleeping
                                     && t.status != crate::browser::tab::TabStatus::Loading
-                                    && !t.is_audio_playing
+                                    && !t.is_media_active
+                                    && !tab_notifications_allowed(&t.url, &state.settings)
                                     && content_views.contains_key(&t.id)
-                                    && !to_sleep.iter().any(|id| id == &t.id)
+                                    && !to_discard.iter().any(|id| id == &t.id)
                             })
-                            .map(|t| (t.id.clone(), t.last_active_at))
+                            .map(|t| {
+                                let protected = t.pinned || t.is_essential;
+                                (t.id.clone(), protected, t.last_active_at)
+                            })
                             .collect();
-                        extra.sort_by_key(|(_, last)| *last);
-                        to_sleep.extend(extra.into_iter().take(need).map(|(id, _)| id));
+                        extra.sort_by(|a, b| a.1.cmp(&b.1).then(a.2.cmp(&b.2)));
+                        to_discard.extend(extra.into_iter().take(need).map(|(id, _, _)| id));
                     }
-                    to_sleep.sort();
-                    to_sleep.dedup();
-                    for id in to_sleep {
+                    to_discard.sort();
+                    to_discard.dedup();
+                    for id in to_discard {
                         content_views.remove(&id);
                         content_hwnds.remove(&id);
+                        suspended_tabs.remove(&id);
                         clear_load_watches(&mut load_watches, &id);
                         state.tab_manager.sleep_tab(&id);
                         tracing::debug!(
-                            "tab_sleep: sleeping tab {} (free_mb={}, threshold={}min)",
+                            "tab_discard: unloaded tab {} (free_mb={}, max_live={}, threshold={}min)",
                             id,
                             free_mb,
+                            max_live,
                             threshold_ms / 60_000
                         );
                     }
@@ -3651,7 +3779,7 @@ fn site_permission_state(value: &str) -> Wv2PermState {
 
 #[cfg(windows)]
 fn permission_asks_by_default(key: &str) -> bool {
-    matches!(key, "microphone" | "camera")
+    matches!(key, "microphone" | "camera" | "notifications")
 }
 
 #[cfg(windows)]
@@ -3817,15 +3945,41 @@ fn attach_permission_handler(
 }
 
 #[cfg(windows)]
-#[cfg(windows)]
 thread_local! {
     static DOWNLOAD_OPS: std::cell::RefCell<
         HashMap<String, webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2DownloadOperation>,
+    > = std::cell::RefCell::new(HashMap::new());
+
+    static DOWNLOAD_DEFERRALS: std::cell::RefCell<
+        HashMap<
+            String,
+            (
+                webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Deferral,
+                webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2DownloadStartingEventArgs,
+                String,
+            ),
+        >,
+    > = std::cell::RefCell::new(HashMap::new());
+
+    static ACCEL_DOWNLOADS: std::cell::RefCell<
+        HashMap<String, crate::browser::accel_download::AccelControl>,
     > = std::cell::RefCell::new(HashMap::new());
 }
 
 #[cfg(windows)]
 fn control_download(id: &str, action: DownloadCtl) {
+    use std::sync::atomic::Ordering;
+    if let Some(ctl) = ACCEL_DOWNLOADS.with(|m| m.borrow().get(id).cloned()) {
+        match action {
+            DownloadCtl::Pause => ctl.paused.store(true, Ordering::Relaxed),
+            DownloadCtl::Resume => ctl.paused.store(false, Ordering::Relaxed),
+            DownloadCtl::Cancel => {
+                ctl.cancel.store(true, Ordering::Relaxed);
+                ACCEL_DOWNLOADS.with(|m| m.borrow_mut().remove(id));
+            }
+        }
+        return;
+    }
     let op = DOWNLOAD_OPS.with(|m| m.borrow().get(id).cloned());
     let Some(op) = op else { return };
     unsafe {
@@ -3839,6 +3993,13 @@ fn control_download(id: &str, action: DownloadCtl) {
 
 #[cfg(windows)]
 fn cancel_all_downloads() {
+    use std::sync::atomic::Ordering;
+    ACCEL_DOWNLOADS.with(|m| {
+        for ctl in m.borrow().values() {
+            ctl.cancel.store(true, Ordering::Relaxed);
+        }
+        m.borrow_mut().clear();
+    });
     let ops: Vec<_> = DOWNLOAD_OPS.with(|m| m.borrow().values().cloned().collect());
     for op in ops {
         unsafe {
@@ -3854,15 +4015,8 @@ fn attach_download_handler(
     proxy: tao::event_loop::EventLoopProxy<AppEvent>,
     dl_dir: std::sync::Arc<std::sync::Mutex<DownloadPrefs>>,
 ) {
-    use webview2_com::Microsoft::Web::WebView2::Win32::{
-        ICoreWebView2, ICoreWebView2_4, COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON,
-        COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON_USER_CANCELED,
-        COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON_USER_PAUSED, COREWEBVIEW2_DOWNLOAD_STATE,
-        COREWEBVIEW2_DOWNLOAD_STATE_COMPLETED, COREWEBVIEW2_DOWNLOAD_STATE_IN_PROGRESS,
-    };
-    use webview2_com::{
-        BytesReceivedChangedEventHandler, DownloadStartingEventHandler, StateChangedEventHandler,
-    };
+    use webview2_com::DownloadStartingEventHandler;
+    use webview2_com::Microsoft::Web::WebView2::Win32::{ICoreWebView2, ICoreWebView2_4};
     use wv2core::{Interface, PWSTR};
     use wv2win::Win32::Foundation::BOOL;
 
@@ -3897,124 +4051,213 @@ fn attach_download_handler(
                 .unwrap_or("download")
                 .to_string();
 
-            let prefs = dl_dir.lock().unwrap_or_else(|e| e.into_inner()).clone();
-            let target = if prefs.ask {
-                let mut dlg = rfd::FileDialog::new()
-                    .set_title("Save file")
-                    .set_file_name(&default_name);
-                if prefs.dir.exists() {
-                    dlg = dlg.set_directory(&prefs.dir);
-                }
-                match dlg.save_file() {
-                    Some(p) => p,
-                    None => {
-                        args.SetCancel(BOOL::from(true))?;
-                        return Ok(());
-                    }
-                }
-            } else {
-                unique_download_path(&prefs.dir, &default_name)
-            };
-            if let Some(parent) = target.parent() {
-                let _ = std::fs::create_dir_all(parent);
+            if is_accel_candidate(&url) {
+                let deferral = args.GetDeferral()?;
+                let id = uuid::Uuid::new_v4().to_string();
+                DOWNLOAD_DEFERRALS.with(|m| {
+                    m.borrow_mut()
+                        .insert(id.clone(), (deferral, args.clone(), default_name));
+                });
+                let _ = proxy.send_event(AppEvent::AccelProbe { id, url });
+                return Ok(());
             }
-            let (path_pcwstr, _buf) = pcwstr(&target.to_string_lossy());
-            args.SetResultFilePath(path_pcwstr)?;
-            args.SetHandled(BOOL::from(true))?;
 
-            let id = uuid::Uuid::new_v4().to_string();
-            let filename = target
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or(&default_name)
-                .to_string();
-            let path_str = target.to_string_lossy().to_string();
-            let total = read_download_total(&op);
-
-            let proxy_p = proxy.clone();
-            let id_p = id.clone();
-            let last_emit =
-                std::cell::Cell::new(std::time::Instant::now() - std::time::Duration::from_secs(1));
-            let bytes_handler = BytesReceivedChangedEventHandler::create(Box::new(move |op, _| {
-                let Some(op) = op else {
-                    return Ok(());
-                };
-                let now = std::time::Instant::now();
-                if now.duration_since(last_emit.get()) < std::time::Duration::from_millis(150) {
-                    return Ok(());
-                }
-                last_emit.set(now);
-                let mut recv = 0i64;
-                op.BytesReceived(&mut recv)?;
-                let _ = proxy_p.send_event(AppEvent::DownloadProgress {
-                    id: id_p.clone(),
-                    received: recv.max(0) as u64,
-                    total: read_download_total(&op),
-                });
-                Ok(())
-            }));
-            let mut bt = Default::default();
-            op.add_BytesReceivedChanged(&bytes_handler, &mut bt)?;
-
-            let proxy_s = proxy.clone();
-            let id_s = id.clone();
-            let state_handler = StateChangedEventHandler::create(Box::new(move |op, _| {
-                let Some(op) = op else {
-                    return Ok(());
-                };
-                let mut st = COREWEBVIEW2_DOWNLOAD_STATE::default();
-                op.State(&mut st)?;
-                if st == COREWEBVIEW2_DOWNLOAD_STATE_IN_PROGRESS {
-                    let mut recv = 0i64;
-                    op.BytesReceived(&mut recv)?;
-                    let _ = proxy_s.send_event(AppEvent::DownloadProgress {
-                        id: id_s.clone(),
-                        received: recv.max(0) as u64,
-                        total: read_download_total(&op),
-                    });
-                    return Ok(());
-                }
-                if st == COREWEBVIEW2_DOWNLOAD_STATE_COMPLETED {
-                    DOWNLOAD_OPS.with(|m| m.borrow_mut().remove(&id_s));
-                    let _ = proxy_s.send_event(AppEvent::DownloadDone {
-                        id: id_s.clone(),
-                        success: true,
-                        canceled: false,
-                    });
-                    return Ok(());
-                }
-                let mut reason = COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON::default();
-                let _ = op.InterruptReason(&mut reason);
-                if reason == COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON_USER_PAUSED {
-                    let _ = proxy_s.send_event(AppEvent::DownloadPaused { id: id_s.clone() });
-                    return Ok(());
-                }
-                let canceled = reason == COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON_USER_CANCELED;
-                DOWNLOAD_OPS.with(|m| m.borrow_mut().remove(&id_s));
-                let _ = proxy_s.send_event(AppEvent::DownloadDone {
-                    id: id_s.clone(),
-                    success: false,
-                    canceled,
-                });
-                Ok(())
-            }));
-            let mut st_tok = Default::default();
-            op.add_StateChanged(&state_handler, &mut st_tok)?;
-
-            DOWNLOAD_OPS.with(|m| m.borrow_mut().insert(id.clone(), op.clone()));
-            let _ = proxy.send_event(AppEvent::DownloadStarted {
-                id: Some(id),
-                url,
-                filename,
-                path: path_str,
-                total,
-            });
+            let Some(target) = resolve_download_target(&default_name, &dl_dir) else {
+                args.SetCancel(BOOL::from(true))?;
+                return Ok(());
+            };
+            begin_native_download(&args, &target, url, &proxy);
         }
         Ok(())
     }));
     let mut token = Default::default();
     unsafe {
         let _ = webview4.add_DownloadStarting(&handler, &mut token);
+    }
+}
+
+fn is_accel_candidate(url: &str) -> bool {
+    url.starts_with("http://") || url.starts_with("https://")
+}
+
+fn resolve_download_target(
+    default_name: &str,
+    dl_dir: &std::sync::Arc<std::sync::Mutex<DownloadPrefs>>,
+) -> Option<std::path::PathBuf> {
+    let prefs = dl_dir.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    let target = if prefs.ask {
+        let mut dlg = rfd::FileDialog::new()
+            .set_title("Save file")
+            .set_file_name(default_name);
+        if prefs.dir.exists() {
+            dlg = dlg.set_directory(&prefs.dir);
+        }
+        dlg.save_file()?
+    } else {
+        unique_download_path(&prefs.dir, default_name)
+    };
+    if let Some(parent) = target.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    Some(target)
+}
+
+#[cfg(windows)]
+fn begin_native_download(
+    args: &webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2DownloadStartingEventArgs,
+    target: &std::path::Path,
+    url: String,
+    proxy: &tao::event_loop::EventLoopProxy<AppEvent>,
+) {
+    use webview2_com::Microsoft::Web::WebView2::Win32::{
+        COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON,
+        COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON_FILE_TRANSIENT_ERROR,
+        COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON_NETWORK_DISCONNECTED,
+        COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON_NETWORK_FAILED,
+        COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON_NETWORK_SERVER_DOWN,
+        COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON_NETWORK_TIMEOUT,
+        COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON_SERVER_FAILED,
+        COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON_USER_CANCELED,
+        COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON_USER_PAUSED, COREWEBVIEW2_DOWNLOAD_STATE,
+        COREWEBVIEW2_DOWNLOAD_STATE_COMPLETED, COREWEBVIEW2_DOWNLOAD_STATE_IN_PROGRESS,
+    };
+    use webview2_com::{BytesReceivedChangedEventHandler, StateChangedEventHandler};
+    use wv2win::Win32::Foundation::BOOL;
+
+    unsafe {
+        let Ok(op) = args.DownloadOperation() else {
+            return;
+        };
+        let (path_pcwstr, _buf) = pcwstr(&target.to_string_lossy());
+        if args.SetResultFilePath(path_pcwstr).is_err() {
+            return;
+        }
+        if args.SetHandled(BOOL::from(true)).is_err() {
+            return;
+        }
+
+        let id = uuid::Uuid::new_v4().to_string();
+        let filename = target
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("download")
+            .to_string();
+        let path_str = target.to_string_lossy().to_string();
+        let total = read_download_total(&op);
+
+        let proxy_p = proxy.clone();
+        let id_p = id.clone();
+        let last_emit =
+            std::cell::Cell::new(std::time::Instant::now() - std::time::Duration::from_secs(1));
+        let bytes_handler = BytesReceivedChangedEventHandler::create(Box::new(move |op, _| {
+            let Some(op) = op else {
+                return Ok(());
+            };
+            let now = std::time::Instant::now();
+            if now.duration_since(last_emit.get()) < std::time::Duration::from_millis(150) {
+                return Ok(());
+            }
+            last_emit.set(now);
+            let mut recv = 0i64;
+            op.BytesReceived(&mut recv)?;
+            let _ = proxy_p.send_event(AppEvent::DownloadProgress {
+                id: id_p.clone(),
+                received: recv.max(0) as u64,
+                total: read_download_total(&op),
+            });
+            Ok(())
+        }));
+        let mut bt = Default::default();
+        let _ = op.add_BytesReceivedChanged(&bytes_handler, &mut bt);
+
+        let proxy_s = proxy.clone();
+        let id_s = id.clone();
+        let resume_tries = std::cell::Cell::new(0u32);
+        let resume_anchor = std::cell::Cell::new(0u64);
+        let state_handler = StateChangedEventHandler::create(Box::new(move |op, _| {
+            let Some(op) = op else {
+                return Ok(());
+            };
+            let mut st = COREWEBVIEW2_DOWNLOAD_STATE::default();
+            op.State(&mut st)?;
+            if st == COREWEBVIEW2_DOWNLOAD_STATE_IN_PROGRESS {
+                let mut recv = 0i64;
+                op.BytesReceived(&mut recv)?;
+                let recv = recv.max(0) as u64;
+                if recv > resume_anchor.get().saturating_add(1_048_576) {
+                    resume_anchor.set(recv);
+                    resume_tries.set(0);
+                }
+                let _ = proxy_s.send_event(AppEvent::DownloadProgress {
+                    id: id_s.clone(),
+                    received: recv,
+                    total: read_download_total(&op),
+                });
+                return Ok(());
+            }
+            if st == COREWEBVIEW2_DOWNLOAD_STATE_COMPLETED {
+                DOWNLOAD_OPS.with(|m| m.borrow_mut().remove(&id_s));
+                tracing::info!(target: "ventus::dl", id = %id_s, "download completed");
+                let _ = proxy_s.send_event(AppEvent::DownloadDone {
+                    id: id_s.clone(),
+                    success: true,
+                    canceled: false,
+                });
+                return Ok(());
+            }
+            let mut reason = COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON::default();
+            let _ = op.InterruptReason(&mut reason);
+            if reason == COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON_USER_PAUSED {
+                let _ = proxy_s.send_event(AppEvent::DownloadPaused { id: id_s.clone() });
+                return Ok(());
+            }
+            let canceled = reason == COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON_USER_CANCELED;
+            let recoverable = reason == COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON_NETWORK_FAILED
+                || reason == COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON_NETWORK_TIMEOUT
+                || reason == COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON_NETWORK_DISCONNECTED
+                || reason == COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON_NETWORK_SERVER_DOWN
+                || reason == COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON_SERVER_FAILED
+                || reason == COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON_FILE_TRANSIENT_ERROR;
+            let mut can = BOOL::default();
+            let _ = op.CanResume(&mut can);
+            if !canceled
+                && recoverable
+                && can.as_bool()
+                && resume_tries.get() < MAX_DOWNLOAD_RESUMES
+            {
+                resume_tries.set(resume_tries.get() + 1);
+                tracing::warn!(target: "ventus::dl", id = %id_s, reason = reason.0, try_n = resume_tries.get(), "download interrupted; resuming");
+                let proxy_r = proxy_s.clone();
+                let id_r = id_s.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(DOWNLOAD_RESUME_DELAY);
+                    let _ = proxy_r.send_event(AppEvent::DownloadResume { id: id_r });
+                });
+                return Ok(());
+            }
+            DOWNLOAD_OPS.with(|m| m.borrow_mut().remove(&id_s));
+            if !canceled {
+                tracing::warn!(target: "ventus::dl", id = %id_s, reason = reason.0, "download failed");
+            }
+            let _ = proxy_s.send_event(AppEvent::DownloadDone {
+                id: id_s.clone(),
+                success: false,
+                canceled,
+            });
+            Ok(())
+        }));
+        let mut st_tok = Default::default();
+        let _ = op.add_StateChanged(&state_handler, &mut st_tok);
+
+        DOWNLOAD_OPS.with(|m| m.borrow_mut().insert(id.clone(), op.clone()));
+        tracing::info!(target: "ventus::dl", id = %id, filename = %filename, total = total.unwrap_or(0), "download started");
+        let _ = proxy.send_event(AppEvent::DownloadStarted {
+            id: Some(id),
+            url,
+            filename,
+            path: path_str,
+            total,
+        });
     }
 }
 
@@ -4990,9 +5233,14 @@ fn build_content_webview_once(
                         .get("playing")
                         .and_then(|v| v.as_bool())
                         .unwrap_or(false);
+                    let active = value
+                        .get("active")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(playing);
                     let _ = proxy_ipc.send_event(AppEvent::Chrome(ChromeCommand::TabAudioState {
                         tab_id: tab_id_ipc.clone(),
                         playing,
+                        active,
                     }));
                     return;
                 }
@@ -5143,6 +5391,28 @@ fn wake_content_webview(wv: &WebView) {
     );
 }
 
+#[cfg(windows)]
+fn suspend_content_webview(wv: &WebView) {
+    use webview2_com::Microsoft::Web::WebView2::Win32::{ICoreWebView2, ICoreWebView2_3};
+    use webview2_com::TrySuspendCompletedHandler;
+    use wv2core::Interface;
+    let controller = wv.controller();
+    let core: ICoreWebView2 = match unsafe { controller.CoreWebView2() } {
+        Ok(c) => c,
+        Err(_) => return,
+    };
+    let Ok(core3) = core.cast::<ICoreWebView2_3>() else {
+        return;
+    };
+    let handler = TrySuspendCompletedHandler::create(Box::new(move |_err, _ok| Ok(())));
+    unsafe {
+        let _ = core3.TrySuspend(&handler);
+    }
+}
+
+#[cfg(not(windows))]
+fn suspend_content_webview(_wv: &WebView) {}
+
 fn clear_tab_favicon(state: &mut AppState, tab_id: &str) {
     if let Some(tab) = state.tab_manager.tabs.iter_mut().find(|t| t.id == tab_id) {
         tab.favicon = None;
@@ -5186,11 +5456,8 @@ fn webview_args(settings: &config::AppSettings) -> String {
         "AutoDiscardTabs".to_string(),
         "CalculateNativeWinOcclusion".to_string(),
     ];
-    let mut enable_features = Vec::new();
+    let mut enable_features = vec!["ParallelDownloading".to_string()];
     let mut args = vec![
-        "--disable-backgrounding-occluded-windows".to_string(),
-        "--disable-renderer-backgrounding".to_string(),
-        "--disable-background-timer-throttling".to_string(),
         "--no-first-run".to_string(),
         "--disk-cache-size=1073741824".to_string(),
         "--media-cache-size=536870912".to_string(),
@@ -5869,9 +6136,12 @@ fn content_initialization_script(
     return '';
   };
   let __edgeTimer = 0;
+  let __neuraInternalDrag = false;
   const __clearEdgeTimer = () => { if (__edgeTimer) { clearTimeout(__edgeTimer); __edgeTimer = 0; } };
+  window.addEventListener('dragstart', function() { __neuraInternalDrag = true; }, true);
   window.addEventListener('dragover', function(e) {
     if (e.defaultPrevented || dropTargetEditable(e.target)) { __clearEdgeTimer(); return; }
+    if (__neuraInternalDrag) { __clearEdgeTimer(); return; }
     if (!dragHasLink(e.dataTransfer)) { __clearEdgeTimer(); return; }
     e.preventDefault();
     try { e.dataTransfer.dropEffect = 'copy'; } catch (_) {}
@@ -5888,12 +6158,14 @@ fn content_initialization_script(
   window.addEventListener('drop', function(e) {
     __clearEdgeTimer();
     if (e.defaultPrevented || dropTargetEditable(e.target)) return;
+    if (__neuraInternalDrag) return;
     const url = extractDropUrl(e.dataTransfer);
     if (!url) return;
     e.preventDefault();
     post({cmd:'open_in_new_tab', url});
   }, false);
   window.addEventListener('dragend', function() {
+    __neuraInternalDrag = false;
     __clearEdgeTimer();
     post({cmd:'sidebar_auto_close'});
   }, false);
@@ -6048,12 +6320,20 @@ fn content_initialization_script(
   // sidebar can show an animated speaker indicator and allow mute from the tab list.
   if (isTop) {
     let __audioPlaying = false;
+    let __mediaActive = false;
     const __checkAudio = function() {
-      const playing = Array.from(document.querySelectorAll('audio,video'))
-        .some(function(m) { return !m.paused && !m.muted && !m.ended && m.readyState > 2; });
-      if (playing !== __audioPlaying) {
-        __audioPlaying = playing;
-        post({cmd:'tab_audio_state', playing: playing});
+      const all = Array.from(document.querySelectorAll('audio,video'));
+      const audible = all.some(function(m) { return !m.paused && !m.muted && !m.ended && m.readyState > 2; });
+      const watching = all.some(function(m) {
+        if (m.tagName !== 'VIDEO' || m.paused || m.ended || m.readyState < 3) return false;
+        const r = m.getBoundingClientRect();
+        return (r.width * r.height) >= 30000;
+      });
+      const active = audible || watching;
+      if (audible !== __audioPlaying || active !== __mediaActive) {
+        __audioPlaying = audible;
+        __mediaActive = active;
+        post({cmd:'tab_audio_state', playing: audible, active: active});
       }
     };
     document.addEventListener('play',         __checkAudio, true);
@@ -9793,23 +10073,45 @@ fn available_memory_mb() -> u64 {
     u64::MAX
 }
 
-/// How long a background tab must be idle before it is eligible to sleep,
-/// based on how much free RAM is currently available.
-///
-/// | Free RAM   | Threshold |
-/// |------------|-----------|
-/// | > 4 GB     | 30 min    |
-/// | 2 – 4 GB   | 15 min    |
-/// | 1 – 2 GB   | 8 min     |
-/// | 512 MB – 1 GB | 4 min  |
-/// | < 512 MB   | 2 min     |
 fn sleep_threshold_ms(free_mb: u64) -> u64 {
     match free_mb {
-        m if m > 4096 => 30 * 60 * 1000,
-        m if m > 2048 => 15 * 60 * 1000,
-        m if m > 1024 => 8 * 60 * 1000,
+        m if m > 8192 => 4 * 60 * 60 * 1000,
+        m if m > 4096 => 2 * 60 * 60 * 1000,
+        m if m > 2048 => 30 * 60 * 1000,
+        m if m > 1024 => 10 * 60 * 1000,
         m if m > 512 => 4 * 60 * 1000,
-        _ => 2 * 60 * 1000,
+        _ => 90 * 1000,
+    }
+}
+
+fn max_live_webviews(free_mb: u64) -> usize {
+    match free_mb {
+        m if m > 8192 => 24,
+        m if m > 4096 => 16,
+        m if m > 2048 => 10,
+        m if m > 1024 => 6,
+        _ => 4,
+    }
+}
+
+fn tab_notifications_allowed(url: &str, settings: &config::AppSettings) -> bool {
+    #[cfg(windows)]
+    {
+        let Some(origin) = normalize_webview_origin(url) else {
+            return false;
+        };
+        permission_action(
+            settings.privacy.strict_permissions,
+            &settings.privacy.site_permissions,
+            &settings.privacy.default_permissions,
+            &origin,
+            "notifications",
+        ) == "allow"
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (url, settings);
+        false
     }
 }
 

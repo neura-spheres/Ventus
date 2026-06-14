@@ -89,6 +89,11 @@ pub enum ChromeCommand {
         #[serde(default)]
         before: Option<String>,
     },
+    MoveBookmarkFolder {
+        id: String,
+        #[serde(default)]
+        before: Option<String>,
+    },
     BookmarkRemove {
         url: String,
     },
@@ -278,6 +283,8 @@ pub enum ChromeCommand {
     TabAudioState {
         tab_id: String,
         playing: bool,
+        #[serde(default)]
+        active: bool,
     },
     /// Chrome UI requests mute/unmute toggle for a specific tab.
     MuteTab {
@@ -448,6 +455,21 @@ pub enum AppEvent {
     /// A native download was paused by the user (WebView2 reports USER_PAUSED).
     DownloadPaused {
         id: String,
+    },
+    DownloadResume {
+        id: String,
+    },
+    AccelProbe {
+        id: String,
+        url: String,
+    },
+    AccelDecision {
+        id: String,
+        accelerate: bool,
+        url: String,
+        final_url: String,
+        total: u64,
+        referer: String,
     },
     /// A native download reached a terminal state. `canceled` distinguishes a user
     /// cancel from a real failure.

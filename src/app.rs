@@ -16,6 +16,7 @@ use crate::config::{
 use crate::storage::{keychain, passwords, repositories, settings_store};
 use crate::ui::events::{AppEvent, ChromeCommand};
 
+const WEB_ERROR_UNKNOWN: i32 = 0;
 const WEB_ERROR_CONNECTION_ABORTED: i32 = 9;
 const WEB_ERROR_OPERATION_CANCELED: i32 = 14;
 
@@ -92,9 +93,9 @@ pub struct AppState {
     /// Per-origin set of permission keys the site has actually requested this session.
     /// Drives the site-info popover so it lists only what a page asked for.
     pub requested_permissions: HashMap<String, BTreeSet<String>>,
-    /// Per-download speed sampling: (sample time ms, bytes at that sample). Used to
-    /// turn raw byte-count ticks into a smoothed bytes/sec figure for the UI.
-    pub download_samples: HashMap<String, (i64, u64)>,
+    /// Per-download speed sampling: (sample time ms, bytes at that sample, smoothed bytes/sec).
+    /// Used to turn raw byte-count ticks into a smoothed bytes/sec figure for the UI.
+    pub download_samples: HashMap<String, (i64, u64, u64)>,
     /// On-device learned ranker for address-bar suggestions. Updated each time the
     /// user picks a suggestion, persisted to the settings table.
     pub omnibox: crate::browser::omnibox::Model,
@@ -176,21 +177,24 @@ impl AppState {
         let entry = self
             .download_samples
             .entry(id.to_string())
-            .or_insert((now, received));
-        let (t0, b0) = *entry;
-        let dt = now - t0;
-        if dt <= 0 {
-            return 0;
+            .or_insert((now, received, 0));
+        let (t_last, b_last, ema) = *entry;
+        let dt = now - t_last;
+        if dt < 250 {
+            return ema;
         }
-        let speed = if received >= b0 {
-            (received - b0) * 1000 / dt as u64
+        let instant = if received >= b_last {
+            (received - b_last).saturating_mul(1000) / dt as u64
         } else {
             0
         };
-        if dt >= 600 {
-            *entry = (now, received);
-        }
-        speed
+        let new_ema = if ema == 0 {
+            instant
+        } else {
+            (instant * 3 + ema * 7) / 10
+        };
+        *entry = (now, received, new_ema);
+        new_ema
     }
 
     pub fn account_state_json(&self) -> String {
@@ -665,6 +669,13 @@ pub fn handle_chrome_command(
             state.push_state_to_chrome(chrome);
             None
         }
+        ChromeCommand::MoveBookmarkFolder { id, before } => {
+            let _ = repositories::move_bookmark_folder(&state.conn, &id, before.as_deref());
+            state.cached_bookmark_folders =
+                repositories::list_bookmark_folders(&state.conn).unwrap_or_default();
+            state.push_state_to_chrome(chrome);
+            None
+        }
         ChromeCommand::BookmarkRemove { url } => {
             let _ = repositories::remove_bookmark_by_url(&state.conn, &url);
             state.cached_bookmarks = repositories::list_bookmarks(&state.conn).unwrap_or_default();
@@ -865,9 +876,14 @@ pub fn handle_chrome_command(
         ChromeCommand::SetDefaultPermission { permission, value } => {
             set_default_permission(permission, value, state, chrome)
         }
-        ChromeCommand::TabAudioState { tab_id, playing } => {
+        ChromeCommand::TabAudioState {
+            tab_id,
+            playing,
+            active,
+        } => {
             if let Some(tab) = state.tab_manager.tabs.iter_mut().find(|t| t.id == tab_id) {
                 tab.is_audio_playing = playing;
+                tab.is_media_active = active;
             }
             state.push_state_to_chrome(chrome);
             None
@@ -1972,7 +1988,7 @@ fn drop_failed_load(
 fn canceled_nav_status(status: i32) -> bool {
     matches!(
         status,
-        WEB_ERROR_CONNECTION_ABORTED | WEB_ERROR_OPERATION_CANCELED
+        WEB_ERROR_UNKNOWN | WEB_ERROR_CONNECTION_ABORTED | WEB_ERROR_OPERATION_CANCELED
     )
 }
 
@@ -2233,6 +2249,7 @@ pub fn handle_app_event_inner(
                 track_url && !redirect_start && (cur.is_empty() || !same_nav(&cur, &clean_url));
             if let Some(tab) = state.tab_manager.tabs.iter_mut().find(|t| t.id == tab_id) {
                 tab.is_audio_playing = false;
+                tab.is_media_active = false;
                 tab.is_muted = false;
             }
             if new_url {
@@ -2764,7 +2781,7 @@ pub fn handle_app_event_inner(
             let dl = state.downloads.add(dl).clone();
             state
                 .download_samples
-                .insert(dl.id.clone(), (dl.started_at, 0));
+                .insert(dl.id.clone(), (dl.started_at, 0, 0));
             if let Err(e) = repositories::save_download(&state.conn, &dl) {
                 tracing::warn!("save download start failed: {}", e);
             }
@@ -2845,6 +2862,15 @@ pub fn handle_app_event_inner(
             }
             state.push_state_to_chrome(chrome);
             None
+        }
+        AppEvent::DownloadResume { id } => {
+            if let Some(dl) = state.downloads.find_mut(&id) {
+                dl.status = crate::browser::downloads::DownloadStatus::Downloading;
+            }
+            Some(TabAction::DownloadControl {
+                id,
+                action: DownloadCtl::Resume,
+            })
         }
         AppEvent::DownloadDone {
             id,

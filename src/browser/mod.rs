@@ -1,3 +1,4 @@
+pub mod accel_download;
 pub mod cookie_manager;
 pub mod downloads;
 pub mod extensions;

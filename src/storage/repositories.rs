@@ -572,6 +572,28 @@ pub fn rename_bookmark_folder(conn: &Connection, id: &str, name: &str) -> Result
     Ok(())
 }
 
+pub fn move_bookmark_folder(conn: &Connection, id: &str, before_id: Option<&str>) -> Result<()> {
+    let mut ids: Vec<String> = list_bookmark_folders(conn)?
+        .into_iter()
+        .map(|f| f.id)
+        .collect();
+    let Some(from) = ids.iter().position(|f| f == id) else {
+        return Ok(());
+    };
+    let moved = ids.remove(from);
+    let insert_at = before_id
+        .and_then(|bid| ids.iter().position(|f| f == bid))
+        .unwrap_or(ids.len());
+    ids.insert(insert_at, moved);
+    for (pos, fid) in ids.iter().enumerate() {
+        conn.execute(
+            "UPDATE bookmark_folders SET position = ?1 WHERE id = ?2",
+            params![pos as i32, fid],
+        )?;
+    }
+    Ok(())
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct HistoryEntry {
     pub id: i64,

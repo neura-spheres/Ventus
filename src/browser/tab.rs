@@ -37,6 +37,8 @@ pub struct Tab {
     pub created_at: i64,
     pub last_active_at: i64,
     pub is_audio_playing: bool,
+    #[serde(skip)]
+    pub is_media_active: bool,
     pub is_muted: bool,
     pub sleeping: bool,
 }
@@ -69,6 +71,7 @@ impl Tab {
             created_at: now,
             last_active_at: now,
             is_audio_playing: false,
+            is_media_active: false,
             is_muted: false,
             sleeping: false,
         }

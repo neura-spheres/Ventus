@@ -9889,7 +9889,7 @@ function renderBookmarksBar() {
   const folderSvg = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
   const folderHtml = folders.map(f => {
     const label = f.name.length > 18 ? f.name.slice(0,16)+'...' : f.name;
-    return `<div class="bm-bar-item" data-folder-id="${escAttr(f.id)}" data-label="${escAttr(f.name)}" title="${escAttr(f.name)}" onclick="openFolderModal('${escAttr(f.id)}',this)" oncontextmenu="bmFolderContextMenu(event,this)">
+    return `<div class="bm-bar-item" draggable="true" data-folder-id="${escAttr(f.id)}" data-label="${escAttr(f.name)}" title="${escAttr(f.name)}" onclick="openFolderModal('${escAttr(f.id)}',this)" oncontextmenu="bmFolderContextMenu(event,this)">
       <span style="display:flex;align-items:center;gap:4px;opacity:0.75">${folderSvg}</span>
       <span class="bm-bar-text">${escHtml(label)}</span>
     </div>`;
@@ -11217,6 +11217,16 @@ document.addEventListener('dragstart', function(e) {
   // URL input has its own dedicated handler below that sets dataTransfer before this fires.
   if (e.target.id === 'url-input') return;
   if (e.target.closest('button')) { e.preventDefault(); return; }
+  // Bookmark-bar folder: reorder-only drag (no URL to carry).
+  const folderEl = e.target.closest('.bm-bar-item[data-folder-id]');
+  if (folderEl) {
+    dragKind = 'folder'; dragId = folderEl.dataset.folderId; dragPinned = false; dragFolderId = '';
+    dragTitle = folderEl.dataset.label || '';
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('application/x-ventus-folder', dragId);
+    folderEl.classList.add('dragging-url');
+    return;
+  }
   const el = e.target.closest('[data-nav-url]');
   if (!el) { e.preventDefault(); return; }
   const url = el.dataset.navUrl;
@@ -11251,7 +11261,10 @@ document.addEventListener('dragend', function() {
 // cfg.reorderKind, otherwise treats the drop as an external URL (new tab / save bookmark).
 function setupDropZone(container, cfg) {
   if (!container) return;
-  const visibleItems = () => [...container.querySelectorAll(cfg.item)].filter((it) => !it.classList.contains('dragging-url'));
+  const itemSel = () => (typeof cfg.item === 'function' ? cfg.item() : cfg.item);
+  const isReorder = () => (typeof cfg.reorderKind === 'function' ? cfg.reorderKind(dragKind) : dragKind === cfg.reorderKind);
+  const idOf = (el) => (cfg.idOf ? cfg.idOf(el) : el.dataset.reorderId);
+  const visibleItems = () => [...container.querySelectorAll(itemSel())].filter((it) => !it.classList.contains('dragging-url'));
   const groupItems = () => visibleItems().filter((it) => !cfg.sameGroup || cfg.sameGroup(it));
   const clearLines = () => {
     container.querySelectorAll('.dz-line,.dz-line-end').forEach((e) => e.classList.remove('dz-line','dz-line-end'));
@@ -11268,7 +11281,7 @@ function setupDropZone(container, cfg) {
   };
   container.addEventListener('dragover', function(e) {
     if (e.defaultPrevented) return;
-    const reorder = dragKind === cfg.reorderKind && dragId;
+    const reorder = isReorder() && dragId;
     const external = !reorder && dropHasLink(e.dataTransfer);
     if (!reorder && !external) return;
     e.preventDefault();
@@ -11289,13 +11302,13 @@ function setupDropZone(container, cfg) {
   }, false);
   container.addEventListener('drop', function(e) {
     if (e.defaultPrevented) return;
-    const reorder = dragKind === cfg.reorderKind && dragId;
+    const reorder = isReorder() && dragId;
     if (reorder && cfg.folderDrop && _bmMergeTarget) return;
     e.preventDefault();
     e.stopPropagation();
     if (reorder) {
       const before = computeBefore(e);
-      const beforeId = before ? before.dataset.reorderId : null;
+      const beforeId = before ? idOf(before) : null;
       clearLines();
       cfg.onReorder(dragId, beforeId);
     } else {
@@ -11375,8 +11388,11 @@ setupDropZone(document.getElementById('sb-page'), {
   onExternal: (url) => send('OpenInNewTab', {url}),
 });
 setupDropZone(document.getElementById('bookmarks-bar'), {
-  reorderKind: 'bookmark', item: '.bm-bar-item[data-reorder-id]', axis: 'x',
-  onReorder: moveBookmarkToBar,
+  reorderKind: (k) => k === 'bookmark' || k === 'folder',
+  item: () => (dragKind === 'folder' ? '.bm-bar-item[data-folder-id]' : '.bm-bar-item[data-reorder-id]'),
+  idOf: (el) => (dragKind === 'folder' ? el.dataset.folderId : el.dataset.reorderId),
+  axis: 'x',
+  onReorder: (id, before) => { if (dragKind === 'folder') send('MoveBookmarkFolder', {id, before}); else moveBookmarkToBar(id, before); },
   onExternal: (url) => send('BookmarkAddUrl', {url, title: dragTitle || ''}),
   folderDrop: true,
 });
