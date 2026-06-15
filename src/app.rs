@@ -1642,7 +1642,7 @@ fn take_pending(state: &mut AppState, tab_id: &str, url: &str) -> PendingNav {
     PendingNav::Match
 }
 
-fn same_nav(expected: &str, actual: &str) -> bool {
+pub(crate) fn same_nav(expected: &str, actual: &str) -> bool {
     let expected = crate::utils::url::clean_tracking_url(expected);
     if expected == actual {
         return true;
@@ -2345,6 +2345,17 @@ pub fn handle_app_event_inner(
                 .get(&tab_id)
                 .map(|expected| !same_nav(expected, &clean_url) && same_id)
                 .unwrap_or(false);
+            let pending_match = state
+                .pending_nav_urls
+                .get(&tab_id)
+                .map(|expected| same_nav(expected, &clean_url))
+                .unwrap_or(false);
+            let native_match = state
+                .native_loads
+                .get(&tab_id)
+                .map(|expected| same_nav(expected, &clean_url))
+                .unwrap_or(false);
+            let current_match = track_url && !cur.is_empty() && same_nav(&cur, &clean_url);
             if let Some(expected) = state.pending_nav_urls.get(&tab_id) {
                 if !same_nav(expected, &clean_url) && !redirect_start {
                     return None;
@@ -2353,13 +2364,23 @@ pub fn handle_app_event_inner(
             let same_doc = track_url
                 && !cur.is_empty()
                 && cur != clean_url
-                && same_nav(&cur, &clean_url)
+                && current_match
                 && !state.pending_nav_urls.contains_key(&tab_id);
             if same_doc {
                 return None;
             }
-            let new_url =
-                track_url && !redirect_start && (cur.is_empty() || !same_nav(&cur, &clean_url));
+            if native
+                && track_url
+                && was_loading
+                && (current_match || pending_match || native_match)
+            {
+                state.native_loads.insert(tab_id.clone(), clean_url);
+                if nav_id != 0 {
+                    state.native_nav_ids.insert(tab_id, nav_id);
+                }
+                return None;
+            }
+            let new_url = track_url && !redirect_start && !current_match;
             if let Some(tab) = state.tab_manager.tabs.iter_mut().find(|t| t.id == tab_id) {
                 tab.is_audio_playing = false;
                 tab.is_media_active = false;

@@ -1542,15 +1542,22 @@ state.settings.privacy.default_permissions.clone(),
                 id,
                 title,
                 body,
+                icon,
+                origin,
             }) => {
                 let proxy_click = proxy_main.clone();
                 let proxy_close = proxy_main.clone();
                 let (tc, ic) = (tab_id.clone(), id.clone());
                 let (td, idd) = (tab_id.clone(), id.clone());
+                let tab = state.tab_manager.get_tab(&tab_id);
+                let site = notification_site(&origin, tab.map(|t| t.url.as_str()).unwrap_or(""));
+                let icon = notification_icon(&icon, &origin, tab.and_then(|t| t.favicon.as_deref()));
                 notify::show(
                     &id,
                     &title,
                     &body,
+                    &site,
+                    &icon,
                     Box::new(move || {
                         let _ = proxy_click.send_event(AppEvent::NotificationClicked {
                             tab_id: tc.clone(),
@@ -1655,6 +1662,8 @@ state.settings.privacy.default_permissions.clone(),
                         &crate::utils::url::clean_tracking_url(url),
                     ));
                 }
+                let quiet_nav_event = repeated_native_load_start(&state, &app_event)
+                    || stale_canceled_nav_failure(&state, &app_event);
                 if let AppEvent::ContentLoadStart {
                     tab_id,
                     url,
@@ -1662,7 +1671,7 @@ state.settings.privacy.default_permissions.clone(),
                     ..
                 } = &app_event
                 {
-                    if *native {
+                    if *native && !quiet_nav_event {
                         watch_load(
                             &rt,
                             &proxy_main,
@@ -1747,7 +1756,7 @@ state.settings.privacy.default_permissions.clone(),
                         *guard = download_prefs_from_settings(&state.settings);
                     }
                 }
-                if nav_state_event {
+                if nav_state_event && !quiet_nav_event {
                     refresh_nav_buttons(&chrome, &content_views, &mut state);
                 }
                 if let Some(action) = action_opt {
@@ -4557,7 +4566,11 @@ fn attach_navigation_handler(
             }
             let mut status = Default::default();
             let _ = args.WebErrorStatus(&mut status);
-            tracing::warn!(target: "ventus::nav", tab = %tab_id, nav_id = id, status = status.0, url = %url, "NavigationCompleted FAILED");
+            if canceled_web_error_status(status.0) {
+                tracing::debug!(target: "ventus::nav", tab = %tab_id, nav_id = id, status = status.0, url = %url, "NavigationCompleted canceled");
+            } else {
+                tracing::warn!(target: "ventus::nav", tab = %tab_id, nav_id = id, status = status.0, url = %url, "NavigationCompleted FAILED");
+            }
             let _ = proxy.send_event(AppEvent::ContentNavigationFailed {
                 tab_id: tab_id.clone(),
                 url: url.clone(),
@@ -4972,6 +4985,10 @@ unsafe fn webview_source(
 
 fn is_recoverable_nav_url(url: &str) -> bool {
     url.starts_with("http://") || url.starts_with("https://") || url.starts_with("file://")
+}
+
+fn canceled_web_error_status(status: i32) -> bool {
+    matches!(status, 0 | 9 | 14)
 }
 
 #[cfg(windows)]
@@ -5416,6 +5433,8 @@ fn build_content_webview_once(
                             id,
                             title: get("title"),
                             body: get("body"),
+                            icon: get("icon"),
+                            origin: get("origin"),
                         });
                     }
                     return;
@@ -6005,7 +6024,9 @@ fn content_initialization_script(
       };
       this.close = () => { post({cmd: 'web_notification_close', id}); delete live[id]; };
       live[id] = this;
-      post({cmd: 'web_notification', id, title: this.title, body: this.body, icon: this.icon, origin: location.origin});
+      let icon = '';
+      try { if (this.icon) icon = new URL(this.icon, location.href).href; } catch (_) {}
+      post({cmd: 'web_notification', id, title: this.title, body: this.body, icon, origin: location.origin});
       setTimeout(() => this._fire('show'), 0);
     }
     Object.defineProperty(VN, 'permission', {get: () => Native.permission, configurable: true});
@@ -8433,6 +8454,165 @@ fn should_save_session(event: &AppEvent) -> bool {
             | AppEvent::Chrome(ChromeCommand::ReopenTab)
             | AppEvent::Chrome(ChromeCommand::OpenInNewTab { .. })
     )
+}
+
+fn notification_site(origin: &str, fallback: &str) -> String {
+    let site = notification_site_label(origin);
+    if !site.is_empty() {
+        return site;
+    }
+    notification_site_label(fallback)
+}
+
+fn notification_site_label(raw: &str) -> String {
+    let Ok(url) = url::Url::parse(raw) else {
+        return String::new();
+    };
+    let Some(host) = url.host_str() else {
+        return String::new();
+    };
+    site_case(&site_stem(host))
+}
+
+fn site_stem(host: &str) -> String {
+    let labels: Vec<&str> = host.split('.').filter(|p| !p.is_empty()).collect();
+    if labels.is_empty() {
+        return String::new();
+    }
+    if labels.len() == 1 {
+        return labels[0].to_string();
+    }
+    let mut idx = labels.len().saturating_sub(2);
+    let slds = ["ac", "co", "com", "edu", "gov", "net", "org"];
+    if labels.last().map(|p| p.len() == 2).unwrap_or(false)
+        && slds.contains(&labels[idx])
+        && idx > 0
+    {
+        idx -= 1;
+    }
+    labels[idx].to_string()
+}
+
+fn site_case(stem: &str) -> String {
+    let lower = stem.to_ascii_lowercase();
+    match lower.as_str() {
+        "whatsapp" => "WhatsApp".to_string(),
+        "youtube" => "YouTube".to_string(),
+        "chatgpt" => "ChatGPT".to_string(),
+        "github" => "GitHub".to_string(),
+        "gmail" => "Gmail".to_string(),
+        "google" => "Google".to_string(),
+        "linkedin" => "LinkedIn".to_string(),
+        _ => lower
+            .split(['-', '_'])
+            .filter(|p| !p.is_empty())
+            .map(title_word)
+            .collect::<Vec<_>>()
+            .join(" "),
+    }
+}
+
+fn title_word(word: &str) -> String {
+    let mut chars = word.chars();
+    let Some(first) = chars.next() else {
+        return String::new();
+    };
+    first.to_uppercase().chain(chars).collect()
+}
+
+fn notification_icon(icon: &str, origin: &str, favicon: Option<&str>) -> String {
+    if let Some(url) = notification_icon_url(icon, origin) {
+        return url;
+    }
+    if let Some(url) = favicon.and_then(|v| notification_icon_url(v, origin)) {
+        return url;
+    }
+    origin_favicon(origin).unwrap_or_default()
+}
+
+fn notification_icon_url(raw: &str, base: &str) -> Option<String> {
+    let raw = raw.trim();
+    if raw.is_empty() || raw.starts_with("data:") || raw.starts_with("blob:") {
+        return None;
+    }
+    let url = url::Url::parse(raw)
+        .or_else(|_| url::Url::parse(base).and_then(|base| base.join(raw)))
+        .ok()?;
+    if !matches!(url.scheme(), "http" | "https" | "file") {
+        return None;
+    }
+    Some(url.to_string())
+}
+
+fn origin_favicon(origin: &str) -> Option<String> {
+    let mut url = url::Url::parse(origin).ok()?;
+    if !matches!(url.scheme(), "http" | "https") {
+        return None;
+    }
+    url.set_path("/favicon.ico");
+    url.set_query(None);
+    url.set_fragment(None);
+    Some(url.to_string())
+}
+
+fn repeated_native_load_start(state: &AppState, event: &AppEvent) -> bool {
+    let AppEvent::ContentLoadStart {
+        tab_id,
+        url,
+        native,
+        ..
+    } = event
+    else {
+        return false;
+    };
+    if !*native {
+        return false;
+    }
+    let clean_url = crate::utils::url::clean_tracking_url(url);
+    if clean_url.trim().is_empty()
+        || clean_url == "about:blank"
+        || clean_url.starts_with("neura://")
+    {
+        return false;
+    }
+    let Some(tab) = state.tab_manager.get_tab(tab_id) else {
+        return false;
+    };
+    if tab.status != crate::browser::tab::TabStatus::Loading {
+        return false;
+    }
+    let current_match = app::same_nav(&tab.url, &clean_url);
+    let pending_match = state
+        .pending_nav_urls
+        .get(tab_id)
+        .map(|expected| app::same_nav(expected, &clean_url))
+        .unwrap_or(false);
+    let native_match = state
+        .native_loads
+        .get(tab_id)
+        .map(|expected| app::same_nav(expected, &clean_url))
+        .unwrap_or(false);
+    current_match || pending_match || native_match
+}
+
+fn stale_canceled_nav_failure(state: &AppState, event: &AppEvent) -> bool {
+    let AppEvent::ContentNavigationFailed {
+        tab_id,
+        status,
+        nav_id,
+        ..
+    } = event
+    else {
+        return false;
+    };
+    if !canceled_web_error_status(*status) {
+        return false;
+    }
+    state
+        .native_nav_ids
+        .get(tab_id)
+        .map(|id| *nav_id == 0 || *id != *nav_id)
+        .unwrap_or(false)
 }
 
 fn save_window_size(window: &tao::window::Window, state: &mut AppState, maxed: bool) {

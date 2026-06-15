@@ -640,6 +640,8 @@ pub enum AppEvent {
         id: String,
         title: String,
         body: String,
+        icon: String,
+        origin: String,
     },
     /// The page called notification.close() — dismiss the matching toast.
     WebNotificationClose {

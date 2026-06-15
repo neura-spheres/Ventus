@@ -4758,6 +4758,7 @@ window.__neura = {
     state.omnibox = (payload && payload.items) || [];
     renderSuggestionPanels();
     refreshSpotlightSuggestions();
+    syncInlineCompletion();
   },
   refreshOmnibox() {
     refreshOmnibox();
@@ -6625,14 +6626,7 @@ function handleUrlInput(e) {
     hideSuggestions();
     return;
   }
-  const typingForward = !e || e.inputType === 'insertText';
-  if (typingForward && value.length >= 2 && !value.includes(' ')) {
-    const completion = findInlineCompletion(value);
-    if (completion && completion.length > value.length) {
-      input.value = completion;
-      input.setSelectionRange(value.length, completion.length);
-    }
-  }
+  applyInlineCompletion(input, value, e);
   renderSuggestions('url', value);
   send('OmniboxSuggest', {q: value});
 }
@@ -6908,19 +6902,92 @@ function siteLabel(url) {
   const known = {youtube:'YouTube',github:'GitHub',gmail:'Gmail',google:'Google',reddit:'Reddit',linkedin:'LinkedIn',instagram:'Instagram',facebook:'Facebook',x:'X',twitter:'Twitter',netflix:'Netflix',spotify:'Spotify',tiktok:'TikTok',whatsapp:'WhatsApp',stackoverflow:'Stack Overflow',bbc:'BBC'};
   return known[raw] || raw.split('-').filter(Boolean).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 }
+function typedInputValue(input) {
+  if (!input) return '';
+  const start = input.selectionStart || 0;
+  const end = input.selectionEnd || 0;
+  if (end > start && end === input.value.length) return input.value.slice(0, start);
+  return input.value;
+}
+function inlineSite(url) {
+  if (!url) return null;
+  const raw = /^[a-z][a-z0-9+.-]*:\/\//i.test(url) ? url : 'https://' + url;
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+    const host = u.hostname.replace(/^www\./, '').toLowerCase();
+    if (!host || !host.includes('.')) return null;
+    const port = u.port ? ':' + u.port : '';
+    return {host: host + port, url: `${u.protocol}//${host}${port}/`};
+  } catch {
+    return null;
+  }
+}
+function inlineText(typed, host) {
+  const raw = String(typed || '').trim();
+  const lower = raw.toLowerCase();
+  const scheme = (lower.match(/^https?:\/\//) || [''])[0];
+  const afterScheme = lower.replace(/^https?:\/\//, '');
+  const hasWww = afterScheme.startsWith('www.');
+  const bare = afterScheme.replace(/^www\./, '');
+  if (!bare || bare.length < 2 || bare.includes(' ')) return null;
+  if (!host.startsWith(bare)) return null;
+  const next = scheme + (hasWww ? 'www.' : '') + host;
+  return next.length > raw.length && next.toLowerCase().startsWith(lower) ? next : null;
+}
+function inlineCandidates() {
+  const out = [];
+  (state.omnibox || []).forEach((p, i) => {
+    if (!p || !p.url || p.kind !== 'site') return;
+    const site = inlineSite(p.url);
+    if (site) out.push({...site, score: 2000 + (p.score || 0) * 1000 - i});
+  });
+  uniqueHistory().forEach((h, i) => {
+    const site = inlineSite(h.url);
+    if (site) out.push({...site, score: 600 - i});
+  });
+  (state.bookmarks || []).forEach((b, i) => {
+    const site = inlineSite(b.url);
+    if (site) out.push({...site, score: 300 - i});
+  });
+  const seen = new Set();
+  return out
+    .sort((a, b) => b.score - a.score)
+    .filter(c => {
+      if (seen.has(c.host)) return false;
+      seen.add(c.host);
+      return true;
+    });
+}
 function findInlineCompletion(typed) {
-  if (!typed || typed.length < 2) return null;
-  const strippedTyped = typed.toLowerCase().replace(/^https?:\/\/(www\.)?/, '');
-  for (const h of uniqueHistory()) {
-    if (!h.url) continue;
-    try {
-      const domain = new URL(h.url).hostname.replace(/^www\./, '').toLowerCase();
-      if (domain.startsWith(strippedTyped) && domain.length > strippedTyped.length) {
-        return domain; // e.g. "youtube.com"
-      }
-    } catch {}
+  for (const c of inlineCandidates()) {
+    const next = inlineText(typed, c.host);
+    if (next) return next;
   }
   return null;
+}
+function applyInlineCompletion(input, value, e) {
+  if (!input || !searchSuggestionsEnabled()) return false;
+  const typed = value == null ? typedInputValue(input) : value;
+  const typingForward = !e || e.inputType === 'insertText';
+  if (!typingForward) return false;
+  const completion = findInlineCompletion(typed);
+  if (!completion) return false;
+  input.value = completion;
+  input.setSelectionRange(String(typed).length, completion.length);
+  return true;
+}
+function syncInlineCompletion() {
+  const url = document.getElementById('url-input');
+  if (document.activeElement === url && url.dataset.showingCurrent !== '1') {
+    applyInlineCompletion(url, typedInputValue(url));
+  }
+  const nt = document.getElementById('newtab-input');
+  if (document.activeElement === nt) applyInlineCompletion(nt, typedInputValue(nt));
+  const tsp = document.getElementById('tsp-input');
+  if (spotlightOpen && !tspAiMode && document.activeElement === tsp) {
+    applyInlineCompletion(tsp, typedInputValue(tsp));
+  }
 }
 function activeTab() {
   return state.tabs && state.tabs.find(t => t.id === state.active_tab_id);
@@ -7331,6 +7398,7 @@ function handleNewtabInput(value) {
     hideSuggestions();
     return;
   }
+  applyInlineCompletion(document.getElementById('newtab-input'), value);
   renderSuggestions('newtab', value);
   send('OmniboxSuggest', {q: value});
 }
@@ -7649,7 +7717,7 @@ function refreshOmnibox() {
   if (!activeSuggestionTarget) return;
   const input = getSuggestionInput(activeSuggestionTarget);
   if (!input) return;
-  const q = activeSuggestionTarget === 'url' && input.dataset.showingCurrent === '1' ? '' : input.value;
+  const q = activeSuggestionTarget === 'url' && input.dataset.showingCurrent === '1' ? '' : typedInputValue(input);
   send('OmniboxSuggest', {q});
 }
 
@@ -7666,7 +7734,7 @@ function renderSuggestionPanels() {
   const input = getSuggestionInput(activeSuggestionTarget);
   const query = activeSuggestionTarget === 'url' && input && input.dataset.showingCurrent === '1'
     ? ''
-    : input.value;
+    : typedInputValue(input);
   renderSuggestions(activeSuggestionTarget, query);
 }
 
@@ -9219,15 +9287,7 @@ function renderConvCard(query) {
 function refreshSpotlightSuggestions() {
   if (!spotlightOpen || tspAiMode) return;
   const input = document.getElementById('tsp-input');
-  renderTspSuggestions(tspInputQuery(input));
-}
-
-function tspInputQuery(input) {
-  if (!input) return '';
-  const start = input.selectionStart || 0;
-  const end = input.selectionEnd || 0;
-  if (end > start && end === input.value.length) return input.value.slice(0, start);
-  return input.value;
+  renderTspSuggestions(typedInputValue(input));
 }
 
 function handleTspInput(e) {
@@ -9239,21 +9299,14 @@ function handleTspInput(e) {
     renderTspSuggestions(value || '');
     return;
   }
-  const typingForward = !e || e.inputType === 'insertText';
-  if (typingForward && value.length >= 2 && !value.includes(' ')) {
-    const completion = findInlineCompletion(value);
-    if (completion && completion.length > value.length) {
-      input.value = completion;
-      input.setSelectionRange(value.length, completion.length);
-    }
-  }
+  applyInlineCompletion(input, value, e);
   renderTspSuggestions(value || '');
   send('OmniboxSuggest', {q: (value || '').trim()});
 }
 
 function recordSpotlightPick(url) {
   const input = document.getElementById('tsp-input');
-  const q = (lastTypedOmnibox || tspInputQuery(input)).trim();
+  const q = (lastTypedOmnibox || typedInputValue(input)).trim();
   if (!q || !url) return;
   const shown = (spotlightSuggestions || []).filter(s => s.predicted && s.url).map(s => s.url);
   send('OmniboxPick', {q, url, shown});
@@ -9303,10 +9356,12 @@ function spotlightHistorySites(query, limit) {
     .slice(0, limit);
 }
 
-function renderTspOmniboxRows(items) {
+function renderTspOmniboxRows(items, query) {
   let html = '';
   let group = '';
   const sites = new Set();
+  let siteCount = 0;
+  const siteLimit = query ? 5 : 5;
   for (const item of items) {
     if (!item || !item.url) continue;
     const isSearch = item.icon === 'search';
@@ -9316,7 +9371,9 @@ function renderTspOmniboxRows(items) {
     if (!isSearch) {
       const site = spotlightSite(item.url);
       if (!site || sites.has(site.key)) continue;
+      if (siteCount >= siteLimit) continue;
       sites.add(site.key);
+      siteCount += 1;
       const title = spotlightSiteTitle(site);
       row = {...item, title, url: site.url, sub: site.host};
       favicon = tspFavicon(site.url);
@@ -9412,7 +9469,7 @@ function renderTspSuggestions(q) {
     html += renderConvCard(query);
   }
   const shared = searchSuggestionsEnabled() ? buildSuggestions(query) : [];
-  const rows = shared.length ? renderTspOmniboxRows(shared) : '';
+  const rows = shared.length ? renderTspOmniboxRows(shared, query) : '';
   html += rows || renderTspFallbackRows(query);
 
   results.innerHTML = html;

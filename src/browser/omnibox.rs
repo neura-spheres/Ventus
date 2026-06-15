@@ -1,6 +1,6 @@
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::storage::{repositories, settings_store};
 
@@ -129,6 +129,90 @@ struct Cand {
     sub: String,
 }
 
+fn history_site_cands(conn: &Connection, q: &str) -> Vec<Cand> {
+    let pool = if q.is_empty() { 300 } else { CAND_POOL * 5 };
+    let rows = repositories::history_candidates(conn, q, pool).unwrap_or_default();
+    site_cands(rows)
+}
+
+fn site_cands(rows: Vec<repositories::HistoryCandidate>) -> Vec<Cand> {
+    let mut sites: HashMap<String, Cand> = HashMap::new();
+    for h in rows {
+        let Some((key, url, host)) = site_parts(&h.url) else {
+            continue;
+        };
+        if let Some(c) = sites.get_mut(&key) {
+            c.visits += h.visits;
+            c.last = c.last.max(h.last);
+            continue;
+        }
+        sites.insert(
+            key,
+            Cand {
+                url,
+                title: String::new(),
+                visits: h.visits,
+                last: h.last,
+                kind: "site",
+                traffic: 0,
+                rank: 0,
+                sub: host,
+            },
+        );
+    }
+    let now = now_ms();
+    let mut out: Vec<Cand> = sites.into_values().collect();
+    out.sort_by(|a, b| {
+        site_score(b, now)
+            .partial_cmp(&site_score(a, now))
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    out
+}
+
+fn site_score(c: &Cand, now: i64) -> f64 {
+    let age_days = ((now - c.last).max(0) as f64) / 86_400_000.0;
+    c.visits.max(1) as f64 / (1.0 + age_days / 7.0)
+}
+
+fn site_cand_for(conn: &Connection, url: &str, now: i64) -> Cand {
+    let Some((key, site_url, host)) = site_parts(url) else {
+        return raw_cand(url, now);
+    };
+    let mut rows = repositories::history_candidates(conn, &host, 300).unwrap_or_default();
+    rows.retain(|h| site_parts(&h.url).map(|p| p.0 == key).unwrap_or(false));
+    if let Some(c) = site_cands(rows).into_iter().next() {
+        return c;
+    }
+    Cand {
+        url: site_url,
+        title: String::new(),
+        visits: 0,
+        last: now,
+        kind: "site",
+        traffic: 0,
+        rank: 0,
+        sub: host,
+    }
+}
+
+fn raw_cand(url: &str, now: i64) -> Cand {
+    Cand {
+        url: url.to_string(),
+        title: url.to_string(),
+        visits: 0,
+        last: now,
+        kind: if looks_like_url(url) {
+            "site"
+        } else {
+            "search"
+        },
+        traffic: 0,
+        rank: 0,
+        sub: String::new(),
+    }
+}
+
 pub fn suggest(
     conn: &Connection,
     model: &Model,
@@ -140,21 +224,10 @@ pub fn suggest(
     let assoc = load_assoc(conn);
     let learned = digest(&assoc, &q);
 
-    let mut cands: Vec<Cand> = repositories::history_candidates(conn, &q, CAND_POOL)
-        .unwrap_or_default()
-        .into_iter()
-        .map(|h| Cand {
-            url: h.url,
-            title: h.title,
-            visits: h.visits,
-            last: h.last,
-            kind: "site",
-            traffic: 0,
-            rank: 0,
-            sub: String::new(),
-        })
-        .collect();
-    add_trends(&mut cands, trends, &q);
+    let mut cands = history_site_cands(conn, &q);
+    if !q.is_empty() {
+        add_trends(&mut cands, trends, &q);
+    }
 
     let mut seen: HashSet<String> = cands.iter().map(|c| url_key(&c.url)).collect();
     let now = now_ms();
@@ -164,7 +237,7 @@ pub fn suggest(
             continue;
         }
         seen.insert(key);
-        cands.push(cand_for(conn, url, now));
+        cands.push(site_cand_for(conn, url, now));
     }
 
     let mut out: Vec<Suggestion> = cands
@@ -219,7 +292,7 @@ fn step(
     conn: &Connection,
     now: i64,
 ) {
-    let cand = cand_for(conn, url, now);
+    let cand = site_cand_for(conn, url, now);
     let f = features(q, &cand, learned, now);
     let p = sigmoid(dot(&model.w, &f) + model.b);
     let g = LEARN_RATE * (label - p);
@@ -227,35 +300,6 @@ fn step(
         model.w[i] = (model.w[i] + g * f[i]).clamp(-WEIGHT_CLAMP, WEIGHT_CLAMP);
     }
     model.b = (model.b + g).clamp(-WEIGHT_CLAMP, WEIGHT_CLAMP);
-}
-
-fn cand_for(conn: &Connection, url: &str, now: i64) -> Cand {
-    if let Ok(Some(h)) = repositories::history_stats(conn, url) {
-        return Cand {
-            url: h.url,
-            title: h.title,
-            visits: h.visits,
-            last: h.last,
-            kind: "site",
-            traffic: 0,
-            rank: 0,
-            sub: String::new(),
-        };
-    }
-    Cand {
-        url: url.to_string(),
-        title: url.to_string(),
-        visits: 0,
-        last: now,
-        kind: if looks_like_url(url) {
-            "site"
-        } else {
-            "search"
-        },
-        traffic: 0,
-        rank: 0,
-        sub: String::new(),
-    }
 }
 
 fn add_trends(cands: &mut Vec<Cand>, trends: &[Trend], q: &str) {
@@ -431,6 +475,26 @@ fn url_key(raw: &str) -> String {
     format!("{host}{port}{path}{query}")
 }
 
+fn site_parts(raw: &str) -> Option<(String, String, String)> {
+    let trimmed = raw.trim();
+    let url = if looks_like_url(trimmed) && !trimmed.contains("://") {
+        url::Url::parse(&format!("https://{trimmed}")).ok()?
+    } else {
+        url::Url::parse(trimmed).ok()?
+    };
+    if url.scheme() != "http" && url.scheme() != "https" {
+        return None;
+    }
+    let host = url.host_str()?.trim_start_matches("www.").to_lowercase();
+    if host.is_empty() {
+        return None;
+    }
+    let port = url.port().map(|p| format!(":{p}")).unwrap_or_default();
+    let key = format!("{host}{port}");
+    let site_url = format!("{}://{key}/", url.scheme());
+    Some((key, site_url, host))
+}
+
 fn now_ms() -> i64 {
     chrono::Utc::now().timestamp_millis()
 }
@@ -495,9 +559,52 @@ mod tests {
         let items = suggest(&conn, &Model::default(), "claude", &[], 8);
         let count = items
             .iter()
-            .filter(|s| s.title == "New chat - Claude" && host_of(&s.url) == "claude.ai")
+            .filter(|s| s.kind == "site" && s.url == "https://claude.ai/")
             .count();
         assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn suggest_recommends_distinct_top_sites() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                url TEXT NOT NULL,
+                title TEXT NOT NULL DEFAULT '',
+                workspace_id TEXT,
+                visited_at INTEGER NOT NULL
+            );",
+        )
+        .unwrap();
+        let now = now_ms();
+        for i in 0..8 {
+            conn.execute(
+                "INSERT INTO history(url, title, workspace_id, visited_at) VALUES(?1, ?2, NULL, ?3)",
+                params![format!("https://youtube.com/watch?v={i}"), "YouTube", now - i],
+            )
+            .unwrap();
+        }
+        for host in [
+            "chatgpt.com",
+            "github.com",
+            "reddit.com",
+            "news.ycombinator.com",
+        ] {
+            conn.execute(
+                "INSERT INTO history(url, title, workspace_id, visited_at) VALUES(?1, ?2, NULL, ?3)",
+                params![format!("https://{host}/some/page"), host, now],
+            )
+            .unwrap();
+        }
+
+        let items = suggest(&conn, &Model::default(), "", &[], 8);
+        let sites: Vec<&str> = items.iter().map(|s| s.url.as_str()).collect();
+        assert!(sites.contains(&"https://youtube.com/"));
+        assert!(sites.contains(&"https://chatgpt.com/"));
+        assert!(sites.contains(&"https://github.com/"));
+        assert!(sites.contains(&"https://reddit.com/"));
+        assert!(sites.contains(&"https://news.ycombinator.com/"));
     }
 
     #[test]
@@ -553,7 +660,7 @@ mod tests {
                 published: now_ms(),
             })
             .collect();
-        let items = suggest(&conn, &Model::default(), "", &trends, 8);
+        let items = suggest(&conn, &Model::default(), "trend", &trends, 8);
         let count = items.iter().filter(|s| s.kind == "trend").count();
         assert_eq!(count, TREND_LIMIT);
     }

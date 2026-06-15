@@ -64,14 +64,20 @@ mod imp {
         id: &str,
         title: &str,
         body: &str,
+        site: &str,
+        icon: &str,
         mut on_click: Box<dyn FnMut() + Send + 'static>,
         mut on_close: Box<dyn FnMut() + Send + 'static>,
     ) {
         let Some(notifier) = notifier() else { return };
+        let image = image_xml(icon);
+        let site = site_xml(site);
         let xml = format!(
-            "<toast><visual><binding template=\"ToastGeneric\"><text>{}</text><text>{}</text></binding></visual></toast>",
+            "<toast><visual><binding template=\"ToastGeneric\">{}<text>{}</text><text>{}</text>{}</binding></visual></toast>",
+            image,
             esc(title),
-            esc(body)
+            esc(body),
+            site
         );
         let Ok(doc) = XmlDocument::new() else { return };
         if doc.LoadXml(&HSTRING::from(xml)).is_err() {
@@ -122,6 +128,25 @@ mod imp {
             .replace('"', "&quot;")
             .replace('\'', "&apos;")
     }
+
+    fn image_xml(icon: &str) -> String {
+        let icon = icon.trim();
+        if icon.is_empty() {
+            return String::new();
+        }
+        format!(
+            "<image placement=\"appLogoOverride\" hint-crop=\"circle\" src=\"{}\"/>",
+            esc(icon)
+        )
+    }
+
+    fn site_xml(site: &str) -> String {
+        let site = site.trim();
+        if site.is_empty() {
+            return String::new();
+        }
+        format!("<text placement=\"attribution\">{}</text>", esc(site))
+    }
 }
 
 #[cfg(windows)]
@@ -135,6 +160,8 @@ pub fn show(
     _id: &str,
     _title: &str,
     _body: &str,
+    _site: &str,
+    _icon: &str,
     _on_click: Box<dyn FnMut() + Send + 'static>,
     _on_close: Box<dyn FnMut() + Send + 'static>,
 ) {
