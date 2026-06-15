@@ -9198,12 +9198,64 @@ fn handle_ai_quick_action(
                         target: "ventus::ai",
                         kind = "quick_action",
                         elapsed_ms = started.elapsed().as_millis() as u64,
-                        "ai empty response"
+                        "ai stream empty; retrying without streaming"
                     );
-                    let _ = proxy_task.send_event(AppEvent::AiError {
-                        message: "AI returned an empty response. Please try again.".into(),
-                    });
-                    return;
+                    let mut fallback_req = req;
+                    fallback_req.stream = false;
+                    match prov.chat(fallback_req).await {
+                        Ok(resp) => {
+                            if ai_generation_guard.load(Ordering::SeqCst) != request_generation {
+                                return;
+                            }
+                            if resp.content.trim().is_empty() {
+                                tracing::warn!(
+                                    target: "ventus::ai",
+                                    kind = "quick_action",
+                                    elapsed_ms = started.elapsed().as_millis() as u64,
+                                    "ai fallback empty response"
+                                );
+                                let _ = proxy_task.send_event(AppEvent::AiError {
+                                    message: "AI returned an empty response. Please try again."
+                                        .into(),
+                                });
+                                return;
+                            }
+                            let chars = resp.content.chars().count();
+                            let _ = proxy_task.send_event(AppEvent::AiChunk {
+                                text: resp.content,
+                                done: false,
+                            });
+                            let _ = proxy_task.send_event(AppEvent::AiChunk {
+                                text: String::new(),
+                                done: true,
+                            });
+                            tracing::info!(
+                                target: "ventus::ai",
+                                kind = "quick_action",
+                                fallback = true,
+                                chars,
+                                elapsed_ms = started.elapsed().as_millis() as u64,
+                                "ai request finished"
+                            );
+                            return;
+                        }
+                        Err(e) => {
+                            if ai_generation_guard.load(Ordering::SeqCst) != request_generation {
+                                return;
+                            }
+                            tracing::warn!(
+                                target: "ventus::ai",
+                                kind = "quick_action",
+                                error = %e,
+                                elapsed_ms = started.elapsed().as_millis() as u64,
+                                "ai empty-stream fallback failed"
+                            );
+                            let _ = proxy_task.send_event(AppEvent::AiError {
+                                message: format!("AI error: {}", e),
+                            });
+                            return;
+                        }
+                    }
                 }
 
                 let _ = proxy_task.send_event(AppEvent::AiChunk {

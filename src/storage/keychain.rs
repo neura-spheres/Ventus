@@ -21,7 +21,10 @@ pub fn get_api_key(provider: &str) -> Result<Option<String>> {
     let keyring_result =
         keyring::Entry::new(SERVICE, provider).and_then(|entry| entry.get_password());
     match keyring_result {
-        Ok(key) => Ok(Some(key)),
+        Ok(key) => match non_empty_key(key) {
+            Some(key) => Ok(Some(key)),
+            None => get_fallback_api_key(provider),
+        },
         Err(keyring::Error::NoEntry) => get_fallback_api_key(provider),
         Err(e) => match get_fallback_api_key(provider)? {
             Some(key) => Ok(Some(key)),
@@ -45,10 +48,34 @@ pub fn has_api_key(provider: &str) -> bool {
 
 fn canonical_provider(provider: &str) -> &str {
     match provider {
-        "openai_compatible" | "openai-compatible" => "openai",
+        "openai_compatible" | "openai-compatible" | "openrouter" | "ollama" => "openai",
         "anthropic_compatible" | "anthropic-compatible" => "anthropic",
         "gemini_compatible" | "gemini-compatible" => "gemini",
         other => other,
+    }
+}
+
+fn provider_aliases(provider: &str) -> &'static [&'static str] {
+    match canonical_provider(provider) {
+        "openai" => &[
+            "openai",
+            "openai_compatible",
+            "openai-compatible",
+            "openrouter",
+            "ollama",
+        ],
+        "anthropic" => &["anthropic", "anthropic_compatible", "anthropic-compatible"],
+        "gemini" => &["gemini", "gemini_compatible", "gemini-compatible"],
+        _ => &[],
+    }
+}
+
+fn non_empty_key(key: String) -> Option<String> {
+    let trimmed = key.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
     }
 }
 
@@ -83,11 +110,18 @@ fn set_fallback_api_key(provider: &str, key: &str) -> Result<()> {
 
 fn get_fallback_api_key(provider: &str) -> Result<Option<String>> {
     let keys = load_fallback_keys()?;
-    let Some(encoded) = keys.get(provider) else {
-        return Ok(None);
-    };
-    let decoded = general_purpose::STANDARD.decode(encoded)?;
-    Ok(Some(String::from_utf8(decoded)?))
+    let mut names = vec![provider];
+    names.extend(provider_aliases(provider));
+    for name in names {
+        let Some(encoded) = keys.get(name) else {
+            continue;
+        };
+        let decoded = general_purpose::STANDARD.decode(encoded)?;
+        if let Some(key) = non_empty_key(String::from_utf8(decoded)?) {
+            return Ok(Some(key));
+        }
+    }
+    Ok(None)
 }
 
 fn delete_fallback_api_key(provider: &str) -> Result<()> {

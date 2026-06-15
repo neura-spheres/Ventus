@@ -325,16 +325,23 @@ impl OpenAiProvider {
             out.push_str("\n</thinking>\n");
         }
 
+        out.push_str(&Self::parse_responses_output_text(data));
+        out
+    }
+
+    fn parse_responses_output_text(data: &Value) -> String {
         if let Some(text) = data["output_text"].as_str() {
-            out.push_str(text);
-            return out;
+            return text.to_string();
         }
 
+        let mut out = String::new();
         if let Some(items) = data["output"].as_array() {
             for item in items {
                 if let Some(content) = item["content"].as_array() {
                     for block in content {
                         if let Some(text) = block["text"].as_str() {
+                            out.push_str(text);
+                        } else if let Some(text) = block["refusal"].as_str() {
                             out.push_str(text);
                         }
                     }
@@ -342,6 +349,100 @@ impl OpenAiProvider {
             }
         }
         out
+    }
+
+    fn close_thinking_if_open(thinking_open: &mut bool, content: &mut String) {
+        if *thinking_open {
+            content.push_str("</thinking>\n");
+            *thinking_open = false;
+        }
+    }
+
+    fn response_event_payload<'a>(event: &'a Value) -> &'a Value {
+        event.get("response").unwrap_or(event)
+    }
+
+    fn string_delta(event: &Value) -> Option<&str> {
+        event["delta"]
+            .as_str()
+            .or_else(|| event["text"].as_str())
+            .or_else(|| event["summary"].as_str())
+            .or_else(|| event["content"].as_str())
+    }
+
+    fn parse_responses_stream_event(
+        event: &Value,
+        thinking_open: &mut bool,
+        emitted_output: &mut bool,
+    ) -> String {
+        let event_type = event["type"].as_str().unwrap_or("");
+        let mut content = String::new();
+
+        match event_type {
+            "response.output_text.delta" | "response.refusal.delta" => {
+                Self::close_thinking_if_open(thinking_open, &mut content);
+                if let Some(delta) = Self::string_delta(event) {
+                    *emitted_output = true;
+                    content.push_str(delta);
+                }
+            }
+            "response.completed" => {
+                Self::close_thinking_if_open(thinking_open, &mut content);
+                if !*emitted_output {
+                    let final_text =
+                        Self::parse_responses_output_text(Self::response_event_payload(event));
+                    if !final_text.trim().is_empty() {
+                        *emitted_output = true;
+                        content.push_str(&final_text);
+                    }
+                }
+            }
+            _ if event_type.contains("reasoning") && event_type.ends_with(".delta") => {
+                if let Some(delta) = Self::string_delta(event) {
+                    if !*thinking_open {
+                        content.push_str("<thinking>\n");
+                        *thinking_open = true;
+                    }
+                    content.push_str(delta);
+                }
+            }
+            _ if *thinking_open
+                && (event_type.contains("reasoning") && event_type.ends_with(".done")
+                    || event_type == "response.completed") =>
+            {
+                Self::close_thinking_if_open(thinking_open, &mut content);
+            }
+            _ => {}
+        }
+
+        content
+    }
+
+    fn parse_chat_completion_stream_event(event: &Value, thinking_open: &mut bool) -> String {
+        let mut content = String::new();
+        let choice = &event["choices"][0];
+        let delta = &choice["delta"];
+        let reasoning_delta = delta["reasoning_content"]
+            .as_str()
+            .or_else(|| delta["reasoning"].as_str());
+
+        if let Some(delta) = reasoning_delta {
+            if !*thinking_open {
+                content.push_str("<thinking>\n");
+                *thinking_open = true;
+            }
+            content.push_str(delta);
+        } else if let Some(delta) = delta["content"]
+            .as_str()
+            .or_else(|| delta["refusal"].as_str())
+        {
+            Self::close_thinking_if_open(thinking_open, &mut content);
+            content.push_str(delta);
+        } else if choice["finish_reason"].is_string() {
+            Self::close_thinking_if_open(thinking_open, &mut content);
+        }
+
+        content
     }
 
     /// Parse function_call items from a Responses API output array.
@@ -554,57 +655,68 @@ impl AiProvider for OpenAiProvider {
                 return Err(anyhow!("Responses API error {}: {}", status, text));
             }
 
-            let mut thinking_open = false;
-            let stream = resp.bytes_stream().map(move |chunk| -> Result<String> {
-                let bytes = chunk?;
-                let text = std::str::from_utf8(&bytes).unwrap_or("");
-                let mut content = String::new();
-                for line in text.lines() {
-                    if let Some(data) = line.strip_prefix("data: ") {
+            let mut byte_stream = resp.bytes_stream();
+            let stream = async_stream::try_stream! {
+                let mut buffer = String::new();
+                let mut thinking_open = false;
+                let mut emitted_output = false;
+
+                while let Some(chunk) = byte_stream.next().await {
+                    let bytes = chunk?;
+                    let text = std::str::from_utf8(&bytes).unwrap_or("");
+                    buffer.push_str(text);
+
+                    while let Some(line_end) = buffer.find('\n') {
+                        let line = buffer[..line_end].trim_end_matches('\r').trim().to_string();
+                        buffer.drain(..=line_end);
+                        if line.is_empty() {
+                            continue;
+                        }
+                        let Some(data) = line.strip_prefix("data:").map(str::trim_start) else {
+                            continue;
+                        };
                         if data == "[DONE]" {
                             if thinking_open {
-                                content.push_str("</thinking>");
-                                thinking_open = false;
+                                yield "</thinking>\n".to_string();
                             }
-                            break;
+                            return;
                         }
-                        if let Ok(val) = serde_json::from_str::<Value>(data) {
-                            let event_type = val["type"].as_str().unwrap_or("");
-                            if event_type == "response.output_text.delta" {
-                                if thinking_open {
-                                    content.push_str("</thinking>\n");
-                                    thinking_open = false;
-                                }
-                                if let Some(delta) = val["delta"].as_str() {
-                                    content.push_str(delta);
-                                }
-                            } else if event_type.contains("reasoning")
-                                && event_type.ends_with(".delta")
-                            {
-                                let delta = val["delta"]
-                                    .as_str()
-                                    .or_else(|| val["text"].as_str())
-                                    .or_else(|| val["summary"].as_str());
-                                if let Some(delta) = delta {
-                                    if !thinking_open {
-                                        content.push_str("<thinking>");
-                                        thinking_open = true;
-                                    }
-                                    content.push_str(delta);
-                                }
-                            } else if thinking_open
-                                && (event_type.contains("reasoning")
-                                    && event_type.ends_with(".done")
-                                    || event_type == "response.completed")
-                            {
-                                content.push_str("</thinking>");
-                                thinking_open = false;
-                            }
+                        let val = serde_json::from_str::<Value>(data)?;
+                        if val["type"].as_str() == Some("error") {
+                            Err(anyhow!("Responses API stream error: {}", val))?;
+                        }
+                        let content = Self::parse_responses_stream_event(
+                            &val,
+                            &mut thinking_open,
+                            &mut emitted_output,
+                        );
+                        if !content.is_empty() {
+                            yield content;
                         }
                     }
                 }
-                Ok(content)
-            });
+
+                let tail = buffer.trim();
+                if let Some(data) = tail.strip_prefix("data:").map(str::trim_start) {
+                    if !data.is_empty() && data != "[DONE]" {
+                        let val = serde_json::from_str::<Value>(data)?;
+                        if val["type"].as_str() == Some("error") {
+                            Err(anyhow!("Responses API stream error: {}", val))?;
+                        }
+                        let content = Self::parse_responses_stream_event(
+                            &val,
+                            &mut thinking_open,
+                            &mut emitted_output,
+                        );
+                        if !content.is_empty() {
+                            yield content;
+                        }
+                    }
+                }
+                if thinking_open {
+                    yield "</thinking>\n".to_string();
+                }
+            };
 
             return Ok(Box::pin(stream));
         }
@@ -648,42 +760,59 @@ impl AiProvider for OpenAiProvider {
 
 impl OpenAiProvider {
     async fn chat_completion_stream(resp: reqwest::Response) -> Result<ChatStream> {
-        let mut thinking_open = false;
-        let stream = resp.bytes_stream().map(move |chunk| -> Result<String> {
-            let bytes = chunk?;
-            let text = std::str::from_utf8(&bytes).unwrap_or("");
-            let mut content = String::new();
-            for line in text.lines() {
-                if let Some(data) = line.strip_prefix("data: ") {
+        let mut byte_stream = resp.bytes_stream();
+        let stream = async_stream::try_stream! {
+            let mut buffer = String::new();
+            let mut thinking_open = false;
+
+            while let Some(chunk) = byte_stream.next().await {
+                let bytes = chunk?;
+                let text = std::str::from_utf8(&bytes).unwrap_or("");
+                buffer.push_str(text);
+
+                while let Some(line_end) = buffer.find('\n') {
+                    let line = buffer[..line_end].trim_end_matches('\r').trim().to_string();
+                    buffer.drain(..=line_end);
+                    if line.is_empty() {
+                        continue;
+                    }
+                    let Some(data) = line.strip_prefix("data:").map(str::trim_start) else {
+                        continue;
+                    };
                     if data == "[DONE]" {
                         if thinking_open {
-                            content.push_str("</thinking>");
-                            thinking_open = false;
+                            yield "</thinking>\n".to_string();
                         }
-                        break;
+                        return;
                     }
-                    if let Ok(val) = serde_json::from_str::<Value>(data) {
-                        let reasoning_delta = val["choices"][0]["delta"]["reasoning_content"]
-                            .as_str()
-                            .or_else(|| val["choices"][0]["delta"]["reasoning"].as_str());
-                        if let Some(delta) = reasoning_delta {
-                            if !thinking_open {
-                                content.push_str("<thinking>");
-                                thinking_open = true;
-                            }
-                            content.push_str(delta);
-                        } else if let Some(delta) = val["choices"][0]["delta"]["content"].as_str() {
-                            if thinking_open {
-                                content.push_str("</thinking>");
-                                thinking_open = false;
-                            }
-                            content.push_str(delta);
-                        }
+                    let val = serde_json::from_str::<Value>(data)?;
+                    if val["error"].is_object() {
+                        Err(anyhow!("API stream error: {}", val["error"]))?;
+                    }
+                    let content = Self::parse_chat_completion_stream_event(&val, &mut thinking_open);
+                    if !content.is_empty() {
+                        yield content;
                     }
                 }
             }
-            Ok(content)
-        });
+
+            let tail = buffer.trim();
+            if let Some(data) = tail.strip_prefix("data:").map(str::trim_start) {
+                if !data.is_empty() && data != "[DONE]" {
+                    let val = serde_json::from_str::<Value>(data)?;
+                    if val["error"].is_object() {
+                        Err(anyhow!("API stream error: {}", val["error"]))?;
+                    }
+                    let content = Self::parse_chat_completion_stream_event(&val, &mut thinking_open);
+                    if !content.is_empty() {
+                        yield content;
+                    }
+                }
+            }
+            if thinking_open {
+                yield "</thinking>\n".to_string();
+            }
+        };
 
         Ok(Box::pin(stream))
     }

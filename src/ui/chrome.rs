@@ -1437,90 +1437,131 @@ button,input,select,textarea{font-family:var(--font)}
 }
 .ai-pill-btn:hover{background:var(--bg-hover);color:var(--ai-text);border-color:var(--border)}
 .ai-model-select{
-  flex:1;height:38px;justify-content:space-between;color:var(--ai-text);
-  background:var(--bg-card);min-width:0;
+  flex:0 1 auto;height:34px;justify-content:flex-start;color:var(--ai-text);
+  background:transparent;border-color:transparent;min-width:0;max-width:100%;padding:0 4px;gap:6px;
 }
-#ai-model-pill{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.ai-model-select:hover{background:transparent;border-color:transparent;color:var(--text)}
+.ai-model-select:active{transform:none}
+.ai-model-select svg{opacity:.62;flex-shrink:0}
+.ai-model-select:hover svg{opacity:.9}
+#ai-model-pill{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;font-size:14.5px;font-weight:700;letter-spacing:0;color:inherit}
 /* â”€â”€ Model picker modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 #model-modal{
-  /* Constrain to AI sidebar column so the panel never overflows the Chrome clip region */
-  position:fixed;top:0;right:0;width:var(--ai-w);height:100%;
-  z-index:9000;display:flex;align-items:flex-start;justify-content:flex-end;
-  background:transparent;pointer-events:none;
-  transition:background .18s ease;
+  position:fixed;top:var(--top-chrome-h);right:0;width:var(--ai-w);height:calc(100% - var(--top-chrome-h));
+  z-index:9000;display:flex;align-items:stretch;justify-content:flex-end;
+  background:transparent;pointer-events:none;padding:8px;
+  transition:background .22s cubic-bezier(.2,.8,.2,1);
 }
-#model-modal.open{pointer-events:all;background:var(--overlay-bg-soft)}
+#model-modal.open{pointer-events:all;background:transparent}
 #model-modal-panel{
-  /* width adapts to sidebar width so it never clips outside the Chrome hit-test region */
-  max-width:360px;width:calc(var(--ai-w) - 24px);
-  max-height:540px;background:var(--bg-elevated);
-  border:1px solid var(--border);border-radius:18px 18px 0 18px;
-  box-shadow:var(--modal-shadow);
+  width:100%;height:100%;min-height:0;
+  background:color-mix(in srgb,var(--chrome-bg) 94%,var(--bg-card));
+  border:1px solid var(--border-subtle);border-radius:18px;
+  box-shadow:0 18px 46px var(--ai-shadow);
   display:flex;flex-direction:column;overflow:hidden;
-  margin:54px 12px 0 0;
-  opacity:0;transform:translateY(12px) scale(.97);
-  transition:opacity .18s ease,transform .18s ease;pointer-events:none;
+  margin:0;
+  opacity:0;transform:translateX(10px);filter:blur(2px);
+  transition:opacity .22s cubic-bezier(.2,.8,.2,1),transform .22s cubic-bezier(.2,.8,.2,1),filter .22s cubic-bezier(.2,.8,.2,1);
+  pointer-events:none;
 }
 #model-modal.open #model-modal-panel{
-  opacity:1;transform:translateY(0) scale(1);pointer-events:all;
+  opacity:1;transform:translateX(0);filter:blur(0);pointer-events:all;
 }
 .mm-header{
-  display:flex;align-items:center;justify-content:space-between;
-  padding:14px 16px 10px;border-bottom:1px solid var(--border);flex-shrink:0;
+  display:flex;align-items:flex-start;justify-content:space-between;gap:12px;
+  padding:18px 16px 12px;flex-shrink:0;
 }
-.mm-title{font-size:13px;font-weight:700;color:var(--text)}
+.mm-heading{min-width:0;display:flex;flex-direction:column;gap:4px}
+.mm-kicker{
+  color:var(--ai-muted);font-size:10px;font-weight:650;text-transform:uppercase;
+  letter-spacing:.08em;line-height:1;display:none;
+}
+.mm-title{font-size:20px;font-weight:700;color:var(--ai-text);letter-spacing:0;line-height:1.12}
+.mm-current{
+  color:var(--ai-muted);font-size:12px;font-weight:500;line-height:1.35;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px;
+}
 .mm-close{
-  width:26px;height:26px;border-radius:50%;border:none;background:var(--bg);
-  color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;
-  font-size:16px;line-height:1;transition:background var(--transition);
+  width:30px;height:30px;border-radius:50%;border:1px solid transparent;background:transparent;
+  color:var(--ai-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;
+  font-size:18px;line-height:1;flex-shrink:0;
+  transition:background .14s ease,color .14s ease;
 }
-.mm-close:hover{background:var(--border);color:var(--text)}
+.mm-close:hover{background:var(--bg-hover);color:var(--ai-text)}
 .mm-providers{
-  display:flex;gap:6px;padding:10px 14px 8px;flex-shrink:0;flex-wrap:wrap;
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:3px;
+  margin:0 12px 12px;padding:3px;flex-shrink:0;
+  background:var(--bg);border:1px solid var(--border-subtle);border-radius:12px;
 }
 .mm-tab{
-  height:28px;padding:0 12px;border-radius:999px;border:1px solid var(--border);
-  background:transparent;color:var(--text-muted);font-family:var(--font);
-  font-size:12px;font-weight:650;cursor:pointer;transition:all var(--transition);white-space:nowrap;
+  height:30px;padding:0 8px;border-radius:9px;border:1px solid transparent;
+  background:transparent;color:var(--ai-muted);font-family:var(--font);
+  font-size:12px;font-weight:650;cursor:pointer;transition:background .14s ease,color .14s ease,box-shadow .14s ease;
+  white-space:nowrap;text-align:center;display:flex;align-items:center;justify-content:center;gap:6px;min-width:0;
 }
-.mm-tab:hover{background:var(--bg);color:var(--text)}
-.mm-tab.active{background:var(--accent);border-color:var(--accent);color:#fff}
-.mm-models{flex:1;overflow-y:auto;padding:6px 10px 8px;display:flex;flex-direction:column;gap:3px;min-height:0}
+.mm-tab:hover{background:var(--bg-hover);color:var(--ai-text)}
+.mm-tab.active{
+  background:var(--bg-elevated);color:var(--ai-text);
+  box-shadow:0 1px 2px var(--ai-shadow);
+}
+.mm-models{
+  flex:1;overflow-y:auto;margin:0 12px 12px;padding:5px;display:flex;flex-direction:column;gap:1px;min-height:0;
+  background:var(--ai-panel);border:1px solid var(--border-subtle);border-radius:14px;
+  scrollbar-gutter:stable;
+}
 .mm-model{
-  display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:10px;
-  cursor:pointer;transition:background var(--transition);border:1px solid transparent;
+  position:relative;display:flex;align-items:flex-start;gap:10px;min-height:58px;
+  padding:9px 8px 9px 10px;border-radius:10px;overflow:hidden;
+  cursor:pointer;background:transparent;border:1px solid transparent;
+  transition:background .14s ease,color .14s ease,opacity .14s ease;
 }
-.mm-model:hover{background:var(--bg)}
-.mm-model.selected{background:color-mix(in srgb,var(--accent) 10%,var(--bg));border-color:color-mix(in srgb,var(--accent) 30%,transparent)}
-.mm-model-dot{
-  width:8px;height:8px;border-radius:50%;background:var(--border);flex-shrink:0;
-  transition:background var(--transition);
+#model-modal.open .mm-model{animation:mm-row-in .16s ease both}
+.mm-model::after{
+  content:"";position:absolute;left:12px;right:12px;bottom:-1px;height:1px;background:var(--border-subtle);opacity:.7;
 }
-.mm-model.selected .mm-model-dot{background:var(--accent)}
+.mm-model:last-child::after,.mm-model:hover::after,.mm-model.selected::after{opacity:0}
+.mm-model:hover{background:var(--bg-hover)}
+.mm-model.selected{
+  background:var(--bg-active);
+}
 .mm-model-info{flex:1;min-width:0}
-.mm-model-name{font-size:13px;font-weight:650;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.mm-model-meta{display:flex;gap:5px;margin-top:2px;flex-wrap:wrap}
+.mm-model-top{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0}
+.mm-model-name{font-size:13.5px;font-weight:650;color:var(--ai-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.28}
+.mm-model-id{font-size:10.5px;color:var(--ai-dim);font-weight:500;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mm-model-check{
+  width:20px;height:20px;border-radius:50%;border:1px solid transparent;
+  color:transparent;display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  transition:color .14s ease,background .14s ease;
+}
+.mm-model.selected .mm-model-check{background:transparent;color:var(--accent)}
+.mm-model-meta{display:flex;gap:4px;margin-top:7px;flex-wrap:wrap}
 .mm-tag{
-  font-size:10px;padding:1px 6px;border-radius:999px;
-  background:var(--bg);border:1px solid var(--border);color:var(--text-muted);white-space:nowrap;
+  font-size:10.5px;padding:2px 6px;border-radius:999px;line-height:1.25;
+  background:var(--bg);border:none;color:var(--ai-muted);white-space:nowrap;
 }
-.mm-tag.tools{border-color:color-mix(in srgb,var(--accent) 40%,transparent);color:var(--accent)}
-.mm-tag.fast{border-color:color-mix(in srgb,var(--success) 40%,transparent);color:var(--success)}
-.mm-tag.flagship{border-color:color-mix(in srgb,var(--warning) 40%,transparent);color:var(--warning)}
-.mm-loading{padding:20px;text-align:center;color:var(--text-muted);font-size:13px}
-.mm-custom{display:flex;gap:8px;padding:8px 10px 10px;border-top:1px solid var(--border);flex-shrink:0}
+.mm-tag.tools,.mm-tag.fast,.mm-tag.flagship{color:var(--ai-muted)}
+.mm-loading{
+  padding:34px 14px;text-align:center;color:var(--text-muted);font-size:13px;
+}
+.mm-custom{padding:0 12px 12px;flex-shrink:0;background:var(--chrome-bg)}
+.mm-custom-shell{
+  display:flex;align-items:center;gap:8px;padding:5px;
+  background:var(--ai-panel);border:1px solid var(--border-subtle);border-radius:12px;
+  box-shadow:none;transition:border-color .14s ease,box-shadow .14s ease,background .14s ease;
+}
+.mm-custom-shell:focus-within{border-color:var(--text-dim);box-shadow:0 0 0 3px var(--ai-ring);background:var(--bg-card)}
 .mm-custom-input{
-  flex:1;height:32px;border-radius:8px;border:1px solid var(--border);
-  background:var(--bg);color:var(--text);font-family:var(--font);font-size:12px;padding:0 10px;
-  outline:none;transition:border-color var(--transition);
+  flex:1;height:32px;min-width:0;border:none;background:transparent;color:var(--ai-text);
+  font-family:var(--font);font-size:12.5px;padding:0 8px;outline:none;
 }
-.mm-custom-input:focus{border-color:var(--accent)}
+.mm-custom-input::placeholder{color:var(--ai-muted)}
 .mm-custom-btn{
   height:32px;padding:0 12px;border-radius:8px;border:1px solid var(--primary-btn-border);
   background:var(--primary-btn-bg);color:var(--primary-btn-text);font-family:var(--font);font-size:12px;font-weight:650;
   cursor:pointer;white-space:nowrap;transition:background var(--transition),border-color var(--transition),opacity var(--transition);
 }
 .mm-custom-btn:hover{background:var(--primary-btn-bg-hover)}
+@keyframes mm-row-in{from{opacity:.45}to{opacity:1}}
 .ai-circle-btn{
   width:34px;height:34px;border-radius:var(--radius);border:1px solid var(--border);
   background:transparent;color:var(--ai-muted);display:flex;align-items:center;justify-content:center;
@@ -3702,14 +3743,20 @@ svg{display:block;flex-shrink:0}
 <div id="model-modal" onclick="handleModelModalBg(event)">
   <div id="model-modal-panel">
     <div class="mm-header">
-      <span class="mm-title">Select Model</span>
+      <div class="mm-heading">
+        <span class="mm-kicker">AI model</span>
+        <span class="mm-title">Select model</span>
+        <span class="mm-current" id="mm-current-model">Current: Smart</span>
+      </div>
       <button class="mm-close" onclick="closeModelModal()">&#x2715;</button>
     </div>
     <div class="mm-providers" id="mm-providers"></div>
     <div class="mm-models" id="mm-models"></div>
     <div class="mm-custom">
-      <input class="mm-custom-input" id="mm-custom-input" placeholder="Custom model ID..." onkeydown="if(event.key==='Enter')applyCustomModel()">
-      <button class="mm-custom-btn" onclick="applyCustomModel()">Use</button>
+      <div class="mm-custom-shell">
+        <input class="mm-custom-input" id="mm-custom-input" placeholder="Custom model ID..." onkeydown="if(event.key==='Enter')applyCustomModel()">
+        <button class="mm-custom-btn" onclick="applyCustomModel()">Use</button>
+      </div>
     </div>
   </div>
 </div>
@@ -6460,10 +6507,20 @@ function populateSettingsPanel() {
   setInputValue('set-gemini-base-url', ai.gemini_base_url || 'https://generativelanguage.googleapis.com/v1beta');
   setSelectValue('set-reasoning-effort', ai.reasoning_effort || 'default');
   setToggleEl('toggle-openai-use-responses-api', !!ai.openai_use_responses_api);
+  syncAiKeyPlaceholders();
   const zoomPct = Math.round((app.zoom_level || 1.0) * 100);
   setInputValue('global-zoom-slider', zoomPct);
   onZoomSliderInput(zoomPct);
   populateRegionSettings();
+}
+function syncAiKeyPlaceholders() {
+  const ks = state.ai_key_status || {};
+  const openai = document.getElementById('set-openai-key');
+  const anthropic = document.getElementById('set-anthropic-key');
+  const gemini = document.getElementById('set-gemini-key');
+  if (openai) openai.placeholder = ks.openai ? 'Saved locally' : 'sk-...';
+  if (anthropic) anthropic.placeholder = ks.anthropic ? 'Saved locally' : 'sk-ant-...';
+  if (gemini) gemini.placeholder = ks.gemini ? 'Saved locally' : 'AIza...';
 }
 function syncSecureDnsSettingsUI() {
   const priv = ((state.settings || {}).privacy) || {};
@@ -8310,12 +8367,16 @@ document.addEventListener('click', function(e) {
   }
 });
 function aiProviderChange(v) {
-  state.ai_provider = v;
+  const provider = normalizeAiProvider(v);
+  state.ai_provider = provider;
   if (!state.settings) state.settings = {};
   if (!state.settings.ai) state.settings.ai = {};
-  state.settings.ai.default_provider = v;
+  state.settings.ai.default_provider = provider;
+  if (!modelBelongsToProvider(provider, state.settings.ai.default_model || '')) {
+    state.settings.ai.default_model = providerDefaultModel(provider);
+  }
   renderAiSidebar();
-  send('AiProviderChange', {provider: v});
+  send('AiProviderChange', {provider});
 }
 function aiQuickAction(action) {
   if (aiStreaming) return;
@@ -8339,10 +8400,33 @@ function normalizeAiProvider(p) {
 function providerLabel(p) {
   return {anthropic:'Anthropic Compatible',openai:'OpenAI Compatible',gemini:'Gemini Compatible'}[normalizeAiProvider(p)] || 'AI';
 }
+function providerDefaultModel(provider) {
+  const models = PROVIDER_MODELS[normalizeAiProvider(provider)] || [];
+  return models.length ? models[0].id : 'gpt-5.4-mini';
+}
+function knownModelProvider(modelId) {
+  const id = String(modelId || '').trim();
+  if (!id) return null;
+  for (const provider of ['openai','anthropic','gemini']) {
+    if ((PROVIDER_MODELS[provider] || []).some(m => m.id === id)) return provider;
+  }
+  if (id.startsWith('claude-')) return 'anthropic';
+  if (id.startsWith('gemini-') || id.startsWith('models/gemini-')) return 'gemini';
+  if (id.startsWith('gpt-') || id.startsWith('o') || id.startsWith('chatgpt-') || id.startsWith('openai/')) return 'openai';
+  return null;
+}
+function modelBelongsToProvider(provider, modelId) {
+  const id = String(modelId || '').trim();
+  if (!id) return false;
+  const owner = knownModelProvider(id);
+  return owner ? owner === normalizeAiProvider(provider) : true;
+}
 function renderAiSidebar() {
   const ai = state.settings && state.settings.ai ? state.settings.ai : {};
   const provider = normalizeAiProvider(ai.default_provider || state.ai_provider || 'openai');
-  const model = ai.default_model || 'Smart';
+  const model = modelBelongsToProvider(provider, ai.default_model || '')
+    ? (ai.default_model || providerDefaultModel(provider))
+    : providerDefaultModel(provider);
   const status = state.ai_key_status || {};
   const saved = !!status[provider];
   state.ai_provider = provider;
@@ -8403,9 +8487,9 @@ const PROVIDER_MODELS = {
   ollama: [], // populated dynamically
 };
 const PROVIDER_LABELS = {
-  openai:'OpenAI Compatible',
-  anthropic:'Anthropic Compatible',
-  gemini:'Gemini Compatible'
+  openai:'OpenAI',
+  anthropic:'Anthropic',
+  gemini:'Gemini'
 };
 let mmActiveProvider = null;
 let ollamaModelsFetched = false;
@@ -8416,11 +8500,28 @@ function modelDisplayName(provider, modelId) {
   const found = models.find(m => m.id === id);
   return found ? found.name : id;
 }
+function modelPickerCurrent() {
+  const ai = (state.settings && state.settings.ai) || {};
+  const provider = normalizeAiProvider(ai.default_provider || state.ai_provider || 'openai');
+  const rawModel = ai.default_model || providerDefaultModel(provider);
+  const model = modelBelongsToProvider(provider, rawModel) ? rawModel : providerDefaultModel(provider);
+  return {provider, model, label:modelDisplayName(provider, model)};
+}
+function updateModelPickerHeader(viewProvider) {
+  const current = modelPickerCurrent();
+  const title = document.querySelector('#model-modal .mm-title');
+  const currentEl = document.getElementById('mm-current-model');
+  if (title) title.textContent = (PROVIDER_LABELS[viewProvider] || 'AI') + ' models';
+  if (currentEl) currentEl.textContent = 'Current: ' + current.label;
+}
+function jsSingleQuote(str) {
+  return String(str || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\r/g,'\\r').replace(/\n/g,'\\n');
+}
 
 function openModelModal(e) {
   if (e) e.stopPropagation();
   const ai = (state.settings && state.settings.ai) || {};
-  mmActiveProvider = normalizeAiProvider(ai.default_provider || 'openai');
+  mmActiveProvider = normalizeAiProvider(ai.default_provider || state.ai_provider || 'openai');
   renderModalProviders();
   renderModalModels(mmActiveProvider);
   document.getElementById('mm-custom-input').value = '';
@@ -8447,8 +8548,9 @@ function switchModalProvider(provider) {
 function renderModalModels(provider) {
   const ai = (state.settings && state.settings.ai) || {};
   const currentProvider = normalizeAiProvider(ai.default_provider || '');
-  const currentModel = ai.default_model || '';
+  const currentModel = modelBelongsToProvider(currentProvider, ai.default_model || '') ? (ai.default_model || '') : '';
   const listEl = document.getElementById('mm-models');
+  updateModelPickerHeader(provider);
 
   if (provider === 'ollama' && !ollamaModelsFetched) {
     listEl.innerHTML = '<div class="mm-loading">Fetching local models...</div>';
@@ -8470,12 +8572,18 @@ function renderModalModels(provider) {
 
   listEl.innerHTML = models.map(m => {
     const isSelected = provider === currentProvider && m.id === currentModel;
-    const tags = (m.tags || []).map(t => `<span class="mm-tag ${t}">${tagLabel(t)}</span>`).join('');
-    return `<div class="mm-model${isSelected ? ' selected' : ''}" onclick="selectModel('${provider}','${m.id.replace(/'/g,"\\'")}','${m.name.replace(/'/g,"\\'")}')">
-      <div class="mm-model-dot"></div>
+    const tags = (m.tags || []).map(t => {
+      const cls = String(t).replace(/[^a-z0-9_-]/gi,'');
+      return `<span class="mm-tag ${cls}">${escHtml(tagLabel(t))}</span>`;
+    }).join('');
+    return `<div class="mm-model${isSelected ? ' selected' : ''}" role="button" aria-selected="${isSelected ? 'true' : 'false'}" title="${escAttr(m.id)}" onclick="selectModel('${jsSingleQuote(provider)}','${jsSingleQuote(m.id)}','${jsSingleQuote(m.name)}')">
       <div class="mm-model-info">
-        <div class="mm-model-name">${m.name}</div>
-        <div class="mm-model-meta"><span class="mm-tag">${m.ctx || '?'}</span>${tags}</div>
+        <div class="mm-model-top">
+          <div class="mm-model-name">${escHtml(m.name)}</div>
+          <div class="mm-model-check"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m20 6-11 11-5-5"/></svg></div>
+        </div>
+        <div class="mm-model-id">${escHtml(m.id)}</div>
+        <div class="mm-model-meta"><span class="mm-tag">${escHtml(m.ctx || '?')}</span>${tags}</div>
       </div>
     </div>`;
   }).join('');
@@ -8521,9 +8629,11 @@ function applyCustomModel() {
   const id = input.value.trim();
   if (!id) return;
   const ai = (state.settings && state.settings.ai) || {};
+  const provider = normalizeAiProvider(ai.default_provider || state.ai_provider || 'openai');
   send('AiModelChange', {model: id});
   if (!state.settings) state.settings = {};
   if (!state.settings.ai) state.settings.ai = {};
+  state.settings.ai.default_provider = provider;
   state.settings.ai.default_model = id;
   const pill = document.getElementById('ai-model-pill');
   if (pill) pill.textContent = id.length > 18 ? id.slice(0, 16) + '..' : id;
