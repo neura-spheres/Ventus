@@ -7,8 +7,8 @@ use tracing::{Event, Level, Subscriber};
 use tracing_subscriber::layer::Context;
 use tracing_subscriber::Layer;
 
-const CAP: usize = 300;
-const MAX_MSG: usize = 1000;
+const CAP: usize = 900;
+const MAX_MSG: usize = 800;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct LogEntry {
@@ -49,7 +49,8 @@ impl Visit for MsgVisitor {
         if !self.extra.is_empty() {
             self.extra.push(' ');
         }
-        self.extra.push_str(&format!("{}={:?}", field.name(), value));
+        self.extra
+            .push_str(&format!("{}={:?}", field.name(), value));
     }
 }
 
@@ -70,9 +71,7 @@ impl<S: Subscriber> Layer<S> for BufferLayer {
             }
             message.push_str(&v.extra);
         }
-        if message.len() > MAX_MSG {
-            message.truncate(MAX_MSG);
-        }
+        trim(&mut message, MAX_MSG);
         let level = *meta.level();
         if level == Level::ERROR {
             ERROR_PENDING.store(true, Ordering::Relaxed);
@@ -89,4 +88,15 @@ impl<S: Subscriber> Layer<S> for BufferLayer {
         }
         buf.push_back(entry);
     }
+}
+
+fn trim(text: &mut String, max: usize) {
+    if text.len() <= max {
+        return;
+    }
+    let mut n = max.min(text.len());
+    while n > 0 && !text.is_char_boundary(n) {
+        n -= 1;
+    }
+    text.truncate(n);
 }

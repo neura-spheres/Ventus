@@ -120,6 +120,33 @@ pub fn sanitize_url_for_display(url: &str) -> String {
         .to_string()
 }
 
+pub fn log_url(raw: &str) -> String {
+    let raw = raw.trim().replace(['\r', '\n'], " ");
+    if raw.is_empty() {
+        return String::new();
+    }
+    if let Ok(mut url) = Url::parse(&raw) {
+        let _ = url.set_username("");
+        let _ = url.set_password(None);
+        url.set_fragment(None);
+        return cut(url.to_string(), 500);
+    }
+    cut(raw, 300)
+}
+
+fn cut(mut text: String, max: usize) -> String {
+    if text.len() <= max {
+        return text;
+    }
+    let mut n = max.min(text.len());
+    while n > 0 && !text.is_char_boundary(n) {
+        n -= 1;
+    }
+    text.truncate(n);
+    text.push_str("...");
+    text
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

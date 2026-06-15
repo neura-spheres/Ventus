@@ -36,7 +36,7 @@ async-trait = "0.1"
 base64 = "0.22"
 aes-gcm = "0.10"
 rand = "0.8"
-image = { version = "0.25", features = ["png", "jpeg", "gif", "webp"], default-features = false }
+image = { version = "0.25", features = ["png", "jpeg", "gif", "webp", "ico"], default-features = false }
 semver = "1"
 rfd = { version = "0.14", default-features = false }
 roxmltree = "0.20"

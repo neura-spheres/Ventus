@@ -11,8 +11,9 @@ use crate::storage::settings_store;
 use crate::utils::log_buffer::LogEntry;
 
 const DEVICE_ID_KEY: &str = "report_device_id";
-const MAX_LOGS: usize = 150;
+pub const MAX_LOGS: usize = 400;
 const MAX_MESSAGE: usize = 5000;
+const MAX_CONTEXT: usize = 16000;
 
 pub struct Report {
     pub kind: String,
@@ -25,6 +26,7 @@ pub struct Report {
     pub device_id: String,
     pub session_id: String,
     pub panic: String,
+    pub context: String,
     pub logs: Vec<LogEntry>,
 }
 
@@ -87,9 +89,9 @@ pub async fn send(report: Report) -> Result<()> {
         return Err(anyhow!("cloud not configured"));
     }
     let mut message = report.message;
-    if message.len() > MAX_MESSAGE {
-        message.truncate(MAX_MESSAGE);
-    }
+    trim(&mut message, MAX_MESSAGE);
+    let mut context = report.context;
+    trim(&mut context, MAX_CONTEXT);
     let url = format!(
         "https://firestore.googleapis.com/v1/projects/{}/databases/(default)/documents/reports?key={}",
         config::FIREBASE_PROJECT_ID,
@@ -107,6 +109,7 @@ pub async fn send(report: Report) -> Result<()> {
         "deviceId": s(&report.device_id),
         "sessionId": s(&report.session_id),
         "panic": s(&report.panic),
+        "context": s(&context),
         "createdAt": { "timestampValue": chrono::Utc::now().to_rfc3339() },
         "logs": logs_value(&report.logs),
     }});
@@ -135,7 +138,22 @@ pub async fn send_crash(record: CrashRecord, uid: String, email: String, device_
         device_id,
         session_id: record.session_id,
         panic: record.panic,
+        context: serde_json::json!({
+            "crash_ts": record.ts,
+        })
+        .to_string(),
         logs: record.logs,
     };
     let _ = send(report).await;
+}
+
+fn trim(text: &mut String, max: usize) {
+    if text.len() <= max {
+        return;
+    }
+    let mut n = max.min(text.len());
+    while n > 0 && !text.is_char_boundary(n) {
+        n -= 1;
+    }
+    text.truncate(n);
 }

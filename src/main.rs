@@ -16,7 +16,9 @@ mod utils;
 mod version;
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{hash_map::DefaultHasher, HashMap, HashSet},
+    hash::{Hash, Hasher},
+    io::Cursor,
     sync::{
         atomic::{AtomicBool, AtomicIsize, AtomicUsize, Ordering},
         Arc, Mutex,
@@ -91,11 +93,7 @@ const ERROR_REPORT_COOLDOWN: Duration = Duration::from_secs(5 * 60);
 fn install_panic_hook(crash_path: std::path::PathBuf, session_id: String) {
     let prev = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
-        let panic = format!(
-            "{}\n\n{}",
-            info,
-            std::backtrace::Backtrace::force_capture()
-        );
+        let panic = format!("{}\n\n{}", info, std::backtrace::Backtrace::force_capture());
         let record = cloud::report::CrashRecord {
             session_id: session_id.clone(),
             app_version: version::APP_VERSION.to_string(),
@@ -103,7 +101,7 @@ fn install_panic_hook(crash_path: std::path::PathBuf, session_id: String) {
             arch: std::env::consts::ARCH.to_string(),
             ts: chrono::Utc::now().timestamp_millis(),
             panic,
-            logs: utils::log_buffer::snapshot(200),
+            logs: utils::log_buffer::snapshot(cloud::report::MAX_LOGS),
         };
         cloud::report::write_crash(&crash_path, &record);
         prev(info);
@@ -869,6 +867,7 @@ fn main() {
             }
 
             Event::UserEvent(AppEvent::Chrome(ChromeCommand::CheckForUpdate)) => {
+                tracing::info!(target: "ventus::feature", action = "check_update", "feature action");
                 let proxy_upd = proxy_main.clone();
                 rt.spawn(async move {
                     match updater::check_latest().await {
@@ -898,6 +897,7 @@ fn main() {
             }
 
             Event::UserEvent(AppEvent::Chrome(ChromeCommand::LoadNeuraFeed)) => {
+                tracing::info!(target: "ventus::feature", action = "load_neura_feed", "feature action");
                 let proxy_feed = proxy_main.clone();
                 rt.spawn(async move {
                     let client = reqwest::Client::builder()
@@ -935,10 +935,12 @@ fn main() {
             }
 
             Event::UserEvent(AppEvent::Chrome(ChromeCommand::RefreshTrends)) => {
+                tracing::info!(target: "ventus::feature", action = "refresh_trends", "feature action");
                 refresh_trends(&mut state, &proxy_main, &rt);
             }
 
             Event::UserEvent(AppEvent::Chrome(ChromeCommand::FetchCurrencyRates)) => {
+                tracing::info!(target: "ventus::feature", action = "fetch_currency_rates", "feature action");
                 let proxy_cur = proxy_main.clone();
                 rt.spawn(async move {
                     let client = reqwest::Client::builder()
@@ -983,18 +985,22 @@ fn main() {
             }
 
             Event::UserEvent(AppEvent::Chrome(ChromeCommand::AiStop)) => {
+                tracing::info!(target: "ventus::ai", "ai stop requested");
                 ai_generation.fetch_add(1, Ordering::SeqCst);
             }
 
             Event::UserEvent(AppEvent::Chrome(ChromeCommand::AuthSignUp { email, password })) => {
+                tracing::info!(target: "ventus::auth", mode = "sign_up", email_domain = %email_domain(&email), "auth requested");
                 auth_email_password(true, email, password, &state, &proxy_main, &rt);
             }
 
             Event::UserEvent(AppEvent::Chrome(ChromeCommand::AuthSignIn { email, password })) => {
+                tracing::info!(target: "ventus::auth", mode = "sign_in", email_domain = %email_domain(&email), "auth requested");
                 auth_email_password(false, email, password, &state, &proxy_main, &rt);
             }
 
             Event::UserEvent(AppEvent::Chrome(ChromeCommand::AuthSignInGoogle)) => {
+                tracing::info!(target: "ventus::auth", mode = "google", "auth requested");
                 if let Some(port) = auth_google(&state, &chrome, &proxy_main, &rt) {
                     #[cfg(windows)]
                     {
@@ -1019,6 +1025,7 @@ fn main() {
                 birthdate,
                 bio,
             })) => {
+                tracing::info!(target: "ventus::auth", action = "profile_update", "account action");
                 account_update_profile(
                     username,
                     full_name,
@@ -1031,6 +1038,7 @@ fn main() {
             }
 
             Event::UserEvent(AppEvent::Chrome(ChromeCommand::AccountSetPhoto { data_uri })) => {
+                tracing::info!(target: "ventus::auth", action = "photo_update", bytes = data_uri.len(), "account action");
                 account_set_photo(data_uri, &state, &chrome, &proxy_main, &rt);
             }
 
@@ -1038,6 +1046,7 @@ fn main() {
                 current,
                 new_password,
             })) => {
+                tracing::info!(target: "ventus::auth", action = "password_change", "account action");
                 account_change_password(current, new_password, &state, &proxy_main, &rt);
             }
 
@@ -1170,6 +1179,7 @@ fn main() {
             // initially appears black while loading.  Re-applying the layout immediately
             // after restores the Chrome WebView Z-order so the browser UI stays visible.
             Event::UserEvent(AppEvent::Chrome(ChromeCommand::OpenDevtools)) => {
+                tracing::info!(target: "ventus::feature", action = "open_devtools", "feature action");
                 if let Some(ref id) = state.tab_manager.active_tab_id.clone() {
                     if let Some(wv) = content_views.get(id) {
                         wv.open_devtools();
@@ -1186,10 +1196,12 @@ fn main() {
             }
 
             Event::UserEvent(AppEvent::Chrome(ChromeCommand::WindowDragStart)) => {
+                tracing::info!(target: "ventus::window", action = "drag", "window action");
                 let _ = window.drag_window();
             }
 
             Event::UserEvent(AppEvent::Chrome(ChromeCommand::WindowMinimize)) => {
+                tracing::info!(target: "ventus::window", action = "minimize", "window action");
                 window.set_minimized(true);
             }
 
@@ -1197,6 +1209,11 @@ fn main() {
                 if state.content_fullscreen {
                     return;
                 }
+                tracing::info!(
+                    target: "ventus::window",
+                    action = if window.is_maximized() { "restore" } else { "maximize" },
+                    "window action"
+                );
                 custom_maximized = window.is_maximized();
                 toggle_window_maximized(&window, &mut custom_maximized);
                 sync_window_maximized(&chrome, custom_maximized);
@@ -1211,6 +1228,7 @@ fn main() {
             }
 
             Event::UserEvent(AppEvent::Chrome(ChromeCommand::WindowClose)) => {
+                tracing::info!(target: "ventus::window", action = "close", "window action");
                 if !new_window {
                     save_window_size(&window, &mut state, custom_maximized);
                     save_session(&state);
@@ -1318,6 +1336,12 @@ fn main() {
             }
 
             Event::UserEvent(AppEvent::ContentProcessFailed { tab_id, fatal }) => {
+                tracing::warn!(
+                    target: "ventus::content",
+                    tab = %tab_id,
+                    fatal,
+                    "content process failed"
+                );
                 let url = state
                     .tab_manager
                     .tabs
@@ -1550,13 +1574,50 @@ state.settings.privacy.default_permissions.clone(),
                 icon,
                 origin,
             }) => {
+                tracing::info!(
+                    target: "ventus::notifications",
+                    tab = %tab_id,
+                    origin = %origin,
+                    title_chars = title.chars().count(),
+                    body_chars = body.chars().count(),
+                    "web notification requested"
+                );
+                let tab = state.tab_manager.get_tab(&tab_id);
+                let site = notification_site(&origin, tab.map(|t| t.url.as_str()).unwrap_or(""));
+                let icons =
+                    notification_icons(&icon, &origin, tab.and_then(|t| t.favicon.as_deref()));
+                let proxy_ready = proxy_main.clone();
+                rt.spawn(async move {
+                    let icon = cache_notification_icon(icons).await;
+                    let _ = proxy_ready.send_event(AppEvent::WebNotificationReady {
+                        tab_id,
+                        id,
+                        title,
+                        body,
+                        site,
+                        icon,
+                    });
+                });
+            }
+            Event::UserEvent(AppEvent::WebNotificationReady {
+                tab_id,
+                id,
+                title,
+                body,
+                site,
+                icon,
+            }) => {
+                tracing::info!(
+                    target: "ventus::notifications",
+                    tab = %tab_id,
+                    site = %site,
+                    has_icon = !icon.is_empty(),
+                    "web notification ready"
+                );
                 let proxy_click = proxy_main.clone();
                 let proxy_close = proxy_main.clone();
                 let (tc, ic) = (tab_id.clone(), id.clone());
                 let (td, idd) = (tab_id.clone(), id.clone());
-                let tab = state.tab_manager.get_tab(&tab_id);
-                let site = notification_site(&origin, tab.map(|t| t.url.as_str()).unwrap_or(""));
-                let icon = notification_icon(&icon, &origin, tab.and_then(|t| t.favicon.as_deref()));
                 notify::show(
                     &id,
                     &title,
@@ -1578,9 +1639,16 @@ state.settings.privacy.default_permissions.clone(),
                 );
             }
             Event::UserEvent(AppEvent::WebNotificationClose { id, .. }) => {
+                tracing::info!(target: "ventus::notifications", id = %id, "web notification closed");
                 notify::hide(&id);
             }
             Event::UserEvent(AppEvent::NotificationClicked { tab_id, id }) => {
+                tracing::info!(
+                    target: "ventus::notifications",
+                    tab = %tab_id,
+                    id = %id,
+                    "web notification clicked"
+                );
                 window.set_minimized(false);
                 window.set_focus();
                 if state.tab_manager.active_tab_id.as_deref() != Some(tab_id.as_str())
@@ -1598,6 +1666,12 @@ state.settings.privacy.default_permissions.clone(),
                 }
             }
             Event::UserEvent(AppEvent::NotificationClosed { tab_id, id }) => {
+                tracing::info!(
+                    target: "ventus::notifications",
+                    tab = %tab_id,
+                    id = %id,
+                    "web notification dismissed"
+                );
                 if let Some(wv) = content_views.get(&tab_id) {
                     let _ = wv.evaluate_script(&format!(
                         "window.__neuraNotifClose&&window.__neuraNotifClose({})",
@@ -1831,8 +1905,16 @@ state.settings.privacy.default_permissions.clone(),
                         TabAction::SendReport(report) => {
                             let proxy_r = proxy_main.clone();
                             rt.spawn(async move {
-                                let ok = cloud::report::send(*report).await.is_ok();
-                                let _ = proxy_r.send_event(AppEvent::ReportSent { ok });
+                                match cloud::report::send(*report).await {
+                                    Ok(()) => {
+                                        tracing::info!(target: "ventus::report", "report uploaded");
+                                        let _ = proxy_r.send_event(AppEvent::ReportSent { ok: true });
+                                    }
+                                    Err(e) => {
+                                        tracing::warn!(target: "ventus::report", error = %e, "report upload failed");
+                                        let _ = proxy_r.send_event(AppEvent::ReportSent { ok: false });
+                                    }
+                                }
                             });
                         }
                         TabAction::Create { tab_id, url } => {
@@ -3043,7 +3125,10 @@ state.settings.privacy.default_permissions.clone(),
                     let report =
                         app::build_report(&state, "error", "Automatic error report".into(), String::new());
                     rt.spawn(async move {
-                        let _ = cloud::report::send(report).await;
+                        match cloud::report::send(report).await {
+                            Ok(()) => tracing::info!(target: "ventus::report", "automatic report uploaded"),
+                            Err(e) => tracing::warn!(target: "ventus::report", error = %e, "automatic report upload failed"),
+                        }
                     });
                 }
             }
@@ -4075,8 +4160,11 @@ fn attach_permission_handler(
             } else if !origin.is_empty() {
                 if let Ok(deferral) = args.GetDeferral() {
                     let id = uuid::Uuid::new_v4().to_string();
-                    let dup = PERMISSION_DEFERRALS
-                        .with(|m| m.borrow().values().any(|(_, _, o, k)| o == &origin && k == key));
+                    let dup = PERMISSION_DEFERRALS.with(|m| {
+                        m.borrow()
+                            .values()
+                            .any(|(_, _, o, k)| o == &origin && k == key)
+                    });
                     PERMISSION_DEFERRALS.with(|m| {
                         m.borrow_mut().insert(
                             id.clone(),
@@ -8525,14 +8613,26 @@ fn title_word(word: &str) -> String {
     first.to_uppercase().chain(chars).collect()
 }
 
-fn notification_icon(icon: &str, origin: &str, favicon: Option<&str>) -> String {
-    if let Some(url) = notification_icon_url(icon, origin) {
-        return url;
+fn notification_icons(icon: &str, origin: &str, favicon: Option<&str>) -> Vec<String> {
+    let mut icons = Vec::new();
+    push_icon(&mut icons, notification_icon_url(icon, origin));
+    push_icon(
+        &mut icons,
+        favicon.and_then(|v| notification_icon_url(v, origin)),
+    );
+    push_icon(&mut icons, origin_favicon(origin));
+    push_icon(&mut icons, google_favicon(origin));
+    icons
+}
+
+fn push_icon(icons: &mut Vec<String>, icon: Option<String>) {
+    let Some(icon) = icon else {
+        return;
+    };
+    if icons.iter().any(|i| i == &icon) {
+        return;
     }
-    if let Some(url) = favicon.and_then(|v| notification_icon_url(v, origin)) {
-        return url;
-    }
-    origin_favicon(origin).unwrap_or_default()
+    icons.push(icon);
 }
 
 fn notification_icon_url(raw: &str, base: &str) -> Option<String> {
@@ -8558,6 +8658,87 @@ fn origin_favicon(origin: &str) -> Option<String> {
     url.set_query(None);
     url.set_fragment(None);
     Some(url.to_string())
+}
+
+fn google_favicon(origin: &str) -> Option<String> {
+    let url = url::Url::parse(origin).ok()?;
+    let host = url.host_str()?;
+    Some(format!(
+        "https://www.google.com/s2/favicons?domain={}&sz=64",
+        host
+    ))
+}
+
+async fn cache_notification_icon(icons: Vec<String>) -> String {
+    for icon in icons {
+        if let Some(path) = cache_notification_icon_url(&icon).await {
+            return path;
+        }
+    }
+    String::new()
+}
+
+async fn cache_notification_icon_url(icon: &str) -> Option<String> {
+    let url = url::Url::parse(icon).ok()?;
+    if url.scheme() == "file" {
+        return Some(icon.to_string());
+    }
+    if !matches!(url.scheme(), "http" | "https") {
+        return None;
+    }
+    let path = notification_icon_path(icon);
+    if path.is_file() {
+        return notification_icon_file_url(&path);
+    }
+    let bytes = download_notification_icon(icon).await?;
+    write_notification_icon(&path, &bytes)
+}
+
+async fn download_notification_icon(icon: &str) -> Option<Vec<u8>> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(3))
+        .user_agent(browser_user_agent())
+        .build()
+        .ok()?;
+    let resp = client.get(icon).send().await.ok()?;
+    if !resp.status().is_success() {
+        return None;
+    }
+    let bytes = resp.bytes().await.ok()?;
+    if bytes.is_empty() || bytes.len() > 1_500_000 {
+        return None;
+    }
+    Some(bytes.to_vec())
+}
+
+fn write_notification_icon(path: &std::path::Path, bytes: &[u8]) -> Option<String> {
+    let img = image::load_from_memory(bytes).ok()?;
+    let img = img.resize(64, 64, image::imageops::FilterType::Lanczos3);
+    let dir = path.parent()?;
+    std::fs::create_dir_all(dir).ok()?;
+    let mut buf = Vec::new();
+    img.write_to(&mut Cursor::new(&mut buf), image::ImageFormat::Png)
+        .ok()?;
+    std::fs::write(path, buf).ok()?;
+    notification_icon_file_url(path)
+}
+
+fn notification_icon_path(icon: &str) -> std::path::PathBuf {
+    utils::platform::data_dir()
+        .join("notification-icons")
+        .join(format!("{}.png", notification_icon_hash(icon)))
+}
+
+fn notification_icon_file_url(path: &std::path::Path) -> Option<String> {
+    url::Url::from_file_path(path)
+        .ok()
+        .map(|url| url.to_string())
+}
+
+fn notification_icon_hash(icon: &str) -> u64 {
+    let mut h = DefaultHasher::new();
+    icon.hash(&mut h);
+    h.finish()
 }
 
 fn repeated_native_load_start(state: &AppState, event: &AppEvent) -> bool {
@@ -8897,6 +9078,18 @@ fn handle_ai_quick_action(
     let tab_id = state.tab_manager.active_tab_id.clone().unwrap_or_default();
     let request_generation = ai_generation.fetch_add(1, Ordering::SeqCst) + 1;
     let ai_generation_guard = Arc::clone(ai_generation);
+    let provider = prov.provider_id();
+    let supports_streaming = prov.supports_streaming();
+    tracing::info!(
+        target: "ventus::ai",
+        kind = "quick_action",
+        action = %action,
+        provider,
+        model = %model,
+        tab = %tab_id,
+        supports_streaming,
+        "ai request started"
+    );
 
     // Build a unique call_id for the page-text round-trip
     let call_id = format!("qa-{}", uuid_v4_simple());
@@ -8905,6 +9098,7 @@ fn handle_ai_quick_action(
     let page_js = ai::browser_tools::js_get_page_text(&call_id);
 
     rt.spawn(async move {
+        let started = Instant::now();
         // Step 1 — read the page text directly (guaranteed, no AI indirection)
         let page_text_raw =
             execute_page_js(page_js, &call_id, &tab_id, &pending, &proxy_task).await;
@@ -8915,6 +9109,13 @@ fn handle_ai_quick_action(
         // Unquote the JSON-encoded string the JS sends back
         let page_text: String =
             serde_json::from_str(&page_text_raw).unwrap_or_else(|_| page_text_raw.clone());
+        tracing::info!(
+            target: "ventus::ai",
+            kind = "quick_action",
+            action = %task_label,
+            page_chars = page_text.chars().count(),
+            "ai page context read"
+        );
 
         let page_context = if page_text.trim().is_empty() || page_text.starts_with("Error") {
             "The page text could not be read (the page may not have loaded yet or may be empty)."
@@ -8974,6 +9175,13 @@ fn handle_ai_quick_action(
                             if ai_generation_guard.load(Ordering::SeqCst) != request_generation {
                                 return;
                             }
+                            tracing::warn!(
+                                target: "ventus::ai",
+                                kind = "quick_action",
+                                error = %e,
+                                elapsed_ms = started.elapsed().as_millis() as u64,
+                                "ai stream failed"
+                            );
                             let _ = proxy_task.send_event(AppEvent::AiError {
                                 message: format!("AI stream error: {}", e),
                             });
@@ -8986,6 +9194,12 @@ fn handle_ai_quick_action(
                 }
 
                 if accumulated.trim().is_empty() {
+                    tracing::warn!(
+                        target: "ventus::ai",
+                        kind = "quick_action",
+                        elapsed_ms = started.elapsed().as_millis() as u64,
+                        "ai empty response"
+                    );
                     let _ = proxy_task.send_event(AppEvent::AiError {
                         message: "AI returned an empty response. Please try again.".into(),
                     });
@@ -8996,6 +9210,13 @@ fn handle_ai_quick_action(
                     text: String::new(),
                     done: true,
                 });
+                tracing::info!(
+                    target: "ventus::ai",
+                    kind = "quick_action",
+                    chars = accumulated.chars().count(),
+                    elapsed_ms = started.elapsed().as_millis() as u64,
+                    "ai request finished"
+                );
             }
             Err(stream_error) => {
                 if ai_generation_guard.load(Ordering::SeqCst) != request_generation {
@@ -9009,11 +9230,18 @@ fn handle_ai_quick_action(
                             return;
                         }
                         if resp.content.trim().is_empty() {
+                            tracing::warn!(
+                                target: "ventus::ai",
+                                kind = "quick_action",
+                                elapsed_ms = started.elapsed().as_millis() as u64,
+                                "ai fallback empty response"
+                            );
                             let _ = proxy_task.send_event(AppEvent::AiError {
                                 message: "AI returned an empty response. Please try again.".into(),
                             });
                             return;
                         }
+                        let chars = resp.content.chars().count();
                         let _ = proxy_task.send_event(AppEvent::AiChunk {
                             text: resp.content,
                             done: false,
@@ -9022,11 +9250,27 @@ fn handle_ai_quick_action(
                             text: String::new(),
                             done: true,
                         });
+                        tracing::info!(
+                            target: "ventus::ai",
+                            kind = "quick_action",
+                            fallback = true,
+                            chars,
+                            elapsed_ms = started.elapsed().as_millis() as u64,
+                            "ai request finished"
+                        );
                     }
                     Err(e) => {
                         if ai_generation_guard.load(Ordering::SeqCst) != request_generation {
                             return;
                         }
+                        tracing::warn!(
+                            target: "ventus::ai",
+                            kind = "quick_action",
+                            error = %e,
+                            stream_error = %stream_error,
+                            elapsed_ms = started.elapsed().as_millis() as u64,
+                            "ai fallback failed"
+                        );
                         let _ = proxy_task.send_event(AppEvent::AiError {
                             message: format!("AI error: {} (stream failed: {})", e, stream_error),
                         });
@@ -9061,6 +9305,15 @@ fn open_in_system_browser(url: &str) {
     {
         let _ = std::process::Command::new("xdg-open").arg(url).spawn();
     }
+}
+
+fn email_domain(email: &str) -> String {
+    email
+        .split('@')
+        .nth(1)
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase()
 }
 
 fn auth_email_password(
@@ -9418,9 +9671,26 @@ fn handle_ai_message(
     let reasoning_effort = Some(state.settings.ai.reasoning_effort.clone());
     let request_generation = ai_generation.fetch_add(1, Ordering::SeqCst) + 1;
     let ai_generation_guard = Arc::clone(ai_generation);
+    let provider = prov.provider_id();
+    let supports_streaming = prov.supports_streaming();
+    let active_url = active
+        .map(|t| crate::utils::url::log_url(&t.url))
+        .unwrap_or_default();
+    tracing::info!(
+        target: "ventus::ai",
+        kind = "chat",
+        provider,
+        model = %model,
+        prompt_chars = user_text.chars().count(),
+        history_messages = state.ai_messages.len(),
+        active = %active_url,
+        supports_streaming,
+        "ai request started"
+    );
 
     rt.spawn(async move {
         use futures_util::StreamExt;
+        let started = Instant::now();
 
         // Agent loop — up to 12 iterations (tool call rounds)
         const MAX_STEPS: usize = 12;
@@ -9462,6 +9732,14 @@ fn handle_ai_message(
                             if ai_generation_guard.load(Ordering::SeqCst) != request_generation {
                                 return;
                             }
+                            tracing::warn!(
+                                target: "ventus::ai",
+                                kind = "chat",
+                                step,
+                                error = %e,
+                                elapsed_ms = started.elapsed().as_millis() as u64,
+                                "ai stream failed"
+                            );
                             let _ = proxy_agent.send_event(AppEvent::AiError {
                                 message: format!("AI stream error: {}", e),
                             });
@@ -9520,6 +9798,14 @@ fn handle_ai_message(
                         user_text,
                         assistant_text: accumulated,
                     });
+                    tracing::info!(
+                        target: "ventus::ai",
+                        kind = "chat",
+                        step,
+                        chars = clean.chars().count(),
+                        elapsed_ms = started.elapsed().as_millis() as u64,
+                        "ai request finished"
+                    );
                     return;
                 }
                 // Stream was empty/thinking-only → model likely wants tool calls
@@ -9545,6 +9831,14 @@ fn handle_ai_message(
                     if ai_generation_guard.load(Ordering::SeqCst) != request_generation {
                         return;
                     }
+                    tracing::warn!(
+                        target: "ventus::ai",
+                        kind = "chat",
+                        step,
+                        error = %e,
+                        elapsed_ms = started.elapsed().as_millis() as u64,
+                        "ai fallback failed"
+                    );
                     let _ = proxy_agent.send_event(AppEvent::AiError {
                         message: format!("AI error: {}", e),
                     });
@@ -9581,11 +9875,27 @@ fn handle_ai_message(
                     user_text,
                     assistant_text: final_text,
                 });
+                tracing::info!(
+                    target: "ventus::ai",
+                    kind = "chat",
+                    step,
+                    fallback = true,
+                    chars = resp.content.chars().count(),
+                    elapsed_ms = started.elapsed().as_millis() as u64,
+                    "ai request finished"
+                );
                 return;
             }
 
             // Tool calls requested
             let tool_calls = resp.tool_calls.unwrap();
+            tracing::info!(
+                target: "ventus::ai",
+                kind = "chat",
+                step,
+                tool_calls = tool_calls.len(),
+                "ai tool calls requested"
+            );
 
             // Record assistant's tool-call message in the conversation
             msgs.push(ai::ChatMessage::assistant_with_tool_calls(
@@ -9616,6 +9926,14 @@ fn handle_ai_message(
                     tc.function.name,
                     &result[..result.len().min(200)]
                 );
+                tracing::info!(
+                    target: "ventus::ai",
+                    kind = "chat",
+                    step,
+                    tool = %tc.function.name,
+                    result_chars = result.chars().count(),
+                    "ai tool result"
+                );
                 msgs.push(ai::ChatMessage::tool_result(&tc.id, result));
             }
 
@@ -9629,6 +9947,12 @@ fn handle_ai_message(
         if ai_generation_guard.load(Ordering::SeqCst) != request_generation {
             return;
         }
+        tracing::warn!(
+            target: "ventus::ai",
+            kind = "chat",
+            elapsed_ms = started.elapsed().as_millis() as u64,
+            "ai max steps"
+        );
         let _ = proxy_agent.send_event(AppEvent::AiError {
             message: "Agent reached maximum steps — please try a simpler request.".into(),
         });
@@ -9656,8 +9980,17 @@ fn handle_spotlight_ai_query(
     let max_tokens = state.settings.ai.max_tokens;
     let reasoning_effort = Some(state.settings.ai.reasoning_effort.clone());
     let query_text = text.clone();
+    tracing::info!(
+        target: "ventus::ai",
+        kind = "spotlight",
+        provider = prov.provider_id(),
+        model = %model,
+        query_chars = text.chars().count(),
+        "ai request started"
+    );
 
     rt.spawn(async move {
+        let started = Instant::now();
         let today = chrono::Local::now().format("%B %d, %Y").to_string();
 
         // ── 2. Try native provider web-search (Gemini Google Search / Anthropic web_search) ──
@@ -9693,12 +10026,26 @@ fn handle_spotlight_ai_query(
         match native_result {
             Ok(Some(answer)) if !answer.is_empty() => {
                 // Native search returned a grounded answer — stream it.
+                tracing::info!(
+                    target: "ventus::ai",
+                    kind = "spotlight",
+                    source = "native",
+                    chars = answer.chars().count(),
+                    elapsed_ms = started.elapsed().as_millis() as u64,
+                    "ai request finished"
+                );
                 stream_spotlight_text(answer, &proxy_task).await;
                 return;
             }
             Err(e) => {
                 // Native search failed — log and fall through to Wikipedia path.
-                eprintln!("[spotlight] native search error: {e}");
+                tracing::warn!(
+                    target: "ventus::ai",
+                    kind = "spotlight",
+                    source = "native",
+                    error = %e,
+                    "ai native search failed"
+                );
             }
             _ => {}
         }
@@ -9787,14 +10134,36 @@ fn handle_spotlight_ai_query(
         match prov.chat(req).await {
             Ok(resp) => {
                 if resp.content.is_empty() {
+                    tracing::warn!(
+                        target: "ventus::ai",
+                        kind = "spotlight",
+                        elapsed_ms = started.elapsed().as_millis() as u64,
+                        "ai empty response"
+                    );
                     let _ = proxy_task.send_event(AppEvent::SpotlightAiError {
                         message: "No response from AI.".to_string(),
                     });
                     return;
                 }
+                tracing::info!(
+                    target: "ventus::ai",
+                    kind = "spotlight",
+                    source = "fallback",
+                    context_parts = ctx_parts.len(),
+                    chars = resp.content.chars().count(),
+                    elapsed_ms = started.elapsed().as_millis() as u64,
+                    "ai request finished"
+                );
                 stream_spotlight_text(resp.content, &proxy_task).await;
             }
             Err(e) => {
+                tracing::warn!(
+                    target: "ventus::ai",
+                    kind = "spotlight",
+                    error = %e,
+                    elapsed_ms = started.elapsed().as_millis() as u64,
+                    "ai request failed"
+                );
                 let _ = proxy_task.send_event(AppEvent::SpotlightAiError {
                     message: format!("AI error: {}", e),
                 });

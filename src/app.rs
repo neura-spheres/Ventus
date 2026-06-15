@@ -428,6 +428,7 @@ pub fn handle_chrome_command(
     state: &mut AppState,
     chrome: &WebView,
 ) -> Option<TabAction> {
+    log_feature_command(&cmd, state);
     match cmd {
         ChromeCommand::Navigate { url } => navigate_current_tab(url, state, chrome),
         ChromeCommand::ContinueHttp { url } => {
@@ -904,10 +905,14 @@ pub fn handle_chrome_command(
             decision,
         } => permission_decision(origin, permission, decision, state, chrome),
         ChromeCommand::SendReport { message } => {
+            tracing::info!(
+                target: "ventus::report",
+                kind = "manual",
+                message_len = message.chars().count(),
+                "report requested"
+            );
             if !crate::cloud::config::is_configured() {
-                let _ = chrome.evaluate_script(
-                    "window.__neura&&window.__neura.reportSent(false)",
-                );
+                let _ = chrome.evaluate_script("window.__neura&&window.__neura.reportSent(false)");
                 return None;
             }
             let report = build_report(state, "manual", message, String::new());
@@ -2167,8 +2172,121 @@ pub fn build_report(
         device_id: state.device_id.clone(),
         session_id: state.session_id.clone(),
         panic,
-        logs: crate::utils::log_buffer::snapshot(150),
+        context: report_context(state),
+        logs: crate::utils::log_buffer::snapshot(crate::cloud::report::MAX_LOGS),
     }
+}
+
+fn log_feature_command(cmd: &ChromeCommand, state: &AppState) {
+    let Some(action) = cmd.report_name() else {
+        return;
+    };
+    let active = state
+        .tab_manager
+        .active_tab()
+        .map(|tab| crate::utils::url::log_url(&tab.url))
+        .unwrap_or_default();
+    tracing::info!(
+        target: "ventus::feature",
+        action = action,
+        active = %active,
+        "feature action"
+    );
+}
+
+fn report_context(state: &AppState) -> String {
+    let tab = state.tab_manager.active_tab();
+    let ws = state.tab_manager.active_workspace();
+    let active_tabs = state.tab_manager.active_workspace_tabs().len();
+    let pending_tools = state
+        .ai_pending_tools
+        .lock()
+        .map(|m| m.len())
+        .unwrap_or_default();
+    let downloads_active = state
+        .downloads
+        .downloads
+        .iter()
+        .filter(|d| {
+            matches!(
+                d.status,
+                crate::browser::downloads::DownloadStatus::Pending
+                    | crate::browser::downloads::DownloadStatus::Downloading
+                    | crate::browser::downloads::DownloadStatus::Paused
+            )
+        })
+        .count();
+    serde_json::json!({
+        "active": {
+            "tab_id": state.tab_manager.active_tab_id.clone(),
+            "url": tab.map(|t| crate::utils::url::log_url(&t.url)).unwrap_or_default(),
+            "title": tab.map(|t| trim_report_text(&t.title, 180)).unwrap_or_default(),
+            "loading": tab.map(|t| t.status == crate::browser::tab::TabStatus::Loading).unwrap_or(false),
+            "sleeping": tab.map(|t| t.sleeping).unwrap_or(false),
+            "workspace_id": state.tab_manager.active_workspace_id.clone(),
+            "workspace_name": ws.map(|w| trim_report_text(&w.name, 80)).unwrap_or_default(),
+            "incognito": ws.map(|w| w.is_incognito).unwrap_or(false),
+        },
+        "counts": {
+            "tabs": state.tab_manager.tabs.len(),
+            "active_workspace_tabs": active_tabs,
+            "workspaces": state.tab_manager.workspaces.len(),
+            "bookmarks": state.cached_bookmarks.len(),
+            "bookmark_folders": state.cached_bookmark_folders.len(),
+            "history_cached": state.cached_history.len(),
+            "downloads": state.downloads.downloads.len(),
+            "downloads_active": downloads_active,
+            "pending_navs": state.pending_nav_urls.len(),
+            "native_loads": state.native_loads.len(),
+            "ai_pending_tools": pending_tools,
+        },
+        "ui": {
+            "sidebar_collapsed": state.sidebar_collapsed,
+            "sidebar_pinned": state.sidebar_pinned,
+            "sidebar_auto_hide_open": state.sidebar_auto_hide_open,
+            "ai_sidebar_open": state.ai_sidebar_open,
+            "spotlight_open": state.spotlight_open,
+            "content_cover_open": state.content_cover_open,
+            "content_fullscreen": state.content_fullscreen,
+        },
+        "ai": {
+            "provider": state.settings.ai.default_provider.clone(),
+            "model": state.settings.ai.default_model.clone(),
+            "temperature": state.settings.ai.temperature,
+            "max_tokens": state.settings.ai.max_tokens,
+            "reasoning_effort": state.settings.ai.reasoning_effort.clone(),
+            "responses_api": state.settings.ai.openai_use_responses_api,
+            "messages": state.ai_messages.len(),
+        },
+        "privacy": {
+            "ad_blocker": state.settings.privacy.ad_blocker_enabled,
+            "ad_blocker_kills": state.adblock_page_kills,
+            "https_only": state.settings.privacy.https_only,
+            "strict_permissions": state.settings.privacy.strict_permissions,
+            "fingerprint_protection": state.settings.privacy.fingerprint_protection,
+            "auto_crash_report": state.settings.privacy.auto_crash_report,
+            "site_permission_origins": state.settings.privacy.site_permissions.len(),
+            "requested_permission_origins": state.requested_permissions.len(),
+        },
+        "update": {
+            "pending_version": state.pending_update_version.clone(),
+            "has_pending_url": state.pending_update_url.is_some(),
+        },
+        "session": {
+            "id": state.session_id.clone(),
+            "signed_in": state.auth.is_some(),
+        },
+    })
+    .to_string()
+}
+
+fn trim_report_text(text: &str, max: usize) -> String {
+    if text.chars().count() <= max {
+        return text.to_string();
+    }
+    let mut out: String = text.chars().take(max).collect();
+    out.push_str("...");
+    out
 }
 
 fn permission_decision(
@@ -2252,6 +2370,7 @@ pub fn handle_app_event_inner(
             None
         }
         AppEvent::ReportSent { ok } => {
+            tracing::info!(target: "ventus::report", ok, "report finished");
             let js = if ok {
                 "window.__neura&&window.__neura.reportSent(true)"
             } else {
@@ -2264,6 +2383,12 @@ pub fn handle_app_event_inner(
             if origin.is_empty() || !valid_site_permission_key(&key) {
                 return None;
             }
+            tracing::info!(
+                target: "ventus::permissions",
+                origin = %origin,
+                key = %key,
+                "permission prompt"
+            );
             let _ = chrome.evaluate_script(&format!(
                 "window.__neura&&window.__neura.showPermissionPrompt({},{},{})",
                 serde_json::to_string(&id).unwrap_or_default(),
@@ -2847,6 +2972,11 @@ pub fn handle_app_event_inner(
             None
         }
         AppEvent::AiError { message } => {
+            tracing::warn!(
+                target: "ventus::ai",
+                message = %trim_report_text(&message, 220),
+                "ai error"
+            );
             let msg_js = serde_json::to_string(&message).unwrap_or_default();
             let _ = chrome.evaluate_script(&format!(
                 "window.__neura && window.__neura.showError({})",
@@ -2858,6 +2988,11 @@ pub fn handle_app_event_inner(
             None
         }
         AppEvent::AiToolCallDisplay { label } => {
+            tracing::info!(
+                target: "ventus::ai",
+                tool = %trim_report_text(&label, 120),
+                "ai tool call"
+            );
             let label_js = serde_json::to_string(&label).unwrap_or_default();
             let _ = chrome.evaluate_script(&format!(
                 "window.__neura && window.__neura.appendAiToolCall({})",
@@ -2869,6 +3004,12 @@ pub fn handle_app_event_inner(
             user_text,
             assistant_text,
         } => {
+            tracing::info!(
+                target: "ventus::ai",
+                user_chars = user_text.chars().count(),
+                assistant_chars = assistant_text.chars().count(),
+                "ai exchange saved"
+            );
             state
                 .ai_messages
                 .push(crate::ai::ChatMessage::user(user_text));
@@ -2896,6 +3037,11 @@ pub fn handle_app_event_inner(
             None
         }
         AppEvent::SpotlightAiError { message } => {
+            tracing::warn!(
+                target: "ventus::ai",
+                message = %trim_report_text(&message, 220),
+                "spotlight ai error"
+            );
             let msg_js = serde_json::to_string(&message).unwrap_or_default();
             let _ = chrome.evaluate_script(&format!(
                 "window.__neura && window.__neura.spotlightAiError({})",
@@ -2910,6 +3056,13 @@ pub fn handle_app_event_inner(
             path,
             total,
         } => {
+            tracing::info!(
+                target: "ventus::dl",
+                url = %crate::utils::url::log_url(&url),
+                filename = %trim_report_text(&filename, 120),
+                total = total.unwrap_or(0),
+                "download added"
+            );
             let mut dl = crate::browser::downloads::Download::new(&url, &filename);
             if let Some(id) = id {
                 dl.id = id;
@@ -2948,6 +3101,13 @@ pub fn handle_app_event_inner(
             }
         }
         AppEvent::DownloadCompleted { url, path, success } => {
+            tracing::info!(
+                target: "ventus::dl",
+                url = %crate::utils::url::log_url(&url),
+                success,
+                has_path = path.is_some(),
+                "download completed event"
+            );
             let mut done_id = None;
             if let Some(dl) = state.downloads.downloads.iter_mut().rev().find(|d| {
                 d.url == url || (path.is_some() && d.local_path.as_deref() == path.as_deref())
@@ -2994,6 +3154,7 @@ pub fn handle_app_event_inner(
             None
         }
         AppEvent::DownloadPaused { id } => {
+            tracing::info!(target: "ventus::dl", id = %id, "download paused");
             state.downloads.pause(&id);
             state.download_samples.remove(&id);
             if let Some(dl) = state.downloads.find_mut(&id) {
@@ -3003,6 +3164,7 @@ pub fn handle_app_event_inner(
             None
         }
         AppEvent::DownloadResume { id } => {
+            tracing::info!(target: "ventus::dl", id = %id, "download resume");
             if let Some(dl) = state.downloads.find_mut(&id) {
                 dl.status = crate::browser::downloads::DownloadStatus::Downloading;
             }
@@ -3016,6 +3178,13 @@ pub fn handle_app_event_inner(
             success,
             canceled,
         } => {
+            tracing::info!(
+                target: "ventus::dl",
+                id = %id,
+                success,
+                canceled,
+                "download done"
+            );
             state.download_samples.remove(&id);
             if let Some(dl) = state.downloads.find_mut(&id) {
                 dl.status = if success {
@@ -3037,6 +3206,12 @@ pub fn handle_app_event_inner(
             notes,
             download_url,
         } => {
+            tracing::info!(
+                target: "ventus::update",
+                available,
+                version = %version,
+                "update check result"
+            );
             if available {
                 state.pending_update_url = Some(download_url);
                 state.pending_update_version = Some(version.clone());
@@ -3055,6 +3230,11 @@ pub fn handle_app_event_inner(
             None
         }
         AppEvent::UpdateCheckFailed { message } => {
+            tracing::warn!(
+                target: "ventus::update",
+                message = %trim_report_text(&message, 220),
+                "update check failed"
+            );
             let m = serde_json::to_string(&message).unwrap_or_default();
             let _ = chrome.evaluate_script(&format!(
                 "window.__neura && window.__neura.setUpdateState({{status:'error',error:{}}})",
@@ -3063,14 +3243,20 @@ pub fn handle_app_event_inner(
             None
         }
         AppEvent::CurrencyRatesLoaded { rates } => {
+            tracing::info!(target: "ventus::feature", action = "currency_rates_loaded", "feature result");
             let _ = chrome.evaluate_script(&format!(
                 "window.__neura && window.__neura.setCurrencyRates({})",
                 rates
             ));
             None
         }
-        AppEvent::CurrencyRatesFailed => None,
+        AppEvent::CurrencyRatesFailed => {
+            tracing::warn!(target: "ventus::feature", action = "currency_rates_failed", "feature result");
+            None
+        }
         AppEvent::NeuraFeedLoaded { articles } => {
+            let count = articles.as_array().map(|a| a.len()).unwrap_or_default();
+            tracing::info!(target: "ventus::feed", articles = count, "neura feed loaded");
             let _ = chrome.evaluate_script(&format!(
                 "window.__neura && window.__neura.setNeuraFeed({})",
                 articles
@@ -3078,6 +3264,11 @@ pub fn handle_app_event_inner(
             None
         }
         AppEvent::NeuraFeedFailed { message } => {
+            tracing::warn!(
+                target: "ventus::feed",
+                message = %trim_report_text(&message, 220),
+                "neura feed failed"
+            );
             let m = serde_json::to_string(&message).unwrap_or_default();
             let _ = chrome.evaluate_script(&format!(
                 "window.__neura && window.__neura.setNeuraFeedError({})",
@@ -3090,6 +3281,8 @@ pub fn handle_app_event_inner(
             trends,
             fetched_at,
         } => {
+            let count = trends.len();
+            tracing::info!(target: "ventus::omnibox", region = %region, trends = count, "trends loaded");
             state.trends = trends;
             state.trends_region = region;
             state.trends_fetched_at = fetched_at;
@@ -3100,6 +3293,7 @@ pub fn handle_app_event_inner(
             None
         }
         AppEvent::TrendsFailed { region } => {
+            tracing::warn!(target: "ventus::omnibox", region = %region, "trends failed");
             if state.trends_region == region || state.trends_region.is_empty() {
                 state.trends_loading = false;
             }
@@ -3172,6 +3366,11 @@ pub fn handle_app_event_inner(
             profile,
             message,
         } => {
+            tracing::info!(
+                target: "ventus::auth",
+                has_message = !message.is_empty(),
+                "auth applied"
+            );
             state.persist_session(&session, &profile);
             state.auth = Some(session);
             state.user_profile = Some(profile);
@@ -3186,6 +3385,11 @@ pub fn handle_app_event_inner(
             None
         }
         AppEvent::AuthError { message } => {
+            tracing::warn!(
+                target: "ventus::auth",
+                message = %trim_report_text(&message, 220),
+                "auth error"
+            );
             let m = serde_json::to_string(&message).unwrap_or_default();
             let _ = chrome.evaluate_script(&format!(
                 "window.__neura && window.__neura.authError({})",
@@ -3199,6 +3403,13 @@ pub fn handle_app_event_inner(
             history,
             settings,
         } => {
+            tracing::info!(
+                target: "ventus::sync",
+                bookmarks = bookmarks.as_ref().map(|b| b.len()).unwrap_or_default(),
+                history = history.as_ref().map(|h| h.len()).unwrap_or_default(),
+                has_settings = settings.is_some(),
+                "cloud sync pulled"
+            );
             if let Some(b) = bookmarks {
                 merge_cloud_bookmarks(state, &b);
             }
@@ -3298,8 +3509,8 @@ fn merge_cloud_history(state: &AppState, blob: &str) {
         );
     }
     let _ = state.conn.execute(
-        "DELETE FROM history WHERE id NOT IN (SELECT id FROM history ORDER BY visited_at DESC LIMIT 150)",
-        [],
+        "DELETE FROM history WHERE id NOT IN (SELECT id FROM history ORDER BY visited_at DESC LIMIT ?1)",
+        rusqlite::params![repositories::HISTORY_LIMIT],
     );
 }
 

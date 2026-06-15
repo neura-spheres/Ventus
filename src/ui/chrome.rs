@@ -3537,7 +3537,7 @@ svg{display:block;flex-shrink:0}
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--nt-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
             <input id="newtab-input" placeholder="Search the web"
               onkeydown="handleNewtabKey(event)"
-              oninput="handleNewtabInput(this.value)"
+              oninput="handleNewtabInput(event)"
               onfocus="handleNewtabFocus()"
               onblur="handleNewtabBlur()">
             <img id="newtab-search-logo" src="__LOGO_URL__" alt="">
@@ -4162,7 +4162,7 @@ svg{display:block;flex-shrink:0}
             <span id="report-status" style="font-size:12px;color:var(--text-muted)"></span>
             <button class="settings-btn" id="report-send-btn" type="button" onclick="sendBugReport()">Send report</button>
           </div>
-          <div class="toggle-desc" style="margin-top:10px">Your report includes the last ~150 diagnostic log lines (which can include visited site addresses), your app version, and OS.</div>
+          <div class="toggle-desc" style="margin-top:10px">Your report includes the last ~400 diagnostic log lines (which can include visited site addresses), your app version, OS, and a small app state snapshot.</div>
         </div>
       </div>
 
@@ -6684,6 +6684,7 @@ function setUrlEditing(v) {
 function handleUrlFocus() {
   const input = document.getElementById('url-input');
   setUrlEditing(true);
+  resetInline(input);
   input.select();
   input.dataset.showingCurrent = '1';
   lastTypedOmnibox = '';
@@ -6715,29 +6716,21 @@ function handleUrlBlur() {
   restoreDisplayUrl();
 }
 function handleUrlKey(e) {
+  const input = e.target;
+  watchInlineKey(e, input);
   if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
     e.preventDefault();
-    const raw = e.target.value.trim();
+    const raw = input.value.trim();
     if (!raw) return;
     const url = /^[a-z0-9-]+$/i.test(raw) ? 'https://www.' + raw + '.com' : raw;
     recordOmniboxPick(url);
     hideSuggestions();
     send('Navigate', {url});
-    e.target.blur();
+    input.blur();
     return;
   }
   if (handleSuggestionKey(e, 'url')) return;
-  const input = e.target;
-  // Accept inline completion: Tab or ArrowRight when there's a selection (ghost text active).
-  if (e.key === 'Tab' || e.key === 'ArrowRight') {
-    const selStart = input.selectionStart;
-    const selEnd = input.selectionEnd;
-    if (selEnd > selStart) {
-      e.preventDefault();
-      input.setSelectionRange(selEnd, selEnd);
-      return;
-    }
-  }
+  if (acceptInline(e, input)) return;
   if (e.key === 'Enter') {
     const val = input.value.trim();
     if (val) { recordOmniboxPick(val); hideSuggestions(); send('Navigate', {url: val}); input.blur(); }
@@ -6983,10 +6976,68 @@ function siteLabel(url) {
 }
 function typedInputValue(input) {
   if (!input) return '';
+  if (hasInline(input)) return input.value.slice(0, input.selectionStart || 0);
+  return input.value;
+}
+function inlineKey(value) {
+  return String(value || '').trim().toLowerCase();
+}
+function clearInline(input) {
+  if (!input) return;
+  delete input.dataset.inlineCompletion;
+  delete input.dataset.inlineTypedLen;
+}
+function resetInline(input) {
+  if (!input) return;
+  clearInline(input);
+  delete input.dataset.inlineBlocked;
+}
+function blockInline(input, value) {
+  if (!input) return;
+  input.dataset.inlineBlocked = inlineKey(value);
+  clearInline(input);
+}
+function hasInline(input) {
+  if (!input || input.dataset.inlineCompletion !== '1') return false;
   const start = input.selectionStart || 0;
   const end = input.selectionEnd || 0;
-  if (end > start && end === input.value.length) return input.value.slice(0, start);
-  return input.value;
+  const typedLen = Number(input.dataset.inlineTypedLen || -1);
+  return end > start && end === input.value.length && start === typedLen;
+}
+function canInline(input, typed, e) {
+  if (!input) return false;
+  const inputType = e && e.inputType ? e.inputType : '';
+  const key = inlineKey(typed);
+  if (inputType.startsWith('delete')) {
+    blockInline(input, typed);
+    return false;
+  }
+  if (input.dataset.inlineBlocked === key) return false;
+  if (input.dataset.inlineBlocked) delete input.dataset.inlineBlocked;
+  return !inputType || inputType === 'insertText';
+}
+function inlineAcceptKey(e) {
+  return (e.key === 'Tab' || e.key === 'ArrowRight') && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey;
+}
+function acceptInline(e, input) {
+  if (!inlineAcceptKey(e) || !hasInline(input)) return false;
+  e.preventDefault();
+  const end = input.value.length;
+  input.setSelectionRange(end, end);
+  clearInline(input);
+  return true;
+}
+function watchInlineKey(e, input) {
+  if (!input) return;
+  if ((e.key === 'Backspace' || e.key === 'Delete') && hasInline(input)) {
+    blockInline(input, input.value.slice(0, input.selectionStart || 0));
+    return;
+  }
+  if (e.key === ' ' && hasInline(input)) {
+    blockInline(input, input.value.slice(0, input.selectionStart || 0));
+    return;
+  }
+  if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey)) clearInline(input);
 }
 function inlineSite(url) {
   if (!url) return null;
@@ -7003,7 +7054,8 @@ function inlineSite(url) {
   }
 }
 function inlineText(typed, host) {
-  const raw = String(typed || '').trim();
+  const raw = String(typed || '');
+  if (raw !== raw.trim() || /\s/.test(raw)) return null;
   const lower = raw.toLowerCase();
   const scheme = (lower.match(/^https?:\/\//) || [''])[0];
   const afterScheme = lower.replace(/^https?:\/\//, '');
@@ -7048,12 +7100,17 @@ function findInlineCompletion(typed) {
 function applyInlineCompletion(input, value, e) {
   if (!input || !searchSuggestionsEnabled()) return false;
   const typed = value == null ? typedInputValue(input) : value;
-  const typingForward = !e || e.inputType === 'insertText';
-  if (!typingForward) return false;
+  if (!canInline(input, typed, e)) return false;
   const completion = findInlineCompletion(typed);
-  if (!completion) return false;
+  if (!completion) {
+    clearInline(input);
+    return false;
+  }
   input.value = completion;
-  input.setSelectionRange(String(typed).length, completion.length);
+  const typedLen = String(typed).length;
+  input.dataset.inlineCompletion = '1';
+  input.dataset.inlineTypedLen = String(typedLen);
+  input.setSelectionRange(typedLen, completion.length);
   return true;
 }
 function syncInlineCompletion() {
@@ -7457,13 +7514,17 @@ function openApp(u) {
 }
 
 function handleNewtabKey(e) {
+  const input = e.target;
+  watchInlineKey(e, input);
   if (handleSuggestionKey(e, 'newtab')) return;
+  if (acceptInline(e, input)) return;
   if (e.key === 'Enter') {
-    const v = e.target.value.trim();
-    if (v) { recordOmniboxPick(v); send('Navigate', {url: v}); e.target.value = ''; hideSuggestions(); }
+    const v = input.value.trim();
+    if (v) { recordOmniboxPick(v); send('Navigate', {url: v}); input.value = ''; hideSuggestions(); }
   }
 }
 function handleNewtabFocus() {
+  resetInline(document.getElementById('newtab-input'));
   lastTypedOmnibox = '';
   if (!searchSuggestionsEnabled()) return;
   openSuggestions('newtab');
@@ -7471,13 +7532,15 @@ function handleNewtabFocus() {
   send('OmniboxSuggest', {q: ''});
   send('GetHistory', {q: ''});
 }
-function handleNewtabInput(value) {
+function handleNewtabInput(e) {
+  const input = e && e.target ? e.target : document.getElementById('newtab-input');
+  const value = input ? input.value : '';
   lastTypedOmnibox = value;
   if (!searchSuggestionsEnabled()) {
     hideSuggestions();
     return;
   }
-  applyInlineCompletion(document.getElementById('newtab-input'), value);
+  applyInlineCompletion(input, value, e);
   renderSuggestions('newtab', value);
   send('OmniboxSuggest', {q: value});
 }
@@ -7803,8 +7866,8 @@ function refreshOmnibox() {
 function recordOmniboxPick(url) {
   if (!url) return;
   const q = (lastTypedOmnibox || '').trim();
-  if (!q) return;
   const shown = (activeSuggestions || []).filter(s => s.predicted && s.url).map(s => s.url);
+  if (!q && !shown.length) return;
   send('OmniboxPick', {q, url, shown});
 }
 
@@ -9346,6 +9409,7 @@ function showSpotlight() {
 function focusSpotlightInput() {
   const inp = document.getElementById('tsp-input');
   if (!inp) return;
+  resetInline(inp);
   inp.focus();
 }
 
@@ -10129,14 +10193,8 @@ function renderTspSuggestions(q) {
 function tspKeydown(e) {
   if (!spotlightOpen) return;
   const input = document.getElementById('tsp-input');
-  const start = input ? input.selectionStart || 0 : 0;
-  const end = input ? input.selectionEnd || 0 : 0;
-  if ((e.key === 'Tab' || e.key === 'ArrowRight') && input && end > start) {
-    e.preventDefault();
-    input.setSelectionRange(end, end);
-    return;
-  }
-  // Tab â†’ switch to AI mode (only when query exists and AI is configured)
+  watchInlineKey(e, input);
+  if (acceptInline(e, input)) return;
   if (e.key === 'Tab') {
     e.preventDefault();
     const val = input ? input.value.trim() : '';
@@ -10147,13 +10205,12 @@ function tspKeydown(e) {
     }
     return;
   }
-  // Escape in AI mode â†’ exit AI mode rather than closing spotlight
   if (e.key === 'Escape' && tspAiMode) {
     e.preventDefault();
     tspExitAiMode();
     return;
   }
-  if (tspAiMode) return; // ignore arrow/enter nav while in AI mode
+  if (tspAiMode) return;
   const rows = document.querySelectorAll('#tsp-results .tsp-row');
   if (e.key === 'ArrowDown') {
     e.preventDefault();

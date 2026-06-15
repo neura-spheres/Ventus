@@ -10,6 +10,7 @@ const LEARN_RATE: f64 = 0.18;
 const WEIGHT_CLAMP: f64 = 6.0;
 const ASSOC_LIMIT: i64 = 800;
 const CAND_POOL: usize = 60;
+const REC_POOL: usize = 1000;
 const TREND_LIMIT: usize = 3;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -130,12 +131,16 @@ struct Cand {
 }
 
 fn history_site_cands(conn: &Connection, q: &str) -> Vec<Cand> {
-    let pool = if q.is_empty() { 300 } else { CAND_POOL * 5 };
+    let pool = if q.is_empty() {
+        REC_POOL
+    } else {
+        CAND_POOL * 5
+    };
     let rows = repositories::history_candidates(conn, q, pool).unwrap_or_default();
-    site_cands(rows)
+    site_cands(rows, q.is_empty())
 }
 
-fn site_cands(rows: Vec<repositories::HistoryCandidate>) -> Vec<Cand> {
+fn site_cands(rows: Vec<repositories::HistoryCandidate>, recs: bool) -> Vec<Cand> {
     let mut sites: HashMap<String, Cand> = HashMap::new();
     for h in rows {
         let Some((key, url, host)) = site_parts(&h.url) else {
@@ -163,16 +168,17 @@ fn site_cands(rows: Vec<repositories::HistoryCandidate>) -> Vec<Cand> {
     let now = now_ms();
     let mut out: Vec<Cand> = sites.into_values().collect();
     out.sort_by(|a, b| {
-        site_score(b, now)
-            .partial_cmp(&site_score(a, now))
+        site_score(b, now, recs)
+            .partial_cmp(&site_score(a, now, recs))
             .unwrap_or(std::cmp::Ordering::Equal)
     });
     out
 }
 
-fn site_score(c: &Cand, now: i64) -> f64 {
+fn site_score(c: &Cand, now: i64, recs: bool) -> f64 {
     let age_days = ((now - c.last).max(0) as f64) / 86_400_000.0;
-    c.visits.max(1) as f64 / (1.0 + age_days / 7.0)
+    let w = if recs { recommend_weight(&c.sub) } else { 1.0 };
+    c.visits.max(1) as f64 * w / (1.0 + age_days / 7.0)
 }
 
 fn site_cand_for(conn: &Connection, url: &str, now: i64) -> Cand {
@@ -181,7 +187,7 @@ fn site_cand_for(conn: &Connection, url: &str, now: i64) -> Cand {
     };
     let mut rows = repositories::history_candidates(conn, &host, 300).unwrap_or_default();
     rows.retain(|h| site_parts(&h.url).map(|p| p.0 == key).unwrap_or(false));
-    if let Some(c) = site_cands(rows).into_iter().next() {
+    if let Some(c) = site_cands(rows, false).into_iter().next() {
         return c;
     }
     Cand {
@@ -264,7 +270,7 @@ pub fn suggest(
 
 pub fn learn(conn: &Connection, model: &mut Model, raw_q: &str, chosen: &str, shown: &[String]) {
     let q = raw_q.trim().to_lowercase();
-    if q.is_empty() || chosen.is_empty() {
+    if chosen.is_empty() {
         return;
     }
     model.ready();
@@ -373,6 +379,11 @@ fn features(q: &str, c: &Cand, learned: &Learned, now: i64) -> [f64; NUM_FEATURE
     let host = host_of(&c.url);
     let title_l = c.title.to_lowercase();
     let age_days = ((now - c.last).max(0) as f64) / 86_400_000.0;
+    let rec_w = if q.is_empty() {
+        recommend_weight(&host)
+    } else {
+        1.0
+    };
 
     let prefix_hit = !q.is_empty() && (bare.starts_with(q) || host.starts_with(q));
     let substr_hit = !q.is_empty() && !prefix_hit && (bare.contains(q) || title_l.contains(q));
@@ -383,13 +394,40 @@ fn features(q: &str, c: &Cand, learned: &Learned, now: i64) -> [f64; NUM_FEATURE
     };
 
     [
-        norm(c.visits as f64 * 0.5),
+        norm(c.visits as f64 * 0.5 * rec_w),
         if prefix_hit { 1.0 } else { 0.0 },
         if substr_hit { 1.0 } else { 0.0 },
         norm(*learned.q_assoc.get(&c.url).unwrap_or(&0) as f64 * 1.5),
         host_affinity,
-        (-age_days / 7.0).exp(),
+        (-age_days / 7.0).exp() * rec_w,
     ]
+}
+
+fn recommend_weight(host: &str) -> f64 {
+    let h = host.trim_start_matches("www.").to_lowercase();
+    if h.is_empty() {
+        return 1.0;
+    }
+    let first = h.split('.').next().unwrap_or("");
+    if matches!(
+        first,
+        "account"
+            | "accounts"
+            | "auth"
+            | "id"
+            | "identity"
+            | "login"
+            | "oauth"
+            | "secure"
+            | "signin"
+            | "sso"
+    ) {
+        return 0.18;
+    }
+    if h.contains(".auth.") || h.contains(".login.") || h.contains(".sso.") {
+        return 0.18;
+    }
+    1.0
 }
 
 fn dot(w: &[f64], f: &[f64; NUM_FEATURES]) -> f64 {
@@ -605,6 +643,97 @@ mod tests {
         assert!(sites.contains(&"https://github.com/"));
         assert!(sites.contains(&"https://reddit.com/"));
         assert!(sites.contains(&"https://news.ycombinator.com/"));
+    }
+
+    #[test]
+    fn suggest_prefers_used_site_over_recent_login() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                url TEXT NOT NULL,
+                title TEXT NOT NULL DEFAULT '',
+                workspace_id TEXT,
+                visited_at INTEGER NOT NULL
+            );",
+        )
+        .unwrap();
+        let now = now_ms();
+        for i in 0..12 {
+            conn.execute(
+                "INSERT INTO history(url, title, workspace_id, visited_at) VALUES(?1, ?2, NULL, ?3)",
+                params![
+                    format!("https://chatgpt.com/c/{i}"),
+                    "ChatGPT",
+                    now - 14 * 86_400_000 - i
+                ],
+            )
+            .unwrap();
+        }
+        for i in 0..4 {
+            conn.execute(
+                "INSERT INTO history(url, title, workspace_id, visited_at) VALUES(?1, ?2, NULL, ?3)",
+                params![
+                    format!("https://login.microsoft.com/common/oauth2/{i}"),
+                    "Sign in",
+                    now - i
+                ],
+            )
+            .unwrap();
+        }
+
+        let items = suggest(&conn, &Model::default(), "", &[], 8);
+        assert_eq!(
+            items.first().map(|s| s.url.as_str()),
+            Some("https://chatgpt.com/")
+        );
+    }
+
+    #[test]
+    fn suggest_learns_empty_recommendation_pick() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                url TEXT NOT NULL,
+                title TEXT NOT NULL DEFAULT '',
+                workspace_id TEXT,
+                visited_at INTEGER NOT NULL
+            );
+            CREATE TABLE omnibox_learn (
+                prefix TEXT NOT NULL,
+                url TEXT NOT NULL,
+                picks INTEGER NOT NULL DEFAULT 0,
+                last_pick INTEGER NOT NULL,
+                PRIMARY KEY (prefix, url)
+            );",
+        )
+        .unwrap();
+        let now = now_ms();
+        for url in ["https://chatgpt.com/", "https://github.com/"] {
+            conn.execute(
+                "INSERT INTO history(url, title, workspace_id, visited_at) VALUES(?1, ?2, NULL, ?3)",
+                params![url, url, now],
+            )
+            .unwrap();
+        }
+        let mut model = Model::default();
+        learn(
+            &conn,
+            &mut model,
+            "",
+            "https://chatgpt.com/",
+            &[
+                "https://github.com/".to_string(),
+                "https://chatgpt.com/".to_string(),
+            ],
+        );
+
+        let items = suggest(&conn, &model, "", &[], 8);
+        assert_eq!(
+            items.first().map(|s| s.url.as_str()),
+            Some("https://chatgpt.com/")
+        );
     }
 
     #[test]

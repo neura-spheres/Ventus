@@ -603,7 +603,7 @@ pub struct HistoryEntry {
     pub visited_at: i64,
 }
 
-const HISTORY_LIMIT: i64 = 150;
+pub const HISTORY_LIMIT: i64 = 1000;
 
 pub fn add_history(
     conn: &Connection,
