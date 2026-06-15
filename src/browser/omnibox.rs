@@ -44,6 +44,110 @@ pub struct Suggestion {
     pub score: f64,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub sub: String,
+    /// True when the site is user-pinned (always shown at the top of recommendations).
+    pub pinned: bool,
+    /// True when the site is user-blocked ("don't recommend"); only ever set on typed
+    /// results (blocked sites are dropped from recommendations) so the menu can offer undo.
+    pub blocked: bool,
+}
+
+/// User overrides for the recommendation list, keyed by site (host:port).
+#[derive(Debug, Clone, Default)]
+struct Prefs {
+    pinned: HashSet<String>,
+    blocked: HashSet<String>,
+}
+
+fn load_prefs(conn: &Connection) -> Prefs {
+    let mut prefs = Prefs::default();
+    let Ok(mut stmt) = conn.prepare("SELECT site, pinned, blocked FROM omnibox_prefs") else {
+        return prefs;
+    };
+    let rows = stmt.query_map([], |r| {
+        Ok((
+            r.get::<_, String>(0)?,
+            r.get::<_, i64>(1)?,
+            r.get::<_, i64>(2)?,
+        ))
+    });
+    let Ok(rows) = rows else {
+        return prefs;
+    };
+    for (site, pinned, blocked) in rows.flatten() {
+        if pinned != 0 {
+            prefs.pinned.insert(site.clone());
+        }
+        if blocked != 0 {
+            prefs.blocked.insert(site);
+        }
+    }
+    prefs
+}
+
+/// Set or clear the pin / block flag for the site that `url` belongs to. `None` leaves
+/// the corresponding flag untouched. Rows that end up all-default are pruned.
+pub fn set_pref(conn: &Connection, url: &str, pinned: Option<bool>, blocked: Option<bool>) {
+    let Some(site) = site_key(url) else {
+        return;
+    };
+    let now = now_ms();
+    let _ = conn.execute(
+        "INSERT INTO omnibox_prefs(site, pinned, blocked, updated_at) VALUES(?1, ?2, ?3, ?4)
+         ON CONFLICT(site) DO UPDATE SET
+            pinned = COALESCE(?5, pinned),
+            blocked = COALESCE(?6, blocked),
+            updated_at = ?4",
+        params![
+            site,
+            pinned.unwrap_or(false) as i64,
+            blocked.unwrap_or(false) as i64,
+            now,
+            pinned.map(|b| b as i64),
+            blocked.map(|b| b as i64),
+        ],
+    );
+    let _ = conn.execute(
+        "DELETE FROM omnibox_prefs WHERE pinned = 0 AND blocked = 0",
+        [],
+    );
+}
+
+/// The site key (host:port, `www.` stripped) for a url, or None if it is not http(s).
+pub fn site_key(url: &str) -> Option<String> {
+    site_parts(url).map(|(key, _, _)| key)
+}
+
+/// Auth / utility hosts that should never surface as a "most-visited" recommendation
+/// (their root is a login/account page, not a destination people deliberately go to).
+fn is_junk_host(host: &str) -> bool {
+    let h = host.trim_start_matches("www.").to_lowercase();
+    if h.is_empty() {
+        return false;
+    }
+    let first = h.split('.').next().unwrap_or("");
+    if matches!(
+        first,
+        "account"
+            | "accounts"
+            | "auth"
+            | "id"
+            | "identity"
+            | "idp"
+            | "idsrv"
+            | "login"
+            | "logout"
+            | "oauth"
+            | "openid"
+            | "register"
+            | "secure"
+            | "signin"
+            | "signon"
+            | "signup"
+            | "sso"
+    ) {
+        return true;
+    }
+    h.contains(".auth.") || h.contains(".login.") || h.contains(".sso.") || h.contains(".account.")
 }
 
 #[derive(Debug, Clone, Default)]
@@ -227,13 +331,20 @@ pub fn suggest(
     limit: usize,
 ) -> Vec<Suggestion> {
     let q = raw_q.trim().to_lowercase();
+    let prefs = load_prefs(conn);
+
+    // Empty query = the "Recommendations for you" list. Rank purely by frecency so the
+    // genuinely most-visited sites win, drop auth/utility hosts and blocked sites, and
+    // float pinned sites to the very top.
+    if q.is_empty() {
+        return recommend(conn, &prefs, limit);
+    }
+
     let assoc = load_assoc(conn);
     let learned = digest(&assoc, &q);
 
     let mut cands = history_site_cands(conn, &q);
-    if !q.is_empty() {
-        add_trends(&mut cands, trends, &q);
-    }
+    add_trends(&mut cands, trends, &q);
 
     let mut seen: HashSet<String> = cands.iter().map(|c| url_key(&c.url)).collect();
     let now = now_ms();
@@ -251,12 +362,17 @@ pub fn suggest(
         .map(|c| {
             let f = features(&q, c, &learned, now);
             let base = sigmoid(dot(&model.w, &f) + model.b);
+            let key = site_key(&c.url);
+            let pinned = key.as_ref().map(|k| prefs.pinned.contains(k)).unwrap_or(false);
+            let blocked = key.as_ref().map(|k| prefs.blocked.contains(k)).unwrap_or(false);
             Suggestion {
                 url: c.url.clone(),
                 title: c.title.clone(),
                 kind: c.kind.to_string(),
                 score: (base + trend_boost(&q, c, now)).min(0.999),
                 sub: c.sub.clone(),
+                pinned,
+                blocked,
             }
         })
         .collect();
@@ -266,6 +382,66 @@ pub fn suggest(
             .unwrap_or(std::cmp::Ordering::Equal)
     });
     uniq(out, limit)
+}
+
+/// Frecency-forward recommendation list for the empty omnibox. Total visit count is the
+/// dominant signal (so the most-visited site wins), softened by recency and learned
+/// host affinity. Pinned sites sort first; blocked + auth/utility hosts are dropped.
+fn recommend(conn: &Connection, prefs: &Prefs, limit: usize) -> Vec<Suggestion> {
+    let now = now_ms();
+    let learned = digest(&load_assoc(conn), "");
+    let mut cands = history_site_cands(conn, "");
+
+    // A pinned site must show even when it has little or no history.
+    let mut keys: HashSet<String> = cands.iter().filter_map(|c| site_key(&c.url)).collect();
+    for site in &prefs.pinned {
+        if keys.insert(site.clone()) {
+            cands.push(site_cand_for(conn, &format!("https://{site}/"), now));
+        }
+    }
+
+    let mut scored: Vec<(bool, f64, Suggestion)> = Vec::new();
+    for c in &cands {
+        let Some(key) = site_key(&c.url) else {
+            continue;
+        };
+        let pinned = prefs.pinned.contains(&key);
+        if !pinned && (prefs.blocked.contains(&key) || is_junk_host(&host_of(&c.url))) {
+            continue;
+        }
+        let score = rec_score(c, now, &learned);
+        scored.push((
+            pinned,
+            score,
+            Suggestion {
+                url: c.url.clone(),
+                title: c.title.clone(),
+                kind: c.kind.to_string(),
+                score,
+                sub: c.sub.clone(),
+                pinned,
+                blocked: false,
+            },
+        ));
+    }
+    scored.sort_by(|a, b| {
+        b.0.cmp(&a.0)
+            .then(b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal))
+    });
+    uniq(scored.into_iter().map(|(_, _, s)| s).collect(), limit)
+}
+
+fn rec_score(c: &Cand, now: i64, learned: &Learned) -> f64 {
+    let age_days = ((now - c.last).max(0) as f64) / 86_400_000.0;
+    let visits = (c.visits.max(0) as f64).ln_1p();
+    let recency = (-age_days / 21.0).exp();
+    let host = host_of(&c.url);
+    let affinity = if learned.total_picks > 0 && !host.is_empty() {
+        *learned.host_picks.get(&host).unwrap_or(&0) as f64 / learned.total_picks as f64
+    } else {
+        0.0
+    };
+    visits * (0.6 + 0.4 * recency) + affinity * 3.0
 }
 
 pub fn learn(conn: &Connection, model: &mut Model, raw_q: &str, chosen: &str, shown: &[String]) {
@@ -819,5 +995,97 @@ mod tests {
         assert!(items
             .iter()
             .any(|s| s.kind == "trend" && s.title == "AI news"));
+    }
+
+    fn prefs_conn() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                url TEXT NOT NULL,
+                title TEXT NOT NULL DEFAULT '',
+                workspace_id TEXT,
+                visited_at INTEGER NOT NULL
+            );
+            CREATE TABLE omnibox_prefs (
+                site TEXT PRIMARY KEY,
+                pinned INTEGER NOT NULL DEFAULT 0,
+                blocked INTEGER NOT NULL DEFAULT 0,
+                updated_at INTEGER NOT NULL DEFAULT 0
+            );",
+        )
+        .unwrap();
+        conn
+    }
+
+    #[test]
+    fn recommend_excludes_junk_and_ranks_by_visits() {
+        let conn = prefs_conn();
+        let now = now_ms();
+        for i in 0..20 {
+            conn.execute(
+                "INSERT INTO history(url, title, workspace_id, visited_at) VALUES(?1, ?2, NULL, ?3)",
+                params![format!("https://youtube.com/watch?v={i}"), "YouTube", now - i],
+            )
+            .unwrap();
+        }
+        // An auth host visited even more often must NOT be recommended.
+        for i in 0..40 {
+            conn.execute(
+                "INSERT INTO history(url, title, workspace_id, visited_at) VALUES(?1, ?2, NULL, ?3)",
+                params![
+                    format!("https://login.microsoftonline.com/x/{i}"),
+                    "Sign in",
+                    now - i
+                ],
+            )
+            .unwrap();
+        }
+        conn.execute(
+            "INSERT INTO history(url, title, workspace_id, visited_at) VALUES(?1, ?2, NULL, ?3)",
+            params!["https://github.com/x", "GitHub", now],
+        )
+        .unwrap();
+
+        let items = suggest(&conn, &Model::default(), "", &[], 8);
+        assert!(!items
+            .iter()
+            .any(|s| s.url.contains("login.microsoftonline.com")));
+        assert_eq!(
+            items.first().map(|s| s.url.as_str()),
+            Some("https://youtube.com/")
+        );
+    }
+
+    #[test]
+    fn recommend_pin_floats_to_top_and_block_hides() {
+        let conn = prefs_conn();
+        let now = now_ms();
+        for i in 0..20 {
+            conn.execute(
+                "INSERT INTO history(url, title, workspace_id, visited_at) VALUES(?1, ?2, NULL, ?3)",
+                params![format!("https://youtube.com/watch?v={i}"), "YouTube", now - i],
+            )
+            .unwrap();
+        }
+        conn.execute(
+            "INSERT INTO history(url, title, workspace_id, visited_at) VALUES(?1, ?2, NULL, ?3)",
+            params!["https://github.com/x", "GitHub", now],
+        )
+        .unwrap();
+
+        // Pin the lesser-visited site -> it must lead and be flagged pinned.
+        set_pref(&conn, "https://github.com/", Some(true), None);
+        let items = suggest(&conn, &Model::default(), "", &[], 8);
+        assert_eq!(
+            items.first().map(|s| s.url.as_str()),
+            Some("https://github.com/")
+        );
+        assert!(items.first().map(|s| s.pinned).unwrap_or(false));
+
+        // Block the most-visited site -> it disappears from recommendations.
+        set_pref(&conn, "https://youtube.com/", None, Some(true));
+        let items = suggest(&conn, &Model::default(), "", &[], 8);
+        assert!(!items.iter().any(|s| s.url == "https://youtube.com/"));
     }
 }

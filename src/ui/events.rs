@@ -2,6 +2,22 @@ use serde::{Deserialize, Serialize};
 
 use crate::cloud::{AuthSession, UserProfile};
 
+/// One prior turn of the spotlight Quick-AI conversation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SpotlightTurn {
+    pub role: String,
+    pub content: String,
+}
+
+/// One entry in the bookmark-bar order. `folder` distinguishes a folder id from a
+/// bookmark id (both are UUIDs, so the flag is what tells them apart).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BarOrderRef {
+    pub id: String,
+    #[serde(default)]
+    pub folder: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "cmd", rename_all = "snake_case")]
 pub enum ChromeCommand {
@@ -95,6 +111,12 @@ pub enum ChromeCommand {
         #[serde(default)]
         before: Option<String>,
     },
+    /// Persist the full left-to-right order of the bookmark bar (folders + unfiled
+    /// bookmarks intermixed). Source of truth for the bar layout only; the per-table
+    /// `position` columns used by the sidebar list and folder modal are untouched.
+    SetBarOrder {
+        order: Vec<BarOrderRef>,
+    },
     BookmarkRemove {
         url: String,
     },
@@ -185,6 +207,18 @@ pub enum ChromeCommand {
         url: String,
         #[serde(default)]
         shown: Vec<String>,
+    },
+    /// Pin / unpin / block a recommendation site. `pinned`/`blocked` are tri-state:
+    /// None leaves that flag untouched. `q` is the current query so the refreshed
+    /// suggestions match what the user is looking at.
+    OmniboxSetPref {
+        url: String,
+        #[serde(default)]
+        pinned: Option<bool>,
+        #[serde(default)]
+        blocked: Option<bool>,
+        #[serde(default)]
+        q: String,
     },
     RefreshTrends,
     DeleteHistoryEntry {
@@ -279,6 +313,10 @@ pub enum ChromeCommand {
     OpenDownloadsPanel,
     SpotlightAiQuery {
         text: String,
+        /// Prior turns of the spotlight conversation (oldest first) so follow-ups have
+        /// context. Each entry is `{role: "user"|"assistant", content}`.
+        #[serde(default)]
+        history: Vec<SpotlightTurn>,
     },
     /// Content WebView reports audio/video playback state change for a tab.
     TabAudioState {
@@ -385,6 +423,7 @@ impl ChromeCommand {
             ChromeCommand::BookmarkAddUrl { .. } => Some("bookmark_add_url"),
             ChromeCommand::MoveBookmark { .. } => Some("move_bookmark"),
             ChromeCommand::MoveBookmarkFolder { .. } => Some("move_bookmark_folder"),
+            ChromeCommand::SetBarOrder { .. } => Some("set_bar_order"),
             ChromeCommand::BookmarkRemove { .. } => Some("bookmark_remove"),
             ChromeCommand::BookmarkRemoveById { .. } => Some("bookmark_remove_by_id"),
             ChromeCommand::BookmarkRename { .. } => Some("bookmark_rename"),
@@ -419,6 +458,7 @@ impl ChromeCommand {
             ChromeCommand::ExportSettings => Some("export_settings"),
             ChromeCommand::ImportSettings { .. } => Some("import_settings"),
             ChromeCommand::OmniboxPick { .. } => Some("omnibox_pick"),
+            ChromeCommand::OmniboxSetPref { .. } => Some("omnibox_set_pref"),
             ChromeCommand::RefreshTrends => Some("refresh_trends"),
             ChromeCommand::DeleteHistoryEntry { .. } => Some("delete_history_entry"),
             ChromeCommand::PwdSaveConfirm => Some("password_save_confirm"),

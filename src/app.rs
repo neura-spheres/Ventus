@@ -80,6 +80,9 @@ pub struct AppState {
     pub cached_search_engines: Vec<crate::browser::search_engine::SearchEngine>,
     pub cached_bookmarks: Vec<repositories::Bookmark>,
     pub cached_bookmark_folders: Vec<repositories::BookmarkFolder>,
+    /// Explicit left-to-right order of the bookmark bar (folders + unfiled bookmarks
+    /// intermixed). Persisted in the settings table under `bookmark_bar_order`.
+    pub bookmark_bar_order: Vec<crate::ui::events::BarOrderRef>,
     pub cached_history: Vec<repositories::HistoryEntry>,
     pub auth: Option<crate::cloud::AuthSession>,
     pub user_profile: Option<crate::cloud::UserProfile>,
@@ -129,6 +132,8 @@ impl AppState {
         let cached_bookmarks = repositories::list_bookmarks(&conn).unwrap_or_default();
         let cached_bookmark_folders =
             repositories::list_bookmark_folders(&conn).unwrap_or_default();
+        let bookmark_bar_order =
+            settings_store::get(&conn, "bookmark_bar_order").ok().flatten().unwrap_or_default();
         let cached_history = repositories::list_history(&conn, 30).unwrap_or_default();
         let omnibox = crate::browser::omnibox::load(&conn);
         Self {
@@ -164,6 +169,7 @@ impl AppState {
             cached_search_engines,
             cached_bookmarks,
             cached_bookmark_folders,
+            bookmark_bar_order,
             cached_history,
             auth: None,
             user_profile: None,
@@ -314,6 +320,7 @@ impl AppState {
             "ai_open": self.ai_sidebar_open,
             "bookmarks": &self.cached_bookmarks,
             "bookmark_folders": &self.cached_bookmark_folders,
+            "bar_order": &self.bookmark_bar_order,
             "history": &self.cached_history,
             "downloads": &self.downloads.downloads,
             "ai_key_status": {
@@ -698,6 +705,12 @@ pub fn handle_chrome_command(
             state.push_state_to_chrome(chrome);
             None
         }
+        ChromeCommand::SetBarOrder { order } => {
+            let _ = settings_store::set(&state.conn, "bookmark_bar_order", &order);
+            state.bookmark_bar_order = order;
+            state.push_state_to_chrome(chrome);
+            None
+        }
         ChromeCommand::BookmarkRemove { url } => {
             let _ = repositories::remove_bookmark_by_url(&state.conn, &url);
             state.cached_bookmarks = repositories::list_bookmarks(&state.conn).unwrap_or_default();
@@ -764,11 +777,9 @@ pub fn handle_chrome_command(
                     state.cached_bookmark_folders =
                         repositories::list_bookmark_folders(&state.conn).unwrap_or_default();
                     state.push_state_to_chrome(chrome);
-                    let js = format!(
-                        "window.__neura && window.__neura.openFolderModalAndRename('{}')",
-                        folder.id.replace('\'', "\\'")
+                    let _ = chrome.evaluate_script(
+                        "window.__neura && window.__neura.showSuccess('Folder created')",
                     );
-                    let _ = chrome.evaluate_script(&js);
                 }
                 Err(e) => tracing::warn!("BookmarkCreateFolder failed: {}", e),
             }
@@ -1123,6 +1134,22 @@ pub fn handle_chrome_command(
         }
         ChromeCommand::OmniboxPick { q, url, shown } => {
             crate::browser::omnibox::learn(&state.conn, &mut state.omnibox, &q, &url, &shown);
+            None
+        }
+        ChromeCommand::OmniboxSetPref {
+            url,
+            pinned,
+            blocked,
+            q,
+        } => {
+            crate::browser::omnibox::set_pref(&state.conn, &url, pinned, blocked);
+            let items =
+                crate::browser::omnibox::suggest(&state.conn, &state.omnibox, &q, &state.trends, 8);
+            let payload = serde_json::json!({ "q": q, "items": items }).to_string();
+            let _ = chrome.evaluate_script(&format!(
+                "window.__neura && window.__neura.setOmnibox({})",
+                payload
+            ));
             None
         }
         ChromeCommand::RefreshTrends => None,

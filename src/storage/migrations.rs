@@ -147,4 +147,11 @@ CREATE TABLE IF NOT EXISTS omnibox_learn (
     PRIMARY KEY (prefix, url)
 );
 CREATE INDEX IF NOT EXISTS idx_omnibox_prefix ON omnibox_learn(prefix);
+
+CREATE TABLE IF NOT EXISTS omnibox_prefs (
+    site TEXT PRIMARY KEY,
+    pinned INTEGER NOT NULL DEFAULT 0,
+    blocked INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL DEFAULT 0
+);
 "#;

@@ -976,8 +976,8 @@ fn main() {
                 handle_ai_message(text, &state, &chrome, &proxy_main, &rt, &ai_generation);
             }
 
-            Event::UserEvent(AppEvent::Chrome(ChromeCommand::SpotlightAiQuery { text })) => {
-                handle_spotlight_ai_query(text, &state, &proxy_main, &rt);
+            Event::UserEvent(AppEvent::Chrome(ChromeCommand::SpotlightAiQuery { text, history })) => {
+                handle_spotlight_ai_query(text, history, &state, &proxy_main, &rt);
             }
 
             Event::UserEvent(AppEvent::Chrome(ChromeCommand::AiQuickAction { action })) => {
@@ -9961,6 +9961,7 @@ fn handle_ai_message(
 
 fn handle_spotlight_ai_query(
     text: String,
+    history: Vec<crate::ui::events::SpotlightTurn>,
     state: &AppState,
     proxy: &tao::event_loop::EventLoopProxy<AppEvent>,
     rt: &tokio::runtime::Runtime,
@@ -10001,10 +10002,15 @@ fn handle_spotlight_ai_query(
              Be concise and accurate. Use markdown formatting (bold key values, bullet lists). \
              Keep the answer under 300 words unless more detail is truly needed."
         );
-        let native_msgs = vec![
-            ai::ChatMessage::system(native_system),
-            ai::ChatMessage::user(query_text.clone()),
-        ];
+        let mut native_msgs = vec![ai::ChatMessage::system(native_system)];
+        for t in &history {
+            native_msgs.push(if t.role == "assistant" {
+                ai::ChatMessage::assistant(t.content.clone())
+            } else {
+                ai::ChatMessage::user(t.content.clone())
+            });
+        }
+        native_msgs.push(ai::ChatMessage::user(query_text.clone()));
         let native_req = ai::ChatRequest {
             messages: native_msgs,
             model: model.clone(),
@@ -10120,7 +10126,15 @@ fn handle_spotlight_ai_query(
             )
         };
 
-        let msgs = vec![ai::ChatMessage::system(system), ai::ChatMessage::user(text)];
+        let mut msgs = vec![ai::ChatMessage::system(system)];
+        for t in &history {
+            msgs.push(if t.role == "assistant" {
+                ai::ChatMessage::assistant(t.content.clone())
+            } else {
+                ai::ChatMessage::user(t.content.clone())
+            });
+        }
+        msgs.push(ai::ChatMessage::user(text));
         let req = ai::ChatRequest {
             messages: msgs,
             model,

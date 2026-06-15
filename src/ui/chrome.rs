@@ -40,6 +40,12 @@ pub fn chrome_html() -> String {
   --accent-dim:rgba(99,102,241,0.14);
   --accent-glow:rgba(99,102,241,0.32);
   --accent-gradient:linear-gradient(135deg,#3b82f6,#6366f1,#8b5cf6);
+  --primary-btn-bg:#ffffff;
+  --primary-btn-bg-hover:#f5f5f7;
+  --primary-btn-bg-active:#ececf0;
+  --primary-btn-text:#1d1d1f;
+  --primary-btn-border:rgba(255,255,255,0.72);
+  --danger-btn-text:#ffffff;
   /* AI panel */
   --ai-bg:var(--chrome-bg);
   --ai-panel:var(--bg-card);
@@ -148,6 +154,12 @@ pub fn chrome_html() -> String {
   --accent-dim:rgba(85,87,232,0.10);
   --accent-glow:rgba(85,87,232,0.22);
   --accent-gradient:linear-gradient(135deg,#2563eb,#5557e8,#7c3aed);
+  --primary-btn-bg:#ffffff;
+  --primary-btn-bg-hover:#f5f5f7;
+  --primary-btn-bg-active:#ececf0;
+  --primary-btn-text:#1d1d1f;
+  --primary-btn-border:rgba(0,0,0,0.12);
+  --danger-btn-text:#ffffff;
   --success:#16a34a;
   --success-dim:rgba(22,163,74,0.10);
   --success-glow:rgba(22,163,74,0.18);
@@ -539,8 +551,8 @@ button,input,select,textarea{font-family:var(--font)}
 .perm-prompt-btn{padding:6px 14px;border-radius:var(--radius-sm);border:1px solid var(--border);
   background:var(--bg-hover);color:var(--text);font-size:12px;cursor:pointer}
 .perm-prompt-btn:hover{background:var(--bg-active)}
-.perm-prompt-btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
-.perm-prompt-btn.primary:hover{background:var(--accent-hover);border-color:var(--accent-hover)}
+.perm-prompt-btn.primary{background:var(--primary-btn-bg);color:var(--primary-btn-text);border-color:var(--primary-btn-border)}
+.perm-prompt-btn.primary:hover{background:var(--primary-btn-bg-hover);border-color:var(--primary-btn-border)}
 .site-pop-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 12px 10px;border-bottom:1px solid var(--border-subtle)}
 .site-pop-title{font-size:13px;font-weight:650;line-height:1.2;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .site-pop-section{display:flex;flex-direction:column;padding:6px 0}
@@ -640,6 +652,9 @@ button,input,select,textarea{font-family:var(--font)}
   font-size:10px;
   flex-shrink:0;
 }
+/* Pinned-recommendation badge (omnibox dropdown + spotlight) */
+.omni-pin{flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;color:var(--accent);opacity:0.9}
+.suggestion-pinned .suggestion-item-icon,.tsp-row-pinned .tsp-row-icon{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 45%,transparent)}
 
 .tb-sep{width:1px;height:20px;background:var(--border-subtle);flex-shrink:0;margin:0 2px}
 
@@ -1288,6 +1303,13 @@ button,input,select,textarea{font-family:var(--font)}
   margin:8px 0 12px;padding:2px 0 2px 10px;border-left:2px solid var(--border);
   color:var(--ai-muted);
 }
+#ai-messages .ai-msg,
+#ai-messages .ai-msg *,
+#ai-messages .ai-thinking-summary,
+#ai-messages .ai-thinking-summary *{
+  user-select:text;-webkit-user-select:text;
+}
+#ai-messages .ai-msg{cursor:text}
 .ai-msg.system{
   background:var(--bg-card);border:1px solid var(--border);
   color:var(--ai-muted);font-size:12px;text-align:center;border-radius:var(--radius);
@@ -1494,11 +1516,11 @@ button,input,select,textarea{font-family:var(--font)}
 }
 .mm-custom-input:focus{border-color:var(--accent)}
 .mm-custom-btn{
-  height:32px;padding:0 12px;border-radius:8px;border:none;
-  background:var(--accent);color:#fff;font-family:var(--font);font-size:12px;font-weight:650;
-  cursor:pointer;white-space:nowrap;transition:opacity var(--transition);
+  height:32px;padding:0 12px;border-radius:8px;border:1px solid var(--primary-btn-border);
+  background:var(--primary-btn-bg);color:var(--primary-btn-text);font-family:var(--font);font-size:12px;font-weight:650;
+  cursor:pointer;white-space:nowrap;transition:background var(--transition),border-color var(--transition),opacity var(--transition);
 }
-.mm-custom-btn:hover{opacity:.85}
+.mm-custom-btn:hover{background:var(--primary-btn-bg-hover)}
 .ai-circle-btn{
   width:34px;height:34px;border-radius:var(--radius);border:1px solid var(--border);
   background:transparent;color:var(--ai-muted);display:flex;align-items:center;justify-content:center;
@@ -1508,16 +1530,16 @@ button,input,select,textarea{font-family:var(--font)}
 .ai-circle-btn:active{transform:scale(.96)}
 #ai-send-btn{
   width:36px;height:36px;border-radius:50%;
-  background:#0a84ff;
-  color:#fff;border:none;
+  background:var(--primary-btn-bg);
+  color:var(--primary-btn-text);border:1px solid var(--primary-btn-border);
   display:flex;align-items:center;justify-content:center;
-  cursor:pointer;flex-shrink:0;transition:background var(--transition),transform var(--transition),opacity var(--transition);
+  cursor:pointer;flex-shrink:0;transition:background var(--transition),border-color var(--transition),transform var(--transition),opacity var(--transition);
 }
-#ai-send-btn:hover{background:#1d8fff}
+#ai-send-btn:hover{background:var(--primary-btn-bg-hover)}
 #ai-send-btn:active{transform:scale(.96)}
 #ai-send-btn:disabled{opacity:0.45;cursor:default;transform:none}
-#ai-send-btn.stop{background:#ff453a}
-#ai-send-btn.stop:hover{background:#ff5a52}
+#ai-send-btn.stop{background:var(--danger);color:var(--danger-btn-text);border-color:var(--danger)}
+#ai-send-btn.stop:hover{background:color-mix(in srgb,var(--danger) 88%,white);border-color:color-mix(in srgb,var(--danger) 88%,white)}
 #ai-clear-btn{display:none}
 
 /* settings overlay â€” sits in front of the live content WebView */
@@ -1567,51 +1589,63 @@ button,input,select,textarea{font-family:var(--font)}
 .acct-empty-icon{color:var(--text-dim);margin-bottom:12px}
 .acct-empty h3{font-size:14px;font-weight:600;color:var(--text);margin:0 0 6px}
 .acct-empty p{font-size:12px;line-height:1.5;max-width:320px;margin:0 auto}
+#account-body{max-width:720px}
 .acct-auth{max-width:360px}
-.acct-tabs{display:flex;gap:4px;background:var(--modal-bg-2);border:1px solid var(--modal-border);border-radius:11px;padding:4px;margin-bottom:18px}
-.acct-tab{flex:1;padding:8px;font-size:12.5px;font-weight:600;color:var(--text-muted);background:transparent;border:none;border-radius:8px;cursor:pointer;transition:all .12s ease;font-family:var(--font)}
+.acct-tabs{display:flex;gap:3px;background:var(--modal-bg-2);border:1px solid var(--modal-border);border-radius:10px;padding:3px;margin-bottom:16px}
+.acct-tab{flex:1;padding:7px 8px;font-size:12px;font-weight:600;color:var(--text-muted);background:transparent;border:none;border-radius:7px;cursor:pointer;transition:all .12s ease;font-family:var(--font)}
 .acct-tab:hover{color:var(--text)}
 .acct-tab.active{background:var(--accent);color:#fff}
 .acct-fields{display:flex;flex-direction:column}
-.acct-fields label,.acct-field label{display:block;font-size:11.5px;font-weight:600;color:var(--text);margin:0 0 6px}
+.acct-fields label,.acct-field label{display:block;font-size:11px;font-weight:650;color:var(--text-muted);margin:0 0 6px}
 .acct-fields input,.acct-field input,.acct-field textarea{
-  width:100%;box-sizing:border-box;background:var(--modal-bg-2);border:1px solid var(--modal-border);
-  color:var(--text);border-radius:10px;padding:9px 12px;font-size:13px;outline:none;font-family:var(--font);
-  margin-bottom:14px;transition:border-color .12s ease;
+  width:100%;box-sizing:border-box;background:var(--bg-hover);border:1px solid var(--border);
+  color:var(--text);border-radius:9px;padding:9px 12px;font-size:13px;outline:none;font-family:var(--font);
+  transition:border-color .12s ease,background .12s ease;
 }
-.acct-fields input:focus,.acct-field input:focus,.acct-field textarea:focus{border-color:var(--accent)}
+.acct-fields input{margin-bottom:13px}
+.acct-fields .acct-primary{margin-top:2px}
+.acct-fields input:focus,.acct-field input:focus,.acct-field textarea:focus{border-color:var(--text-dim);background:var(--bg-active)}
 .acct-field input:disabled,.acct-field textarea:disabled{opacity:.6;cursor:not-allowed}
-.acct-field textarea{resize:vertical;min-height:62px;line-height:1.5}
-.acct-primary{width:100%;padding:10px;font-size:13px;font-weight:600;color:#fff;background:var(--accent);border:none;border-radius:10px;cursor:pointer;font-family:var(--font);transition:filter .12s ease}
-.acct-primary:hover{filter:brightness(1.08)}
+.acct-field textarea{resize:vertical;min-height:86px;line-height:1.5}
+.acct-primary{width:100%;padding:10px 16px;font-size:13px;font-weight:600;color:var(--primary-btn-text);background:var(--primary-btn-bg);border:1px solid var(--primary-btn-border);border-radius:10px;cursor:pointer;font-family:var(--font);transition:background .12s ease,border-color .12s ease}
+.acct-primary:hover{background:var(--primary-btn-bg-hover)}
 .acct-primary:disabled{opacity:.65;cursor:default}
-.acct-secondary{padding:8px 16px;font-size:12.5px;font-weight:600;color:var(--text);background:var(--soft-btn-bg);border:1px solid var(--modal-border);border-radius:9px;cursor:pointer;font-family:var(--font)}
-.acct-secondary:hover{background:var(--modal-bg-2)}
+.acct-secondary{padding:9px 14px;font-size:12.5px;font-weight:600;color:var(--text);background:var(--soft-btn-bg);border:1px solid var(--modal-border);border-radius:9px;cursor:pointer;font-family:var(--font);transition:background .12s ease}
+.acct-secondary:hover{background:var(--soft-btn-bg-hover)}
 .acct-divider{display:flex;align-items:center;text-align:center;color:var(--text-dim);font-size:11px;margin:16px 0}
 .acct-divider::before,.acct-divider::after{content:'';flex:1;height:1px;background:var(--modal-border)}
 .acct-divider span{padding:0 12px}
 .acct-google{width:100%;display:flex;align-items:center;justify-content:center;gap:10px;padding:10px;font-size:13px;font-weight:600;color:var(--text);background:var(--soft-btn-bg);border:1px solid var(--modal-border);border-radius:10px;cursor:pointer;font-family:var(--font);transition:background .12s ease}
 .acct-google:hover{background:var(--modal-bg-2)}
 .acct-google:disabled{opacity:.6;cursor:default}
-.acct-profile{max-width:460px}
-.acct-head{display:flex;align-items:center;gap:16px;margin-bottom:24px}
-.acct-avatar{position:relative;width:66px;height:66px;flex-shrink:0}
-.acct-avatar-img{width:66px;height:66px;border-radius:50%;object-fit:cover;border:1px solid var(--modal-border)}
-.acct-avatar-ph{width:66px;height:66px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:600;color:#fff;background:var(--accent)}
-.acct-avatar-edit{position:absolute;right:-2px;bottom:-2px;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;background:var(--accent);border:2px solid var(--modal-bg);cursor:pointer;padding:0}
-.acct-avatar-edit:hover{filter:brightness(1.1)}
-.acct-head-name{font-size:15px;font-weight:700;color:var(--text)}
-.acct-head-email{font-size:12px;color:var(--text-muted);margin-top:2px}
-.acct-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 16px}
-.acct-actions{margin-top:4px}
+.acct-profile{display:grid;grid-template-columns:188px minmax(0,1fr);gap:28px;align-items:start}
+.acct-summary{display:flex;flex-direction:column;align-items:flex-start;gap:14px;min-width:0}
+.acct-avatar{position:relative;width:82px;height:82px;flex-shrink:0}
+.acct-avatar-img{width:82px;height:82px;border-radius:50%;object-fit:cover;border:1px solid var(--modal-border)}
+.acct-avatar-ph{width:82px;height:82px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:650;color:#fff;background:var(--accent)}
+.acct-avatar-edit{position:absolute;right:0;bottom:0;width:25px;height:25px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--primary-btn-text);background:var(--primary-btn-bg);border:2px solid var(--modal-bg);cursor:pointer;padding:0;transition:background .12s ease}
+.acct-avatar-edit:hover{background:var(--primary-btn-bg-hover)}
+.acct-head-info{min-width:0}
+.acct-head-name{font-size:17px;font-weight:700;color:var(--text);letter-spacing:-0.2px;line-height:1.25}
+.acct-head-email{font-size:12px;color:var(--text-muted);margin-top:3px;overflow:hidden;text-overflow:ellipsis;max-width:170px}
+.acct-status{display:inline-flex;align-items:center;gap:6px;padding:4px 9px;border-radius:999px;background:var(--soft-btn-bg);border:1px solid var(--modal-border);color:var(--text-muted);font-size:11px;font-weight:600}
+.acct-status-dot{width:6px;height:6px;border-radius:50%;background:var(--success)}
+.acct-main{min-width:0}
+.acct-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px 16px}
+.acct-field-wide{margin-top:14px}
+.acct-actions{display:flex;justify-content:flex-start;margin-top:16px}
 .acct-actions .acct-primary{width:auto;min-width:150px}
 .acct-sep{height:1px;background:var(--modal-border);margin:22px 0}
-.acct-pw summary{font-size:12.5px;font-weight:600;color:var(--text);cursor:pointer;margin-bottom:14px;list-style:none}
+.acct-pw summary{height:38px;display:flex;align-items:center;justify-content:space-between;font-size:12.5px;font-weight:650;color:var(--text);cursor:pointer;list-style:none}
 .acct-pw summary::-webkit-details-marker{display:none}
-.acct-pw summary::before{content:'â–¸';display:inline-block;margin-right:7px;color:var(--text-muted);transition:transform .12s ease}
-.acct-pw[open] summary::before{transform:rotate(90deg)}
-.acct-signout{padding:9px 18px;font-size:12.5px;font-weight:600;color:#ff6b6b;background:transparent;border:1px solid rgba(255,107,107,.35);border-radius:9px;cursor:pointer;font-family:var(--font);transition:background .12s ease}
-.acct-signout:hover{background:rgba(255,107,107,.1)}
+.acct-pw summary::after{content:'';width:7px;height:7px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(-45deg);opacity:.55;transition:transform .12s ease}
+.acct-pw[open] summary::after{transform:rotate(45deg)}
+.acct-pw-fields{display:grid;grid-template-columns:1fr 1fr;gap:14px 16px;padding:4px 0 2px}
+.acct-pw .acct-secondary{margin-top:12px}
+.acct-danger-row{display:flex;justify-content:flex-start}
+.acct-signout{padding:9px 18px;font-size:12.5px;font-weight:600;color:var(--danger);background:transparent;border:1px solid color-mix(in srgb,var(--danger) 36%,transparent);border-radius:9px;cursor:pointer;font-family:var(--font);transition:background .12s ease}
+.acct-signout:hover{background:var(--danger-dim)}
+@media(max-width:760px){.acct-profile{grid-template-columns:1fr}.acct-grid,.acct-pw-fields{grid-template-columns:1fr}.acct-head-email{max-width:100%}}
 .settings-group{margin-bottom:24px}
 .settings-group label{
   display:block;font-size:12px;font-weight:600;
@@ -1777,13 +1811,16 @@ button,input,select,textarea{font-family:var(--font)}
 }
 .ob-btn-primary{
   padding:11px 26px;border-radius:12px;
-  background:var(--accent-gradient);color:#fff;border:none;
+  background:var(--primary-btn-bg);color:var(--primary-btn-text);border:1px solid var(--primary-btn-border);
   font-size:13.5px;font-weight:600;cursor:pointer;letter-spacing:0.01em;
-  transition:opacity 0.15s,transform 0.15s;
-  box-shadow:0 4px 18px var(--accent-glow);font-family:var(--font);
+  transition:background 0.15s,border-color 0.15s,opacity 0.15s;
+  box-shadow:none;font-family:var(--font);
   display:flex;align-items:center;gap:8px;
 }
-.ob-btn-primary:hover{opacity:0.88;transform:translateY(-1px)}
+.ob-btn-primary:hover{background:var(--primary-btn-bg-hover);border-color:var(--primary-btn-border)}
+.ob-btn-primary:active{background:var(--primary-btn-bg-active)}
+.ob-btn-danger{background:var(--danger);border-color:var(--danger);color:var(--danger-btn-text)}
+.ob-btn-danger:hover{background:color-mix(in srgb,var(--danger) 88%,white);border-color:color-mix(in srgb,var(--danger) 88%,white)}
 .ob-btn-secondary{
   background:none;border:none;color:var(--text-muted);
   font-size:12.5px;cursor:pointer;transition:color 0.15s;
@@ -1866,8 +1903,8 @@ button,input,select,textarea{font-family:var(--font)}
 .pwd-save-btn{padding:5px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);
   background:var(--bg-hover);color:var(--text);font-size:12px;cursor:pointer}
 .pwd-save-btn:hover{background:var(--bg-active)}
-.pwd-save-btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
-.pwd-save-btn.primary:hover{background:var(--accent-hover);border-color:var(--accent-hover)}
+.pwd-save-btn.primary{background:var(--primary-btn-bg);color:var(--primary-btn-text);border-color:var(--primary-btn-border)}
+.pwd-save-btn.primary:hover{background:var(--primary-btn-bg-hover);border-color:var(--primary-btn-border)}
 .pwd-manager-overlay{
   position:fixed;inset:0;z-index:700;background:var(--overlay-bg);
   display:flex;align-items:center;justify-content:center;
@@ -2584,51 +2621,83 @@ button,input,select,textarea{font-family:var(--font)}
 #tsp-ai-hint{
   display:none;
   flex-shrink:0;
-  font-size:10.5px;font-weight:600;
-  color:var(--accent);
-  background:color-mix(in srgb, var(--accent) 14%, transparent);
-  border:1px solid color-mix(in srgb, var(--accent) 30%, transparent);
-  border-radius:6px;padding:3px 8px;white-space:nowrap;
+  align-items:center;gap:7px;
+  font-size:11.5px;font-weight:500;
+  color:var(--text-muted);
+  white-space:nowrap;
   pointer-events:none;
 }
-#tsp-ai-hint.visible{display:block;}
+#tsp-ai-hint.visible{display:flex;}
+.tsp-ai-hint-key{
+  font-family:var(--font);
+  font-size:10px;font-weight:600;line-height:1.4;
+  color:var(--text);
+  background:var(--bg-elevated);
+  border:1px solid var(--border);
+  border-radius:5px;
+  padding:1px 7px;
+}
 /* Spotlight AI answer panel */
 #tsp-ai-panel{
   display:none;
   flex-direction:column;
 }
 #tsp-ai-panel.visible{display:flex;}
-.tsp-ai-header{
-  display:flex;align-items:center;gap:10px;
-  padding:10px 22px 8px;
+/* Quick-AI: minimalist follow-up chat */
+.tsp-ai-bar{
+  display:flex;align-items:center;gap:8px;
+  padding:11px 16px;
   border-bottom:1px solid var(--border);
 }
 .tsp-ai-back{
-  background:none;border:none;cursor:pointer;
-  color:var(--text-muted);padding:4px;border-radius:6px;
+  background:var(--bg);border:1px solid var(--border);cursor:pointer;
+  color:var(--text-muted);width:30px;height:30px;border-radius:8px;flex-shrink:0;
   display:flex;align-items:center;justify-content:center;
-  transition:background 0.1s,color 0.1s;
+  transition:background 0.1s,color 0.1s,border-color 0.1s;
 }
-.tsp-ai-back:hover{background:var(--bg-hover);color:var(--text);}
-.tsp-ai-title{
-  font-size:12px;font-weight:600;color:var(--text-muted);
-  text-transform:uppercase;letter-spacing:0.07em;
+.tsp-ai-back:hover{background:var(--bg-hover);color:var(--text);border-color:var(--border-strong,var(--border));}
+.tsp-ai-followup{
+  flex:1;min-width:0;border:none;background:none;outline:none;
+  font-family:var(--font);font-size:15px;color:var(--text);
 }
-.tsp-ai-content{
-  padding:14px 22px 18px;
-  font-size:14px;line-height:1.7;color:var(--text);
-  max-height:340px;overflow-y:auto;
+.tsp-ai-followup::placeholder{color:var(--text-dim);}
+.tsp-ai-thread{
+  padding:14px;display:flex;flex-direction:column;gap:12px;
+  max-height:min(440px,60vh);overflow-y:auto;
   scrollbar-width:thin;scrollbar-color:var(--border) transparent;
 }
-.tsp-ai-content strong{font-weight:600;}
-.tsp-ai-content em{font-style:italic;}
-.tsp-ai-content code{
+.tsp-ai-turn{
+  border:1px solid var(--border);border-radius:14px;
+  background:color-mix(in srgb,var(--bg) 60%,transparent);
+  padding:14px 16px 12px;
+}
+.tsp-ai-turn,.tsp-ai-turn *{user-select:text;-webkit-user-select:text}
+.tsp-ai-q{
+  font-size:12px;font-weight:600;color:var(--text-dim);
+  margin-bottom:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.tsp-ai-a{font-size:13.5px;line-height:1.65;color:var(--text);cursor:text;}
+.tsp-ai-a strong{font-weight:650;}
+.tsp-ai-a em{font-style:italic;}
+.tsp-ai-a code{
   font-family:monospace;font-size:12.5px;
   background:var(--bg);border:1px solid var(--border);
   border-radius:4px;padding:1px 5px;
 }
-.tsp-ai-content ul{margin:6px 0 6px 18px;padding:0;}
-.tsp-ai-content li{margin:3px 0;}
+.tsp-ai-a ul{margin:6px 0 6px 18px;padding:0;}
+.tsp-ai-a li{margin:4px 0;}
+.tsp-ai-a p{margin:8px 0;}
+.tsp-ai-a > :first-child{margin-top:0;}
+.tsp-ai-a > :last-child{margin-bottom:0;}
+.tsp-ai-meta{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  margin-top:13px;padding-top:11px;border-top:1px solid var(--border-subtle);
+  font-size:11px;color:var(--text-dim);
+}
+.tsp-ai-model{display:flex;align-items:center;gap:6px;min-width:0;font-weight:500;}
+.tsp-ai-model svg{flex-shrink:0;opacity:0.8;}
+.tsp-ai-model span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.tsp-ai-time{flex-shrink:0;}
 .tsp-ai-dots{display:flex;align-items:center;gap:5px;padding:4px 0;}
 .tsp-ai-dots span{
   width:6px;height:6px;border-radius:50%;
@@ -2684,14 +2753,14 @@ button,input,select,textarea{font-family:var(--font)}
 .ut-btn-later:hover{background:var(--bg-hover);color:var(--text)}
 .ut-btn-update{
   padding:5px 14px;font-size:12px;font-weight:600;
-  background:var(--accent);border:none;
-  border-radius:8px;color:#fff;cursor:pointer;
-  transition:background var(--transition),transform 0.1s ease,box-shadow 0.1s ease;
+  background:var(--primary-btn-bg);border:1px solid var(--primary-btn-border);
+  border-radius:8px;color:var(--primary-btn-text);cursor:pointer;
+  transition:background var(--transition),border-color var(--transition);
   font-family:var(--font);
-  box-shadow:0 2px 10px var(--accent-glow);
+  box-shadow:none;
 }
-.ut-btn-update:hover{background:var(--accent-hover);transform:translateY(-1px);box-shadow:0 4px 14px var(--accent-glow)}
-.ut-btn-update:active{transform:translateY(0)}
+.ut-btn-update:hover{background:var(--primary-btn-bg-hover);border-color:var(--primary-btn-border)}
+.ut-btn-update:active{background:var(--primary-btn-bg-active)}
 
 
 /* context menu */
@@ -2763,7 +2832,7 @@ button,input,select,textarea{font-family:var(--font)}
 /* context menu */
 #ctx-menu{
   position:fixed;background:var(--bg-elevated);border:1px solid var(--border);
-  border-radius:var(--radius);box-shadow:var(--shadow);z-index:400;
+  border-radius:var(--radius);box-shadow:var(--shadow);z-index:10000;
   min-width:160px;padding:4px;display:none;
 }
 .ctx-item{
@@ -2822,7 +2891,6 @@ button,input,select,textarea{font-family:var(--font)}
 .fm-close:hover{background:var(--bg-hover);color:var(--text)}
 .fm-body{flex:1;overflow-y:auto;padding:4px;scrollbar-width:thin;scrollbar-color:var(--border) transparent;display:flex;flex-direction:column;gap:1px}
 .fm-item{display:flex;align-items:center;gap:7px;padding:6px 8px;border-radius:6px;cursor:pointer;transition:background var(--transition)}
-.fm-item[draggable="true"]{cursor:grab}
 .fm-item.dragging-url{opacity:0.55}
 .fm-item:hover{background:var(--bg-hover)}
 .fm-item-info{flex:1;min-width:0}
@@ -3308,7 +3376,7 @@ svg{display:block;flex-shrink:0}
   <div class="more-zoom-row">
     <span class="more-zoom-label">Zoom</span>
     <div class="more-zoom-controls">
-      <button class="more-zoom-btn" onclick="zoomOut();updateMoreMenuZoom()" title="Zoom out">âˆ’</button>
+      <button class="more-zoom-btn" onclick="zoomOut();updateMoreMenuZoom()" title="Zoom out">&minus;</button>
       <span id="more-zoom-pct" onclick="zoomReset();updateMoreMenuZoom()" title="Reset zoom">100%</span>
       <button class="more-zoom-btn" onclick="zoomIn();updateMoreMenuZoom()" title="Zoom in">+</button>
     </div>
@@ -3677,7 +3745,7 @@ svg{display:block;flex-shrink:0}
 
       <div class="settings-section" id="section-account">
         <h2>Account</h2>
-        <p class="subtitle">Sign in to sync your profile to the cloud.</p>
+        <p class="subtitle">Manage your profile and cloud sync.</p>
         <div id="account-body"></div>
       </div>
 
@@ -3985,7 +4053,7 @@ svg{display:block;flex-shrink:0}
         <p class="subtitle">Pages you have visited</p>
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
           <input class="settings-input" id="history-search" placeholder="Search history..." oninput="searchHistory(this.value)" style="flex:1">
-          <button class="ob-btn-primary" style="background:var(--danger);flex-shrink:0" onclick="clearHistory()">Clear all</button>
+          <button class="ob-btn-primary ob-btn-danger" style="flex-shrink:0" onclick="clearHistory()">Clear all</button>
         </div>
         <div id="history-list" style="display:flex;flex-direction:column;gap:2px">
           <div style="color:var(--text-muted);font-size:12px;text-align:center;padding:24px 0">No history yet.</div>
@@ -4233,7 +4301,7 @@ svg{display:block;flex-shrink:0}
               Ventus
               <span class="about-identity-ver">v__APP_VERSION__</span>
             </div>
-            <div class="about-identity-tagline">Fast search Â· Focused workspaces Â· AI-native</div>
+            <div class="about-identity-tagline">Fast search &middot; Focused workspaces &middot; AI-native</div>
             <div class="about-identity-badges">
               <span class="aib aib-live"><span class="aib-live-dot"></span>Stable</span>
               <span class="aib">Windows</span>
@@ -4255,7 +4323,7 @@ svg{display:block;flex-shrink:0}
           </div>
           <div class="about-row">
             <span class="about-row-label">Data storage</span>
-            <span class="about-row-val">Local Â· %APPDATA%\ventus</span>
+            <span class="about-row-val">Local &middot; %APPDATA%\ventus</span>
           </div>
           <div class="about-row">
             <span class="about-row-label">Source</span>
@@ -4483,17 +4551,17 @@ svg{display:block;flex-shrink:0}
     <div id="tsp-input-wrap">
       <svg class="tsp-ico" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
       <input id="tsp-input" type="text" placeholder="Search or go to a website..." autocomplete="off" spellcheck="false" oninput="handleTspInput(event)" onkeydown="tspKeydown(event)">
-      <div id="tsp-ai-hint">Tab â†’ AI</div>
+      <div id="tsp-ai-hint"><span class="tsp-ai-hint-label">Quick AI</span><kbd class="tsp-ai-hint-key">Tab</kbd></div>
     </div>
     <div id="tsp-results"></div>
     <div id="tsp-ai-panel">
-      <div class="tsp-ai-header">
+      <div class="tsp-ai-bar">
         <button class="tsp-ai-back" onclick="tspExitAiMode()" title="Back to search">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
         </button>
-        <span class="tsp-ai-title">AI Answer</span>
+        <input id="tsp-ai-followup" class="tsp-ai-followup" type="text" placeholder="Ask follow-up..." autocomplete="off" spellcheck="false" onkeydown="tspAiFollowupKey(event)">
       </div>
-      <div class="tsp-ai-content" id="tsp-ai-content"></div>
+      <div class="tsp-ai-thread" id="tsp-ai-thread"></div>
     </div>
   </div>
 </div>
@@ -4939,30 +5007,30 @@ window.__neura = {
   showContextMenu(data) { showBrowserContextMenu(data); },
   applyClipboardPaste(text) { applyClipboardPaste(text); },
   spotlightAiChunk(text, done) {
-    if (!tspAiMode) return;
-    const content = document.getElementById('tsp-ai-content');
-    if (!content) return;
+    if (!tspAiMode || !tspAiTurns.length) return;
+    const turn = tspAiTurns[tspAiTurns.length - 1];
     if (done) {
       tspAiStreaming = false;
-      // Remove thinking dots if still present
-      const dots = content.querySelector('.tsp-ai-dots');
-      if (dots) dots.remove();
+      turn.done = true;
+      // Commit this turn to the conversation history so follow-ups have context.
+      tspAiHistory.push({role: 'user', content: turn.q});
+      tspAiHistory.push({role: 'assistant', content: turn.a});
+      renderTspAiThread();
+      const fu = document.getElementById('tsp-ai-followup');
+      if (fu) fu.focus();
       return;
     }
-    // Remove dots on first actual content
-    const dots = content.querySelector('.tsp-ai-dots');
-    if (dots) dots.remove();
-    _tspAiRawText += text;
-    content.innerHTML = renderAiMarkdown(_tspAiRawText);
-    content.scrollTop = content.scrollHeight;
+    turn.a += text;
+    const el = document.querySelector('#tsp-ai-thread .tsp-ai-turn:last-child .tsp-ai-a');
+    if (el) el.innerHTML = renderAiMarkdown(turn.a);
+    const thread = document.getElementById('tsp-ai-thread');
+    if (thread) thread.scrollTop = thread.scrollHeight;
   },
   spotlightAiError(msg) {
-    if (!tspAiMode) return;
+    if (!tspAiMode || !tspAiTurns.length) return;
     tspAiStreaming = false;
-    const content = document.getElementById('tsp-ai-content');
-    if (content) {
-      content.innerHTML = '<span style="color:var(--danger)">' + escHtml(msg) + '</span>';
-    }
+    tspAiTurns[tspAiTurns.length - 1].error = msg;
+    renderTspAiThread();
   },
 };
 
@@ -5507,7 +5575,7 @@ function normalizeNewsArticle(article) {
 }
 
 function renderNewsCard(article, index) {
-  const meta = [article.source, article.time ? formatRelativeTime(article.time) : 'Neura Feed'].filter(Boolean).join(' Â· ');
+  const meta = [article.source, article.time ? formatRelativeTime(article.time) : 'Neura Feed'].filter(Boolean).join(' \u00B7 ');
   const img = article.image ? `<img src="${escAttr(article.image)}" alt="" onerror="this.closest('.news-card').classList.add('no-image');this.remove()">` : '';
   const cls = newsCardClass(index, article.image);
   return `<button class="news-card ${cls}" data-news-url="${escAttr(article.url)}">
@@ -7871,6 +7939,47 @@ function recordOmniboxPick(url) {
   send('OmniboxPick', {q, url, shown});
 }
 
+// The query the user is currently looking at (spotlight input or address bar), so the
+// refreshed recommendation list matches their context after a pin/block.
+function currentOmniboxQuery() {
+  if (spotlightOpen) {
+    const inp = document.getElementById('tsp-input');
+    return inp ? inp.value.trim() : '';
+  }
+  if (activeSuggestionTarget) {
+    const inp = getSuggestionInput(activeSuggestionTarget);
+    if (inp) {
+      if (activeSuggestionTarget === 'url' && inp.dataset.showingCurrent === '1') return '';
+      return (typedInputValue(inp) || '').trim();
+    }
+  }
+  return '';
+}
+
+function omniboxSetPref(url, opts) {
+  if (!url) return;
+  send('OmniboxSetPref', Object.assign({url, q: currentOmniboxQuery()}, opts || {}));
+}
+
+// Right-click menu for a recommendation row: pin to the top, or stop recommending it.
+function omniboxItemMenu(event, url, pinned, blocked) {
+  event.preventDefault();
+  event.stopPropagation();
+  if (!url) return;
+  const items = [
+    pinned
+      ? { label: 'Unpin from top', action: () => omniboxSetPref(url, {pinned: false}) }
+      : { label: 'Pin to top', action: () => omniboxSetPref(url, {pinned: true}) },
+    { sep: true },
+  ];
+  if (blocked) {
+    items.push({ label: 'Recommend again', action: () => omniboxSetPref(url, {blocked: false}) });
+  } else {
+    items.push({ label: "Don't recommend this", danger: true, action: () => omniboxSetPref(url, {blocked: true}) });
+  }
+  showContextMenu(event.clientX, event.clientY, items);
+}
+
 function renderSuggestionPanels() {
   if (!activeSuggestionTarget) return;
   const input = getSuggestionInput(activeSuggestionTarget);
@@ -7905,8 +8014,12 @@ function renderSuggestions(target, rawQuery) {
   panel.innerHTML = renderSuggestionGroups(activeSuggestions);
   panel.querySelectorAll('.suggestion-item').forEach((el, index) => {
     el.addEventListener('mousedown', ev => {
-      ev.preventDefault();
-      chooseSuggestion(index);
+      ev.preventDefault();             // keep the input focused (no blur-close)
+      if (ev.button === 0) chooseSuggestion(index);
+    });
+    el.addEventListener('contextmenu', ev => {
+      const it = activeSuggestions[index];
+      if (it && it.url && it.recommend) omniboxItemMenu(ev, it.url, !!it.pinned, !!it.blocked);
     });
   });
   if (target === 'url') {
@@ -7936,12 +8049,15 @@ function syncSuggestionOverlay(panel) {
     return;
   }
   const rect = panel.getBoundingClientRect();
+  // Pad the clip past the panel's soft shadow (var(--shadow) = 0 4px 24px) so the Win32
+  // region doesn't hard-cut it; 28px covers the blur on every side.
+  const pad = 28;
   send('SuggestionOverlay', {
     visible: true,
-    x: rect.left,
-    y: rect.top,
-    width: rect.width,
-    height: rect.height
+    x: rect.left - pad,
+    y: rect.top - pad,
+    width: rect.width + pad * 2,
+    height: rect.height + pad * 2
   });
 }
 
@@ -7979,7 +8095,10 @@ function buildSuggestions(query) {
       sub: p.sub || (isSearch || isTrend ? (defaultEngine ? `Search ${defaultEngine.name}` : 'Search the web') : siteDomain(p.url)),
       url: p.url,
       icon: isSearch || isTrend ? 'search' : 'globe',
-      predicted: true
+      predicted: true,
+      pinned: !!p.pinned,
+      blocked: !!p.blocked,
+      recommend: !isSearch && !isTrend
     };
     const row = suggestionRowKey(item);
     if (seenRows.has(row)) continue;
@@ -8047,13 +8166,15 @@ function renderSuggestionGroups(items) {
     const groupHtml = item.group !== currentGroup
       ? (currentGroup = item.group, `<div class="suggestion-section">${escHtml(item.group)}</div>`)
       : '';
+    const pin = item.pinned ? `<span class="omni-pin" title="Pinned">${omniPinSvg}</span>` : '';
     return `${groupHtml}
-      <div class="suggestion-item" data-index="${index}">
+      <div class="suggestion-item${item.pinned ? ' suggestion-pinned' : ''}" data-index="${index}">
         <div class="suggestion-item-icon">${suggestionIconSvg(item.icon)}</div>
         <div class="suggestion-item-info">
           <div class="suggestion-item-title">${escHtml(item.title)}</div>
           <div class="suggestion-item-sub">${escHtml(item.sub || '')}</div>
         </div>
+        ${pin}
         ${item.kbd ? `<div class="suggestion-item-kbd">${escHtml(item.kbd)}</div>` : ''}
       </div>`;
   }).join('');
@@ -9149,7 +9270,7 @@ function renderAccountSignedOut() {
       <input id="acct-email" type="email" autocomplete="username" placeholder="you@example.com" value="${emailVal}" ${dis}>
       <label>Password</label>
       <input id="acct-password" type="password" autocomplete="${isSignup?'new-password':'current-password'}" placeholder="${isSignup?'At least 6 characters':'Your password'}" ${dis}>
-      <button class="acct-primary" type="submit" ${dis}>${accountPending?'Please waitâ€¦':(isSignup?'Create account':'Sign in')}</button>
+      <button class="acct-primary" type="submit" ${dis}>${accountPending?'Please wait...':(isSignup?'Create account':'Sign in')}</button>
     </form>
     <div class="acct-divider"><span>or</span></div>
     <button class="acct-google" ${dis} onclick="accountGoogle()">
@@ -9162,12 +9283,14 @@ function renderAccountSignedOut() {
 function renderAccountSignedIn(p) {
   const dis = accountPending ? 'disabled' : '';
   const initial = (p.full_name || p.username || p.email || '?').trim().charAt(0).toUpperCase() || '?';
+  const name = p.full_name || p.username || 'Your account';
+  const email = p.email || '';
   const avatar = p.photo_url
     ? `<img src="${escAttr(p.photo_url)}" alt="" class="acct-avatar-img" onerror="this.style.display='none'">`
     : `<div class="acct-avatar-ph">${escHtml(initial)}</div>`;
   return `
   <div class="acct-profile">
-    <div class="acct-head">
+    <div class="acct-summary">
       <div class="acct-avatar">${avatar}
         <button class="acct-avatar-edit" ${dis} onclick="document.getElementById('acct-photo-input').click()" title="Change photo">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
@@ -9175,29 +9298,34 @@ function renderAccountSignedIn(p) {
         <input id="acct-photo-input" type="file" accept="image/*" hidden onchange="accountPhotoChange(this)">
       </div>
       <div class="acct-head-info">
-        <div class="acct-head-name">${escHtml(p.full_name || p.username || 'Your account')}</div>
-        <div class="acct-head-email">${escHtml(p.email || '')}</div>
+        <div class="acct-head-name">${escHtml(name)}</div>
+        <div class="acct-head-email">${escHtml(email)}</div>
       </div>
+      <div class="acct-status"><span class="acct-status-dot"></span>Cloud sync on</div>
     </div>
-    <div class="acct-grid">
-      <div class="acct-field"><label>Username</label><input id="acct-username" type="text" value="${escAttr(p.username||'')}" placeholder="username" ${dis}></div>
-      <div class="acct-field"><label>Full name</label><input id="acct-fullname" type="text" value="${escAttr(p.full_name||'')}" placeholder="Your name" ${dis}></div>
-      <div class="acct-field"><label>Birthdate</label><input id="acct-birthdate" type="date" value="${escAttr(p.birthdate||'')}" ${dis}></div>
-      <div class="acct-field"><label>Country</label><input type="text" value="${escAttr(p.country||'')}" placeholder="Set in General â†’ Region" disabled></div>
+    <div class="acct-main">
+      <div class="acct-grid">
+        <div class="acct-field"><label>Username</label><input id="acct-username" type="text" value="${escAttr(p.username||'')}" placeholder="username" ${dis}></div>
+        <div class="acct-field"><label>Full name</label><input id="acct-fullname" type="text" value="${escAttr(p.full_name||'')}" placeholder="Your name" ${dis}></div>
+        <div class="acct-field"><label>Birthdate</label><input id="acct-birthdate" type="date" value="${escAttr(p.birthdate||'')}" ${dis}></div>
+        <div class="acct-field"><label>Country</label><input type="text" value="${escAttr(p.country||'')}" placeholder="Set in General" disabled></div>
+      </div>
+      <div class="acct-field acct-field-wide"><label>Bio</label><textarea id="acct-bio" rows="3" placeholder="A little about you" ${dis}>${escHtml(p.bio||'')}</textarea></div>
+      <div class="acct-actions">
+        <button class="acct-primary" ${dis} onclick="accountSaveProfile()">${accountPending?'Saving...':'Save changes'}</button>
+      </div>
+      <div class="acct-sep"></div>
+      <details class="acct-pw">
+        <summary>Change password</summary>
+        <div class="acct-pw-fields">
+          <div class="acct-field"><label>Current password</label><input id="acct-pw-current" type="password" autocomplete="current-password" ${dis}></div>
+          <div class="acct-field"><label>New password</label><input id="acct-pw-new" type="password" autocomplete="new-password" placeholder="At least 6 characters" ${dis}></div>
+        </div>
+        <button class="acct-secondary" ${dis} onclick="accountChangePassword()">Update password</button>
+      </details>
+      <div class="acct-sep"></div>
+      <div class="acct-danger-row"><button class="acct-signout" ${dis} onclick="accountSignOut()">Sign out</button></div>
     </div>
-    <div class="acct-field"><label>Bio</label><textarea id="acct-bio" rows="3" placeholder="A little about you" ${dis}>${escHtml(p.bio||'')}</textarea></div>
-    <div class="acct-actions">
-      <button class="acct-primary" ${dis} onclick="accountSaveProfile()">${accountPending?'Savingâ€¦':'Save changes'}</button>
-    </div>
-    <div class="acct-sep"></div>
-    <details class="acct-pw">
-      <summary>Change password</summary>
-      <div class="acct-field"><label>Current password</label><input id="acct-pw-current" type="password" autocomplete="current-password" ${dis}></div>
-      <div class="acct-field"><label>New password</label><input id="acct-pw-new" type="password" autocomplete="new-password" placeholder="At least 6 characters" ${dis}></div>
-      <button class="acct-secondary" ${dis} onclick="accountChangePassword()">Update password</button>
-    </details>
-    <div class="acct-sep"></div>
-    <button class="acct-signout" ${dis} onclick="accountSignOut()">Sign out</button>
   </div>`;
 }
 
@@ -9351,7 +9479,27 @@ let spotlightUrls = [];
 let spotlightSuggestions = [];
 let tspAiMode = false;
 let tspAiStreaming = false;
-let _tspAiRawText = '';
+let tspAiTurns = [];      // [{q, a, done, model, time}] rendered as chat cards
+let tspAiHistory = [];    // [{role, content}] sent to the model for follow-up context
+
+const tspAiSparkSvg = '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5l1.7 5.6 5.6 1.7-5.6 1.7L12 17.1l-1.7-5.6L4.7 9.8l5.6-1.7z"/><path d="M19 14.5l.8 2.4 2.4.8-2.4.8-.8 2.4-.8-2.4-2.4-.8 2.4-.8z"/></svg>';
+
+function spotlightAiModelLabel() {
+  const ai = (state.settings && state.settings.ai) || {};
+  const provider = normalizeAiProvider(ai.default_provider || 'openai');
+  const pretty = {openai:'OpenAI', anthropic:'Anthropic', gemini:'Gemini'}[provider] || 'AI';
+  const model = modelDisplayName(provider, ai.default_model || '');
+  return (pretty + ' ' + model).trim();
+}
+
+function formatNowTime() {
+  const d = new Date();
+  let h = d.getHours();
+  const m = d.getMinutes();
+  const ap = h >= 12 ? 'PM' : 'AM';
+  h = h % 12; if (h === 0) h = 12;
+  return 'Today, ' + h + ':' + (m < 10 ? '0' + m : m) + ' ' + ap;
+}
 
 function hasAiKey() {
   // true if any of the three compatible providers has a key configured
@@ -9363,27 +9511,77 @@ function hasAiKey() {
 function tspEnterAiMode(query) {
   if (!hasAiKey()) return;
   tspAiMode = true;
-  tspAiStreaming = true;
-  _tspAiRawText = '';
-  const panel = document.getElementById('tsp-ai-panel');
+  tspAiTurns = [];
+  tspAiHistory = [];
+  const wrap = document.getElementById('tsp-input-wrap');
   const results = document.getElementById('tsp-results');
-  const content = document.getElementById('tsp-ai-content');
+  const panel = document.getElementById('tsp-ai-panel');
+  if (wrap) wrap.style.display = 'none';
   if (results) results.style.display = 'none';
   if (panel) panel.classList.add('visible');
-  if (content) {
-    content.innerHTML = '<div class="tsp-ai-dots"><span></span><span></span><span></span></div>';
-  }
-  send('SpotlightAiQuery', {text: query});
+  tspAiAsk(query);
+  const fu = document.getElementById('tsp-ai-followup');
+  if (fu) { fu.value = ''; setTimeout(() => fu.focus(), 30); }
+}
+
+// Send a question (first or follow-up) and append a streaming turn card.
+function tspAiAsk(query) {
+  const q = (query || '').trim();
+  if (!q) return;
+  const history = tspAiHistory.slice();   // prior turns become the model's context
+  tspAiTurns.push({q, a: '', done: false, model: spotlightAiModelLabel(), time: formatNowTime()});
+  tspAiStreaming = true;
+  renderTspAiThread();
+  send('SpotlightAiQuery', {text: q, history});
 }
 
 function tspExitAiMode() {
   tspAiMode = false;
   tspAiStreaming = false;
-  _tspAiRawText = '';
-  const panel = document.getElementById('tsp-ai-panel');
+  tspAiTurns = [];
+  tspAiHistory = [];
+  const wrap = document.getElementById('tsp-input-wrap');
   const results = document.getElementById('tsp-results');
+  const panel = document.getElementById('tsp-ai-panel');
   if (panel) panel.classList.remove('visible');
   if (results) results.style.display = '';
+  if (wrap) wrap.style.display = '';
+  const fu = document.getElementById('tsp-ai-followup');
+  if (fu) fu.value = '';
+  focusSpotlightInput();
+}
+
+function tspAiFollowupKey(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    if (tspAiStreaming) return;   // let the current answer finish first
+    const q = e.target.value.trim();
+    if (!q) return;
+    e.target.value = '';
+    tspAiAsk(q);
+  }
+}
+
+function renderTspAiThread() {
+  const thread = document.getElementById('tsp-ai-thread');
+  if (!thread) return;
+  thread.innerHTML = tspAiTurns.map(t => {
+    const body = t.error
+      ? '<span style="color:var(--danger)">' + escHtml(t.error) + '</span>'
+      : (t.a ? renderAiMarkdown(t.a) : '<div class="tsp-ai-dots"><span></span><span></span><span></span></div>');
+    const meta = t.done && !t.error
+      ? `<div class="tsp-ai-meta">
+          <span class="tsp-ai-model">${tspAiSparkSvg}<span>${escHtml(t.model)}</span></span>
+          <span class="tsp-ai-time">${escHtml(t.time)}</span>
+        </div>`
+      : '';
+    return `<div class="tsp-ai-turn">
+      <div class="tsp-ai-q">${escHtml(t.q)}</div>
+      <div class="tsp-ai-a">${body}</div>
+      ${meta}
+    </div>`;
+  }).join('');
+  thread.scrollTop = thread.scrollHeight;
 }
 
 function openNewTabSpotlight() {
@@ -9459,7 +9657,7 @@ function tspDisplayUrl(url) {
   catch { return url; }
 }
 
-function tspRow(title, url, favicon, isSearch, subText) {
+function tspRow(title, url, favicon, isSearch, subText, pinned) {
   const ico = favicon
     ? `<img src="${escAttr(favicon)}" alt="" width="16" height="16" onerror="this.style.display='none'">`
     : isSearch
@@ -9467,11 +9665,17 @@ function tspRow(title, url, favicon, isSearch, subText) {
       : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg>`;
   const line = subText != null ? subText : ((url && url !== title) ? tspDisplayUrl(url) : '');
   const sub = line ? `<div class="tsp-row-sub">${escHtml(line)}</div>` : '';
-  return `<div class="tsp-row" onclick="spotlightNavigate(this.dataset.u)" data-u="${escAttr(url)}">
+  // Site recommendations get a right-click menu (pin / don't recommend); search + go-to rows don't.
+  // Spotlight only ever shows recommendable (non-blocked) sites, so blocked is always false here.
+  const ctx = isSearch ? '' : `oncontextmenu="omniboxItemMenu(event, this.dataset.u, ${pinned ? 'true' : 'false'}, false)"`;
+  const pin = pinned ? `<span class="omni-pin" title="Pinned">${omniPinSvg}</span>` : '';
+  return `<div class="tsp-row${pinned ? ' tsp-row-pinned' : ''}" onclick="spotlightNavigate(this.dataset.u)" data-u="${escAttr(url)}" ${ctx}>
     <div class="tsp-row-icon">${ico}</div>
     <div class="tsp-row-body"><div class="tsp-row-title">${escHtml(title)}</div>${sub}</div>
+    ${pin}
   </div>`;
 }
+const omniPinSvg = '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M16 3l5 5-2 2-1-1-4 4v5l-2 2-3-3-4 4-1-1 4-4-3-3 2-2h5l4-4-1-1z"/></svg>';
 
 // â”€â”€ Spotlight calculator â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -10095,7 +10299,7 @@ function renderTspOmniboxRows(items, query) {
       group = row.group;
       html += `<div class="tsp-section-lbl">${escHtml(group)}</div>`;
     }
-    html += tspRow(row.title || row.url, row.url, favicon, isSearch, row.sub || null);
+    html += tspRow(row.title || row.url, row.url, favicon, isSearch, row.sub || null, !!row.pinned);
     spotlightSuggestions.push(row);
     spotlightUrls.push(row.url);
   }
@@ -10483,7 +10687,7 @@ function renderDownloads() {
       : (d.status === 'failed' || d.status === 'cancelled') ? 'var(--danger)'
       : 'var(--text-muted)';
     const metaText = isDone && d.local_path
-      ? `${dlMeta(d)} Â· ${escHtml(d.local_path.split(/[\\/]/).pop())}`
+      ? `${dlMeta(d)} \u00B7 ${escHtml(d.local_path.split(/[\\/]/).pop())}`
       : dlMeta(d);
     const id = escAttr(d.id);
     let actionBtns = '';
@@ -10642,6 +10846,10 @@ function closeContextMenu() {
   send('SuggestionOverlay', {visible:false, x:0, y:0, width:0, height:0});
 }
 
+function isSelectableAiTarget(target) {
+  return target && target.closest && target.closest('#ai-messages .ai-msg,#ai-messages .ai-thinking-summary,#tsp-ai-thread .tsp-ai-turn');
+}
+
 // Close context menu or more menu on click outside
 document.addEventListener('mousedown', e => {
   const ctx = document.getElementById('context-menu');
@@ -10662,7 +10870,10 @@ document.addEventListener('mousedown', e => {
 }, true);
 
 // Suppress browser's own context menu on the chrome overlay
-document.addEventListener('contextmenu', e => e.preventDefault());
+document.addEventListener('contextmenu', e => {
+  if (isSelectableAiTarget(e.target)) return;
+  e.preventDefault();
+});
 
 // ============================================================
 // DOWNLOAD PANEL
@@ -10678,15 +10889,15 @@ function _syncDownloadOverlay() {
     return;
   }
   const r = panel.getBoundingClientRect();
-  // Halo around the panel so its border + soft shadow aren't clipped. Kept small so the
-  // click-through "dead zone" over the page stays minimal; a touch more below/left where
-  // the shadow falls. The panel's right edge sits near the window edge (shadow off-screen).
+  // Halo must contain the panel's soft shadow (var(--shadow) = 0 4px 24px) or the Win32
+  // clip hard-cuts it. ~28px covers the blur on the left/top/bottom; the right edge sits
+  // near the window edge so its shadow falls off-screen and needs little padding.
   send('SuggestionOverlay', {
     visible:true,
-    x: r.left - 18,
-    y: r.top - 8,
-    width: r.width + 26,
-    height: r.height + 30
+    x: r.left - 28,
+    y: r.top - 24,
+    width: r.width + 40,
+    height: r.height + 52
   });
 }
 
@@ -10921,7 +11132,7 @@ function closeMoreMenu() {
 
 function updateMoreMenuZoom() {
   const id = state.active_tab_id;
-  const level = tabZoomLevels[id] || 1.0;
+  const level = currentTabZoom(id);
   const el = document.getElementById('more-zoom-pct');
   if (el) el.textContent = Math.round(level * 100) + '%';
 }
@@ -10931,6 +11142,30 @@ function muteTab(e, tabId) {
   send('MuteTab', {tab_id: tabId});
 }
 
+// Full left-to-right order of the bar: folders + unfiled bookmarks intermixed,
+// driven by the saved state.bar_order. Items not yet in the saved order (freshly
+// added) are appended at the end. Returns the complete list (no display cap) so it
+// is safe to use as the source of truth when persisting a reorder.
+function computeBarEntries() {
+  const folders = state.bookmark_folders || [];
+  const unfiled = (state.bookmarks || []).filter(b => !b.folder_id);
+  const fIds = new Set(folders.map(f => f.id));
+  const bIds = new Set(unfiled.map(b => b.id));
+  const order = state.bar_order || [];
+  const entries = [];
+  const seenF = new Set(), seenB = new Set();
+  for (const ref of order) {
+    if (ref.folder) {
+      if (fIds.has(ref.id) && !seenF.has(ref.id)) { entries.push({id: ref.id, folder: true}); seenF.add(ref.id); }
+    } else {
+      if (bIds.has(ref.id) && !seenB.has(ref.id)) { entries.push({id: ref.id, folder: false}); seenB.add(ref.id); }
+    }
+  }
+  for (const f of folders) if (!seenF.has(f.id)) entries.push({id: f.id, folder: true});
+  for (const b of unfiled) if (!seenB.has(b.id)) entries.push({id: b.id, folder: false});
+  return entries;
+}
+
 function renderBookmarksBar() {
   const bar = document.getElementById('bookmarks-bar');
   if (!bar) return;
@@ -10938,20 +11173,22 @@ function renderBookmarksBar() {
   if (!show) return;
   const folders = state.bookmark_folders || [];
   const allBms = state.bookmarks || [];
-  const unfiledBms = allBms.filter(b => !b.folder_id).slice(0, 20);
-  if (!unfiledBms.length && !folders.length) {
+  const hasUnfiled = allBms.some(b => !b.folder_id);
+  if (!hasUnfiled && !folders.length) {
     bar.innerHTML = '<span class="bm-bar-empty">No bookmarks yet - save pages with Ctrl+D</span>';
     return;
   }
   const folderSvg = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
-  const folderHtml = folders.map(f => {
+  const fMap = new Map(folders.map(f => [f.id, f]));
+  const bMap = new Map(allBms.map(b => [b.id, b]));
+  const folderChip = f => {
     const label = f.name.length > 18 ? f.name.slice(0,16)+'...' : f.name;
     return `<div class="bm-bar-item" draggable="true" data-folder-id="${escAttr(f.id)}" data-label="${escAttr(f.name)}" title="${escAttr(f.name)}" onclick="openFolderModal('${escAttr(f.id)}',this)" oncontextmenu="bmFolderContextMenu(event,this)">
       <span style="display:flex;align-items:center;gap:4px;opacity:0.75">${folderSvg}</span>
       <span class="bm-bar-text">${escHtml(label)}</span>
     </div>`;
-  }).join('');
-  const bmHtml = unfiledBms.map(b => {
+  };
+  const bmChip = b => {
     const title = bookmarkLabel(b.url, b.title);
     const tip = [b.title, b.url].filter(Boolean).join(' - ');
     const icon = bookmarkIconUrl(b.url);
@@ -10961,10 +11198,31 @@ function renderBookmarksBar() {
     return `<div class="bm-bar-item ${b.icon_only ? 'icon-only' : ''}" draggable="true" data-reorder-id="${escAttr(b.id)}" data-label="${escAttr(title)}" title="${escAttr(tip)}" data-nav-url="${escAttr(b.url)}" onclick="navigateToUrl('${escAttr(b.url)}')" oncontextmenu="bmItemContextMenu(event,this)">
       ${img}${fallback}${text}
     </div>`;
+  };
+  // Folders are unlimited; unfiled bookmarks are capped at 20 chips on the bar.
+  let bmShown = 0;
+  bar.innerHTML = computeBarEntries().map(e => {
+    if (e.folder) { const f = fMap.get(e.id); return f ? folderChip(f) : ''; }
+    if (++bmShown > 20) return '';
+    const b = bMap.get(e.id); return b ? bmChip(b) : '';
   }).join('');
-  bar.innerHTML = folderHtml + bmHtml;
   setupBookmarkFolderDrop(bar);
   requestAnimationFrame(() => updateBmBarOverflow());
+}
+
+// Persist a bar reorder. `id`/`isFolder` identify the dragged chip; `beforeId` is the
+// chip to drop ahead of (null = end). A bookmark dragged out of a folder is unfiled
+// first, then the new full order is saved.
+function reorderBarItem(id, isFolder, beforeId) {
+  const fromFolder = !isFolder && !!dragFolderId;
+  if (fromFolder) send('BookmarkRemoveFromFolder', {bookmark_id: id});
+  let entries = computeBarEntries().filter(e => !(e.id === id && e.folder === isFolder));
+  let idx = entries.length;
+  if (beforeId) { const j = entries.findIndex(e => e.id === beforeId); if (j >= 0) idx = j; }
+  entries.splice(idx, 0, {id, folder: isFolder});
+  state.bar_order = entries;
+  if (!fromFolder) renderBookmarksBar();
+  send('SetBarOrder', {order: entries});
 }
 
 // ============================================================
@@ -11076,10 +11334,18 @@ document.addEventListener('click', e => {
 const tabZoomLevels = {};
 let zoomToastTimer = null;
 
+function globalZoomLevel() {
+  return (((state.settings || {}).appearance || {}).zoom_level) || 1.0;
+}
+
+function currentTabZoom(id) {
+  return tabZoomLevels[id] || globalZoomLevel();
+}
+
 function zoomIn() {
   const id = state.active_tab_id;
   if (!id) return;
-  const cur = tabZoomLevels[id] || 1.0;
+  const cur = currentTabZoom(id);
   tabZoomLevels[id] = parseFloat(Math.min(cur + 0.1, 3.0).toFixed(1));
   applyZoom(id);
 }
@@ -11087,7 +11353,7 @@ function zoomIn() {
 function zoomOut() {
   const id = state.active_tab_id;
   if (!id) return;
-  const cur = tabZoomLevels[id] || 1.0;
+  const cur = currentTabZoom(id);
   tabZoomLevels[id] = parseFloat(Math.max(cur - 0.1, 0.25).toFixed(1));
   applyZoom(id);
 }
@@ -11100,7 +11366,7 @@ function zoomReset() {
 }
 
 function applyZoom(id) {
-  const level = tabZoomLevels[id] || 1.0;
+  const level = currentTabZoom(id);
   send('ZoomSet', {level});
   showZoomToast(Math.round(level * 100));
 }
@@ -11254,7 +11520,9 @@ function syncFolderModalClip() {
   const modal = document.getElementById('folder-modal');
   if (!modal || !modal.classList.contains('open')) return;
   const r = modal.getBoundingClientRect();
-  send('SuggestionOverlay', {visible:true, x:r.left - 8, y:r.top - 8, width:r.width + 16, height:r.height + 16});
+  // Halo must contain the modal's soft shadow (0 14px 36px) or the Win32 clip hard-cuts
+  // it. Shadow spreads ~36px sideways/up and ~50px down (blur + downward offset).
+  send('SuggestionOverlay', {visible:true, x:r.left - 40, y:r.top - 30, width:r.width + 80, height:r.height + 84});
 }
 
 function placeFolderModal(anchor) {
@@ -11507,8 +11775,8 @@ function dlMeta(d) {
   if (d.status === 'cancelled') return 'Canceled';
   const pct = dlPct(d);
   const sizePart = pct !== null ? pct + '%' : formatBytes(d.received_bytes);
-  if (d.status === 'paused') return ['Paused', sizePart].filter(Boolean).join(' Â· ');
-  return [sizePart, formatSpeed(d.speed_bps), formatEta(d)].filter(Boolean).join(' Â· ');
+  if (d.status === 'paused') return ['Paused', sizePart].filter(Boolean).join(' \u00B7 ');
+  return [sizePart, formatSpeed(d.speed_bps), formatEta(d)].filter(Boolean).join(' \u00B7 ');
 }
 function dlProgressHtml(d) {
   const isPaused = d.status === 'paused';
@@ -11930,11 +12198,17 @@ function wsContextMenu(ev, wsId) {
 let _ctxOverlayActive = false;
 function _hideCtxMenu() {
   document.getElementById('ctx-menu').style.display = 'none';
-  if (_ctxOverlayActive) {
-    _ctxOverlayActive = false;
-    if (_activeFolderId) syncFolderModalClip();
-    else send('SuggestionOverlay', {visible:false, x:0, y:0, width:0, height:0});
-  }
+  if (!_ctxOverlayActive) return;
+  _ctxOverlayActive = false;
+  // Restore whatever popover the menu was floating over, instead of blindly clearing the
+  // clip — otherwise dismissing the menu over a suggestions dropdown cuts off the dropdown.
+  if (_activeFolderId) { syncFolderModalClip(); return; }
+  const panel = activeSuggestionTarget
+    ? document.getElementById(activeSuggestionTarget === 'newtab' ? 'newtab-suggestions' : 'url-suggestions')
+    : null;
+  if (!spotlightOpen && panel && panel.classList.contains('open')) { syncSuggestionOverlay(panel); return; }
+  // Spotlight keeps its own full-window clip (Rust spotlight_open); clearing here is safe.
+  send('SuggestionOverlay', {visible:false, x:0, y:0, width:0, height:0});
 }
 function showContextMenu(x, y, items) {
   // Cancel any in-flight auto-hide so a timer armed just before the right-click
@@ -12136,6 +12410,7 @@ document.addEventListener('keydown', e => {
     if (_bmEditId || _folderEditId) closeBmEdit();
     else if (_bmOverflowOpen) closeBmOverflowPanel();
     else if (_activeFolderId) closeFolderModal();
+    else if (tspAiMode) tspExitAiMode();
     else if (spotlightOpen) closeSpotlight();
     else if (findOpen) closeFindBar(true);
     else if (document.getElementById('workspace-delete-modal').classList.contains('open')) closeWorkspaceDeleteModal();
@@ -12445,10 +12720,10 @@ setupDropZone(document.getElementById('sb-page'), {
 });
 setupDropZone(document.getElementById('bookmarks-bar'), {
   reorderKind: (k) => k === 'bookmark' || k === 'folder',
-  item: () => (dragKind === 'folder' ? '.bm-bar-item[data-folder-id]' : '.bm-bar-item[data-reorder-id]'),
-  idOf: (el) => (dragKind === 'folder' ? el.dataset.folderId : el.dataset.reorderId),
+  item: '.bm-bar-item',
+  idOf: (el) => (el.dataset.folderId || el.dataset.reorderId),
   axis: 'x',
-  onReorder: (id, before) => { if (dragKind === 'folder') send('MoveBookmarkFolder', {id, before}); else moveBookmarkToBar(id, before); },
+  onReorder: (id, before) => reorderBarItem(id, dragKind === 'folder', before),
   onExternal: (url) => send('BookmarkAddUrl', {url, title: dragTitle || ''}),
   folderDrop: true,
 });
