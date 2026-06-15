@@ -33,6 +33,7 @@ chrono = { version = "0.4", features = ["serde"] }
 keyring = "2"
 futures-util = "0.3"
 async-trait = "0.1"
+async-stream = "0.3"
 base64 = "0.22"
 aes-gcm = "0.10"
 rand = "0.8"

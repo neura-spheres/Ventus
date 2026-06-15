@@ -251,19 +251,46 @@ impl AiProvider for GeminiProvider {
             return Err(anyhow!("Gemini error {}: {}", status, text));
         }
 
-        let stream = resp.bytes_stream().map(|chunk| -> Result<String> {
-            let bytes = chunk?;
-            let text = std::str::from_utf8(&bytes).unwrap_or("");
-            let mut content = String::new();
-            for line in text.lines() {
-                let Some(data) = line.strip_prefix("data: ") else {
-                    continue;
-                };
-                let val = serde_json::from_str::<Value>(data)?;
-                content.push_str(&Self::read_text(&val));
+        let mut byte_stream = resp.bytes_stream();
+        let stream = async_stream::try_stream! {
+            let mut buffer = String::new();
+            while let Some(chunk) = byte_stream.next().await {
+                let bytes = chunk?;
+                let text = std::str::from_utf8(&bytes).unwrap_or("");
+                buffer.push_str(text);
+
+                while let Some(line_end) = buffer.find('\n') {
+                    let mut line = buffer[..line_end].trim_end_matches('\r').to_string();
+                    buffer.drain(..=line_end);
+                    if line.is_empty() {
+                        continue;
+                    }
+                    let Some(data) = line.strip_prefix("data: ") else {
+                        continue;
+                    };
+                    if data == "[DONE]" {
+                        return;
+                    }
+                    let val = serde_json::from_str::<Value>(data)?;
+                    let content = Self::read_text(&val);
+                    if !content.is_empty() {
+                        yield content;
+                    }
+                    line.clear();
+                }
             }
-            Ok(content)
-        });
+
+            let tail = buffer.trim();
+            if let Some(data) = tail.strip_prefix("data: ") {
+                if !data.is_empty() && data != "[DONE]" {
+                    let val = serde_json::from_str::<Value>(data)?;
+                    let content = Self::read_text(&val);
+                    if !content.is_empty() {
+                        yield content;
+                    }
+                }
+            }
+        };
 
         Ok(Box::pin(stream))
     }

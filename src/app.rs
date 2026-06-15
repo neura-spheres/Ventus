@@ -608,7 +608,7 @@ pub fn handle_chrome_command(
             let provider = normalize_ai_provider(&provider).to_string();
             state.current_ai_provider = provider.clone();
             state.settings.ai.default_provider = provider.clone();
-            if should_swap_ai_model(&state.settings.ai.default_model) {
+            if !ai_model_matches_provider(&provider, &state.settings.ai.default_model) {
                 state.settings.ai.default_model = ai_model_for(&provider).to_string();
             }
             let _ = settings_store::set(&state.conn, "app_settings", &state.settings);
@@ -616,8 +616,13 @@ pub fn handle_chrome_command(
             None
         }
         ChromeCommand::AiModelChange { model } => {
+            if let Some(provider) = ai_provider_for_model(&model) {
+                state.current_ai_provider = provider.to_string();
+                state.settings.ai.default_provider = provider.to_string();
+            }
             state.settings.ai.default_model = model;
             let _ = settings_store::set(&state.conn, "app_settings", &state.settings);
+            state.push_state_to_chrome(chrome);
             None
         }
         ChromeCommand::AiClearChat => {
@@ -3982,8 +3987,8 @@ fn handle_save_settings(
 fn ai_model_for(provider: &str) -> &'static str {
     match normalize_ai_provider(provider) {
         "anthropic" => "claude-3-5-sonnet-20241022",
-        "gemini" => "gemini-2.5-flash",
-        _ => "gpt-4o-mini",
+        "gemini" => "gemini-3.5-flash",
+        _ => "gpt-5.4-mini",
     }
 }
 
@@ -4018,15 +4023,31 @@ fn clean_reasoning_effort(value: &str) -> &'static str {
     }
 }
 
-fn should_swap_ai_model(model: &str) -> bool {
-    matches!(
-        model,
-        "" | "gpt-4o-mini"
-            | "claude-3-5-sonnet-20241022"
-            | "gemini-2.5-flash"
-            | "openai/gpt-4o-mini"
-            | "llama3.1"
-    )
+fn ai_model_matches_provider(provider: &str, model: &str) -> bool {
+    match ai_provider_for_model(model) {
+        Some(model_provider) => model_provider == normalize_ai_provider(provider),
+        None => !model.trim().is_empty(),
+    }
+}
+
+fn ai_provider_for_model(model: &str) -> Option<&'static str> {
+    let model = model.trim();
+    if model.is_empty() {
+        return None;
+    }
+    if model.starts_with("claude-") {
+        Some("anthropic")
+    } else if model.starts_with("gemini-") || model.starts_with("models/gemini-") {
+        Some("gemini")
+    } else if model.starts_with("gpt-")
+        || model.starts_with("o")
+        || model.starts_with("chatgpt-")
+        || model.starts_with("openai/")
+    {
+        Some("openai")
+    } else {
+        None
+    }
 }
 
 fn get_search_url(state: &AppState) -> String {
