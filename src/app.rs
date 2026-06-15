@@ -103,10 +103,18 @@ pub struct AppState {
     pub trends_region: String,
     pub trends_fetched_at: i64,
     pub trends_loading: bool,
+    pub device_id: String,
+    pub session_id: String,
 }
 
 impl AppState {
-    pub fn new(conn: Connection, settings: AppSettings, data_dir: &std::path::Path) -> Self {
+    pub fn new(
+        conn: Connection,
+        settings: AppSettings,
+        data_dir: &std::path::Path,
+        device_id: String,
+        session_id: String,
+    ) -> Self {
         let ai_provider = settings.ai.default_provider.clone();
         let ad_block_enabled = settings.privacy.ad_blocker_enabled;
         let ad_block_exceptions = settings.privacy.ad_blocker_exceptions.clone();
@@ -169,6 +177,8 @@ impl AppState {
             trends_region: String::new(),
             trends_fetched_at: 0,
             trends_loading: false,
+            device_id,
+            session_id,
         }
     }
 
@@ -402,6 +412,12 @@ pub enum TabAction {
         query: String,
         forward: bool,
     },
+    ResolvePermission {
+        origin: String,
+        key: String,
+        allow: bool,
+    },
+    SendReport(Box<crate::cloud::report::Report>),
 }
 
 pub fn handle_chrome_command(
@@ -875,6 +891,22 @@ pub fn handle_chrome_command(
         } => set_site_permission(origin, permission, value, state, chrome),
         ChromeCommand::SetDefaultPermission { permission, value } => {
             set_default_permission(permission, value, state, chrome)
+        }
+        ChromeCommand::PermissionDecision {
+            id: _,
+            origin,
+            permission,
+            decision,
+        } => permission_decision(origin, permission, decision, state, chrome),
+        ChromeCommand::SendReport { message } => {
+            if !crate::cloud::config::is_configured() {
+                let _ = chrome.evaluate_script(
+                    "window.__neura&&window.__neura.reportSent(false)",
+                );
+                return None;
+            }
+            let report = build_report(state, "manual", message, String::new());
+            Some(TabAction::SendReport(Box::new(report)))
         }
         ChromeCommand::TabAudioState {
             tab_id,
@@ -2108,6 +2140,66 @@ fn set_default_permission(
     Some(TabAction::RebuildContent { tab_id, url })
 }
 
+pub fn build_report(
+    state: &AppState,
+    kind: &str,
+    message: String,
+    panic: String,
+) -> crate::cloud::report::Report {
+    let (uid, email) = state
+        .auth
+        .as_ref()
+        .map(|a| (a.uid.clone(), a.email.clone()))
+        .unwrap_or_default();
+    crate::cloud::report::Report {
+        kind: kind.to_string(),
+        message,
+        uid,
+        email,
+        app_version: crate::version::APP_VERSION.to_string(),
+        os: std::env::consts::OS.to_string(),
+        arch: std::env::consts::ARCH.to_string(),
+        device_id: state.device_id.clone(),
+        session_id: state.session_id.clone(),
+        panic,
+        logs: crate::utils::log_buffer::snapshot(150),
+    }
+}
+
+fn permission_decision(
+    origin: String,
+    permission: String,
+    decision: String,
+    state: &mut AppState,
+    chrome: &WebView,
+) -> Option<TabAction> {
+    let allow = decision == "allow";
+    let remember = decision == "allow" || decision == "block";
+    if remember {
+        if let Some(norm) = normalize_site_origin(&origin) {
+            if valid_site_permission_key(&permission) {
+                let mut perms = state
+                    .settings
+                    .privacy
+                    .site_permissions
+                    .get(&norm)
+                    .cloned()
+                    .unwrap_or_default();
+                if perms.set(&permission, if allow { "allow" } else { "block" }) {
+                    state.settings.privacy.site_permissions.insert(norm, perms);
+                    let _ = settings_store::set(&state.conn, "app_settings", &state.settings);
+                    state.push_state_to_chrome(chrome);
+                }
+            }
+        }
+    }
+    Some(TabAction::ResolvePermission {
+        origin,
+        key: permission,
+        allow,
+    })
+}
+
 fn push_passwords_list(state: &AppState, chrome: &WebView) {
     let creds = passwords::list(&state.conn, &state.pwd_key).unwrap_or_default();
     let items: Vec<serde_json::Value> = creds
@@ -2152,6 +2244,27 @@ pub fn handle_app_event_inner(
             if added {
                 state.push_state_to_chrome(chrome);
             }
+            None
+        }
+        AppEvent::ReportSent { ok } => {
+            let js = if ok {
+                "window.__neura&&window.__neura.reportSent(true)"
+            } else {
+                "window.__neura&&window.__neura.reportSent(false)"
+            };
+            let _ = chrome.evaluate_script(js);
+            None
+        }
+        AppEvent::PermissionPrompt { id, origin, key } => {
+            if origin.is_empty() || !valid_site_permission_key(&key) {
+                return None;
+            }
+            let _ = chrome.evaluate_script(&format!(
+                "window.__neura&&window.__neura.showPermissionPrompt({},{},{})",
+                serde_json::to_string(&id).unwrap_or_default(),
+                serde_json::to_string(&origin).unwrap_or_default(),
+                serde_json::to_string(&key).unwrap_or_default(),
+            ));
             None
         }
         AppEvent::ContentNav { tab_id, url, title } => {
@@ -3391,6 +3504,11 @@ fn handle_save_settings(
         "strict_permissions" => {
             if let Some(v) = value.as_bool() {
                 state.settings.privacy.strict_permissions = v;
+            }
+        }
+        "auto_crash_report" => {
+            if let Some(v) = value.as_bool() {
+                state.settings.privacy.auto_crash_report = v;
             }
         }
         "ad_blocker_exceptions" => {

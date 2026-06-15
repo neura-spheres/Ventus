@@ -463,6 +463,8 @@ pub struct PrivacySettings {
     pub secure_dns_provider: SecureDnsProvider,
     pub secure_dns_mode: SecureDnsMode,
     pub secure_dns_template: String,
+    #[serde(default = "default_true")]
+    pub auto_crash_report: bool,
 }
 
 impl Default for PrivacySettings {
@@ -483,6 +485,7 @@ impl Default for PrivacySettings {
             secure_dns_provider: SecureDnsProvider::default(),
             secure_dns_mode: SecureDnsMode::default(),
             secure_dns_template: CLOUDFLARE_DOH.to_string(),
+            auto_crash_report: true,
         }
     }
 }

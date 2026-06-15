@@ -1,6 +1,6 @@
 [package]
 name = "ventus"
-version = "1.0.24"
+version = "1.0.26"
 edition = "2021"
 description = "Ventus — a focused desktop browser with AI built in"
 license = "MIT"
@@ -54,9 +54,13 @@ windows = { version = "0.57", features = [
     "Win32_System_Threading",
     "Win32_System_WinRT",
     "Win32_System_DataExchange",
+    "Win32_System_Registry",
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_Shell",
-    "Win32_UI_WindowsAndMessaging"
+    "Win32_UI_WindowsAndMessaging",
+    "Foundation",
+    "Data_Xml_Dom",
+    "UI_Notifications"
 ] }
 webview2-com = "0.29"
 # Pinned to the version used by webview2-com-sys 0.29, so that PCWSTR/PWSTR/Interface

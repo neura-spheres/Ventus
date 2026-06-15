@@ -4,6 +4,7 @@ pub mod config;
 pub mod firestore;
 pub mod google;
 pub mod local_server;
+pub mod report;
 pub mod sync;
 
 use anyhow::Result;

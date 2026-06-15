@@ -520,6 +520,27 @@ button,input,select,textarea{font-family:var(--font)}
   color:var(--text);
 }
 #site-info-popover.open{display:flex}
+#perm-prompt{
+  position:fixed;display:none;flex-direction:column;gap:12px;
+  width:320px;max-width:calc(100vw - 16px);
+  background:var(--bg-elevated);
+  border:1px solid var(--border);
+  border-radius:10px;
+  box-shadow:0 14px 30px rgba(0,0,0,0.36),0 0 0 0.5px rgba(255,255,255,0.04);
+  z-index:295;padding:14px;color:var(--text);
+}
+#perm-prompt.open{display:flex}
+.perm-prompt-head{display:flex;align-items:center;gap:10px}
+.perm-prompt-head svg{color:var(--accent);flex-shrink:0}
+.perm-prompt-title{font-size:13px;font-weight:650}
+.perm-prompt-body{font-size:12.5px;color:var(--text-muted);line-height:1.4}
+.perm-prompt-host{color:var(--text);font-weight:600}
+.perm-prompt-actions{display:flex;gap:8px;justify-content:flex-end}
+.perm-prompt-btn{padding:6px 14px;border-radius:var(--radius-sm);border:1px solid var(--border);
+  background:var(--bg-hover);color:var(--text);font-size:12px;cursor:pointer}
+.perm-prompt-btn:hover{background:var(--bg-active)}
+.perm-prompt-btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.perm-prompt-btn.primary:hover{background:var(--accent-hover);border-color:var(--accent-hover)}
 .site-pop-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 12px 10px;border-bottom:1px solid var(--border-subtle)}
 .site-pop-title{font-size:13px;font-weight:650;line-height:1.2;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .site-pop-section{display:flex;flex-direction:column;padding:6px 0}
@@ -3120,6 +3141,17 @@ svg{display:block;flex-shrink:0}
 </div>
 <div id="url-suggestions" class="suggestions-panel"></div>
 <div id="site-info-popover"></div>
+<div id="perm-prompt">
+  <div class="perm-prompt-head">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+    <span class="perm-prompt-title" id="perm-prompt-title">Allow notifications?</span>
+  </div>
+  <div class="perm-prompt-body"><span class="perm-prompt-host" id="perm-prompt-host"></span> <span id="perm-prompt-what"></span></div>
+  <div class="perm-prompt-actions">
+    <button class="perm-prompt-btn" onclick="decidePermission('block')">Block</button>
+    <button class="perm-prompt-btn primary" onclick="decidePermission('allow')">Allow</button>
+  </div>
+</div>
 <div id="find-bar">
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-muted)"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
   <input id="find-input" type="text" placeholder="Find in page" autocomplete="off" spellcheck="false" oninput="queueFind()" onkeydown="handleFindKey(event)">
@@ -3581,6 +3613,7 @@ svg{display:block;flex-shrink:0}
       <div class="settings-nav-item" data-section="ai" onclick="switchSettings('ai')">AI Providers</div>
       <div class="settings-nav-group">System</div>
       <div class="settings-nav-item" data-section="privacy" onclick="switchSettings('privacy')">Privacy</div>
+      <div class="settings-nav-item" data-section="report" onclick="switchSettings('report')">Report a problem</div>
       <div class="settings-nav-item" data-section="keyboard" onclick="switchSettings('keyboard')">Keyboard</div>
       <div class="settings-nav-item" data-section="about" onclick="switchSettings('about')">About</div>
     </nav>
@@ -4038,17 +4071,32 @@ svg{display:block;flex-shrink:0}
         </div>
         <div class="settings-toggle">
           <div class="settings-toggle-info">
-            <div class="toggle-title">Send crash reports</div>
-            <div class="toggle-desc">Help improve Ventus by sharing anonymous crash data</div>
-          </div>
-          <div class="toggle-switch" id="toggle-crash" onclick="toggleSetting('crash_reports')"></div>
-        </div>
-        <div class="settings-toggle">
-          <div class="settings-toggle-info">
             <div class="toggle-title">Block third-party cookies</div>
             <div class="toggle-desc">Limit tracking from websites you did not visit directly</div>
           </div>
           <div class="toggle-switch on" id="toggle-block-third-party-cookies" onclick="toggleSetting('block_third_party_cookies')"></div>
+        </div>
+      </div>
+
+      <div class="settings-section" id="section-report">
+        <h2>Report a problem</h2>
+        <p class="subtitle">Send recent logs so bugs can be tracked down</p>
+        <div class="settings-toggle">
+          <div class="settings-toggle-info">
+            <div class="toggle-title">Automatic crash reports</div>
+            <div class="toggle-desc">Send a report on its own when Ventus crashes or hits an error.</div>
+          </div>
+          <div class="toggle-switch on" id="toggle-auto-crash-report" onclick="toggleSetting('auto_crash_report')"></div>
+        </div>
+        <div style="margin-top:14px">
+          <div class="toggle-title">Describe what happened</div>
+          <div class="toggle-desc">Optional. What were you doing when it broke?</div>
+          <textarea class="settings-input" id="report-message" rows="4" placeholder="Type what went wrong..." style="margin-top:8px;resize:vertical;min-height:84px;font-family:inherit"></textarea>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px">
+            <span id="report-status" style="font-size:12px;color:var(--text-muted)"></span>
+            <button class="settings-btn" id="report-send-btn" type="button" onclick="sendBugReport()">Send report</button>
+          </div>
+          <div class="toggle-desc" style="margin-top:10px">Your report includes the last ~150 diagnostic log lines (which can include visited site addresses), your app version, and OS.</div>
         </div>
       </div>
 
@@ -4372,7 +4420,7 @@ svg{display:block;flex-shrink:0}
   <div id="tab-spotlight">
     <div id="tsp-input-wrap">
       <svg class="tsp-ico" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-      <input id="tsp-input" type="text" placeholder="Search or go to a website..." autocomplete="off" spellcheck="false" oninput="renderTspSuggestions(this.value)" onkeydown="tspKeydown(event)">
+      <input id="tsp-input" type="text" placeholder="Search or go to a website..." autocomplete="off" spellcheck="false" oninput="handleTspInput(event)" onkeydown="tspKeydown(event)">
       <div id="tsp-ai-hint">Tab → AI</div>
     </div>
     <div id="tsp-results"></div>
@@ -4567,6 +4615,8 @@ window.__neura = {
   },
   setWindowMaximized(v) { setWindowMaximized(!!v); },
   focusSpotlight() { focusSpotlightSoon(); },
+  showPermissionPrompt(id, origin, key) { showPermissionPrompt(id, origin, key); },
+  reportSent(ok) { reportSent(!!ok); },
   appendAiChunk(text, done) {
     if (done && !text && !currentStreamEl) {
       finishAiBusy();
@@ -4702,10 +4752,12 @@ window.__neura = {
     state.history = items || [];
     renderHistory();
     renderSuggestionPanels();
+    refreshSpotlightSuggestions();
   },
   setOmnibox(payload) {
     state.omnibox = (payload && payload.items) || [];
     renderSuggestionPanels();
+    refreshSpotlightSuggestions();
   },
   refreshOmnibox() {
     refreshOmnibox();
@@ -6248,6 +6300,7 @@ function populateSettingsPanel() {
   setToggleEl('toggle-storage-partitioning', priv.storage_partitioning !== false);
   setToggleEl('toggle-fingerprint-protection', priv.fingerprint_protection !== false);
   setToggleEl('toggle-strict-permissions', priv.strict_permissions !== false);
+  setToggleEl('toggle-auto-crash-report', priv.auto_crash_report !== false);
   renderDefaultPermissions();
   setToggleEl('toggle-secure-dns-enabled', !!priv.secure_dns_enabled);
   setSelectValue('set-secure-dns-provider', priv.secure_dns_provider || 'cloudflare');
@@ -6406,13 +6459,108 @@ function showSavePasswordBanner(origin, username, isUpdate) {
   document.getElementById('pwd-save-text').textContent =
     (isUpdate ? 'Update password for ' : 'Save password for ') + host + (username ? '  ' + username : '');
   bar.style.display = 'flex';
+  requestAnimationFrame(() => {
+    if (bar.style.display === 'none') return;
+    const r = bar.getBoundingClientRect();
+    const top = Math.max(0, r.top - 8);
+    send('SuggestionOverlay', {visible:true, x:0, y:top, width:window.innerWidth, height:window.innerHeight - top});
+  });
 }
 function hideSavePasswordBanner() {
   const bar = document.getElementById('pwd-save-bar');
   if (bar) bar.style.display = 'none';
+  send('SuggestionOverlay', {visible:false, x:0, y:0, width:0, height:0});
 }
 function confirmSavePassword() { send('PwdSaveConfirm'); }
 function dismissSavePassword() { send('PwdSaveDismiss'); }
+
+function sendBugReport() {
+  const ta = document.getElementById('report-message');
+  const btn = document.getElementById('report-send-btn');
+  const status = document.getElementById('report-status');
+  const msg = ta ? ta.value.trim() : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
+  if (status) status.textContent = '';
+  send('SendReport', {message: msg});
+}
+function reportSent(ok) {
+  const ta = document.getElementById('report-message');
+  const btn = document.getElementById('report-send-btn');
+  const status = document.getElementById('report-status');
+  if (btn) { btn.disabled = false; btn.textContent = 'Send report'; }
+  if (ok) {
+    if (ta) ta.value = '';
+    if (status) status.textContent = 'Thanks, your report was sent.';
+    toast('Report sent', 'success');
+  } else {
+    if (status) status.textContent = "Couldn't send. Check your connection and try again.";
+    toast("Couldn't send report", 'error');
+  }
+}
+
+let permQueue = [];
+let permActive = null;
+const PERM_LABELS = {
+  notifications: 'wants to send notifications',
+  camera: 'wants to use your camera',
+  microphone: 'wants to use your microphone',
+  geolocation: 'wants to know your location',
+  clipboard: 'wants to read your clipboard',
+  midi: 'wants to use MIDI devices',
+  sensors: 'wants to use motion sensors',
+  window_management: 'wants to manage windows',
+  local_fonts: 'wants to see your fonts',
+  file_system: 'wants to access files',
+  autoplay: 'wants to autoplay media',
+  downloads: 'wants to download multiple files',
+};
+function showPermissionPrompt(id, origin, key) {
+  permQueue.push({id, origin, key});
+  if (!permActive) showNextPerm();
+}
+function showNextPerm() {
+  const next = permQueue.shift();
+  if (!next) { permActive = null; return; }
+  permActive = next;
+  let host = next.origin;
+  try { host = new URL(next.origin).hostname.replace(/^www\./, ''); } catch (_) {}
+  const title = document.getElementById('perm-prompt-title');
+  if (title) title.textContent = next.key === 'notifications' ? 'Allow notifications?' : 'Allow permission?';
+  document.getElementById('perm-prompt-host').textContent = host;
+  document.getElementById('perm-prompt-what').textContent = PERM_LABELS[next.key] || ('wants ' + next.key + ' access');
+  const pop = document.getElementById('perm-prompt');
+  if (pop) pop.classList.add('open');
+  positionPermPrompt();
+}
+function positionPermPrompt() {
+  const pop = document.getElementById('perm-prompt');
+  if (!pop || !pop.classList.contains('open')) return;
+  const btn = document.getElementById('site-info-btn');
+  const bar = document.getElementById('address-bar');
+  const anchor = (btn && btn.getBoundingClientRect()) || (bar && bar.getBoundingClientRect()) || {left: 12, bottom: 48};
+  const w = Math.min(320, window.innerWidth - 16);
+  let left = anchor.left;
+  if (left + w > window.innerWidth - 8) left = window.innerWidth - w - 8;
+  if (left < 8) left = 8;
+  pop.style.width = w + 'px';
+  pop.style.left = left + 'px';
+  pop.style.top = (anchor.bottom + 8) + 'px';
+  requestAnimationFrame(() => {
+    const pr = pop.getBoundingClientRect();
+    const pad = 52;
+    send('SuggestionOverlay', {visible:true, x:pr.left - pad, y:pr.top - pad, width:pr.width + pad*2, height:pr.height + pad*2});
+  });
+}
+function decidePermission(decision) {
+  if (!permActive) return;
+  const cur = permActive;
+  send('PermissionDecision', {id: cur.id, origin: cur.origin, permission: cur.key, decision});
+  permActive = null;
+  if (permQueue.length) { showNextPerm(); return; }
+  const pop = document.getElementById('perm-prompt');
+  if (pop) pop.classList.remove('open');
+  send('SuggestionOverlay', {visible:false, x:0, y:0, width:0, height:0});
+}
 function openPasswordManager() {
   const o = document.getElementById('pwd-manager-overlay');
   if (o) { o.style.display = 'flex'; send('PwdList'); }
@@ -8418,6 +8566,7 @@ function installUpdate() {
 let spotlightOpen = false;
 let spotlightIdx = -1;
 let spotlightUrls = [];
+let spotlightSuggestions = [];
 let tspAiMode = false;
 let tspAiStreaming = false;
 let _tspAiRawText = '';
@@ -8465,9 +8614,15 @@ function showSpotlight() {
   if (spotlightOpen) return;
   spotlightOpen = true;
   document.getElementById('tab-spotlight-overlay').classList.add('open');
-  renderTspSuggestions('');
   const inp = document.getElementById('tsp-input');
   if (inp) inp.value = '';
+  lastTypedOmnibox = '';
+  renderTspSuggestions('');
+  if (searchSuggestionsEnabled()) {
+    send('RefreshTrends');
+    send('OmniboxSuggest', {q: ''});
+    send('GetHistory', {q: ''});
+  }
   focusSpotlightSoon();
 }
 
@@ -8505,6 +8660,7 @@ function closeSpotlight() {
 
 function spotlightNavigate(url) {
   if (!url) return;
+  recordSpotlightPick(url);
   closeSpotlight();
   send('NewTab');
   send('Navigate', {url});
@@ -8522,13 +8678,14 @@ function tspDisplayUrl(url) {
   catch { return url; }
 }
 
-function tspRow(title, url, favicon, isSearch) {
+function tspRow(title, url, favicon, isSearch, subText) {
   const ico = favicon
     ? `<img src="${escAttr(favicon)}" alt="" width="16" height="16" onerror="this.style.display='none'">`
     : isSearch
       ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>`
       : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg>`;
-  const sub = (url && url !== title) ? `<div class="tsp-row-sub">${escHtml(tspDisplayUrl(url))}</div>` : '';
+  const line = subText != null ? subText : ((url && url !== title) ? tspDisplayUrl(url) : '');
+  const sub = line ? `<div class="tsp-row-sub">${escHtml(line)}</div>` : '';
   return `<div class="tsp-row" onclick="spotlightNavigate(this.dataset.u)" data-u="${escAttr(url)}">
     <div class="tsp-row-icon">${ico}</div>
     <div class="tsp-row-body"><div class="tsp-row-title">${escHtml(title)}</div>${sub}</div>
@@ -9059,32 +9216,135 @@ function renderConvCard(query) {
   </div>`;
 }
 
-function renderTspSuggestions(q) {
-  const results = document.getElementById('tsp-results');
-  if (!results) return;
-  const query = q.trim();
-  const ql = query.toLowerCase();
-  spotlightUrls = [];
-  let html = '';
+function refreshSpotlightSuggestions() {
+  if (!spotlightOpen || tspAiMode) return;
+  const input = document.getElementById('tsp-input');
+  renderTspSuggestions(tspInputQuery(input));
+}
 
-  // ── Calculator: show result immediately if query is a math expression ──────
-  if (query && isMathExpr(query)) {
-    const calcResult = evaluateMath(query);
-    if (calcResult !== null) {
-      html += `<div class="tsp-calc-card" onclick="navigator.clipboard&&navigator.clipboard.writeText('${calcResult}').catch(()=>{})" title="Click to copy">
-        <div class="tsp-calc-expr">${escHtml(query)}</div>
-        <div class="tsp-calc-result">= ${escHtml(fmtCalcResult(calcResult))}</div>
-        <div class="tsp-calc-copy-hint">click to copy</div>
-      </div>`;
+function tspInputQuery(input) {
+  if (!input) return '';
+  const start = input.selectionStart || 0;
+  const end = input.selectionEnd || 0;
+  if (end > start && end === input.value.length) return input.value.slice(0, start);
+  return input.value;
+}
+
+function handleTspInput(e) {
+  const input = e && e.target ? e.target : document.getElementById('tsp-input');
+  if (!input) return;
+  const value = input.value;
+  lastTypedOmnibox = value || '';
+  if (!searchSuggestionsEnabled()) {
+    renderTspSuggestions(value || '');
+    return;
+  }
+  const typingForward = !e || e.inputType === 'insertText';
+  if (typingForward && value.length >= 2 && !value.includes(' ')) {
+    const completion = findInlineCompletion(value);
+    if (completion && completion.length > value.length) {
+      input.value = completion;
+      input.setSelectionRange(value.length, completion.length);
     }
   }
-  // ── Unit Converter ────────────────────────────────────────────────────────
-  if (query && !html) {
-    html += renderConvCard(query);
-  }
-  // ─────────────────────────────────────────────────────────────────────────
+  renderTspSuggestions(value || '');
+  send('OmniboxSuggest', {q: (value || '').trim()});
+}
 
+function recordSpotlightPick(url) {
+  const input = document.getElementById('tsp-input');
+  const q = (lastTypedOmnibox || tspInputQuery(input)).trim();
+  if (!q || !url) return;
+  const shown = (spotlightSuggestions || []).filter(s => s.predicted && s.url).map(s => s.url);
+  send('OmniboxPick', {q, url, shown});
+}
+
+function spotlightSite(url) {
+  try {
+    const u = new URL(url);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+    const host = u.hostname.replace(/^www\./, '').toLowerCase();
+    if (!host) return null;
+    const port = u.port ? ':' + u.port : '';
+    return {
+      url: `${u.protocol}//${host}${port}/`,
+      key: host + port,
+      host
+    };
+  } catch {
+    return null;
+  }
+}
+
+function spotlightSiteTitle(site) {
+  return siteLabel(site.url);
+}
+
+function spotlightHistorySites(query, limit) {
+  const q = (query || '').toLowerCase();
+  const sites = new Map();
+  for (const h of (state.history || [])) {
+    if (!h || !h.url) continue;
+    const site = spotlightSite(h.url);
+    if (!site) continue;
+    const title = spotlightSiteTitle(site);
+    const text = `${title} ${site.host} ${h.url}`.toLowerCase();
+    if (q && !text.includes(q)) continue;
+    const old = sites.get(site.key);
+    if (old) {
+      old.count += 1;
+      old.visited_at = Math.max(old.visited_at || 0, h.visited_at || 0);
+      continue;
+    }
+    sites.set(site.key, {title, url: site.url, host: site.host, count: 1, visited_at: h.visited_at || 0});
+  }
+  return Array.from(sites.values())
+    .sort((a, b) => (b.count - a.count) || ((b.visited_at || 0) - (a.visited_at || 0)))
+    .slice(0, limit);
+}
+
+function renderTspOmniboxRows(items) {
+  let html = '';
+  let group = '';
+  const sites = new Set();
+  for (const item of items) {
+    if (!item || !item.url) continue;
+    const isSearch = item.icon === 'search';
+    if (isSearch && item.predicted) continue;
+    let row = item;
+    let favicon = '';
+    if (!isSearch) {
+      const site = spotlightSite(item.url);
+      if (!site || sites.has(site.key)) continue;
+      sites.add(site.key);
+      const title = spotlightSiteTitle(site);
+      row = {...item, title, url: site.url, sub: site.host};
+      favicon = tspFavicon(site.url);
+    }
+    if (row.group !== group) {
+      group = row.group;
+      html += `<div class="tsp-section-lbl">${escHtml(group)}</div>`;
+    }
+    html += tspRow(row.title || row.url, row.url, favicon, isSearch, row.sub || null);
+    spotlightSuggestions.push(row);
+    spotlightUrls.push(row.url);
+  }
+  return html;
+}
+
+function renderTspFallbackRows(query) {
+  let html = '';
   if (!query) {
+    const sites = spotlightHistorySites('', 6);
+    if (sites.length) {
+      html += '<div class="tsp-section-lbl">Top sites</div>';
+      sites.forEach(s => {
+        html += tspRow(s.title, s.url, tspFavicon(s.url), false, s.host);
+        spotlightSuggestions.push({url: s.url});
+        spotlightUrls.push(s.url);
+      });
+      return html;
+    }
     const quick = [
       {t: 'GitHub', u: 'https://github.com'},
       {t: 'YouTube', u: 'https://youtube.com'},
@@ -9095,59 +9355,85 @@ function renderTspSuggestions(q) {
     html += '<div class="tsp-section-lbl">Quick access</div>';
     quick.forEach(s => {
       html += tspRow(s.t, s.u, tspFavicon(s.u), false);
+      spotlightSuggestions.push({url: s.u});
       spotlightUrls.push(s.u);
     });
-    const hist = (state.history || []).slice(0, 6);
-    if (hist.length) {
-      html += '<div class="tsp-section-lbl">Recently visited</div>';
-      hist.forEach(h => {
-        html += tspRow(h.title || h.url, h.url, tspFavicon(h.url), false);
-        spotlightUrls.push(h.url);
-      });
-    }
-  } else {
-    const engine = (state.search_engines || []).find(e => e.is_default) || {url_template: 'https://www.google.com/search?q={query}'};
-    const searchUrl = engine.url_template.replace('{query}', encodeURIComponent(query));
-    html += '<div class="tsp-section-lbl">Search</div>';
-    html += tspRow('Search for "' + query + '"', searchUrl, '', true);
-    spotlightUrls.push(searchUrl);
+    return html;
+  }
+  const sites = spotlightHistorySites(query, 5);
+  if (sites.length) {
+    html += '<div class="tsp-section-lbl">Top sites</div>';
+    sites.forEach(s => {
+      html += tspRow(s.title, s.url, tspFavicon(s.url), false, s.host);
+      spotlightSuggestions.push({url: s.url});
+      spotlightUrls.push(s.url);
+    });
+  }
+  if (looksLikeNavigableUrl(query)) {
+    html += '<div class="tsp-section-lbl">Go to</div>';
+    html += tspRow(`Go to ${query}`, query, '', false, 'Open address');
+    spotlightSuggestions.push({url: query});
+    spotlightUrls.push(query);
+  }
+  const engine = getDefaultEngine();
+  html += '<div class="tsp-section-lbl">Search</div>';
+  html += tspRow(`Search ${engine ? engine.name : 'the web'} for "${query}"`, query, '', true, 'Press Enter to search');
+  spotlightSuggestions.push({url: query});
+  spotlightUrls.push(query);
+  return html;
+}
 
-    const hist = (state.history || []).filter(h =>
-      (h.title || '').toLowerCase().includes(ql) || (h.url || '').toLowerCase().includes(ql)
-    ).slice(0, 5);
-    if (hist.length) {
-      html += '<div class="tsp-section-lbl">History</div>';
-      hist.forEach(h => {
-        html += tspRow(h.title || h.url, h.url, tspFavicon(h.url), false);
-        spotlightUrls.push(h.url);
-      });
-    }
+function syncTspAiHint(query) {
+  const hint = document.getElementById('tsp-ai-hint');
+  if (!hint) return;
+  if (query && hasAiKey()) hint.classList.add('visible');
+  else hint.classList.remove('visible');
+}
 
-    if (query.includes('.') || query.startsWith('http')) {
-      const direct = query.startsWith('http') ? query : 'https://' + query;
-      html += '<div class="tsp-section-lbl">Go to</div>';
-      html += tspRow(direct, direct, '', false);
-      spotlightUrls.push(direct);
+function renderTspSuggestions(q) {
+  const results = document.getElementById('tsp-results');
+  if (!results) return;
+  const query = (q || '').trim();
+  spotlightUrls = [];
+  spotlightSuggestions = [];
+  let html = '';
+
+  if (query && isMathExpr(query)) {
+    const calcResult = evaluateMath(query);
+    if (calcResult !== null) {
+      html += `<div class="tsp-calc-card" onclick="navigator.clipboard&&navigator.clipboard.writeText('${calcResult}').catch(()=>{})" title="Click to copy">
+        <div class="tsp-calc-expr">${escHtml(query)}</div>
+        <div class="tsp-calc-result">= ${escHtml(fmtCalcResult(calcResult))}</div>
+        <div class="tsp-calc-copy-hint">click to copy</div>
+      </div>`;
     }
   }
+  if (query && !html) {
+    html += renderConvCard(query);
+  }
+  const shared = searchSuggestionsEnabled() ? buildSuggestions(query) : [];
+  const rows = shared.length ? renderTspOmniboxRows(shared) : '';
+  html += rows || renderTspFallbackRows(query);
 
   results.innerHTML = html;
   spotlightIdx = -1;
-
-  // Show "Tab → AI" hint when there is a query and AI is configured
-  const hint = document.getElementById('tsp-ai-hint');
-  if (hint) {
-    if (query && hasAiKey()) hint.classList.add('visible');
-    else hint.classList.remove('visible');
-  }
+  syncTspAiHint(query);
 }
 
 function tspKeydown(e) {
   if (!spotlightOpen) return;
+  const input = document.getElementById('tsp-input');
+  const start = input ? input.selectionStart || 0 : 0;
+  const end = input ? input.selectionEnd || 0 : 0;
+  if ((e.key === 'Tab' || e.key === 'ArrowRight') && input && end > start) {
+    e.preventDefault();
+    input.setSelectionRange(end, end);
+    return;
+  }
   // Tab → switch to AI mode (only when query exists and AI is configured)
   if (e.key === 'Tab') {
     e.preventDefault();
-    const val = document.getElementById('tsp-input')?.value.trim() || '';
+    const val = input ? input.value.trim() : '';
     if (val && hasAiKey() && !tspAiMode) {
       tspEnterAiMode(val);
     } else if (tspAiMode) {
@@ -9178,7 +9464,7 @@ function tspKeydown(e) {
     if (spotlightIdx >= 0 && spotlightUrls[spotlightIdx]) {
       spotlightNavigate(spotlightUrls[spotlightIdx]);
     } else {
-      const val = document.getElementById('tsp-input').value.trim();
+      const val = input ? input.value.trim() : '';
       if (val) spotlightNavigate(val);
     }
   }
@@ -9719,6 +10005,8 @@ function onContentPointerDown() {
   if (panel && panel.classList.contains('open')) closeDownloadPanel();
   if (siteInfoOpen) closeSiteInfo();
   if (_activeFolderId) closeFolderModal();
+  const pwdBar = document.getElementById('pwd-save-bar');
+  if (pwdBar && pwdBar.style.display !== 'none') dismissSavePassword();
 }
 
 function isPdfFile(name) {

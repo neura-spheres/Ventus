@@ -332,6 +332,15 @@ pub enum ChromeCommand {
         new_password: String,
     },
     GetAccountState,
+    PermissionDecision {
+        id: String,
+        origin: String,
+        permission: String,
+        decision: String,
+    },
+    SendReport {
+        message: String,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -418,6 +427,13 @@ pub enum AppEvent {
     /// A content WebView's site requested a browser permission (camera, mic, etc.).
     /// Recorded per-origin so the site-info popover can show only what was actually asked for.
     PermissionRequested {
+        origin: String,
+        key: String,
+    },
+    /// A site requested a permission that resolves to "ask". The native handler took
+    /// a deferral keyed by `id`; chrome shows a prompt and replies with PermissionDecision.
+    PermissionPrompt {
+        id: String,
         origin: String,
         key: String,
     },
@@ -613,5 +629,31 @@ pub enum AppEvent {
     },
     SyncPush {
         id: u64,
+    },
+    ReportSent {
+        ok: bool,
+    },
+    /// A page created a web Notification (intercepted by the content JS shim). Shown as a
+    /// native Windows toast instead of WebView2's default banner.
+    WebNotification {
+        tab_id: String,
+        id: String,
+        title: String,
+        body: String,
+    },
+    /// The page called notification.close() — dismiss the matching toast.
+    WebNotificationClose {
+        tab_id: String,
+        id: String,
+    },
+    /// The user clicked a native toast — focus the tab and fire the notification's onclick.
+    NotificationClicked {
+        tab_id: String,
+        id: String,
+    },
+    /// A native toast was dismissed — fire the notification's onclose.
+    NotificationClosed {
+        tab_id: String,
+        id: String,
     },
 }

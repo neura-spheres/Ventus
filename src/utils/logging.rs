@@ -21,6 +21,7 @@ pub fn init() {
         .with(filter)
         .with(fmt::layer().with_target(true).compact())
         .with(file_layer)
+        .with(crate::utils::log_buffer::BufferLayer)
         .init();
 
     if let Some(path) = log_file_path() {

@@ -8,6 +8,7 @@ mod app;
 mod browser;
 mod cloud;
 mod config;
+mod notify;
 mod storage;
 mod ui;
 mod updater;
@@ -85,9 +86,33 @@ const CONTENT_BG: (u8, u8, u8, u8) = (255, 255, 255, 255);
 #[cfg(windows)]
 const APP_ID: &str = "NeuraSpheres.Ventus";
 const COOKIE_SAVE_EVERY: Duration = Duration::from_secs(5 * 60);
+const ERROR_REPORT_COOLDOWN: Duration = Duration::from_secs(5 * 60);
+
+fn install_panic_hook(crash_path: std::path::PathBuf, session_id: String) {
+    let prev = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let panic = format!(
+            "{}\n\n{}",
+            info,
+            std::backtrace::Backtrace::force_capture()
+        );
+        let record = cloud::report::CrashRecord {
+            session_id: session_id.clone(),
+            app_version: version::APP_VERSION.to_string(),
+            os: std::env::consts::OS.to_string(),
+            arch: std::env::consts::ARCH.to_string(),
+            ts: chrono::Utc::now().timestamp_millis(),
+            panic,
+            logs: utils::log_buffer::snapshot(200),
+        };
+        cloud::report::write_crash(&crash_path, &record);
+        prev(info);
+    }));
+}
 
 fn main() {
     set_app_id();
+    notify::register_aumid();
     utils::logging::init();
     tracing::info!("Ventus starting");
 
@@ -157,6 +182,24 @@ fn main() {
     let mut cookies_restored = startup_cookies.is_empty();
 
     let settings = load_settings(&conn);
+
+    let session_id = uuid::Uuid::new_v4().to_string();
+    let device_id = cloud::report::get_or_create_device_id(&conn);
+    let crash_path = data_dir.join("pending_crash.json");
+    install_panic_hook(crash_path.clone(), session_id.clone());
+    if settings.privacy.auto_crash_report {
+        if let Some(record) = cloud::report::take_crash(&crash_path) {
+            let did = device_id.clone();
+            rt.spawn(cloud::report::send_crash(
+                record,
+                String::new(),
+                String::new(),
+                did,
+            ));
+        }
+    } else {
+        let _ = cloud::report::take_crash(&crash_path);
+    }
 
     let shared_dl_dir = std::sync::Arc::new(std::sync::Mutex::new(download_prefs_from_settings(
         &settings,
@@ -313,7 +356,7 @@ fn main() {
         min_ai_sidebar_w: 280,
     };
 
-    let mut state = AppState::new(conn, settings, &data_dir);
+    let mut state = AppState::new(conn, settings, &data_dir, device_id, session_id);
     state.chrome_overlay_open = !onboarding_done;
     let mut restored_tabs: HashSet<String> = HashSet::new();
 
@@ -619,6 +662,7 @@ fn main() {
     let mut last_active_tab_id: Option<String> = state.tab_manager.active_tab_id.clone();
     let mut sleep_check_at = Instant::now() + TAB_SLEEP_CHECK_EVERY;
     let mut heal_content_at = Instant::now() + HEAL_CONTENT_EVERY;
+    let mut error_report_at = Instant::now();
     let mut save_id = 0u64;
     let mut sync_id = 0u64;
     let mut sync_dirty = (false, false, false);
@@ -1493,6 +1537,62 @@ state.settings.privacy.default_permissions.clone(),
                 }
             }
 
+            Event::UserEvent(AppEvent::WebNotification {
+                tab_id,
+                id,
+                title,
+                body,
+            }) => {
+                let proxy_click = proxy_main.clone();
+                let proxy_close = proxy_main.clone();
+                let (tc, ic) = (tab_id.clone(), id.clone());
+                let (td, idd) = (tab_id.clone(), id.clone());
+                notify::show(
+                    &id,
+                    &title,
+                    &body,
+                    Box::new(move || {
+                        let _ = proxy_click.send_event(AppEvent::NotificationClicked {
+                            tab_id: tc.clone(),
+                            id: ic.clone(),
+                        });
+                    }),
+                    Box::new(move || {
+                        let _ = proxy_close.send_event(AppEvent::NotificationClosed {
+                            tab_id: td.clone(),
+                            id: idd.clone(),
+                        });
+                    }),
+                );
+            }
+            Event::UserEvent(AppEvent::WebNotificationClose { id, .. }) => {
+                notify::hide(&id);
+            }
+            Event::UserEvent(AppEvent::NotificationClicked { tab_id, id }) => {
+                window.set_minimized(false);
+                window.set_focus();
+                if state.tab_manager.active_tab_id.as_deref() != Some(tab_id.as_str())
+                    && state.tab_manager.get_tab(&tab_id).is_some()
+                {
+                    let _ = proxy_main.send_event(AppEvent::Chrome(ChromeCommand::SwitchTab {
+                        id: tab_id.clone(),
+                    }));
+                }
+                if let Some(wv) = content_views.get(&tab_id) {
+                    let _ = wv.evaluate_script(&format!(
+                        "window.__neuraNotifClick&&window.__neuraNotifClick({})",
+                        serde_json::to_string(&id).unwrap_or_default()
+                    ));
+                }
+            }
+            Event::UserEvent(AppEvent::NotificationClosed { tab_id, id }) => {
+                if let Some(wv) = content_views.get(&tab_id) {
+                    let _ = wv.evaluate_script(&format!(
+                        "window.__neuraNotifClose&&window.__neuraNotifClose({})",
+                        serde_json::to_string(&id).unwrap_or_default()
+                    ));
+                }
+            }
             Event::UserEvent(app_event) => {
                 if matches!(
                     &app_event,
@@ -1708,6 +1808,19 @@ state.settings.privacy.default_permissions.clone(),
                     let focus_spotlight = matches!(action, TabAction::FocusSpotlight);
                     match action {
                         TabAction::SyncClipOnly | TabAction::SyncSidebarClip => unreachable!(),
+                        TabAction::ResolvePermission { origin, key, allow } => {
+                            #[cfg(windows)]
+                            resolve_permission(&origin, &key, allow);
+                            #[cfg(not(windows))]
+                            let _ = (origin, key, allow);
+                        }
+                        TabAction::SendReport(report) => {
+                            let proxy_r = proxy_main.clone();
+                            rt.spawn(async move {
+                                let ok = cloud::report::send(*report).await.is_ok();
+                                let _ = proxy_r.send_event(AppEvent::ReportSent { ok });
+                            });
+                        }
                         TabAction::Create { tab_id, url } => {
                             if !url.starts_with("neura://") {
                                 let is_incog = state.tab_manager.tab_is_incognito(&tab_id);
@@ -2907,6 +3020,18 @@ state.settings.privacy.default_permissions.clone(),
                         }
                     }
                 }
+                if state.settings.privacy.auto_crash_report
+                    && cloud::config::is_configured()
+                    && Instant::now() >= error_report_at
+                    && utils::log_buffer::take_error_pending()
+                {
+                    error_report_at = Instant::now() + ERROR_REPORT_COOLDOWN;
+                    let report =
+                        app::build_report(&state, "error", "Automatic error report".into(), String::new());
+                    rt.spawn(async move {
+                        let _ = cloud::report::send(report).await;
+                    });
+                }
             }
 
             // All events for a wrapped popup window are handled here so they never reach the
@@ -3933,6 +4058,25 @@ fn attach_permission_handler(
                 args.SetState(COREWEBVIEW2_PERMISSION_STATE_ALLOW)?;
             } else if action == "block" {
                 args.SetState(COREWEBVIEW2_PERMISSION_STATE_DENY)?;
+            } else if !origin.is_empty() {
+                if let Ok(deferral) = args.GetDeferral() {
+                    let id = uuid::Uuid::new_v4().to_string();
+                    let dup = PERMISSION_DEFERRALS
+                        .with(|m| m.borrow().values().any(|(_, _, o, k)| o == &origin && k == key));
+                    PERMISSION_DEFERRALS.with(|m| {
+                        m.borrow_mut().insert(
+                            id.clone(),
+                            (deferral, args.clone(), origin.clone(), key.to_string()),
+                        )
+                    });
+                    if !dup {
+                        let _ = proxy.send_event(AppEvent::PermissionPrompt {
+                            id,
+                            origin,
+                            key: key.to_string(),
+                        });
+                    }
+                }
             }
         }
         Ok(())
@@ -3964,6 +4108,45 @@ thread_local! {
     static ACCEL_DOWNLOADS: std::cell::RefCell<
         HashMap<String, crate::browser::accel_download::AccelControl>,
     > = std::cell::RefCell::new(HashMap::new());
+
+    static PERMISSION_DEFERRALS: std::cell::RefCell<
+        HashMap<
+            String,
+            (
+                webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Deferral,
+                webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2PermissionRequestedEventArgs,
+                String,
+                String,
+            ),
+        >,
+    > = std::cell::RefCell::new(HashMap::new());
+}
+
+#[cfg(windows)]
+fn resolve_permission(origin: &str, key: &str, allow: bool) {
+    use webview2_com::Microsoft::Web::WebView2::Win32::{
+        COREWEBVIEW2_PERMISSION_STATE_ALLOW, COREWEBVIEW2_PERMISSION_STATE_DENY,
+    };
+    let entries: Vec<_> = PERMISSION_DEFERRALS.with(|m| {
+        let mut b = m.borrow_mut();
+        let ids: Vec<String> = b
+            .iter()
+            .filter(|(_, (_, _, o, k))| o == origin && k == key)
+            .map(|(id, _)| id.clone())
+            .collect();
+        ids.iter().filter_map(|id| b.remove(id)).collect()
+    });
+    let state = if allow {
+        COREWEBVIEW2_PERMISSION_STATE_ALLOW
+    } else {
+        COREWEBVIEW2_PERMISSION_STATE_DENY
+    };
+    for (deferral, args, _, _) in entries {
+        unsafe {
+            let _ = args.SetState(state);
+            let _ = deferral.Complete();
+        }
+    }
 }
 
 #[cfg(windows)]
@@ -5218,6 +5401,39 @@ fn build_content_webview_once(
                         proxy_ipc.send_event(AppEvent::Chrome(ChromeCommand::ContentPointerDown));
                     return;
                 }
+                if value.get("cmd").and_then(|v| v.as_str()) == Some("web_notification") {
+                    let get = |k: &str| {
+                        value
+                            .get(k)
+                            .and_then(|v| v.as_str())
+                            .unwrap_or_default()
+                            .to_string()
+                    };
+                    let id = get("id");
+                    if !id.is_empty() {
+                        let _ = proxy_ipc.send_event(AppEvent::WebNotification {
+                            tab_id: tab_id_ipc.clone(),
+                            id,
+                            title: get("title"),
+                            body: get("body"),
+                        });
+                    }
+                    return;
+                }
+                if value.get("cmd").and_then(|v| v.as_str()) == Some("web_notification_close") {
+                    let id = value
+                        .get("id")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default()
+                        .to_string();
+                    if !id.is_empty() {
+                        let _ = proxy_ipc.send_event(AppEvent::WebNotificationClose {
+                            tab_id: tab_id_ipc.clone(),
+                            id,
+                        });
+                    }
+                    return;
+                }
                 if value.get("cmd").and_then(|v| v.as_str()) == Some("begin_resize") {
                     let edge = value
                         .get("edge")
@@ -5762,6 +5978,43 @@ fn content_initialization_script(
     } catch (_) {}
   };
   if (!isTop) return;
+  (() => {
+    const Native = window.Notification;
+    if (!Native) return;
+    let seq = 0;
+    const live = {};
+    function VN(title, opts) {
+      opts = opts || {};
+      const id = 'wn' + (++seq) + '_' + Date.now();
+      this.title = String(title == null ? '' : title);
+      this.body = opts.body || '';
+      this.icon = opts.icon || '';
+      this.tag = opts.tag || '';
+      this.data = opts.data;
+      this.dir = opts.dir || 'auto';
+      this.lang = opts.lang || '';
+      this.onclick = null; this.onclose = null; this.onerror = null; this.onshow = null;
+      const L = {click: [], close: [], show: [], error: []};
+      this.addEventListener = (t, f) => { if (L[t] && typeof f === 'function') L[t].push(f); };
+      this.removeEventListener = (t, f) => { const a = L[t]; if (a) { const i = a.indexOf(f); if (i >= 0) a.splice(i, 1); } };
+      this.dispatchEvent = () => true;
+      this._fire = (t) => {
+        const e = {type: t, target: this};
+        try { const h = this['on' + t]; if (typeof h === 'function') h.call(this, e); } catch (_) {}
+        (L[t] || []).forEach(f => { try { f.call(this, e); } catch (_) {} });
+      };
+      this.close = () => { post({cmd: 'web_notification_close', id}); delete live[id]; };
+      live[id] = this;
+      post({cmd: 'web_notification', id, title: this.title, body: this.body, icon: this.icon, origin: location.origin});
+      setTimeout(() => this._fire('show'), 0);
+    }
+    Object.defineProperty(VN, 'permission', {get: () => Native.permission, configurable: true});
+    VN.requestPermission = function() { try { return Native.requestPermission.apply(Native, arguments); } catch (_) { return Promise.resolve(Native.permission); } };
+    try { VN.maxActions = Native.maxActions; } catch (_) {}
+    window.__neuraNotifClick = (id) => { const n = live[id]; if (n) { n._fire('click'); try { window.focus(); } catch (_) {} } };
+    window.__neuraNotifClose = (id) => { const n = live[id]; if (n) { n._fire('close'); delete live[id]; } };
+    try { window.Notification = VN; } catch (_) {}
+  })();
   const findApi = (() => {
     let q = '';
     let ranges = [];
@@ -6570,7 +6823,8 @@ fn privacy_initialization_script(
     try { return sitePermissions[location.origin] || {}; } catch (_) { return {}; }
   })();
   const decisive = v => (v === 'allow' || v === 'block') ? v : null;
-  const action = key => decisive(rules[key]) || decisive(defaultPermissions[key]) || (strictDefault ? 'block' : 'ask');
+  const askByDefault = key => key === 'microphone' || key === 'camera' || key === 'notifications';
+  const action = key => decisive(rules[key]) || decisive(defaultPermissions[key]) || ((strictDefault && !askByDefault(key)) ? 'block' : 'ask');
   const isBlocked = key => action(key) === 'block';
   const blocked = () => Promise.reject(new DOMException('Blocked by Ventus strict permissions', 'NotAllowedError'));
   try {
