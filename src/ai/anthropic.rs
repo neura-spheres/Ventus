@@ -5,16 +5,35 @@ use serde_json::{json, Value};
 
 use super::provider::*;
 
+fn normalize_base_url(value: String, default_url: &str) -> String {
+    let trimmed = value.trim().trim_end_matches('/').to_string();
+    if trimmed.is_empty() {
+        default_url.to_string()
+    } else {
+        trimmed
+    }
+}
+
 pub struct AnthropicProvider {
     pub api_key: String,
+    pub base_url: String,
     pub default_model: String,
     pub client: Client,
 }
 
 impl AnthropicProvider {
     pub fn new(api_key: impl Into<String>, model: impl Into<String>) -> Self {
+        Self::with_base_url(api_key, "https://api.anthropic.com/v1", model)
+    }
+
+    pub fn with_base_url(
+        api_key: impl Into<String>,
+        base_url: impl Into<String>,
+        model: impl Into<String>,
+    ) -> Self {
         Self {
             api_key: api_key.into(),
+            base_url: normalize_base_url(base_url.into(), "https://api.anthropic.com/v1"),
             default_model: model.into(),
             client: Client::new(),
         }
@@ -174,7 +193,7 @@ impl AiProvider for AnthropicProvider {
 
         let resp = self
             .client
-            .post("https://api.anthropic.com/v1/messages")
+            .post(format!("{}/messages", self.base_url))
             .header("x-api-key", &self.api_key)
             .header("anthropic-version", "2023-06-01")
             .header("anthropic-beta", "web-search-2025-03-05")
@@ -215,7 +234,7 @@ impl AiProvider for AnthropicProvider {
 
         let resp = self
             .client
-            .post("https://api.anthropic.com/v1/messages")
+            .post(format!("{}/messages", self.base_url))
             .header("x-api-key", &self.api_key)
             .header("anthropic-version", "2023-06-01")
             .header("content-type", "application/json")
@@ -249,7 +268,7 @@ impl AiProvider for AnthropicProvider {
 
         let resp = self
             .client
-            .post("https://api.anthropic.com/v1/messages")
+            .post(format!("{}/messages", self.base_url))
             .header("x-api-key", &self.api_key)
             .header("anthropic-version", "2023-06-01")
             .header("content-type", "application/json")
@@ -263,7 +282,8 @@ impl AiProvider for AnthropicProvider {
             return Err(anyhow!("Anthropic API error {}: {}", status, text));
         }
 
-        let stream = resp.bytes_stream().map(|chunk| -> Result<String> {
+        let mut thinking_open = false;
+        let stream = resp.bytes_stream().map(move |chunk| -> Result<String> {
             let bytes = chunk?;
             let text = std::str::from_utf8(&bytes).unwrap_or("");
             let mut content = String::new();
@@ -271,9 +291,25 @@ impl AiProvider for AnthropicProvider {
                 if let Some(data) = line.strip_prefix("data: ") {
                     if let Ok(val) = serde_json::from_str::<Value>(data) {
                         if val["type"] == "content_block_delta" {
-                            if let Some(delta) = val["delta"]["text"].as_str() {
+                            if let Some(delta) = val["delta"]["thinking"].as_str() {
+                                if !thinking_open {
+                                    content.push_str("<thinking>");
+                                    thinking_open = true;
+                                }
+                                content.push_str(delta);
+                            } else if let Some(delta) = val["delta"]["text"].as_str() {
+                                if thinking_open {
+                                    content.push_str("</thinking>\n");
+                                    thinking_open = false;
+                                }
                                 content.push_str(delta);
                             }
+                        } else if thinking_open
+                            && (val["type"] == "content_block_stop"
+                                || val["type"] == "message_stop")
+                        {
+                            content.push_str("</thinking>");
+                            thinking_open = false;
                         }
                     }
                 }

@@ -75,6 +75,7 @@ pub enum ChromeCommand {
     AiQuickAction {
         action: String,
     },
+    AiStop,
     AiClearChat,
     BookmarkAdd,
     /// Save a bookmark from a dropped link (drag-to-bookmark).

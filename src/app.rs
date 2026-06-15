@@ -318,8 +318,11 @@ impl AppState {
             "downloads": &self.downloads.downloads,
             "ai_key_status": {
                 "anthropic": keychain::has_api_key("anthropic"),
+                "anthropic_compatible": keychain::has_api_key("anthropic"),
                 "openai": keychain::has_api_key("openai"),
+                "openai_compatible": keychain::has_api_key("openai"),
                 "gemini": keychain::has_api_key("gemini"),
+                "gemini_compatible": keychain::has_api_key("gemini"),
                 "openrouter": keychain::has_api_key("openrouter"),
             },
             "ad_blocker_active": ad_blocker_active,
@@ -601,6 +604,7 @@ pub fn handle_chrome_command(
             Some(TabAction::SyncViews)
         }
         ChromeCommand::AiProviderChange { provider } => {
+            let provider = normalize_ai_provider(&provider).to_string();
             state.current_ai_provider = provider.clone();
             state.settings.ai.default_provider = provider.clone();
             if should_swap_ai_model(&state.settings.ai.default_model) {
@@ -619,6 +623,7 @@ pub fn handle_chrome_command(
             state.ai_messages.clear();
             None
         }
+        ChromeCommand::AiStop => None,
         ChromeCommand::BookmarkAdd => {
             if let Some(tab) = state.tab_manager.active_tab() {
                 let url = tab.url.clone();
@@ -3469,6 +3474,7 @@ fn handle_save_settings(
         }
         "ai_keys" => {
             if let Some(obj) = value.as_object() {
+                let mut save_failed = false;
                 for (provider, key_val) in obj {
                     if let Some(k) = key_val.as_str() {
                         if provider == "model" {
@@ -3476,13 +3482,49 @@ fn handle_save_settings(
                                 state.settings.ai.default_model = k.to_string();
                             }
                         } else if !k.is_empty() {
-                            let _ = keychain::set_api_key(provider, k);
+                            if keychain::set_api_key(provider, k).is_err() {
+                                save_failed = true;
+                            }
                         }
                     }
                 }
-                let _ = chrome.evaluate_script(
-                    "window.__neura && window.__neura.showSuccess('API keys saved')",
-                );
+                if save_failed {
+                    let _ = chrome.evaluate_script(
+                        "window.__neura && window.__neura.showError('Some API keys could not be saved')",
+                    );
+                } else {
+                    let _ = chrome.evaluate_script(
+                        "window.__neura && window.__neura.showSuccess('API keys saved')",
+                    );
+                }
+            }
+        }
+        "openai_base_url" => {
+            if let Some(v) = value.as_str() {
+                state.settings.ai.openai_base_url =
+                    clean_ai_base_url(v, "https://api.openai.com/v1");
+            }
+        }
+        "anthropic_base_url" => {
+            if let Some(v) = value.as_str() {
+                state.settings.ai.anthropic_base_url =
+                    clean_ai_base_url(v, "https://api.anthropic.com/v1");
+            }
+        }
+        "gemini_base_url" => {
+            if let Some(v) = value.as_str() {
+                state.settings.ai.gemini_base_url =
+                    clean_ai_base_url(v, "https://generativelanguage.googleapis.com/v1beta");
+            }
+        }
+        "openai_use_responses_api" => {
+            if let Some(v) = value.as_bool() {
+                state.settings.ai.openai_use_responses_api = v;
+            }
+        }
+        "reasoning_effort" => {
+            if let Some(v) = value.as_str() {
+                state.settings.ai.reasoning_effort = clean_reasoning_effort(v).to_string();
             }
         }
         "save_history" => {
@@ -3727,12 +3769,41 @@ fn handle_save_settings(
 }
 
 fn ai_model_for(provider: &str) -> &'static str {
-    match provider {
+    match normalize_ai_provider(provider) {
         "anthropic" => "claude-3-5-sonnet-20241022",
         "gemini" => "gemini-2.5-flash",
-        "openrouter" => "openai/gpt-4o-mini",
-        "ollama" => "llama3.1",
         _ => "gpt-4o-mini",
+    }
+}
+
+fn normalize_ai_provider(provider: &str) -> &str {
+    match provider {
+        "openai_compatible" | "openai-compatible" | "openrouter" | "ollama" => "openai",
+        "anthropic_compatible" | "anthropic-compatible" => "anthropic",
+        "gemini_compatible" | "gemini-compatible" => "gemini",
+        other => other,
+    }
+}
+
+fn clean_ai_base_url(value: &str, default_url: &str) -> String {
+    let trimmed = value.trim().trim_end_matches('/');
+    if trimmed.is_empty() {
+        default_url.to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn clean_reasoning_effort(value: &str) -> &'static str {
+    match value {
+        "default" | "" => "default",
+        "none" => "none",
+        "minimal" => "minimal",
+        "low" => "low",
+        "high" => "high",
+        "xhigh" | "x-high" | "x_high" => "xhigh",
+        "medium" => "medium",
+        _ => "default",
     }
 }
 

@@ -785,6 +785,7 @@ fn main() {
     }
 
     let proxy_main = proxy.clone();
+    let ai_generation = Arc::new(AtomicUsize::new(0));
     let mut chrome_shown = true;
     keep_frameless(&window);
     window.set_visible(true);
@@ -970,7 +971,7 @@ fn main() {
             }
 
             Event::UserEvent(AppEvent::Chrome(ChromeCommand::AiMessage { text })) => {
-                handle_ai_message(text, &state, &chrome, &proxy_main, &rt);
+                handle_ai_message(text, &state, &chrome, &proxy_main, &rt, &ai_generation);
             }
 
             Event::UserEvent(AppEvent::Chrome(ChromeCommand::SpotlightAiQuery { text })) => {
@@ -978,7 +979,11 @@ fn main() {
             }
 
             Event::UserEvent(AppEvent::Chrome(ChromeCommand::AiQuickAction { action })) => {
-                handle_ai_quick_action(action, &state, &chrome, &proxy_main, &rt);
+                handle_ai_quick_action(action, &state, &chrome, &proxy_main, &rt, &ai_generation);
+            }
+
+            Event::UserEvent(AppEvent::Chrome(ChromeCommand::AiStop)) => {
+                ai_generation.fetch_add(1, Ordering::SeqCst);
             }
 
             Event::UserEvent(AppEvent::Chrome(ChromeCommand::AuthSignUp { email, password })) => {
@@ -8865,6 +8870,7 @@ fn handle_ai_quick_action(
     chrome: &WebView,
     proxy: &tao::event_loop::EventLoopProxy<AppEvent>,
     rt: &tokio::runtime::Runtime,
+    ai_generation: &Arc<AtomicUsize>,
 ) {
     let Some(prov) = ai::build_provider(&state.settings) else {
         let _ = chrome.evaluate_script(
@@ -8887,7 +8893,10 @@ fn handle_ai_quick_action(
     let model = state.settings.ai.default_model.clone();
     let temperature = state.settings.ai.temperature;
     let max_tokens = state.settings.ai.max_tokens;
+    let reasoning_effort = Some(state.settings.ai.reasoning_effort.clone());
     let tab_id = state.tab_manager.active_tab_id.clone().unwrap_or_default();
+    let request_generation = ai_generation.fetch_add(1, Ordering::SeqCst) + 1;
+    let ai_generation_guard = Arc::clone(ai_generation);
 
     // Build a unique call_id for the page-text round-trip
     let call_id = format!("qa-{}", uuid_v4_simple());
@@ -8899,6 +8908,9 @@ fn handle_ai_quick_action(
         // Step 1 — read the page text directly (guaranteed, no AI indirection)
         let page_text_raw =
             execute_page_js(page_js, &call_id, &tab_id, &pending, &proxy_task).await;
+        if ai_generation_guard.load(Ordering::SeqCst) != request_generation {
+            return;
+        }
 
         // Unquote the JSON-encoded string the JS sends back
         let page_text: String =
@@ -8936,43 +8948,90 @@ fn handle_ai_quick_action(
             model,
             temperature,
             max_tokens,
-            stream: false,
+            stream: true,
+            reasoning_effort,
             tools: None, // No tool calls — page text is already in the prompt
         };
 
-        match prov.chat(req).await {
-            Ok(resp) => {
-                let text = resp.content;
-                if text.is_empty() {
+        use futures_util::StreamExt;
+        match prov.stream_chat(req.clone()).await {
+            Ok(mut stream) => {
+                if ai_generation_guard.load(Ordering::SeqCst) != request_generation {
+                    return;
+                }
+                let mut accumulated = String::new();
+                while let Some(chunk) = stream.next().await {
+                    if ai_generation_guard.load(Ordering::SeqCst) != request_generation {
+                        return;
+                    }
+                    match chunk {
+                        Ok(text) if !text.is_empty() => {
+                            accumulated.push_str(&text);
+                            let _ = proxy_task.send_event(AppEvent::AiChunk { text, done: false });
+                        }
+                        Ok(_) => {}
+                        Err(e) => {
+                            if ai_generation_guard.load(Ordering::SeqCst) != request_generation {
+                                return;
+                            }
+                            let _ = proxy_task.send_event(AppEvent::AiError {
+                                message: format!("AI stream error: {}", e),
+                            });
+                            return;
+                        }
+                    }
+                }
+                if ai_generation_guard.load(Ordering::SeqCst) != request_generation {
+                    return;
+                }
+
+                if accumulated.trim().is_empty() {
                     let _ = proxy_task.send_event(AppEvent::AiError {
                         message: "AI returned an empty response. Please try again.".into(),
                     });
                     return;
                 }
-                // Stream word-by-word for a nicer UX
-                let words: Vec<&str> = text.split(' ').collect();
-                let chunk_size = 3.max(words.len() / 20);
-                let mut i = 0;
-                while i < words.len() {
-                    let end = (i + chunk_size).min(words.len());
-                    let chunk = words[i..end].join(" ");
-                    let sep = if end < words.len() { " " } else { "" };
-                    let _ = proxy_task.send_event(AppEvent::AiChunk {
-                        text: format!("{}{}", chunk, sep),
-                        done: false,
-                    });
-                    i = end;
-                    tokio::time::sleep(std::time::Duration::from_millis(15)).await;
-                }
+
                 let _ = proxy_task.send_event(AppEvent::AiChunk {
                     text: String::new(),
                     done: true,
                 });
             }
-            Err(e) => {
-                let _ = proxy_task.send_event(AppEvent::AiError {
-                    message: format!("AI error: {}", e),
-                });
+            Err(stream_error) => {
+                if ai_generation_guard.load(Ordering::SeqCst) != request_generation {
+                    return;
+                }
+                let mut fallback_req = req;
+                fallback_req.stream = false;
+                match prov.chat(fallback_req).await {
+                    Ok(resp) => {
+                        if ai_generation_guard.load(Ordering::SeqCst) != request_generation {
+                            return;
+                        }
+                        if resp.content.trim().is_empty() {
+                            let _ = proxy_task.send_event(AppEvent::AiError {
+                                message: "AI returned an empty response. Please try again.".into(),
+                            });
+                            return;
+                        }
+                        let _ = proxy_task.send_event(AppEvent::AiChunk {
+                            text: resp.content,
+                            done: false,
+                        });
+                        let _ = proxy_task.send_event(AppEvent::AiChunk {
+                            text: String::new(),
+                            done: true,
+                        });
+                    }
+                    Err(e) => {
+                        if ai_generation_guard.load(Ordering::SeqCst) != request_generation {
+                            return;
+                        }
+                        let _ = proxy_task.send_event(AppEvent::AiError {
+                            message: format!("AI error: {} (stream failed: {})", e, stream_error),
+                        });
+                    }
+                }
             }
         }
     });
@@ -9328,6 +9387,7 @@ fn handle_ai_message(
     chrome: &WebView,
     proxy: &tao::event_loop::EventLoopProxy<AppEvent>,
     rt: &tokio::runtime::Runtime,
+    ai_generation: &Arc<AtomicUsize>,
 ) {
     let Some(prov) = ai::build_provider(&state.settings) else {
         let _ = chrome.evaluate_script(
@@ -9355,31 +9415,145 @@ fn handle_ai_message(
     let model = state.settings.ai.default_model.clone();
     let temperature = state.settings.ai.temperature;
     let max_tokens = state.settings.ai.max_tokens;
-    let stream_final = state.settings.ai.stream_responses;
+    let reasoning_effort = Some(state.settings.ai.reasoning_effort.clone());
+    let request_generation = ai_generation.fetch_add(1, Ordering::SeqCst) + 1;
+    let ai_generation_guard = Arc::clone(ai_generation);
 
     rt.spawn(async move {
+        use futures_util::StreamExt;
+
         // Agent loop — up to 12 iterations (tool call rounds)
         const MAX_STEPS: usize = 12;
 
         for step in 0..MAX_STEPS {
-            let req = ai::ChatRequest {
+            if ai_generation_guard.load(Ordering::SeqCst) != request_generation {
+                return;
+            }
+            // ── 1. Try real streaming first ──────────────────────────────────
+            let req_stream = ai::ChatRequest {
                 messages: msgs.clone(),
                 model: model.clone(),
                 temperature,
                 max_tokens,
-                stream: false, // No streaming during tool-call rounds
+                stream: true,
+                reasoning_effort: reasoning_effort.clone(),
                 tools: Some(ai::browser_tools::browser_tool_definitions()),
             };
 
-            let resp = match prov.chat(req).await {
+            if let Ok(mut stream) = prov.stream_chat(req_stream).await {
+                if ai_generation_guard.load(Ordering::SeqCst) != request_generation {
+                    return;
+                }
+                let mut accumulated = String::new();
+                let mut had_error = false;
+                while let Some(chunk) = stream.next().await {
+                    if ai_generation_guard.load(Ordering::SeqCst) != request_generation {
+                        return;
+                    }
+                    match chunk {
+                        Ok(ref t) if !t.is_empty() => {
+                            accumulated.push_str(t);
+                            let _ = proxy_agent.send_event(AppEvent::AiChunk {
+                                text: t.clone(),
+                                done: false,
+                            });
+                        }
+                        Err(e) => {
+                            if ai_generation_guard.load(Ordering::SeqCst) != request_generation {
+                                return;
+                            }
+                            let _ = proxy_agent.send_event(AppEvent::AiError {
+                                message: format!("AI stream error: {}", e),
+                            });
+                            had_error = true;
+                            break;
+                        }
+                        _ => {}
+                    }
+                }
+                if had_error {
+                    return;
+                }
+                if ai_generation_guard.load(Ordering::SeqCst) != request_generation {
+                    return;
+                }
+
+                // Check if the stream produced actual final-answer text
+                // (strip thinking tags to see if there's real content)
+                let clean = {
+                    let mut s = accumulated.clone();
+                    // Remove all <thinking>...</thinking> and <think>...</think> blocks
+                    loop {
+                        let lower = s.to_lowercase();
+                        if let Some(start) = lower.find("<think") {
+                            // Find the end of this opening tag
+                            if let Some(tag_end) = s[start..].find('>') {
+                                let after_tag = start + tag_end + 1;
+                                // Find the closing tag
+                                if let Some(close_start) = lower[after_tag..].find("</think") {
+                                    if let Some(close_end) = s[after_tag + close_start..].find('>')
+                                    {
+                                        let end = after_tag + close_start + close_end + 1;
+                                        s = format!("{}{}", &s[..start], &s[end..]);
+                                        continue;
+                                    }
+                                }
+                                // Unclosed thinking tag — stream is still in thinking
+                                s = s[..start].to_string();
+                            }
+                        }
+                        break;
+                    }
+                    s.trim().to_string()
+                };
+
+                if !clean.is_empty() {
+                    if ai_generation_guard.load(Ordering::SeqCst) != request_generation {
+                        return;
+                    }
+                    // Real text → final answer already streamed to UI
+                    let _ = proxy_agent.send_event(AppEvent::AiChunk {
+                        text: String::new(),
+                        done: true,
+                    });
+                    let _ = proxy_agent.send_event(AppEvent::AiSaveMessages {
+                        user_text,
+                        assistant_text: accumulated,
+                    });
+                    return;
+                }
+                // Stream was empty/thinking-only → model likely wants tool calls
+            }
+
+            // ── 2. Fallback to non-streaming chat() for tool calls ────────────
+            let req_fb = ai::ChatRequest {
+                messages: msgs.clone(),
+                model: model.clone(),
+                temperature,
+                max_tokens,
+                stream: false,
+                reasoning_effort: reasoning_effort.clone(),
+                tools: Some(ai::browser_tools::browser_tool_definitions()),
+            };
+
+            if ai_generation_guard.load(Ordering::SeqCst) != request_generation {
+                return;
+            }
+            let resp = match prov.chat(req_fb).await {
                 Ok(r) => r,
                 Err(e) => {
+                    if ai_generation_guard.load(Ordering::SeqCst) != request_generation {
+                        return;
+                    }
                     let _ = proxy_agent.send_event(AppEvent::AiError {
                         message: format!("AI error: {}", e),
                     });
                     return;
                 }
             };
+            if ai_generation_guard.load(Ordering::SeqCst) != request_generation {
+                return;
+            }
 
             let has_tool_calls = resp
                 .tool_calls
@@ -9388,25 +9562,12 @@ fn handle_ai_message(
                 .unwrap_or(false);
 
             if !has_tool_calls {
-                // Final text response — stream it if streaming is enabled
+                if ai_generation_guard.load(Ordering::SeqCst) != request_generation {
+                    return;
+                }
+                // Final text response from fallback (no tool calls)
                 let final_text = resp.content.clone();
-                if stream_final && !final_text.is_empty() {
-                    // Simulate word-by-word streaming for a nicer UX
-                    let words: Vec<&str> = final_text.splitn(100, ' ').collect();
-                    let chunk_size = 3.max(words.len() / 20);
-                    let mut i = 0;
-                    while i < words.len() {
-                        let end = (i + chunk_size).min(words.len());
-                        let chunk = words[i..end].join(" ");
-                        let sep = if end < words.len() { " " } else { "" };
-                        let _ = proxy_agent.send_event(AppEvent::AiChunk {
-                            text: format!("{}{}", chunk, sep),
-                            done: false,
-                        });
-                        i = end;
-                        tokio::time::sleep(std::time::Duration::from_millis(15)).await;
-                    }
-                } else if !final_text.is_empty() {
+                if !final_text.is_empty() {
                     let _ = proxy_agent.send_event(AppEvent::AiChunk {
                         text: final_text.clone(),
                         done: false,
@@ -9416,7 +9577,6 @@ fn handle_ai_message(
                     text: String::new(),
                     done: true,
                 });
-                // Persist exchange to conversation history
                 let _ = proxy_agent.send_event(AppEvent::AiSaveMessages {
                     user_text,
                     assistant_text: final_text,
@@ -9434,6 +9594,9 @@ fn handle_ai_message(
 
             // Show tool call labels in the AI sidebar
             for tc in &tool_calls {
+                if ai_generation_guard.load(Ordering::SeqCst) != request_generation {
+                    return;
+                }
                 let label =
                     ai::browser_tools::tool_call_label(&tc.function.name, &tc.function.arguments);
                 let _ = proxy_agent.send_event(AppEvent::AiToolCallDisplay { label });
@@ -9441,7 +9604,13 @@ fn handle_ai_message(
 
             // Execute all tool calls and collect results
             for tc in &tool_calls {
+                if ai_generation_guard.load(Ordering::SeqCst) != request_generation {
+                    return;
+                }
                 let result = execute_tool(tc, &snapshot, &pending, &proxy_agent).await;
+                if ai_generation_guard.load(Ordering::SeqCst) != request_generation {
+                    return;
+                }
                 tracing::debug!(
                     "tool {} → {}",
                     tc.function.name,
@@ -9450,13 +9619,16 @@ fn handle_ai_message(
                 msgs.push(ai::ChatMessage::tool_result(&tc.id, result));
             }
 
-            // If this is not the first step, guard against runaway loops with a brief pause
+            // Guard against runaway loops
             if step > 0 {
                 tokio::time::sleep(std::time::Duration::from_millis(100)).await;
             }
         }
 
         // Exceeded max steps
+        if ai_generation_guard.load(Ordering::SeqCst) != request_generation {
+            return;
+        }
         let _ = proxy_agent.send_event(AppEvent::AiError {
             message: "Agent reached maximum steps — please try a simpler request.".into(),
         });
@@ -9482,6 +9654,7 @@ fn handle_spotlight_ai_query(
     let provider_id = state.settings.ai.default_provider.clone();
     let temperature = state.settings.ai.temperature;
     let max_tokens = state.settings.ai.max_tokens;
+    let reasoning_effort = Some(state.settings.ai.reasoning_effort.clone());
     let query_text = text.clone();
 
     rt.spawn(async move {
@@ -9505,6 +9678,7 @@ fn handle_spotlight_ai_query(
             temperature,
             max_tokens,
             stream: false,
+            reasoning_effort: reasoning_effort.clone(),
             tools: None,
         };
 
@@ -9606,6 +9780,7 @@ fn handle_spotlight_ai_query(
             temperature,
             max_tokens,
             stream: false,
+            reasoning_effort: reasoning_effort.clone(),
             tools: None,
         };
 

@@ -5,15 +5,41 @@ use serde_json::{json, Value};
 
 use super::provider::*;
 
+fn normalize_base_url(value: String, default_url: &str) -> String {
+    let trimmed = value.trim().trim_end_matches('/').to_string();
+    if trimmed.is_empty() {
+        default_url.to_string()
+    } else {
+        trimmed
+    }
+}
+
 pub struct GeminiProvider {
     pub api_key: String,
+    pub base_url: String,
     pub client: Client,
 }
 
 impl GeminiProvider {
     pub fn new(api_key: impl Into<String>, _model: impl Into<String>) -> Self {
+        Self::with_base_url(
+            api_key,
+            "https://generativelanguage.googleapis.com/v1beta",
+            _model,
+        )
+    }
+
+    pub fn with_base_url(
+        api_key: impl Into<String>,
+        base_url: impl Into<String>,
+        _model: impl Into<String>,
+    ) -> Self {
         Self {
             api_key: api_key.into(),
+            base_url: normalize_base_url(
+                base_url.into(),
+                "https://generativelanguage.googleapis.com/v1beta",
+            ),
             client: Client::new(),
         }
     }
@@ -26,11 +52,7 @@ impl GeminiProvider {
     }
 
     fn url(&self, model: &str, action: &str) -> String {
-        format!(
-            "https://generativelanguage.googleapis.com/v1beta/{}:{}",
-            self.model_path(model),
-            action
-        )
+        format!("{}/{}:{}", self.base_url, self.model_path(model), action)
     }
 
     fn build_body(&self, req: &ChatRequest) -> Value {

@@ -13,14 +13,25 @@ use std::sync::Arc;
 
 pub use provider::{AiProvider, ChatMessage, ChatRequest};
 
+fn provider_id(id: &str) -> &str {
+    match id {
+        "openai_compatible" | "openai-compatible" => "openai",
+        "anthropic_compatible" | "anthropic-compatible" => "anthropic",
+        "gemini_compatible" | "gemini-compatible" => "gemini",
+        other => other,
+    }
+}
+
 pub fn build_provider(settings: &AppSettings) -> Option<Arc<dyn AiProvider>> {
     let ai = &settings.ai;
-    match ai.default_provider.as_str() {
+    match provider_id(&ai.default_provider) {
         "openai" => {
             if let Ok(Some(key)) = crate::storage::keychain::get_api_key("openai") {
-                Some(Arc::new(openai::OpenAiProvider::openai(
+                Some(Arc::new(openai::OpenAiProvider::compatible(
                     key,
+                    &ai.openai_base_url,
                     &ai.default_model,
+                    ai.openai_use_responses_api,
                 )))
             } else {
                 None
@@ -28,8 +39,9 @@ pub fn build_provider(settings: &AppSettings) -> Option<Arc<dyn AiProvider>> {
         }
         "anthropic" => {
             if let Ok(Some(key)) = crate::storage::keychain::get_api_key("anthropic") {
-                Some(Arc::new(anthropic::AnthropicProvider::new(
+                Some(Arc::new(anthropic::AnthropicProvider::with_base_url(
                     key,
+                    &ai.anthropic_base_url,
                     &ai.default_model,
                 )))
             } else {
@@ -48,8 +60,9 @@ pub fn build_provider(settings: &AppSettings) -> Option<Arc<dyn AiProvider>> {
         }
         "gemini" => {
             if let Ok(Some(key)) = crate::storage::keychain::get_api_key("gemini") {
-                Some(Arc::new(gemini::GeminiProvider::new(
+                Some(Arc::new(gemini::GeminiProvider::with_base_url(
                     key,
+                    &ai.gemini_base_url,
                     &ai.default_model,
                 )))
             } else {

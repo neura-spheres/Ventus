@@ -23,7 +23,7 @@ pub fn chrome_html() -> String {
   --transition:0.15s ease;
   --font:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
 
-  /* Ventus dark theme — pure neutral dark grey */
+  /* Ventus dark theme â€” pure neutral dark grey */
   --bg:#0f0f0f;
   --bg-elevated:#1a1a1a;
   --bg-hover:#212121;
@@ -34,7 +34,7 @@ pub fn chrome_html() -> String {
   --text:#e8e8e8;
   --text-muted:#888888;
   --text-dim:#8a8a8a;
-  /* Blue-purple accent — matches the Ventus logo gradient */
+  /* Blue-purple accent â€” matches the Ventus logo gradient */
   --accent:#6366f1;
   --accent-hover:#7c7ef8;
   --accent-dim:rgba(99,102,241,0.14);
@@ -132,7 +132,7 @@ pub fn chrome_html() -> String {
   --load-ring-faint:rgba(255,255,255,0.09);
 }
 [data-theme="light"]{
-  /* Ventus light theme — soft paper-white with purple tint */
+  /* Ventus light theme â€” soft paper-white with purple tint */
   --bg:#f7f8ff;
   --bg-elevated:#ffffff;
   --bg-hover:#eef0fd;
@@ -242,7 +242,7 @@ button,input,select,textarea{font-family:var(--font)}
 ::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
 ::-webkit-scrollbar-thumb:hover{background:var(--text-dim)}
 
-/* layout — sidebar is a fixed overlay, not a grid column */
+/* layout â€” sidebar is a fixed overlay, not a grid column */
 #app{
   display:grid;
   grid-template-columns:1fr;
@@ -643,7 +643,7 @@ button,input,select,textarea{font-family:var(--font)}
 
 .tb-sep{width:1px;height:20px;background:var(--border-subtle);flex-shrink:0;margin:0 2px}
 
-/* ── More menu ─────────────────────────────────────────────────────────────── */
+/* â”€â”€ More menu â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 #btn-more{position:relative}
 #more-btn-badge{
   position:absolute;top:4px;right:4px;
@@ -711,7 +711,7 @@ button,input,select,textarea{font-family:var(--font)}
 }
 #more-zoom-pct:hover{background:var(--bg-active)}
 
-/* ── Tab audio indicator ───────────────────────────────────────────────────── */
+/* â”€â”€ Tab audio indicator â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .tab-audio-btn{
   width:18px;height:18px;border-radius:4px;
   display:flex;align-items:center;justify-content:center;
@@ -755,9 +755,9 @@ button,input,select,textarea{font-family:var(--font)}
   #toolbar-nav .tb-sep{display:none}
 }
 
-/* ── Window edge resize handles ───────────────────────────────────────────────
+/* â”€â”€ Window edge resize handles â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
    Transparent strips anchored to the window edges inside the chrome clip region.
-   Mousedown fires send('BeginResize',{edge}) → Rust → ReleaseCapture + WM_NCLBUTTONDOWN.
+   Mousedown fires send('BeginResize',{edge}) â†’ Rust â†’ ReleaseCapture + WM_NCLBUTTONDOWN.
 */
 .resize-handle{
   position:fixed;z-index:9999;
@@ -771,7 +771,7 @@ button,input,select,textarea{font-family:var(--font)}
 .resize-handle[data-edge="bottomleft"] {left:0;bottom:0;width:12px;height:12px;cursor:nesw-resize}
 .resize-handle[data-edge="bottomright"]{right:0;bottom:0;width:12px;height:12px;cursor:nwse-resize}
 
-/* ── Spotlight calculator card ────────────────────────────────────────────────
+/* â”€â”€ Spotlight calculator card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
    Shown above search results when the query is a pure math expression.
 */
 .tsp-calc-card{
@@ -798,7 +798,7 @@ button,input,select,textarea{font-family:var(--font)}
 .tsp-conv-disclaimer{
   font-size:10px;color:var(--text-dim);margin-top:2px;opacity:.55;align-self:flex-start;
 }
-/* ── Region settings ──────────────────────────────────────────────────────── */
+/* â”€â”€ Region settings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .region-preview-card{
   background:color-mix(in srgb,var(--accent) 6%,var(--bg-elevated));
   border:1px solid color-mix(in srgb,var(--accent) 20%,var(--border));
@@ -849,7 +849,7 @@ button,input,select,textarea{font-family:var(--font)}
 
 .newtab-logo{width:56px;height:56px;object-fit:contain}
 
-/* ── Workspace dot hover popover ───────────────────────────── */
+/* â”€â”€ Workspace dot hover popover â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .sb-ws-popover{
   position:fixed;z-index:295;
   background:var(--bg-elevated);border:1px solid var(--border);
@@ -897,7 +897,7 @@ button,input,select,textarea{font-family:var(--font)}
 .sb-ws-pop-btn.danger:hover{background:rgba(239,68,68,0.12);color:#f87171}
 .sb-ws-pop-btn:disabled{opacity:.35;cursor:not-allowed;pointer-events:none}
 
-/* ── Pages viewport ─────────────────────────────────────────── */
+/* â”€â”€ Pages viewport â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .sb-viewport{flex:1;overflow:hidden;position:relative}
 .sb-page{
   height:100%;overflow-y:auto;overflow-x:hidden;
@@ -909,7 +909,7 @@ button,input,select,textarea{font-family:var(--font)}
 .sb-page::-webkit-scrollbar-track{background:transparent}
 .sb-page::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
 
-/* ── Sidebar bottom bar ─────────────────────────────────────── */
+/* â”€â”€ Sidebar bottom bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .sb-bottom{
   display:flex;align-items:center;justify-content:space-between;
   padding:0 8px;border-top:1px solid var(--border-subtle);
@@ -962,7 +962,7 @@ button,input,select,textarea{font-family:var(--font)}
 .ws-dot.muted:hover .ws-dot-mark{opacity:0;transform:scale(.45)}
 .ws-dot:hover{transform:scale(1.08)}
 
-/* ── Emoji picker (workspace modal) ─────────────────────────── */
+/* â”€â”€ Emoji picker (workspace modal) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .ws-emoji-row{display:flex;align-items:flex-start;gap:10px;width:100%}
 .ws-emoji-preview{
   width:40px;height:40px;border-radius:10px;flex-shrink:0;
@@ -1002,7 +1002,7 @@ button,input,select,textarea{font-family:var(--font)}
   padding:0;flex-shrink:0;
 }
 
-/* ── Preserve workspace modal avatar in dialogs ─────────────── */
+/* â”€â”€ Preserve workspace modal avatar in dialogs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .workspace-avatar{
   width:22px;height:22px;border-radius:6px;
   display:flex;align-items:center;justify-content:center;
@@ -1118,7 +1118,7 @@ button,input,select,textarea{font-family:var(--font)}
 .delete-btn-danger{border-color:rgba(255,105,97,0.3);background:#ff453a;color:#fff}
 .delete-btn-danger:hover{background:#ff5c52}
 
-/* legacy alias — sb-page now handles this */
+/* legacy alias â€” sb-page now handles this */
 .sidebar-tabs{flex:1;overflow:hidden}
 .tab-item{
   display:flex;align-items:center;gap:9px;
@@ -1158,12 +1158,14 @@ button,input,select,textarea{font-family:var(--font)}
 .tab-item.active.loading{animation:tab-chip-pulse-active 1.8s ease-in-out infinite}
 
 #ai-header{
-  display:flex;align-items:center;justify-content:space-between;gap:12px;
-  padding:10px 10px 9px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding:10px 12px 8px;flex-shrink:0;
   border-bottom:1px solid var(--chrome-border);
   background:var(--chrome-bg);
 }
 .ai-top-left,.ai-top-right{display:flex;align-items:center;gap:8px;min-width:0}
+.ai-top-left{flex:1}
+.ai-top-right{flex-shrink:0}
 .ai-icon-btn{
   width:30px;height:30px;border-radius:var(--radius-sm);border:1px solid transparent;
   background:transparent;color:var(--ai-muted);cursor:pointer;
@@ -1215,6 +1217,7 @@ button,input,select,textarea{font-family:var(--font)}
 }
 .ai-provider-dd-item.active .ai-provider-dd-item-dot{background:var(--accent)}
 .ai-hero{
+  display:none;
   padding:16px 16px 12px;flex-shrink:0;
   border-bottom:1px solid var(--border-subtle);
 }
@@ -1260,6 +1263,31 @@ button,input,select,textarea{font-family:var(--font)}
   background:var(--ai-panel);border:1px solid var(--ai-line);
   color:var(--ai-text);align-self:flex-start;
 }
+.ai-msg.assistant p{margin:0 0 10px}
+.ai-msg.assistant p:last-child{margin-bottom:0}
+.ai-msg.assistant h1,.ai-msg.assistant h2,.ai-msg.assistant h3,.ai-msg.assistant h4{
+  margin:14px 0 7px;font-weight:700;line-height:1.25;color:var(--ai-text);
+}
+.ai-msg.assistant h1{font-size:18px}
+.ai-msg.assistant h2{font-size:16px}
+.ai-msg.assistant h3{font-size:14px}
+.ai-msg.assistant h4{font-size:13px}
+.ai-msg.assistant ul,.ai-msg.assistant ol{margin:6px 0 12px 18px;padding:0}
+.ai-msg.assistant li{margin:4px 0;padding-left:2px}
+.ai-msg.assistant li p{margin:4px 0}
+.ai-msg.assistant code{
+  background:var(--bg);border:1px solid var(--border);border-radius:4px;
+  padding:1px 5px;font-size:12px;
+}
+.ai-msg.assistant pre{
+  background:var(--bg);border:1px solid var(--border);border-radius:6px;
+  padding:8px 10px;font-size:12px;overflow-x:auto;white-space:pre-wrap;margin:8px 0 12px;
+}
+.ai-msg.assistant pre code{background:transparent;border:0;padding:0}
+.ai-msg.assistant blockquote{
+  margin:8px 0 12px;padding:2px 0 2px 10px;border-left:2px solid var(--border);
+  color:var(--ai-muted);
+}
 .ai-msg.system{
   background:var(--bg-card);border:1px solid var(--border);
   color:var(--ai-muted);font-size:12px;text-align:center;border-radius:var(--radius);
@@ -1269,6 +1297,45 @@ button,input,select,textarea{font-family:var(--font)}
   display:flex;gap:5px;align-items:center;align-self:flex-start;
   padding:10px 12px;border-radius:10px;background:var(--ai-panel);border:1px solid var(--ai-line);
 }
+.ai-thinking-summary{
+  align-self:stretch;color:rgb(175,175,175);font-weight:400;
+  font-size:12.5px;line-height:1.5;max-width:100%;
+}
+[data-theme="light"] .ai-thinking-summary{color:rgb(93,93,93)}
+.ai-thinking-preview{
+  display:flex;flex-direction:column;gap:3px;cursor:pointer;
+  padding:8px 2px 6px;user-select:none;-webkit-user-select:none;
+}
+.ai-thinking-title-row{display:flex;align-items:center;gap:6px;min-width:0}
+.ai-thinking-title{
+  font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.ai-thinking-chevron{opacity:.7;transition:transform .18s ease;flex-shrink:0}
+.ai-thinking-summary.expanded .ai-thinking-chevron{transform:rotate(90deg)}
+.ai-thinking-preview-text{
+  color:inherit;opacity:.9;white-space:pre-wrap;overflow:visible;
+}
+.ai-thinking-summary.done .ai-thinking-preview-text,
+.ai-thinking-summary.expanded .ai-thinking-preview-text{display:none}
+.ai-thinking-timeline{
+  display:none;flex-direction:column;gap:10px;
+  padding:4px 2px 8px 14px;border-left:1px solid var(--border-subtle);
+}
+.ai-thinking-summary.expanded .ai-thinking-timeline{display:flex}
+.ai-thinking-node{position:relative;padding-left:9px}
+.ai-thinking-node::before{
+  content:"";position:absolute;left:-18px;top:7px;width:5px;height:5px;
+  border-radius:50%;background:currentColor;opacity:.72;
+}
+.ai-thinking-node-title{font-weight:500;margin-bottom:2px;color:inherit}
+.ai-thinking-node-body{white-space:pre-wrap;color:inherit;font-weight:400}
+.ai-thinking-summary.streaming.raw .ai-thinking-title,
+.ai-thinking-summary.streaming.gpt .ai-thinking-title,
+.ai-thinking-summary.streaming.gpt .ai-thinking-node.active .ai-thinking-node-title{
+  animation:ai-thinking-pulse 1.6s ease-in-out infinite;
+  will-change:opacity;
+}
+@keyframes ai-thinking-pulse{0%,100%{opacity:.68}50%{opacity:1}}
 .ai-tool-call{
   display:flex;gap:8px;align-items:center;align-self:flex-start;
   padding:8px 10px;border-radius:10px;
@@ -1286,7 +1353,7 @@ button,input,select,textarea{font-family:var(--font)}
 .ai-dot:nth-child(2){animation-delay:0.2s}
 .ai-dot:nth-child(3){animation-delay:0.4s}
 #ai-quick-actions{
-  padding:0 16px 12px;display:flex;flex-direction:column;gap:8px;flex-shrink:0;
+  padding:12px 14px 12px;display:flex;flex-direction:column;gap:8px;flex-shrink:0;
 }
 #ai-page-chip,.ai-qa-btn{
   width:100%;max-width:100%;min-height:38px;border-radius:var(--radius);
@@ -1302,7 +1369,7 @@ button,input,select,textarea{font-family:var(--font)}
 #ai-page-chip:hover,.ai-qa-btn:hover{
   background:var(--bg-hover);border-color:var(--border);color:var(--ai-text);
 }
-/* Chevron rotates 90° when quick-actions are collapsed */
+/* Chevron rotates 90Â° when quick-actions are collapsed */
 #ai-page-chip .ai-chip-chevron{transition:transform .22s ease}
 #ai-quick-actions.qa-collapsed #ai-page-chip .ai-chip-chevron{transform:rotate(-90deg)}
 #ai-quick-actions.qa-collapsed .ai-qa-btn{display:none}
@@ -1321,7 +1388,8 @@ button,input,select,textarea{font-family:var(--font)}
 #ai-sidebar.ai-chatting #ai-input-area{margin-top:0}
 .ai-composer{
   background:var(--ai-panel);border:1px solid var(--border);
-  border-radius:var(--radius-lg);padding:12px;
+  border-radius:var(--radius-lg);padding:8px;
+  display:flex;align-items:flex-end;gap:8px;
   box-shadow:0 12px 28px var(--ai-shadow);
   transition:border-color var(--transition),box-shadow var(--transition);
 }
@@ -1330,10 +1398,11 @@ button,input,select,textarea{font-family:var(--font)}
   box-shadow:0 12px 28px var(--ai-shadow),0 0 0 3px var(--ai-ring);
 }
 #ai-input{
-  width:100%;resize:none;background:transparent;border:none;
-  color:var(--ai-text);padding:2px 4px 12px;font-size:13.5px;
+  flex:1;width:100%;min-width:0;resize:none;background:transparent;border:none;
+  box-sizing:border-box;color:var(--ai-text);padding:8px 0;font-size:13.5px;
   font-family:var(--font);outline:none;line-height:1.5;
-  min-height:52px;max-height:150px;
+  height:36px;min-height:36px;max-height:172px;overflow-y:hidden;
+  scrollbar-width:thin;
 }
 #ai-input::placeholder{color:var(--ai-muted)}
 .ai-composer-actions{display:flex;align-items:center;justify-content:space-between;gap:10px}
@@ -1345,11 +1414,16 @@ button,input,select,textarea{font-family:var(--font)}
   display:flex;align-items:center;gap:8px;transition:background var(--transition),color var(--transition),border-color var(--transition);
 }
 .ai-pill-btn:hover{background:var(--bg-hover);color:var(--ai-text);border-color:var(--border)}
-/* ── Model picker modal ───────────────────────────────────────────────────── */
+.ai-model-select{
+  flex:1;height:38px;justify-content:space-between;color:var(--ai-text);
+  background:var(--bg-card);min-width:0;
+}
+#ai-model-pill{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+/* â”€â”€ Model picker modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 #model-modal{
   /* Constrain to AI sidebar column so the panel never overflows the Chrome clip region */
   position:fixed;top:0;right:0;width:var(--ai-w);height:100%;
-  z-index:9000;display:flex;align-items:flex-end;justify-content:flex-end;
+  z-index:9000;display:flex;align-items:flex-start;justify-content:flex-end;
   background:transparent;pointer-events:none;
   transition:background .18s ease;
 }
@@ -1361,7 +1435,7 @@ button,input,select,textarea{font-family:var(--font)}
   border:1px solid var(--border);border-radius:18px 18px 0 18px;
   box-shadow:var(--modal-shadow);
   display:flex;flex-direction:column;overflow:hidden;
-  margin:0 12px 76px 0;
+  margin:54px 12px 0 0;
   opacity:0;transform:translateY(12px) scale(.97);
   transition:opacity .18s ease,transform .18s ease;pointer-events:none;
 }
@@ -1428,7 +1502,7 @@ button,input,select,textarea{font-family:var(--font)}
 .ai-circle-btn{
   width:34px;height:34px;border-radius:var(--radius);border:1px solid var(--border);
   background:transparent;color:var(--ai-muted);display:flex;align-items:center;justify-content:center;
-  cursor:pointer;transition:background var(--transition),color var(--transition),border-color var(--transition),transform var(--transition);
+  cursor:pointer;flex-shrink:0;transition:background var(--transition),color var(--transition),border-color var(--transition),transform var(--transition);
 }
 .ai-circle-btn:hover{background:var(--bg-hover);color:var(--ai-text);border-color:var(--border)}
 .ai-circle-btn:active{transform:scale(.96)}
@@ -1437,14 +1511,16 @@ button,input,select,textarea{font-family:var(--font)}
   background:#0a84ff;
   color:#fff;border:none;
   display:flex;align-items:center;justify-content:center;
-  cursor:pointer;transition:background var(--transition),transform var(--transition),opacity var(--transition);
+  cursor:pointer;flex-shrink:0;transition:background var(--transition),transform var(--transition),opacity var(--transition);
 }
 #ai-send-btn:hover{background:#1d8fff}
 #ai-send-btn:active{transform:scale(.96)}
 #ai-send-btn:disabled{opacity:0.45;cursor:default;transform:none}
+#ai-send-btn.stop{background:#ff453a}
+#ai-send-btn.stop:hover{background:#ff5a52}
 #ai-clear-btn{display:none}
 
-/* settings overlay — sits in front of the live content WebView */
+/* settings overlay â€” sits in front of the live content WebView */
 #settings-overlay{
   position:fixed;inset:0;
   background:var(--overlay-bg);
@@ -1532,7 +1608,7 @@ button,input,select,textarea{font-family:var(--font)}
 .acct-sep{height:1px;background:var(--modal-border);margin:22px 0}
 .acct-pw summary{font-size:12.5px;font-weight:600;color:var(--text);cursor:pointer;margin-bottom:14px;list-style:none}
 .acct-pw summary::-webkit-details-marker{display:none}
-.acct-pw summary::before{content:'▸';display:inline-block;margin-right:7px;color:var(--text-muted);transition:transform .12s ease}
+.acct-pw summary::before{content:'â–¸';display:inline-block;margin-right:7px;color:var(--text-muted);transition:transform .12s ease}
 .acct-pw[open] summary::before{transform:rotate(90deg)}
 .acct-signout{padding:9px 18px;font-size:12.5px;font-weight:600;color:#ff6b6b;background:transparent;border:1px solid rgba(255,107,107,.35);border-radius:9px;cursor:pointer;font-family:var(--font);transition:background .12s ease}
 .acct-signout:hover{background:rgba(255,107,107,.1)}
@@ -1654,7 +1730,7 @@ button,input,select,textarea{font-family:var(--font)}
 }
 .theme-card .theme-name{font-size:12px;font-weight:500;color:var(--text)}
 
-/* onboarding ─────────────────────────────────────────────────────────────── */
+/* onboarding â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 #onboarding-overlay{
   position:fixed;inset:0;background:rgba(0,0,0,0.72);
   -webkit-backdrop-filter:blur(20px) saturate(160%);
@@ -1971,7 +2047,7 @@ button,input,select,textarea{font-family:var(--font)}
 @media(max-width:820px){.newtab-feed-main{grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:170px}.news-card.featured,.news-card.wide{grid-column:span 2}.newtab-shortcuts{grid-template-columns:repeat(4,minmax(72px,1fr))}}
 @media(max-width:720px){#newtab-placeholder{padding:18px 14px 26px}.newtab-top{align-items:flex-start}.newtab-date{display:none}.newtab-hero{padding-top:clamp(16px,6vh,44px)}.newtab-greeting{font-size:14px}.newtab-shortcuts{grid-template-columns:repeat(3,minmax(64px,1fr))}.newtab-feed-main{grid-template-columns:1fr;grid-auto-rows:250px}.news-card.featured,.news-card.wide{grid-column:span 1}.news-card.tall,.news-card.featured{grid-row:span 1}.newtab-feed{gap:14px}}
 
-/* ── Newtab clock ─────────────────────────────────────────── */
+/* â”€â”€ Newtab clock â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 #newtab-clock{
   font-family:'Segoe UI Variable Display','SF Pro Display',-apple-system,BlinkMacSystemFont,var(--font);
   font-size:clamp(72px,8vw,128px);font-weight:200;letter-spacing:-0.07em;line-height:.9;
@@ -2000,7 +2076,7 @@ button,input,select,textarea{font-family:var(--font)}
 #newtab-placeholder.nt-theme-minimal .newtab-shortcut{background:transparent!important;border:none!important;box-shadow:none!important}
 #newtab-placeholder.nt-theme-minimal .newtab-shortcut:hover{background:var(--nt-shortcut-hover-bg)!important;transform:translateY(-1px)}
 #newtab-placeholder.nt-theme-minimal .newtab-shortcut-label{color:var(--nt-hero-text)}
-/* ── Newtab theme: FOCUS (wallpaper, centered, huge clock) ── */
+/* â”€â”€ Newtab theme: FOCUS (wallpaper, centered, huge clock) â”€â”€ */
 #newtab-placeholder.nt-theme-focus .newtab-shell{justify-content:center;gap:18px}
 #newtab-placeholder.nt-theme-focus .newtab-top{display:none}
 #newtab-placeholder.nt-theme-focus .newtab-feed{display:none!important}
@@ -2010,7 +2086,7 @@ button,input,select,textarea{font-family:var(--font)}
 #newtab-placeholder.nt-theme-focus .newtab-greeting{font-size:16px;font-weight:400;opacity:1}
 #newtab-placeholder.nt-theme-focus .newtab-search-wrap{width:min(580px,100%)}
 #newtab-placeholder.nt-theme-focus .newtab-shortcuts{width:min(580px,100%)}
-/* ── Newtab theme: HORIZON (wallpaper, top bar, no feed) ──── */
+/* â”€â”€ Newtab theme: HORIZON (wallpaper, top bar, no feed) â”€â”€â”€â”€ */
 #newtab-placeholder.nt-theme-horizon .newtab-feed{display:none!important}
 [data-theme="light"] #newtab-placeholder:not(.nt-hide-background){
   --nt-scrim:linear-gradient(rgba(8,10,18,0.16),rgba(8,10,18,0.22));
@@ -2020,7 +2096,7 @@ button,input,select,textarea{font-family:var(--font)}
   --nt-scrim:linear-gradient(transparent,transparent);
   --nt-vignette:linear-gradient(transparent,transparent);
 }
-/* ── Light mode: opaque search bar over dark wallpapers ──── */
+/* â”€â”€ Light mode: opaque search bar over dark wallpapers â”€â”€â”€â”€ */
 [data-theme="light"] #newtab-placeholder .newtab-search{
   background:rgba(255,255,255,0.92);backdrop-filter:none;
   box-shadow:0 4px 24px rgba(30,40,100,0.12),0 0 0 1px rgba(0,0,0,0.06);
@@ -2039,9 +2115,9 @@ button,input,select,textarea{font-family:var(--font)}
   border-radius:26px 26px 0 0;
   box-shadow:none;
 }
-/* ── Newtab theme: INFORMATIVE is the default (no overrides) */
+/* â”€â”€ Newtab theme: INFORMATIVE is the default (no overrides) */
 
-/* ── Wallpaper settings panel ─────────────────────────────── */
+/* â”€â”€ Wallpaper settings panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .nt-theme-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:4px}
 .nt-theme-card{display:flex;flex-direction:column;align-items:center;gap:7px;border:2px solid var(--border);border-radius:12px;padding:8px 6px 10px;background:var(--bg-elevated);cursor:pointer;transition:border-color var(--transition),background var(--transition);width:100%}
 .nt-theme-card:hover{border-color:var(--accent-hover);background:var(--bg-hover)}
@@ -2204,9 +2280,9 @@ button,input,select,textarea{font-family:var(--font)}
 .find-btn:hover{background:var(--bg-hover);color:var(--text)}
 .find-btn:disabled{opacity:.35;cursor:default}
 
-/* download badge lives on #btn-more — see #more-btn-badge CSS above */
+/* download badge lives on #btn-more â€” see #more-btn-badge CSS above */
 
-/* ── Download panel ─────────────────────────────────────────────────────────── */
+/* â”€â”€ Download panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 #download-panel{
   position:fixed;display:none;flex-direction:column;
   width:348px;max-height:500px;overflow:hidden;
@@ -2360,7 +2436,7 @@ button,input,select,textarea{font-family:var(--font)}
 }
 .dl-panel-foot a:hover{color:var(--accent)}
 
-/* ── Adblock modal ──────────────────────────────────────────────────────────── */
+/* â”€â”€ Adblock modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 #adblock-backdrop{
   display:none;position:fixed;inset:0;z-index:9998;background:transparent;
 }
@@ -2781,7 +2857,7 @@ button,input,select,textarea{font-family:var(--font)}
 .dl-action-btn:hover{background:var(--bg-active);color:var(--text)}
 .dl-action-btn.danger:hover{background:rgba(239,68,68,0.12);color:#f87171}
 
-/* ── About section ─────────────────────────────────────────────────────────── */
+/* â”€â”€ About section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .about-identity-card{
   display:flex;align-items:center;gap:18px;
   padding:20px 20px 18px;
@@ -2945,7 +3021,7 @@ button,input,select,textarea{font-family:var(--font)}
 /* while sidebar is floating open the left strip passes events through */
 #app.sidebar-auto-hide.sidebar-floating-open #sidebar-float-trigger{pointer-events:none}
 
-/* pill indicator inside left frame — only shown in auto-hide mode */
+/* pill indicator inside left frame â€” only shown in auto-hide mode */
 #sidebar-pill{
   position:absolute;
   left:0;top:50%;
@@ -2972,14 +3048,14 @@ button,input,select,textarea{font-family:var(--font)}
 }
 /* hide pill while sidebar is showing */
 #app.sidebar-auto-hide.sidebar-floating-open #sidebar-pill{opacity:0;pointer-events:none}
-/* transparent backdrop — catches clicks outside to close, no visual dim */
+/* transparent backdrop â€” catches clicks outside to close, no visual dim */
 #sidebar-float-backdrop{
   display:none;position:fixed;
   top:var(--top-chrome-h);left:0;right:0;bottom:0;
   z-index:148;background:transparent;
 }
 #app.sidebar-auto-hide.sidebar-floating-open #sidebar-float-backdrop{display:block}
-/* pinned: sidebar is solid — remove float shadow, hide backdrop, add border */
+/* pinned: sidebar is solid â€” remove float shadow, hide backdrop, add border */
 #app.sidebar-auto-hide.sidebar-pinned #sidebar{
   box-shadow:none;
   border-right:1px solid var(--border);
@@ -3198,7 +3274,7 @@ svg{display:block;flex-shrink:0}
     <span class="more-item-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><polyline points="9 3 9 9 3 9"/></svg></span>
     <span class="more-item-label">New Window</span>
   </button>
-  <button class="more-item" onclick="closeMoreMenu();send('NewWorkspace',{name:'Incognito',is_incognito:true,icon:'🔐',accent_color:'#6b7280'})" role="menuitem">
+  <button class="more-item" onclick="closeMoreMenu();send('NewWorkspace',{name:'Incognito',is_incognito:true,icon:'ðŸ”',accent_color:'#6b7280'})" role="menuitem">
     <span class="more-item-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="2" y1="2" x2="22" y2="22"/></svg></span>
     <span class="more-item-label">New Incognito Tab</span>
   </button>
@@ -3232,7 +3308,7 @@ svg{display:block;flex-shrink:0}
   <div class="more-zoom-row">
     <span class="more-zoom-label">Zoom</span>
     <div class="more-zoom-controls">
-      <button class="more-zoom-btn" onclick="zoomOut();updateMoreMenuZoom()" title="Zoom out">−</button>
+      <button class="more-zoom-btn" onclick="zoomOut();updateMoreMenuZoom()" title="Zoom out">âˆ’</button>
       <span id="more-zoom-pct" onclick="zoomReset();updateMoreMenuZoom()" title="Reset zoom">100%</span>
       <button class="more-zoom-btn" onclick="zoomIn();updateMoreMenuZoom()" title="Zoom in">+</button>
     </div>
@@ -3303,7 +3379,7 @@ svg{display:block;flex-shrink:0}
     </button>
   </div>
 
-  <!-- Tab pages viewport — clips animated slide -->
+  <!-- Tab pages viewport â€” clips animated slide -->
   <div class="sb-viewport">
     <div class="sb-page" id="sb-page">
       <!-- populated by renderTabs() -->
@@ -3362,9 +3438,9 @@ svg{display:block;flex-shrink:0}
       <div class="workspace-field" id="ws-icon-field">
         <label>Icon</label>
         <div class="ws-emoji-row">
-          <div class="ws-emoji-preview" id="ws-emoji-preview">📁</div>
+          <div class="ws-emoji-preview" id="ws-emoji-preview">ðŸ“</div>
           <div class="ws-emoji-grid">
-            <button type="button" class="ws-emoji-opt" data-emoji="🌐" onclick="selectWsEmoji(this,'🌐')">🌐</button><button type="button" class="ws-emoji-opt" data-emoji="💼" onclick="selectWsEmoji(this,'💼')">💼</button><button type="button" class="ws-emoji-opt" data-emoji="🏠" onclick="selectWsEmoji(this,'🏠')">🏠</button><button type="button" class="ws-emoji-opt" data-emoji="🔬" onclick="selectWsEmoji(this,'🔬')">🔬</button><button type="button" class="ws-emoji-opt" data-emoji="💬" onclick="selectWsEmoji(this,'💬')">💬</button><button type="button" class="ws-emoji-opt" data-emoji="🛍️" onclick="selectWsEmoji(this,'🛍️')">🛍️</button><button type="button" class="ws-emoji-opt" data-emoji="📰" onclick="selectWsEmoji(this,'📰')">📰</button><button type="button" class="ws-emoji-opt" data-emoji="💻" onclick="selectWsEmoji(this,'💻')">💻</button><button type="button" class="ws-emoji-opt" data-emoji="🎵" onclick="selectWsEmoji(this,'🎵')">🎵</button><button type="button" class="ws-emoji-opt" data-emoji="🎬" onclick="selectWsEmoji(this,'🎬')">🎬</button><button type="button" class="ws-emoji-opt selected" data-emoji="📁" onclick="selectWsEmoji(this,'📁')">📁</button><button type="button" class="ws-emoji-opt" data-emoji="🎨" onclick="selectWsEmoji(this,'🎨')">🎨</button><button type="button" class="ws-emoji-opt" data-emoji="🚀" onclick="selectWsEmoji(this,'🚀')">🚀</button><button type="button" class="ws-emoji-opt" data-emoji="❤️" onclick="selectWsEmoji(this,'❤️')">❤️</button><button type="button" class="ws-emoji-opt" data-emoji="⭐" onclick="selectWsEmoji(this,'⭐')">⭐</button><button type="button" class="ws-emoji-opt" data-emoji="🔥" onclick="selectWsEmoji(this,'🔥')">🔥</button><button type="button" class="ws-emoji-opt" data-emoji="💡" onclick="selectWsEmoji(this,'💡')">💡</button><button type="button" class="ws-emoji-opt" data-emoji="🏆" onclick="selectWsEmoji(this,'🏆')">🏆</button><button type="button" class="ws-emoji-opt" data-emoji="🎯" onclick="selectWsEmoji(this,'🎯')">🎯</button><button type="button" class="ws-emoji-opt" data-emoji="📚" onclick="selectWsEmoji(this,'📚')">📚</button><button type="button" class="ws-emoji-opt" data-emoji="🌟" onclick="selectWsEmoji(this,'🌟')">🌟</button><button type="button" class="ws-emoji-opt" data-emoji="🍕" onclick="selectWsEmoji(this,'🍕')">🍕</button><button type="button" class="ws-emoji-opt" data-emoji="🎮" onclick="selectWsEmoji(this,'🎮')">🎮</button><button type="button" class="ws-emoji-opt" data-emoji="🌈" onclick="selectWsEmoji(this,'🌈')">🌈</button><button type="button" class="ws-emoji-opt" data-emoji="🦋" onclick="selectWsEmoji(this,'🦋')">🦋</button><button type="button" class="ws-emoji-opt" data-emoji="🌸" onclick="selectWsEmoji(this,'🌸')">🌸</button><button type="button" class="ws-emoji-opt" data-emoji="🎸" onclick="selectWsEmoji(this,'🎸')">🎸</button><button type="button" class="ws-emoji-opt" data-emoji="🌙" onclick="selectWsEmoji(this,'🌙')">🌙</button><button type="button" class="ws-emoji-opt" data-emoji="☀️" onclick="selectWsEmoji(this,'☀️')">☀️</button><button type="button" class="ws-emoji-opt" data-emoji="🌊" onclick="selectWsEmoji(this,'🌊')">🌊</button><button type="button" class="ws-emoji-opt" data-emoji="🧩" onclick="selectWsEmoji(this,'🧩')">🧩</button><button type="button" class="ws-emoji-opt" data-emoji="🔐" onclick="selectWsEmoji(this,'🔐')">🔐</button><button type="button" class="ws-emoji-opt" data-emoji="📊" onclick="selectWsEmoji(this,'📊')">📊</button><button type="button" class="ws-emoji-opt" data-emoji="🎭" onclick="selectWsEmoji(this,'🎭')">🎭</button><button type="button" class="ws-emoji-opt" data-emoji="🏖️" onclick="selectWsEmoji(this,'🏖️')">🏖️</button><button type="button" class="ws-emoji-opt" data-emoji="🚗" onclick="selectWsEmoji(this,'🚗')">🚗</button><button type="button" class="ws-emoji-opt" data-emoji="✈️" onclick="selectWsEmoji(this,'✈️')">✈️</button><button type="button" class="ws-emoji-opt" data-emoji="🎓" onclick="selectWsEmoji(this,'🎓')">🎓</button><button type="button" class="ws-emoji-opt" data-emoji="💎" onclick="selectWsEmoji(this,'💎')">💎</button><button type="button" class="ws-emoji-opt" data-emoji="🎪" onclick="selectWsEmoji(this,'🎪')">🎪</button>
+            <button type="button" class="ws-emoji-opt" data-emoji="ðŸŒ" onclick="selectWsEmoji(this,'ðŸŒ')">ðŸŒ</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸ’¼" onclick="selectWsEmoji(this,'ðŸ’¼')">ðŸ’¼</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸ " onclick="selectWsEmoji(this,'ðŸ ')">ðŸ </button><button type="button" class="ws-emoji-opt" data-emoji="ðŸ”¬" onclick="selectWsEmoji(this,'ðŸ”¬')">ðŸ”¬</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸ’¬" onclick="selectWsEmoji(this,'ðŸ’¬')">ðŸ’¬</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸ›ï¸" onclick="selectWsEmoji(this,'ðŸ›ï¸')">ðŸ›ï¸</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸ“°" onclick="selectWsEmoji(this,'ðŸ“°')">ðŸ“°</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸ’»" onclick="selectWsEmoji(this,'ðŸ’»')">ðŸ’»</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸŽµ" onclick="selectWsEmoji(this,'ðŸŽµ')">ðŸŽµ</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸŽ¬" onclick="selectWsEmoji(this,'ðŸŽ¬')">ðŸŽ¬</button><button type="button" class="ws-emoji-opt selected" data-emoji="ðŸ“" onclick="selectWsEmoji(this,'ðŸ“')">ðŸ“</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸŽ¨" onclick="selectWsEmoji(this,'ðŸŽ¨')">ðŸŽ¨</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸš€" onclick="selectWsEmoji(this,'ðŸš€')">ðŸš€</button><button type="button" class="ws-emoji-opt" data-emoji="â¤ï¸" onclick="selectWsEmoji(this,'â¤ï¸')">â¤ï¸</button><button type="button" class="ws-emoji-opt" data-emoji="â­" onclick="selectWsEmoji(this,'â­')">â­</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸ”¥" onclick="selectWsEmoji(this,'ðŸ”¥')">ðŸ”¥</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸ’¡" onclick="selectWsEmoji(this,'ðŸ’¡')">ðŸ’¡</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸ†" onclick="selectWsEmoji(this,'ðŸ†')">ðŸ†</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸŽ¯" onclick="selectWsEmoji(this,'ðŸŽ¯')">ðŸŽ¯</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸ“š" onclick="selectWsEmoji(this,'ðŸ“š')">ðŸ“š</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸŒŸ" onclick="selectWsEmoji(this,'ðŸŒŸ')">ðŸŒŸ</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸ•" onclick="selectWsEmoji(this,'ðŸ•')">ðŸ•</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸŽ®" onclick="selectWsEmoji(this,'ðŸŽ®')">ðŸŽ®</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸŒˆ" onclick="selectWsEmoji(this,'ðŸŒˆ')">ðŸŒˆ</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸ¦‹" onclick="selectWsEmoji(this,'ðŸ¦‹')">ðŸ¦‹</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸŒ¸" onclick="selectWsEmoji(this,'ðŸŒ¸')">ðŸŒ¸</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸŽ¸" onclick="selectWsEmoji(this,'ðŸŽ¸')">ðŸŽ¸</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸŒ™" onclick="selectWsEmoji(this,'ðŸŒ™')">ðŸŒ™</button><button type="button" class="ws-emoji-opt" data-emoji="â˜€ï¸" onclick="selectWsEmoji(this,'â˜€ï¸')">â˜€ï¸</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸŒŠ" onclick="selectWsEmoji(this,'ðŸŒŠ')">ðŸŒŠ</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸ§©" onclick="selectWsEmoji(this,'ðŸ§©')">ðŸ§©</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸ”" onclick="selectWsEmoji(this,'ðŸ”')">ðŸ”</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸ“Š" onclick="selectWsEmoji(this,'ðŸ“Š')">ðŸ“Š</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸŽ­" onclick="selectWsEmoji(this,'ðŸŽ­')">ðŸŽ­</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸ–ï¸" onclick="selectWsEmoji(this,'ðŸ–ï¸')">ðŸ–ï¸</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸš—" onclick="selectWsEmoji(this,'ðŸš—')">ðŸš—</button><button type="button" class="ws-emoji-opt" data-emoji="âœˆï¸" onclick="selectWsEmoji(this,'âœˆï¸')">âœˆï¸</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸŽ“" onclick="selectWsEmoji(this,'ðŸŽ“')">ðŸŽ“</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸ’Ž" onclick="selectWsEmoji(this,'ðŸ’Ž')">ðŸ’Ž</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸŽª" onclick="selectWsEmoji(this,'ðŸŽª')">ðŸŽª</button>
           </div>
         </div>
       </div>
@@ -3502,29 +3578,17 @@ svg{display:block;flex-shrink:0}
 <div id="ai-sidebar">
   <div id="ai-header">
     <div class="ai-top-left">
-      <button class="ai-icon-btn" onclick="aiClear()" title="New chat">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
-      </button>
-      <button class="ai-icon-btn" onclick="openSettings('ai')" title="AI settings">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+      <button class="ai-pill-btn ai-model-select" onclick="openModelModal(event)" title="Change model">
+        <span id="ai-model-pill">Smart</span>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
       </button>
     </div>
     <div class="ai-top-right">
-      <div class="ai-provider-dd" id="ai-provider-dd">
-        <button class="ai-provider-dd-btn" onclick="toggleProviderDd(event)">
-          <span id="ai-provider-dd-label">Anthropic</span>
-          <svg class="ai-provider-dd-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-        </button>
-        <div class="ai-provider-dd-menu" id="ai-provider-dd-menu">
-          <div class="ai-provider-dd-item" data-provider="anthropic" onclick="selectProviderDd('anthropic')"><div class="ai-provider-dd-item-dot"></div>Anthropic</div>
-          <div class="ai-provider-dd-item" data-provider="openai" onclick="selectProviderDd('openai')"><div class="ai-provider-dd-item-dot"></div>OpenAI</div>
-          <div class="ai-provider-dd-item" data-provider="gemini" onclick="selectProviderDd('gemini')"><div class="ai-provider-dd-item-dot"></div>Gemini</div>
-          <div class="ai-provider-dd-item" data-provider="openrouter" onclick="selectProviderDd('openrouter')"><div class="ai-provider-dd-item-dot"></div>OpenRouter</div>
-          <div class="ai-provider-dd-item" data-provider="ollama" onclick="selectProviderDd('ollama')"><div class="ai-provider-dd-item-dot"></div>Ollama</div>
-        </div>
-      </div>
-      <button class="ai-icon-btn" onclick="toggleAi()" title="Close AI">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      <button class="ai-icon-btn" onclick="toast('Chat history is not available yet')" title="Chat history">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v6h6"/><path d="M12 7v5l3 2"/></svg>
+      </button>
+      <button class="ai-icon-btn" onclick="aiClear()" title="New chat">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
       </button>
     </div>
   </div>
@@ -3555,24 +3619,13 @@ svg{display:block;flex-shrink:0}
   </div>
   <div id="ai-input-area">
     <div class="ai-composer">
-      <textarea id="ai-input" placeholder="Ask about this page" rows="2" onkeydown="handleAiKey(event)"></textarea>
-      <div class="ai-composer-actions">
-        <div class="ai-composer-left">
-          <button class="ai-circle-btn" onclick="openSettings('ai')" title="Add or manage API keys">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
-          </button>
-          <button class="ai-pill-btn" onclick="openModelModal(event)" title="Change model">
-            <span id="ai-model-pill">Smart</span>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-          </button>
-        </div>
-        <div class="ai-composer-right">
-          <button id="ai-clear-btn" onclick="aiClear()">Clear chat</button>
-          <button id="ai-send-btn" onclick="sendAiMessage()" title="Send">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
-          </button>
-        </div>
-      </div>
+      <button class="ai-circle-btn" onclick="toast('Media attachments are not available yet')" title="Add media">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+      </button>
+      <textarea id="ai-input" placeholder="Ask about this page" rows="1" oninput="autoGrowAiInput()" onkeydown="handleAiKey(event)"></textarea>
+      <button id="ai-send-btn" onclick="handleAiPrimaryButton()" title="Send">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
+      </button>
     </div>
   </div>
 </div>
@@ -3949,33 +4002,46 @@ svg{display:block;flex-shrink:0}
 
       <div class="settings-section" id="section-ai">
         <h2>AI Providers</h2>
-        <p class="subtitle">Connect your AI accounts to use the sidebar assistant</p>
+        <p class="subtitle">Connect a compatible provider to use the sidebar assistant</p>
         <div class="settings-group">
-          <label>Anthropic (Claude)</label>
-          <input class="settings-input" id="set-anthropic-key" type="password" placeholder="sk-ant-...">
-          <div class="hint">Get a key at console.anthropic.com</div>
-        </div>
-        <div class="settings-group">
-          <label>OpenAI</label>
+          <label>OpenAI Compatible</label>
           <input class="settings-input" id="set-openai-key" type="password" placeholder="sk-...">
-          <div class="hint">Get a key at platform.openai.com</div>
+          <input class="settings-input" id="set-openai-base-url" placeholder="https://api.openai.com/v1" style="margin-top:8px">
+          <div class="hint">Use OpenAI or any endpoint that follows the OpenAI API shape.</div>
+        </div>
+        <div class="settings-toggle">
+          <div class="settings-toggle-info">
+            <div class="toggle-title">Use OpenAI Responses API</div>
+            <div class="toggle-desc">Send OpenAI-compatible requests to /responses instead of /chat/completions when no browser tools are attached.</div>
+          </div>
+          <div class="toggle-switch" id="toggle-openai-use-responses-api" onclick="toggleSetting('openai_use_responses_api')"></div>
         </div>
         <div class="settings-group">
-          <label>Gemini</label>
+          <label>Reasoning effort</label>
+          <select class="settings-select" id="set-reasoning-effort" onchange="saveSetting('reasoning_effort',this.value)">
+            <option value="default">Default</option>
+            <option value="none">None</option>
+            <option value="minimal">Minimal</option>
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+            <option value="xhigh">X-High</option>
+          </select>
+          <div class="hint">Used by OpenAI-compatible reasoning models when Responses API is enabled.</div>
+        </div>
+        <div class="settings-group">
+          <label>Anthropic Compatible</label>
+          <input class="settings-input" id="set-anthropic-key" type="password" placeholder="sk-ant-...">
+          <input class="settings-input" id="set-anthropic-base-url" placeholder="https://api.anthropic.com/v1" style="margin-top:8px">
+          <div class="hint">Use Anthropic or a Claude-compatible Messages API endpoint.</div>
+        </div>
+        <div class="settings-group">
+          <label>Gemini Compatible</label>
           <input class="settings-input" id="set-gemini-key" type="password" placeholder="AIza...">
-          <div class="hint">Get a key at aistudio.google.com</div>
+          <input class="settings-input" id="set-gemini-base-url" placeholder="https://generativelanguage.googleapis.com/v1beta" style="margin-top:8px">
+          <div class="hint">Use Gemini or a compatible generateContent endpoint.</div>
         </div>
-        <div class="settings-group">
-          <label>OpenRouter</label>
-          <input class="settings-input" id="set-openrouter-key" type="password" placeholder="sk-or-...">
-          <div class="hint">Access hundreds of models at openrouter.ai</div>
-        </div>
-        <div class="settings-group">
-          <label>Ollama (local)</label>
-          <input class="settings-input" id="set-ollama-url" placeholder="http://localhost:11434">
-          <div class="hint">Run open-source models locally with Ollama</div>
-        </div>
-        <button class="ob-btn-primary" onclick="saveAiSettings()">Save API Keys</button>
+        <button class="ob-btn-primary" onclick="saveAiSettings()">Save AI Settings</button>
       </div>
 
       <div class="settings-section" id="section-privacy">
@@ -4167,7 +4233,7 @@ svg{display:block;flex-shrink:0}
               Ventus
               <span class="about-identity-ver">v__APP_VERSION__</span>
             </div>
-            <div class="about-identity-tagline">Fast search · Focused workspaces · AI-native</div>
+            <div class="about-identity-tagline">Fast search Â· Focused workspaces Â· AI-native</div>
             <div class="about-identity-badges">
               <span class="aib aib-live"><span class="aib-live-dot"></span>Stable</span>
               <span class="aib">Windows</span>
@@ -4189,7 +4255,7 @@ svg{display:block;flex-shrink:0}
           </div>
           <div class="about-row">
             <span class="about-row-label">Data storage</span>
-            <span class="about-row-val">Local · %APPDATA%\ventus</span>
+            <span class="about-row-val">Local Â· %APPDATA%\ventus</span>
           </div>
           <div class="about-row">
             <span class="about-row-label">Source</span>
@@ -4324,20 +4390,16 @@ svg{display:block;flex-shrink:0}
         <h2 class="ob-title">Connect an AI</h2>
         <p class="ob-sub">Paste an API key to unlock the AI sidebar. Optional, you can do this later in Settings.</p>
         <div class="ob-api-row">
-          <label>Anthropic (Claude)</label>
+          <label>Anthropic Compatible</label>
           <input class="ob-api-input" id="ob-anthropic-key" type="password" placeholder="sk-ant-...">
         </div>
         <div class="ob-api-row">
-          <label>OpenAI</label>
+          <label>OpenAI Compatible</label>
           <input class="ob-api-input" id="ob-openai-key" type="password" placeholder="sk-...">
         </div>
         <div class="ob-api-row">
-          <label>Gemini</label>
+          <label>Gemini Compatible</label>
           <input class="ob-api-input" id="ob-gemini-key" type="password" placeholder="AIza...">
-        </div>
-        <div class="ob-api-row">
-          <label>OpenRouter</label>
-          <input class="ob-api-input" id="ob-openrouter-key" type="password" placeholder="sk-or-...">
         </div>
         <div class="ob-actions">
           <button class="ob-btn-secondary" onclick="obPrev()">Back</button>
@@ -4403,7 +4465,7 @@ svg{display:block;flex-shrink:0}
   </div>
 </div>
 
-<!-- Window edge resize handles — transparent hit zones, trigger native Win32 resize.
+<!-- Window edge resize handles â€” transparent hit zones, trigger native Win32 resize.
      LEFT edge is intentionally omitted: it conflicts with #sidebar-float-trigger.
      Left/bottom/right are handled by the content WebView initialization script instead.
      Chrome handles only the right edge (when AI panel is open) and top corners
@@ -4421,7 +4483,7 @@ svg{display:block;flex-shrink:0}
     <div id="tsp-input-wrap">
       <svg class="tsp-ico" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
       <input id="tsp-input" type="text" placeholder="Search or go to a website..." autocomplete="off" spellcheck="false" oninput="handleTspInput(event)" onkeydown="tspKeydown(event)">
-      <div id="tsp-ai-hint">Tab → AI</div>
+      <div id="tsp-ai-hint">Tab â†’ AI</div>
     </div>
     <div id="tsp-results"></div>
     <div id="tsp-ai-panel">
@@ -4507,7 +4569,7 @@ let state = {
   search_engines: [],
   settings: {},
   ai_key_status: {},
-  ai_provider: 'anthropic',
+  ai_provider: 'openai',
   ai_model: '',
   is_bookmarked: false,
 };
@@ -4520,6 +4582,14 @@ let obRegion = '';
 let obDirection = 1;
 let aiStreaming = false;
 let currentStreamEl = null;
+let currentThinkingEl = null;
+let aiStreamRawText = '';
+let aiThinkingFrozen = false;
+let aiStreamStopped = false;
+let aiThinkingStartedAt = 0;
+let aiThinkingWorkedApplied = false;
+let _thinkThrottleTimer = null;
+let _lastThinkingHtml = '';
 let loadProgress = 0;
 let loadProgressTimer = null;
 let activeSuggestionTarget = null;
@@ -4533,7 +4603,7 @@ let findIndex = 0;
 let findTimer = 0;
 let findLastTabId = null;
 let findLastUrl = '';
-let selectedWsEmoji = '📁';
+let selectedWsEmoji = 'ðŸ“';
 let selectedWsColor = '#8b5cf6';
 let wsColorManual = false;
 let activeSuggestions = [];
@@ -4618,43 +4688,43 @@ window.__neura = {
   showPermissionPrompt(id, origin, key) { showPermissionPrompt(id, origin, key); },
   reportSent(ok) { reportSent(!!ok); },
   appendAiChunk(text, done) {
-    if (done && !text && !currentStreamEl) {
+    if (aiStreamStopped) {
+      if (done) finishAiBusy();
+      return;
+    }
+    if (done && !text && !currentStreamEl && !currentThinkingEl && !aiStreamRawText) {
       finishAiBusy();
       return;
     }
-    if (!currentStreamEl) {
-      const msgs = document.getElementById('ai-messages');
-      currentStreamEl = document.createElement('div');
-      currentStreamEl.className = 'ai-msg assistant';
-      currentStreamEl._rawText = '';
-      // remove thinking dots if present
-      const thinking = msgs.querySelector('.ai-thinking');
-      if (thinking) thinking.remove();
-      msgs.appendChild(currentStreamEl);
+    aiStreamRawText += text || '';
+    const parsed = parseAiResponseStream(aiStreamRawText);
+    const finalStarted = !!parsed.final.trim();
+    if (parsed.thinking.trim() || finalStarted || text) removeAiThinkingDots();
+    if (finalStarted || done) removeAiToolStatuses();
+    if (parsed.thinking.trim() && !aiThinkingFrozen) {
+      scheduleThinkingRender(parsed.thinking, !finalStarted && !done, finalStarted || done);
     }
-    currentStreamEl._rawText += text;
-    currentStreamEl.innerHTML = renderAiMarkdown(currentStreamEl._rawText);
+    if (finalStarted) {
+      freezeAiThinkingSummary();
+      renderAiFinalAnswer(parsed.final);
+    }
     scrollAiToBottom();
     if (done) {
+      flushThinkingRender();
+      freezeAiThinkingSummary();
       currentStreamEl = null;
+      currentThinkingEl = null;
+      aiStreamRawText = '';
+      aiThinkingFrozen = false;
       finishAiBusy();
     }
   },
   appendAiToolCall(label) {
-    const msgs = document.getElementById('ai-messages');
-    // Remove old thinking dots so tool call appears in their place
-    const thinking = msgs.querySelector('.ai-thinking');
-    if (thinking) thinking.remove();
-    const el = document.createElement('div');
-    el.className = 'ai-tool-call';
-    el.innerHTML = '<span class="ai-tool-icon" aria-hidden="true"></span><span class="ai-tool-label"></span>';
-    el.querySelector('.ai-tool-label').textContent = label;
-    msgs.appendChild(el);
-    // Re-add thinking dots after the tool call bubble so user knows AI is still working
-    showAiThinking();
-    scrollAiToBottom();
+    removeAiThinkingDots();
+    removeAiToolStatuses();
+    appendAiActivity(label || 'Using browser tool', 'Running browser activity.');
   },
-  showError(msg) { toast(msg, 'error'); finishAiBusy(); },
+  showError(msg) { removeAiToolStatuses(); freezeAiThinkingSummary(); toast(msg, 'error'); finishAiBusy(); },
   showSuccess(msg) { toast(msg, 'success'); },
   showSavePassword(origin, username, isUpdate) { showSavePasswordBanner(origin, username, isUpdate); },
   hideSavePassword() { hideSavePasswordBanner(); },
@@ -4801,7 +4871,7 @@ window.__neura = {
   },
   closeSidebar() {
     // Called by Rust when content WebView detects cursor in the content area.
-    // Respects sidebarPinned — only closes hover-triggered (unpinned) sidebar.
+    // Respects sidebarPinned â€” only closes hover-triggered (unpinned) sidebar.
     scheduledHide();
   },
   openSidebar() {
@@ -5050,7 +5120,7 @@ function renderAdBlockExceptions(exceptions) {
   list.innerHTML = exceptions.map(host => `
     <div style="display:flex;align-items:center;justify-content:space-between;padding:3px 0">
       <span style="font-size:12px;color:var(--text)">${host}</span>
-      <button onclick="removeAdBlockException('${host}')" style="background:none;border:none;color:var(--text-muted);cursor:pointer;padding:2px 4px;font-size:11px;border-radius:3px" title="Remove exception">✕</button>
+      <button onclick="removeAdBlockException('${host}')" style="background:none;border:none;color:var(--text-muted);cursor:pointer;padding:2px 4px;font-size:11px;border-radius:3px" title="Remove exception">âœ•</button>
     </div>`).join('');
 }
 
@@ -5078,7 +5148,7 @@ function renderWorkspaces() {
   const multi = wsList.length > 1;
   setSidebarGlow(wsList.find(w => w.id === activeId));
 
-  // Workspace page dots — always shown, with hover popover
+  // Workspace page dots â€” always shown, with hover popover
   const dotsEl = document.getElementById('sb-ws-dots');
   if (dotsEl) {
     dotsEl.classList.toggle('scrollable', wsList.length > 4);
@@ -5235,7 +5305,7 @@ function renderTabs() {
       ? `<button class="tab-audio-btn" onclick="muteTab(event,'${tab.id}')" title="${audioTitle}">${audioSvg}</button>`
       : '';
     const sleepIcon = tab.sleeping
-      ? `<svg class="tab-sleep-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" title="Tab is sleeping — click to wake"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`
+      ? `<svg class="tab-sleep-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" title="Tab is sleeping â€” click to wake"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`
       : '';
     return `<div class="tab-item ${active} ${loading} ${pinned} ${audioPlaying} ${tabMuted} ${sleeping}" draggable="true" data-reorder-id="${escAttr(tab.id)}" data-nav-url="${escAttr(tab.url)}" onclick="switchTab('${tab.id}')" oncontextmenu="tabContextMenu(event,'${tab.id}')">
       ${faviconEl}
@@ -5437,7 +5507,7 @@ function normalizeNewsArticle(article) {
 }
 
 function renderNewsCard(article, index) {
-  const meta = [article.source, article.time ? formatRelativeTime(article.time) : 'Neura Feed'].filter(Boolean).join(' · ');
+  const meta = [article.source, article.time ? formatRelativeTime(article.time) : 'Neura Feed'].filter(Boolean).join(' Â· ');
   const img = article.image ? `<img src="${escAttr(article.image)}" alt="" onerror="this.closest('.news-card').classList.add('no-image');this.remove()">` : '';
   const cls = newsCardClass(index, article.image);
   return `<button class="news-card ${cls}" data-news-url="${escAttr(article.url)}">
@@ -5770,7 +5840,7 @@ function clearToolbarDropMarks() {
 // ============================================================
 function switchTab(id) { send('SwitchTab', {id}); }
 
-// ── Workspace page-slide animation state ───────────────────────────────────
+// â”€â”€ Workspace page-slide animation state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 let __wsSlideDir = 0; // -1 = going left (higher index), 1 = going right (lower index)
 
 function switchWorkspace(id) {
@@ -5873,7 +5943,7 @@ function openIncognitoWorkspace() {
   openWorkspaceModal();
   const check = document.getElementById('workspace-incognito-check');
   if (check) check.checked = true;
-  selectedWsEmoji = '🔐';
+  selectedWsEmoji = 'ðŸ”';
   selectedWsColor = '#6b7280';
   wsColorManual = false;
   const preview = document.getElementById('ws-emoji-preview');
@@ -5902,7 +5972,7 @@ function openWorkspaceModal(wsId = null) {
   if (title) title.textContent = ws ? 'Rename workspace' : 'New workspace';
   if (submit) submit.textContent = ws ? 'Save' : 'Create';
   input.value = ws ? ws.name : '';
-  const wsIcon = ws ? (ws.icon || '📁') : '📁';
+  const wsIcon = ws ? (ws.icon || 'ðŸ“') : 'ðŸ“';
   selectedWsEmoji = wsIcon;
   selectedWsColor = cleanHex(ws && ws.accent_color) || emojiColor(wsIcon);
   wsColorManual = !!ws;
@@ -5997,7 +6067,7 @@ function hexRgb(color) {
 
 function emojiColor(emoji) {
   const colors = {
-    '🌐':'#3b82f6','💼':'#6366f1','🏠':'#f97316','🔬':'#06b6d4','💬':'#22c55e','🛍️':'#ec4899','📰':'#64748b','💻':'#3b82f6','🎵':'#8b5cf6','🎬':'#ef4444','📁':'#8b5cf6','🎨':'#ec4899','🚀':'#f97316','❤️':'#ef4444','⭐':'#eab308','🔥':'#f97316','💡':'#eab308','🏆':'#eab308','🎯':'#ef4444','📚':'#3b82f6','🌟':'#eab308','🍕':'#f97316','🎮':'#8b5cf6','🌈':'#ec4899','🦋':'#06b6d4','🌸':'#ec4899','🎸':'#ef4444','🌙':'#6366f1','☀️':'#eab308','🌊':'#06b6d4','🧩':'#22c55e','🔐':'#6b7280','📊':'#3b82f6','🎭':'#8b5cf6','🏖️':'#06b6d4','🚗':'#ef4444','✈️':'#3b82f6','🎓':'#6366f1','💎':'#06b6d4','🎪':'#ec4899'
+    'ðŸŒ':'#3b82f6','ðŸ’¼':'#6366f1','ðŸ ':'#f97316','ðŸ”¬':'#06b6d4','ðŸ’¬':'#22c55e','ðŸ›ï¸':'#ec4899','ðŸ“°':'#64748b','ðŸ’»':'#3b82f6','ðŸŽµ':'#8b5cf6','ðŸŽ¬':'#ef4444','ðŸ“':'#8b5cf6','ðŸŽ¨':'#ec4899','ðŸš€':'#f97316','â¤ï¸':'#ef4444','â­':'#eab308','ðŸ”¥':'#f97316','ðŸ’¡':'#eab308','ðŸ†':'#eab308','ðŸŽ¯':'#ef4444','ðŸ“š':'#3b82f6','ðŸŒŸ':'#eab308','ðŸ•':'#f97316','ðŸŽ®':'#8b5cf6','ðŸŒˆ':'#ec4899','ðŸ¦‹':'#06b6d4','ðŸŒ¸':'#ec4899','ðŸŽ¸':'#ef4444','ðŸŒ™':'#6366f1','â˜€ï¸':'#eab308','ðŸŒŠ':'#06b6d4','ðŸ§©':'#22c55e','ðŸ”':'#6b7280','ðŸ“Š':'#3b82f6','ðŸŽ­':'#8b5cf6','ðŸ–ï¸':'#06b6d4','ðŸš—':'#ef4444','âœˆï¸':'#3b82f6','ðŸŽ“':'#6366f1','ðŸ’Ž':'#06b6d4','ðŸŽª':'#ec4899'
   };
   return colors[emoji] || '#8b5cf6';
 }
@@ -6140,14 +6210,14 @@ function animSidebarClip() {
     if (now - startT < DUR) {
       requestAnimationFrame(frame);
     } else {
-      send('SidebarClipWidth', {w: -1}); // release override → normal clip logic
+      send('SidebarClipWidth', {w: -1}); // release override â†’ normal clip logic
     }
   }
   requestAnimationFrame(frame);
 }
 
-// pin=true: opened via button click — stays open until explicitly closed
-// pin=false: hover — never activates the button, never pins
+// pin=true: opened via button click â€” stays open until explicitly closed
+// pin=false: hover â€” never activates the button, never pins
 function showFloatingSidebar(pin) {
   cancelSidebarHide();
   clearSidebarClipTimer();
@@ -6167,12 +6237,12 @@ function showFloatingSidebar(pin) {
   _syncSidebarBtnState();
 }
 
-// Schedule a close with debounce — allows mouse to travel from trigger to sidebar
+// Schedule a close with debounce â€” allows mouse to travel from trigger to sidebar
 function scheduledHide() {
   if (!sidebarPeeking || sidebarPinned) return;
   const pop = document.getElementById('sb-ws-popover');
   if (pop && pop.classList.contains('visible')) return;
-  // Keep the auto-hide sidebar open while a context menu spawned from it is showing —
+  // Keep the auto-hide sidebar open while a context menu spawned from it is showing â€”
   // moving onto the menu must not collapse the tabs out from under it.
   const ctx = document.getElementById('ctx-menu');
   if (ctx && ctx.style.display === 'block') return;
@@ -6246,6 +6316,10 @@ function rememberSetting(key, value) {
     if (!state.settings.downloads) state.settings.downloads = {};
     state.settings.downloads.default_folder = value;
   }
+  if (['openai_base_url','anthropic_base_url','gemini_base_url','openai_use_responses_api','reasoning_effort'].includes(key)) {
+    if (!state.settings.ai) state.settings.ai = {};
+    state.settings.ai[key] = value;
+  }
   if (key === 'homepage' || key === 'download_path') delete settingDrafts[key];
   if (key === 'homepage') setInputValue('set-homepage', value);
   if (key === 'download_path') setInputValue('set-download-path', value);
@@ -6312,7 +6386,12 @@ function populateSettingsPanel() {
   syncNewtabSettingsUI();
   syncSecureDnsSettingsUI();
   renderAdBlockExceptions(priv.ad_blocker_exceptions || []);
-  updateProviderDdUI(ai.default_provider || 'openai');
+  updateProviderDdUI(normalizeAiProvider(ai.default_provider || 'openai'));
+  setInputValue('set-openai-base-url', ai.openai_base_url || 'https://api.openai.com/v1');
+  setInputValue('set-anthropic-base-url', ai.anthropic_base_url || 'https://api.anthropic.com/v1');
+  setInputValue('set-gemini-base-url', ai.gemini_base_url || 'https://generativelanguage.googleapis.com/v1beta');
+  setSelectValue('set-reasoning-effort', ai.reasoning_effort || 'default');
+  setToggleEl('toggle-openai-use-responses-api', !!ai.openai_use_responses_api);
   const zoomPct = Math.round((app.zoom_level || 1.0) * 100);
   setInputValue('global-zoom-slider', zoomPct);
   onZoomSliderInput(zoomPct);
@@ -7611,7 +7690,7 @@ function ntPickWallpaperFile() {
       toast('Image too large (max 20 MB)', 'error');
       return;
     }
-    toast('Processing image…', 'info');
+    toast('Processing imageâ€¦', 'info');
     _compressWallpaperImage(file, dataUrl => {
       if (!dataUrl) {
         toast('Could not process image', 'error');
@@ -8057,24 +8136,31 @@ function aiProviderChange(v) {
 function aiQuickAction(action) {
   if (aiStreaming) return;
   startAiChat();
-  send('AiQuickAction', {action});
+  resetAiStreamState();
   addAiMessage('user', actionLabel(action));
-  showAiThinking();
   aiStreaming = true;
-  document.getElementById('ai-send-btn').disabled = true;
+  setAiPrimaryButtonMode(true);
+  appendAiActivity('Reading Page', 'Reading visible page text before preparing the response.');
+  send('AiQuickAction', {action});
 }
 function actionLabel(a) {
   return {summarize:'Summarize page',explain:'Explain this topic',key_points:'Extract key points',ask_anything:'What can you help with on this page?'}[a]||a;
 }
+function normalizeAiProvider(p) {
+  if (p === 'openai_compatible' || p === 'openai-compatible' || p === 'openrouter' || p === 'ollama') return 'openai';
+  if (p === 'anthropic_compatible' || p === 'anthropic-compatible') return 'anthropic';
+  if (p === 'gemini_compatible' || p === 'gemini-compatible') return 'gemini';
+  return p || 'openai';
+}
 function providerLabel(p) {
-  return {anthropic:'Anthropic',openai:'OpenAI',gemini:'Gemini',openrouter:'OpenRouter',ollama:'Ollama'}[p] || 'AI';
+  return {anthropic:'Anthropic Compatible',openai:'OpenAI Compatible',gemini:'Gemini Compatible'}[normalizeAiProvider(p)] || 'AI';
 }
 function renderAiSidebar() {
   const ai = state.settings && state.settings.ai ? state.settings.ai : {};
-  const provider = ai.default_provider || state.ai_provider || 'openai';
+  const provider = normalizeAiProvider(ai.default_provider || state.ai_provider || 'openai');
   const model = ai.default_model || 'Smart';
   const status = state.ai_key_status || {};
-  const saved = provider === 'ollama' || !!status[provider];
+  const saved = !!status[provider];
   state.ai_provider = provider;
   updateProviderDdUI(provider);
   const dot = document.getElementById('ai-key-dot');
@@ -8083,7 +8169,10 @@ function renderAiSidebar() {
   const page = document.getElementById('ai-page-title');
   if (dot) dot.classList.toggle('ok', saved);
   if (text) text.textContent = saved ? providerLabel(provider) + ' key saved locally' : 'Add ' + providerLabel(provider) + ' key locally';
-  if (pill) pill.textContent = model.length > 18 ? model.slice(0, 16) + '..' : model;
+  if (pill) {
+    const label = modelDisplayName(provider, model);
+    pill.textContent = label.length > 22 ? label.slice(0, 20) + '..' : label;
+  }
   if (page) page.textContent = state.active_title || state.active_url || 'Current page';
 }
 // ============================================================
@@ -8130,16 +8219,24 @@ const PROVIDER_MODELS = {
   ollama: [], // populated dynamically
 };
 const PROVIDER_LABELS = {
-  anthropic:'Anthropic', openai:'OpenAI', gemini:'Gemini',
-  openrouter:'OpenRouter', ollama:'Ollama'
+  openai:'OpenAI Compatible',
+  anthropic:'Anthropic Compatible',
+  gemini:'Gemini Compatible'
 };
 let mmActiveProvider = null;
 let ollamaModelsFetched = false;
 
+function modelDisplayName(provider, modelId) {
+  const id = modelId || 'Smart';
+  const models = PROVIDER_MODELS[provider] || [];
+  const found = models.find(m => m.id === id);
+  return found ? found.name : id;
+}
+
 function openModelModal(e) {
   if (e) e.stopPropagation();
   const ai = (state.settings && state.settings.ai) || {};
-  mmActiveProvider = ai.default_provider || 'anthropic';
+  mmActiveProvider = normalizeAiProvider(ai.default_provider || 'openai');
   renderModalProviders();
   renderModalModels(mmActiveProvider);
   document.getElementById('mm-custom-input').value = '';
@@ -8153,7 +8250,7 @@ function handleModelModalBg(e) {
 }
 function renderModalProviders() {
   const container = document.getElementById('mm-providers');
-  const providers = ['anthropic','openai','gemini','openrouter','ollama'];
+  const providers = ['openai','anthropic','gemini'];
   container.innerHTML = providers.map(p =>
     `<button class="mm-tab${p === mmActiveProvider ? ' active' : ''}" onclick="switchModalProvider('${p}')">${PROVIDER_LABELS[p]}</button>`
   ).join('');
@@ -8165,7 +8262,7 @@ function switchModalProvider(provider) {
 }
 function renderModalModels(provider) {
   const ai = (state.settings && state.settings.ai) || {};
-  const currentProvider = ai.default_provider || '';
+  const currentProvider = normalizeAiProvider(ai.default_provider || '');
   const currentModel = ai.default_model || '';
   const listEl = document.getElementById('mm-models');
 
@@ -8221,7 +8318,7 @@ async function fetchOllamaModels() {
 }
 function selectModel(provider, modelId, modelName) {
   const ai = (state.settings && state.settings.ai) || {};
-  const prevProvider = ai.default_provider || '';
+  const prevProvider = normalizeAiProvider(ai.default_provider || '');
   if (provider !== prevProvider) {
     send('AiProviderChange', {provider});
   }
@@ -8255,6 +8352,32 @@ function startAiChat() {
   if (sidebar) sidebar.classList.add('ai-chatting');
   if (empty) empty.remove();
 }
+function autoGrowAiInput() {
+  const input = document.getElementById('ai-input');
+  if (!input) return;
+  input.style.height = '36px';
+  const maxHeight = 172;
+  const nextHeight = Math.min(input.scrollHeight, maxHeight);
+  input.style.height = Math.max(36, nextHeight) + 'px';
+  input.style.overflowY = input.scrollHeight > maxHeight ? 'auto' : 'hidden';
+}
+function setAiPrimaryButtonMode(streaming) {
+  const btn = document.getElementById('ai-send-btn');
+  if (!btn) return;
+  btn.classList.toggle('stop', !!streaming);
+  btn.disabled = false;
+  btn.title = streaming ? 'Stop' : 'Send';
+  btn.innerHTML = streaming
+    ? '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>'
+    : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>';
+}
+function handleAiPrimaryButton() {
+  if (aiStreaming) {
+    stopAiStream();
+    return;
+  }
+  sendAiMessage();
+}
 function handleAiKey(e) {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendAiMessage(); }
 }
@@ -8263,15 +8386,50 @@ function sendAiMessage() {
   const text = input.value.trim();
   if (!text || aiStreaming) return;
   startAiChat();
+  resetAiStreamState();
   addAiMessage('user', text);
   input.value = '';
-  showAiThinking();
+  autoGrowAiInput();
   aiStreaming = true;
-  document.getElementById('ai-send-btn').disabled = true;
+  setAiPrimaryButtonMode(true);
+  appendAiActivity('Reading Page', 'Reading the current page context before answering.');
   send('AiMessage', {text});
 }
-// Minimal markdown renderer for AI responses: bold, italic, code, line breaks
-function renderAiMarkdown(text) {
+function stopAiStream() {
+  if (!aiStreaming) return;
+  aiStreamStopped = true;
+  removeAiThinkingDots();
+  removeAiToolStatuses();
+  flushThinkingRender();
+  freezeAiThinkingSummary();
+  currentStreamEl = null;
+  currentThinkingEl = null;
+  aiStreamRawText = '';
+  finishAiBusy();
+  aiStreamStopped = true;
+  send('AiStop');
+}
+function cleanActivityText(text) {
+  return String(text || '')
+    .replace(/<\/?think(?:ing)?[^>]*>/ig, '')
+    .replace(/[<>]/g, '')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+function appendAiActivity(title, body='') {
+  if (aiStreamStopped) return;
+  if (!aiThinkingStartedAt) aiThinkingStartedAt = Date.now();
+  const safeTitle = cleanThinkingTitle(cleanActivityText(title)) || 'Activity';
+  const safeBody = cleanThinkingBody(cleanActivityText(body));
+  aiStreamRawText += `<thinking>**${safeTitle}**${safeBody ? '\n' + safeBody : ''}</thinking>\n`;
+  const parsed = parseAiResponseStream(aiStreamRawText);
+  if (parsed.thinking.trim() && !aiThinkingFrozen) {
+    scheduleThinkingRender(parsed.thinking, true, true);
+  }
+  scrollAiToBottom();
+}
+function renderAiMarkdownLegacy(text) {
   // Escape HTML entities first
   let s = text
     .replace(/&/g, '&amp;')
@@ -8295,9 +8453,501 @@ function renderAiMarkdown(text) {
       items.map(i => '<li>' + i.replace(/^[ \t]*[-*] /, '') + '</li>').join('') +
       '</ul>';
   });
-  // Newlines → line breaks (after block elements are handled)
+  // Newlines â†’ line breaks (after block elements are handled)
   s = s.replace(/\n\n/g, '<br><br>').replace(/\n/g, '<br>');
   return s;
+}
+function renderAiMarkdown(text) {
+  const source = String(text || '').replace(/\r\n/g, '\n').trim();
+  if (!source) return '';
+
+  const mainText = source
+    .replace(/<think(?:ing)?(?:\s[^>]*)?>[\s\S]*?<\/think(?:ing)?>/ig, '')
+    .replace(/<think(?:ing)?(?:\s[^>]*)?>[\s\S]*$/i, '')
+    .trim();
+
+  const lines = mainText.split('\n');
+  const html = [];
+  let paragraph = [];
+  let listType = null;
+  let inCode = false;
+  let codeLines = [];
+
+  const closeParagraph = () => {
+    if (!paragraph.length) return;
+    html.push('<p>' + paragraph.map(renderInlineMarkdown).join('<br>') + '</p>');
+    paragraph = [];
+  };
+  const closeList = () => {
+    if (!listType) return;
+    html.push(`</${listType}>`);
+    listType = null;
+  };
+  const openList = (type) => {
+    closeParagraph();
+    if (listType && listType !== type) closeList();
+    if (!listType) {
+      listType = type;
+      html.push(`<${type}>`);
+    }
+  };
+  const closeBlocks = () => {
+    closeParagraph();
+    closeList();
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.replace(/\s+$/, '');
+    const trimmed = line.trim();
+
+    if (trimmed.startsWith('```')) {
+      if (inCode) {
+        html.push('<pre><code>' + escHtml(codeLines.join('\n')) + '</code></pre>');
+        codeLines = [];
+        inCode = false;
+      } else {
+        closeBlocks();
+        inCode = true;
+      }
+      continue;
+    }
+
+    if (inCode) {
+      codeLines.push(rawLine);
+      continue;
+    }
+
+    if (!trimmed) {
+      closeBlocks();
+      continue;
+    }
+
+    const heading = trimmed.match(/^(#{1,4})\s+(.+)$/);
+    if (heading) {
+      closeBlocks();
+      const level = heading[1].length;
+      html.push(`<h${level}>${renderInlineMarkdown(heading[2])}</h${level}>`);
+      continue;
+    }
+
+    const quote = trimmed.match(/^>\s?(.+)$/);
+    if (quote) {
+      closeBlocks();
+      html.push('<blockquote>' + renderInlineMarkdown(quote[1]) + '</blockquote>');
+      continue;
+    }
+
+    const bullet = trimmed.match(/^[-*\u2022]\s+(.+)$/);
+    if (bullet) {
+      openList('ul');
+      html.push('<li>' + renderInlineMarkdown(bullet[1]) + '</li>');
+      continue;
+    }
+
+    const ordered = trimmed.match(/^\d+[.)]\s+(.+)$/);
+    if (ordered) {
+      openList('ol');
+      html.push('<li>' + renderInlineMarkdown(ordered[1]) + '</li>');
+      continue;
+    }
+
+    closeList();
+    paragraph.push(trimmed);
+  }
+
+  if (inCode) {
+    html.push('<pre><code>' + escHtml(codeLines.join('\n')) + '</code></pre>');
+  }
+  closeBlocks();
+  return html.join('');
+}
+function renderInlineMarkdown(text) {
+  const codeParts = [];
+  let s = String(text || '').replace(/`([^`\n]+)`/g, (_, code) => {
+    const marker = `@@CODE${codeParts.length}@@`;
+    codeParts.push('<code>' + escHtml(code) + '</code>');
+    return marker;
+  });
+  s = escHtml(s);
+
+  s = s
+    .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/__([^_\n]+)__/g, '<strong>$1</strong>')
+    .replace(/(^|[\s(])\*([^*\n]+)\*(?=$|[\s).,!?:;])/g, '$1<em>$2</em>')
+    .replace(/(^|[\s(])_([^_\n]+)_(?=$|[\s).,!?:;])/g, '$1<em>$2</em>');
+
+  codeParts.forEach((code, index) => {
+    s = s.replace(`@@CODE${index}@@`, code);
+  });
+  return s;
+}
+function resetAiStreamState() {
+  currentStreamEl = null;
+  currentThinkingEl = null;
+  aiStreamRawText = '';
+  aiThinkingFrozen = false;
+  aiStreamStopped = false;
+  aiThinkingStartedAt = Date.now();
+  aiThinkingWorkedApplied = false;
+  _lastThinkingHtml = '';
+  if (_thinkThrottleTimer) { clearTimeout(_thinkThrottleTimer); _thinkThrottleTimer = null; }
+  removeAiThinkingDots();
+  removeAiToolStatuses();
+}
+function removeAiThinkingDots() {
+  const thinking = document.querySelector('#ai-messages .ai-thinking');
+  if (thinking) thinking.remove();
+}
+function removeAiToolStatuses() {
+  document.querySelectorAll('#ai-messages .ai-tool-call').forEach(el => el.remove());
+}
+function parseAiResponseStream(raw) {
+  const source = String(raw || '');
+  if (!source) return {thinking: '', final: ''};
+
+  const tagRe = /<\/think(?:ing)?\s*>|<think(?:ing)?(?:\s[^>]*)?>/ig;
+  let thinking = '';
+  let finalText = '';
+  let cursor = 0;
+  let inThinking = false;
+  let sawTag = false;
+  let match;
+
+  while ((match = tagRe.exec(source)) !== null) {
+    sawTag = true;
+    const segment = source.slice(cursor, match.index);
+    const isClosing = match[0].startsWith('</');
+    if (inThinking) {
+      thinking += segment;
+    } else {
+      finalText += segment;
+    }
+    if (!isClosing && thinking.trim()) {
+      thinking = thinking.replace(/\s*$/, '') + '\n\n';
+    }
+    inThinking = !isClosing;
+    cursor = tagRe.lastIndex;
+  }
+
+  const rest = source.slice(cursor);
+  if (inThinking) {
+    thinking += rest;
+  } else {
+    finalText += rest;
+  }
+
+  if (!sawTag) {
+    const trimmed = source.trimStart().toLowerCase();
+    if (trimmed && ('<thinking>'.startsWith(trimmed) || '<think>'.startsWith(trimmed))) {
+      return {thinking: '', final: ''};
+    }
+    return {thinking: '', final: source};
+  }
+
+  return {
+    thinking: normalizeThinkingText(thinking),
+    final: finalText.replace(/\n{3,}/g, '\n\n'),
+  };
+}
+function normalizeThinkingText(text) {
+  return String(text || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/<think(?:ing)?(?:\s[^>]*)?>/ig, '')
+    .replace(/<\/think(?:ing)?\s*>/ig, '')
+    .replace(/<\/?think(?:ing)?\s*$/i, '')
+    .trim();
+}
+function parseThinkingNodes(text) {
+  const clean = normalizeThinkingText(text);
+  if (!clean) return {style: 'raw', nodes: []};
+
+  if (/\*\*([^*\n]+)\*\*/.test(clean)) {
+    const titleRe = /(?:^|\n|\.\s+)\s*\*\*([^*\n]+)\*\*\s*/g;
+    const matches = [];
+    let match;
+    while ((match = titleRe.exec(clean)) !== null) {
+      const atStart = clean.slice(0, match.index).trim() === '';
+      if (!atStart && match[0][0] !== '\n' && match[0][0] !== '.') continue;
+      matches.push({
+        start: match.index,
+        end: titleRe.lastIndex,
+        title: match[1].trim(),
+      });
+    }
+    if (!matches.length || clean.slice(0, matches[0].start).trim()) {
+      return {
+        style: 'raw',
+        nodes: splitRawThinking(cleanThinkingBody(clean)).map(body => ({title: '', body})),
+      };
+    }
+    const nodes = matches.map((item, index) => {
+      const next = matches[index + 1];
+      return {
+        title: cleanThinkingTitle(item.title),
+        body: cleanThinkingBody(clean.slice(item.end, next ? next.start : clean.length)),
+      };
+    }).filter(node => node.title || node.body);
+    return {style: 'gpt', nodes};
+  }
+
+  return {
+    style: 'raw',
+    nodes: splitRawThinking(cleanThinkingBody(clean)).map(body => ({title: '', body})),
+  };
+}
+function cleanThinkingTitle(text) {
+  return String(text || '')
+    .replace(/\s+/g, ' ')
+    .replace(/^#+\s*/, '')
+    .replace(/[`*_~]/g, '')
+    .trim();
+}
+function cleanThinkingBody(text) {
+  return String(text || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/^\s*#{1,6}\s+/gm, '')
+    .replace(/\*\*\*([^*]+?)\*\*\*/g, '$1')
+    .replace(/\*\*([^*]+?)\*\*/g, '$1')
+    .replace(/__([^_]+?)__/g, '$1')
+    .replace(/(^|[\s(])\*([^*]+?)\*(?=$|[\s.,!?:;)\]])/gm, '$1$2')
+    .replace(/(^|[\s(])_([^_]+?)_(?=$|[\s.,!?:;)\]])/gm, '$1$2')
+    .replace(/~~([^~]+?)~~/g, '$1')
+    .replace(/`([^`\n]+)`/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/^\s*[-*\u2022]\s+/gm, '')
+    .replace(/^\s*\d+[.)\s]+/gm, '')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+function splitRawThinking(text) {
+  if (!text) return [];
+  const paragraphs = String(text)
+    .split(/\n\s*\n+/)
+    .map(p => p.trim())
+    .filter(Boolean);
+  const chunks = [];
+  for (const paragraph of paragraphs) {
+    const paragraphClean = paragraph.replace(/\s+/g, ' ').trim();
+    chunks.push(...splitRawThinkingParagraph(paragraphClean));
+  }
+  return chunks;
+}
+function splitRawThinkingParagraph(paragraph) {
+  const sentenceRegex = /[^.!?]+(?:[.!?]+|$)/g;
+  const sentences = (String(paragraph || '').match(sentenceRegex) || [paragraph])
+    .map(s => s.trim())
+    .filter(Boolean);
+  if (sentences.length <= 1) return splitLongSentence(paragraph);
+
+  const chunks = [];
+  let currentChunk = '';
+  let currentWords = 0;
+  let currentSentences = 0;
+
+  for (const sentence of sentences) {
+    const sentenceWords = wordCount(sentence);
+    const startsWithUpper = /^[A-Z]/.test(sentence);
+    const startsNewThought = isRawThinkingTransition(sentence);
+    const shouldSplit =
+      currentChunk &&
+      (
+        currentWords + sentenceWords > 100 ||
+        (currentWords >= 60 && startsWithUpper) ||
+        (currentWords >= 28 && currentSentences >= 2 && startsWithUpper) ||
+        (currentWords >= 18 && startsNewThought)
+      );
+
+    if (shouldSplit) {
+      chunks.push(currentChunk.trim());
+      currentChunk = '';
+      currentWords = 0;
+      currentSentences = 0;
+    }
+
+    currentChunk = currentChunk ? currentChunk + ' ' + sentence : sentence;
+    currentWords += sentenceWords;
+    currentSentences += 1;
+
+    if (currentWords > 110) {
+      const subChunks = splitLongSentence(currentChunk);
+      for (let i = 0; i < subChunks.length - 1; i++) {
+        chunks.push(subChunks[i].trim());
+      }
+      currentChunk = subChunks[subChunks.length - 1] || '';
+      currentWords = wordCount(currentChunk);
+      currentSentences = currentChunk ? 1 : 0;
+    }
+  }
+
+  if (currentChunk.trim()) chunks.push(currentChunk.trim());
+  return chunks;
+}
+function isRawThinkingTransition(sentence) {
+  return /^(now|next|then|also|finally|first|second|third|meanwhile|after that|i need|i should|i can|i will|i'll|let me|let's|need to|we need|we should|checking|analyzing|summarizing|reading|comparing|considering|reviewing|the user|user asks|looks like)\b/i
+    .test(String(sentence || '').trim());
+}
+function splitLongSentence(sentence) {
+  const clauseRegex = /[^,;â€”]+(?:[,;â€”]+|$)/g;
+  const clauses = (sentence.match(clauseRegex) || [sentence])
+    .map(c => c.trim())
+    .filter(Boolean);
+  const subChunks = [];
+  let current = '';
+  let currentWords = 0;
+  for (const clause of clauses) {
+    const clauseWords = wordCount(clause);
+    if (current && currentWords + clauseWords > 100) {
+      subChunks.push(current.trim());
+      current = '';
+      currentWords = 0;
+    }
+    current = current ? current + ' ' + clause : clause;
+    currentWords += clauseWords;
+    if (currentWords > 100) {
+      const words = current.split(/\s+/);
+      let temp = '';
+      let tempWords = 0;
+      for (const word of words) {
+        if (tempWords >= 80) {
+          subChunks.push(temp.trim());
+          temp = '';
+          tempWords = 0;
+        }
+        temp = temp ? temp + ' ' + word : word;
+        tempWords++;
+      }
+      current = temp;
+      currentWords = tempWords;
+    }
+  }
+  if (current.trim()) {
+    subChunks.push(current.trim());
+  }
+  return subChunks;
+}
+function wordCount(text) {
+  const words = String(text || '').trim().match(/\S+/g);
+  return words ? words.length : 0;
+}
+function compactThinkingPreview(text) {
+  return String(text || '').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+}
+/* Schedule/throttle thinking render so CSS animations are not restarted every chunk */
+let _pendingThinkText = '';
+let _pendingThinkStreaming = false;
+function scheduleThinkingRender(text, streaming, flush) {
+  _pendingThinkText = text;
+  _pendingThinkStreaming = streaming;
+  if (flush) { flushThinkingRender(); return; }
+  if (!_thinkThrottleTimer) {
+    _thinkThrottleTimer = setTimeout(flushThinkingRender, 150);
+  }
+}
+function flushThinkingRender() {
+  if (_thinkThrottleTimer) { clearTimeout(_thinkThrottleTimer); _thinkThrottleTimer = null; }
+  if (_pendingThinkText) {
+    renderAiThinkingSummary(_pendingThinkText, _pendingThinkStreaming);
+    _pendingThinkText = '';
+  }
+}
+function renderAiThinkingSummary(text, streaming) {
+  const parsed = parseThinkingNodes(text);
+  if (!parsed.nodes.length) return;
+  if (!aiThinkingStartedAt) aiThinkingStartedAt = Date.now();
+
+  startAiChat();
+  removeAiThinkingDots();
+
+  const msgs = document.getElementById('ai-messages');
+  const expanded = currentThinkingEl && currentThinkingEl.classList.contains('expanded');
+  if (!currentThinkingEl || !currentThinkingEl.isConnected) {
+    currentThinkingEl = document.createElement('div');
+    if (currentStreamEl && currentStreamEl.isConnected) {
+      msgs.insertBefore(currentThinkingEl, currentStreamEl);
+    } else {
+      msgs.appendChild(currentThinkingEl);
+    }
+  }
+
+  const activeIndex = parsed.nodes.length - 1;
+  const active = parsed.nodes[activeIndex] || {title: '', body: ''};
+  const header = parsed.style === 'gpt' && active.title ? active.title : 'Thinking';
+  /* Preview shows the full active node body when collapsed, not a single truncated line. */
+  const preview = compactThinkingPreview(active.body || active.title || 'Thinking...');
+  const classNames = ['ai-thinking-summary', parsed.style];
+  if (streaming) classNames.push('streaming');
+  if (expanded) classNames.push('expanded');
+  currentThinkingEl.className = classNames.join(' ');
+
+  /* Stable DOM patching: only rebuild innerHTML when content actually changed.
+     This prevents CSS animation restarts on every streaming chunk. */
+  const timeline = parsed.nodes.map((node, index) => {
+    const title = node.title ? `<div class="ai-thinking-node-title">${escHtml(node.title)}</div>` : '';
+    const body = node.body ? `<div class="ai-thinking-node-body">${escHtml(node.body)}</div>` : '';
+    return `<div class="ai-thinking-node${index === activeIndex ? ' active' : ''}">${title}${body}</div>`;
+  }).join('');
+
+  const newHtml = `
+    <div class="ai-thinking-preview" onclick="toggleAiThinkingSummary(this)">
+      <div class="ai-thinking-title-row">
+        <span class="ai-thinking-title">${escHtml(header)}</span>
+        <span class="ai-thinking-chevron">&gt;</span>
+      </div>
+      <div class="ai-thinking-preview-text">${escHtml(preview)}</div>
+    </div>
+    <div class="ai-thinking-timeline">${timeline}</div>
+  `;
+
+  if (newHtml !== _lastThinkingHtml) {
+    /* If the skeleton already exists, patch only changed text nodes instead of full replace */
+    const existingTitle = currentThinkingEl.querySelector('.ai-thinking-title');
+    const existingPreview = currentThinkingEl.querySelector('.ai-thinking-preview-text');
+    const existingTimeline = currentThinkingEl.querySelector('.ai-thinking-timeline');
+    if (existingTitle && existingPreview && existingTimeline) {
+      const newHeaderText = escHtml(header);
+      const newPreviewText = escHtml(preview);
+      if (existingTitle.innerHTML !== newHeaderText) existingTitle.innerHTML = newHeaderText;
+      if (existingPreview.innerHTML !== newPreviewText) existingPreview.innerHTML = newPreviewText;
+      existingTimeline.innerHTML = timeline;
+    } else {
+      currentThinkingEl.innerHTML = newHtml;
+    }
+    _lastThinkingHtml = newHtml;
+  }
+}
+function toggleAiThinkingSummary(el) {
+  const root = el && el.closest ? el.closest('.ai-thinking-summary') : null;
+  if (root) root.classList.toggle('expanded');
+}
+function aiWorkedForLabel() {
+  const startedAt = aiThinkingStartedAt || Date.now();
+  const seconds = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
+  return `Worked for ${seconds} ${seconds === 1 ? 'second' : 'seconds'}`;
+}
+function freezeAiThinkingSummary() {
+  if (currentThinkingEl) {
+    currentThinkingEl.classList.remove('streaming');
+    currentThinkingEl.classList.add('done');
+    if (!aiThinkingWorkedApplied) {
+      const title = currentThinkingEl.querySelector('.ai-thinking-title');
+      if (title) title.textContent = aiWorkedForLabel();
+      aiThinkingWorkedApplied = true;
+    }
+  }
+  aiThinkingFrozen = true;
+}
+function renderAiFinalAnswer(text) {
+  const content = String(text || '');
+  if (!content.trim() && !currentStreamEl) return;
+  startAiChat();
+  if (!currentStreamEl || !currentStreamEl.isConnected) {
+    const msgs = document.getElementById('ai-messages');
+    currentStreamEl = document.createElement('div');
+    currentStreamEl.className = 'ai-msg assistant';
+    msgs.appendChild(currentStreamEl);
+  }
+  currentStreamEl.innerHTML = renderAiMarkdown(content);
 }
 function addAiMessage(role, text) {
   startAiChat();
@@ -8324,9 +8974,10 @@ function showAiThinking() {
 function finishAiBusy() {
   const thinking = document.querySelector('#ai-messages .ai-thinking');
   if (thinking) thinking.remove();
+  removeAiToolStatuses();
   aiStreaming = false;
-  const btn = document.getElementById('ai-send-btn');
-  if (btn) btn.disabled = false;
+  aiStreamStopped = false;
+  setAiPrimaryButtonMode(false);
 }
 function scrollAiToBottom() {
   const msgs = document.getElementById('ai-messages');
@@ -8336,7 +8987,7 @@ function aiClear() {
   document.getElementById('ai-messages').innerHTML = '<div class="ai-empty"></div>';
   const sidebar = document.getElementById('ai-sidebar');
   if (sidebar) sidebar.classList.remove('ai-chatting');
-  currentStreamEl = null;
+  resetAiStreamState();
   finishAiBusy();
   send('AiClearChat');
 }
@@ -8435,7 +9086,7 @@ function renderAccountSignedOut() {
       <input id="acct-email" type="email" autocomplete="username" placeholder="you@example.com" value="${emailVal}" ${dis}>
       <label>Password</label>
       <input id="acct-password" type="password" autocomplete="${isSignup?'new-password':'current-password'}" placeholder="${isSignup?'At least 6 characters':'Your password'}" ${dis}>
-      <button class="acct-primary" type="submit" ${dis}>${accountPending?'Please wait…':(isSignup?'Create account':'Sign in')}</button>
+      <button class="acct-primary" type="submit" ${dis}>${accountPending?'Please waitâ€¦':(isSignup?'Create account':'Sign in')}</button>
     </form>
     <div class="acct-divider"><span>or</span></div>
     <button class="acct-google" ${dis} onclick="accountGoogle()">
@@ -8469,11 +9120,11 @@ function renderAccountSignedIn(p) {
       <div class="acct-field"><label>Username</label><input id="acct-username" type="text" value="${escAttr(p.username||'')}" placeholder="username" ${dis}></div>
       <div class="acct-field"><label>Full name</label><input id="acct-fullname" type="text" value="${escAttr(p.full_name||'')}" placeholder="Your name" ${dis}></div>
       <div class="acct-field"><label>Birthdate</label><input id="acct-birthdate" type="date" value="${escAttr(p.birthdate||'')}" ${dis}></div>
-      <div class="acct-field"><label>Country</label><input type="text" value="${escAttr(p.country||'')}" placeholder="Set in General → Region" disabled></div>
+      <div class="acct-field"><label>Country</label><input type="text" value="${escAttr(p.country||'')}" placeholder="Set in General â†’ Region" disabled></div>
     </div>
     <div class="acct-field"><label>Bio</label><textarea id="acct-bio" rows="3" placeholder="A little about you" ${dis}>${escHtml(p.bio||'')}</textarea></div>
     <div class="acct-actions">
-      <button class="acct-primary" ${dis} onclick="accountSaveProfile()">${accountPending?'Saving…':'Save changes'}</button>
+      <button class="acct-primary" ${dis} onclick="accountSaveProfile()">${accountPending?'Savingâ€¦':'Save changes'}</button>
     </div>
     <div class="acct-sep"></div>
     <details class="acct-pw">
@@ -8640,12 +9291,10 @@ let tspAiStreaming = false;
 let _tspAiRawText = '';
 
 function hasAiKey() {
-  // true if any provider has a key configured, or Ollama is selected (no key needed)
+  // true if any of the three compatible providers has a key configured
   if (!state) return false;
-  const provider = state.settings?.ai?.default_provider || '';
-  if (provider === 'ollama') return true;
   const ks = state.ai_key_status || {};
-  return !!(ks.openai || ks.anthropic || ks.gemini || ks.openrouter);
+  return !!(ks.openai || ks.anthropic || ks.gemini);
 }
 
 function tspEnterAiMode(query) {
@@ -8760,7 +9409,7 @@ function tspRow(title, url, favicon, isSearch, subText) {
   </div>`;
 }
 
-// ── Spotlight calculator ───────────────────────────────────────────────────────
+// â”€â”€ Spotlight calculator â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /** Returns true if the query looks like a pure math expression (no plain words). */
 function isMathExpr(q) {
@@ -8781,11 +9430,11 @@ function isMathExpr(q) {
 function evaluateMath(q) {
   try {
     let expr = q.replace(/\s+/g, '').toLowerCase();
-    // Normalise implicit multiplication: 2(3+4) → 2*(3+4), (3)(4) → (3)*(4)
+    // Normalise implicit multiplication: 2(3+4) â†’ 2*(3+4), (3)(4) â†’ (3)*(4)
     expr = expr.replace(/(\d)\(/g, '$1*(').replace(/\)(\d)/g, ')*$1').replace(/\)\(/g, ')*(');
-    // Exponentiation: ^ → **
+    // Exponentiation: ^ â†’ **
     expr = expr.replace(/\^/g, '**');
-    // sin30 / cos45 style (no parens) → sin(30) / cos(45)
+    // sin30 / cos45 style (no parens) â†’ sin(30) / cos(45)
     expr = expr.replace(/(sin|cos|tan|asin|acos|atan|sqrt|log|ln|abs|ceil|floor|round)([0-9.]+)/g, '$1($2)');
     // Validate: after substitution only math chars remain
     const check = expr.replace(/[0-9+\-*\/().e%]/g, '').replace(/(sin|cos|tan|asin|acos|atan|sinh|cosh|tanh|sqrt|log|ln|abs|floor|ceil|round|pow|max|min|pi)/g, '');
@@ -8823,7 +9472,7 @@ function fmtCalcResult(n) {
   return parts.join('.');
 }
 
-// ── Spotlight unit converter ──────────────────────────────────────────────────
+// â”€â”€ Spotlight unit converter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Matches: <number> <from-unit> <bridge> <to-unit>
 // Bridge words: to, into, in, as
 // Handles plural 's'/'es', abbreviations, and multi-word unit names.
@@ -8838,7 +9487,7 @@ const _CONV_UNITS = (()=>{
   //        pressure=pascal, currency=USD
   // Temperature: factor is scale id string (C/F/K/R), not a numeric factor
   const groups = [
-    // ─── Length ─────────────────────────────────────────────────────────────
+    // â”€â”€â”€ Length â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     [['mm','millimeter','millimetre'],                   L, 0.001],
     [['cm','centimeter','centimetre'],                   L, 0.01],
     [['dm','decimeter','decimetre'],                     L, 0.1],
@@ -8851,7 +9500,7 @@ const _CONV_UNITS = (()=>{
     [['nmi','nautical mile'],                            L, 1852],
     [['ly','light year','light-year','lightyear'],       L, 9.461e15],
     [['au','astronomical unit'],                         L, 1.496e11],
-    // ─── Weight / Mass ───────────────────────────────────────────────────────
+    // â”€â”€â”€ Weight / Mass â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     [['mcg','ug','microgram'],                           W, 1e-6],
     [['mg','milligram'],                                 W, 0.001],
     [['g','gram'],                                       W, 1],
@@ -8862,7 +9511,7 @@ const _CONV_UNITS = (()=>{
     [['st','stone'],                                     W, 6350.29],
     [['short ton'],                                      W, 907185],
     [['long ton'],                                       W, 1016047],
-    // ─── Time ───────────────────────────────────────────────────────────────
+    // â”€â”€â”€ Time â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     [['ms','millisecond'],                               TM, 0.001],
     [['s','sec','second'],                               TM, 1],
     [['min','minute'],                                   TM, 60],
@@ -8873,12 +9522,12 @@ const _CONV_UNITS = (()=>{
     [['yr','year'],                                      TM, 31536000],
     [['decade'],                                         TM, 315360000],
     [['century','centuries'],                            TM, 3153600000],
-    // ─── Temperature ────────────────────────────────────────────────────────
-    [['c','celsius','°c','degc','deg c'],                TP, 'C'],
-    [['f','fahrenheit','°f','degf','deg f'],             TP, 'F'],
+    // â”€â”€â”€ Temperature â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    [['c','celsius','Â°c','degc','deg c'],                TP, 'C'],
+    [['f','fahrenheit','Â°f','degf','deg f'],             TP, 'F'],
     [['k','kelvin'],                                     TP, 'K'],
     [['r','rankine'],                                    TP, 'R'],
-    // ─── Volume ─────────────────────────────────────────────────────────────
+    // â”€â”€â”€ Volume â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     [['ml','milliliter','millilitre'],                   V, 0.001],
     [['cl','centiliter','centilitre'],                   V, 0.01],
     [['dl','deciliter','decilitre'],                     V, 0.1],
@@ -8894,7 +9543,7 @@ const _CONV_UNITS = (()=>{
     [['cm3','cubic centimeter','cubic centimetre','cc'], V, 0.001],
     [['ft3','cubic foot','cubic feet'],                  V, 28.3168],
     [['in3','cubic inch','cubic inches'],                V, 0.0163871],
-    // ─── Area ───────────────────────────────────────────────────────────────
+    // â”€â”€â”€ Area â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     [['mm2','sq mm','square mm'],                        A, 1e-6],
     [['cm2','sq cm','square cm'],                        A, 1e-4],
     [['m2','sqm','sq m','square meter','square metre'],  A, 1],
@@ -8904,13 +9553,13 @@ const _CONV_UNITS = (()=>{
     [['sqft','sq ft','square foot','square feet'],       A, 0.092903],
     [['sqin','sq in','square inch','square inches'],     A, 6.4516e-4],
     [['sqmi','sq mi','square mile'],                     A, 2589988.11],
-    // ─── Speed ──────────────────────────────────────────────────────────────
+    // â”€â”€â”€ Speed â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     [['m/s','mps','meter per second'],                   SP, 1],
     [['km/h','kph','kmh','kilometer per hour'],          SP, 0.277778],
     [['mph','mile per hour'],                            SP, 0.44704],
     [['knot','kn','knots'],                              SP, 0.514444],
     [['ft/s','fps','foot per second','feet per second'], SP, 0.3048],
-    // ─── Digital Storage ────────────────────────────────────────────────────
+    // â”€â”€â”€ Digital Storage â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     [['bit'],                                            DT, 0.125],
     [['b','byte'],                                       DT, 1],
     [['kb','kilobyte'],                                  DT, 1000],
@@ -8922,7 +9571,7 @@ const _CONV_UNITS = (()=>{
     [['mib','mebibyte'],                                 DT, 1048576],
     [['gib','gibibyte'],                                 DT, 1073741824],
     [['tib','tebibyte'],                                 DT, 1099511627776],
-    // ─── Energy ─────────────────────────────────────────────────────────────
+    // â”€â”€â”€ Energy â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     [['j','joule'],                                      EN, 1],
     [['kj','kilojoule'],                                 EN, 1000],
     [['mj','megajoule'],                                 EN, 1e6],
@@ -8932,7 +9581,7 @@ const _CONV_UNITS = (()=>{
     [['kwh','kilowatt-hour'],                            EN, 3600000],
     [['btu'],                                            EN, 1055.06],
     [['ev','electronvolt'],                              EN, 1.602e-19],
-    // ─── Pressure ───────────────────────────────────────────────────────────
+    // â”€â”€â”€ Pressure â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     [['pa','pascal'],                                    PR, 1],
     [['kpa','kilopascal'],                               PR, 1000],
     [['mpa','megapascal'],                               PR, 1e6],
@@ -8941,7 +9590,7 @@ const _CONV_UNITS = (()=>{
     [['psi'],                                            PR, 6894.76],
     [['atm','atmosphere'],                               PR, 101325],
     [['torr','mmhg'],                                    PR, 133.322],
-    // ─── Currency (static approximate rates — base 1 USD) ───────────────────
+    // â”€â”€â”€ Currency (static approximate rates â€” base 1 USD) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     [['usd','dollar'],                                   CU, 1],
     [['eur','euro'],                                     CU, 1.087],
     [['gbp','pound sterling'],                           CU, 1.268],
@@ -8992,15 +9641,15 @@ const _CONV_UNITS = (()=>{
 
 /**
  * Look up a unit string, handling:
- *  • exact match   "meter"
- *  • plural -s     "meters" → "meter"
- *  • plural -es    "inches" → check without 'es' (though 'inches' is in map directly)
- *  • normalise whitespace so "sq  ft" → "sq ft"
+ *  â€¢ exact match   "meter"
+ *  â€¢ plural -s     "meters" â†’ "meter"
+ *  â€¢ plural -es    "inches" â†’ check without 'es' (though 'inches' is in map directly)
+ *  â€¢ normalise whitespace so "sq  ft" â†’ "sq ft"
  */
 function _convLookup(raw) {
   const s = raw.toLowerCase().trim().replace(/\s+/g, ' ');
   if (_CONV_UNITS[s]) return _CONV_UNITS[s];
-  // Strip trailing 's' (hours→hour, meters→meter, pounds→pound, gallons→gallon…)
+  // Strip trailing 's' (hoursâ†’hour, metersâ†’meter, poundsâ†’pound, gallonsâ†’gallonâ€¦)
   if (s.length > 2 && s.endsWith('s') && _CONV_UNITS[s.slice(0, -1)])
     return _CONV_UNITS[s.slice(0, -1)];
   // Strip trailing 'es' (catches irregular plurals not already in the map)
@@ -9029,7 +9678,7 @@ function _parseConversion(q) {
   const rest = s.slice(numM[0].length);
   if (!rest) return null;
   // Scan every bridge position left-to-right; stop at first valid unit pair
-  const bridgeRE = /\s+(?:to|into|in|as|→|->)\s+/gi;
+  const bridgeRE = /\s+(?:to|into|in|as|â†’|->)\s+/gi;
   let m;
   while ((m = bridgeRE.exec(rest)) !== null) {
     const fromStr = rest.slice(0, m.index);
@@ -9074,10 +9723,10 @@ const _CONV_LABEL = {
   energy:'Energy', pressure:'Pressure', currency:'Currency'
 };
 
-// Auto-suggest targets: canonical-key → canonical-key of the best "default" target.
+// Auto-suggest targets: canonical-key â†’ canonical-key of the best "default" target.
 // Keys must be the first alias of their group (the canonical key stored in .k).
 const _AUTO_SUGGEST = {
-  // Length — suggest adjacent scale or imperial equivalent
+  // Length â€” suggest adjacent scale or imperial equivalent
   mm:'cm', cm:'m', dm:'m', m:'ft', km:'mi',
   'in':'cm', ft:'m', yd:'m', mi:'km', nmi:'km',
   // Weight
@@ -9096,7 +9745,7 @@ const _AUTO_SUGGEST = {
   ha:'ac', ac:'ha', sqft:'m2', sqin:'cm2', sqmi:'km2',
   // Speed
   'm/s':'km/h', 'km/h':'mph', mph:'km/h', knot:'mph', 'ft/s':'m/s',
-  // Data — always go up one SI step
+  // Data â€” always go up one SI step
   bit:'b', b:'kb', kb:'mb', mb:'gb', gb:'tb', tb:'pb',
   kib:'mib', mib:'gib', gib:'tib', tib:'gib',
   // Energy
@@ -9105,7 +9754,7 @@ const _AUTO_SUGGEST = {
   // Pressure
   pa:'atm', kpa:'psi', mpa:'bar', bar:'psi', mbar:'pa',
   psi:'bar', atm:'psi', torr:'pa',
-  // Currency — suggest USD (or EUR for USD itself)
+  // Currency â€” suggest USD (or EUR for USD itself)
   usd:'eur', eur:'usd', gbp:'usd', jpy:'usd', cny:'usd', krw:'usd',
   aud:'usd', cad:'usd', chf:'usd', inr:'usd', idr:'usd', sgd:'usd',
   hkd:'usd', mxn:'usd', brl:'usd', rub:'usd', 'try':'usd', php:'usd',
@@ -9129,7 +9778,7 @@ function _parseUnitOnly(q) {
   return {value, fromU, fromStr: rest};
 }
 
-// Country registry: ISO-3166-1 alpha-2 → {name, currency (canonical key|null), sys}
+// Country registry: ISO-3166-1 alpha-2 â†’ {name, currency (canonical key|null), sys}
 // sys: 'metric' | 'imperial' | 'uk'
 const _COUNTRY_DATA = {
   AE:{name:'UAE',               currency:'aed', sys:'metric'},
@@ -9199,13 +9848,13 @@ const _COUNTRY_DATA = {
 
 // Unit-system overrides for metric countries (keys that _AUTO_SUGGEST biases toward imperial).
 const _METRIC_OVERRIDES = {
-  m:'km',        // m → km  (not ft)
-  km:'m',        // km → m  (not mi)
-  kg:'g',        // kg → g  (not lb)
-  l:'ml',        // l → ml  (not gal)
-  'km/h':'m/s',  // km/h → m/s  (not mph)
-  m2:'ha',       // m² → ha  (not sqft)
-  ha:'m2',       // ha → m²  (not acre)
+  m:'km',        // m â†’ km  (not ft)
+  km:'m',        // km â†’ m  (not mi)
+  kg:'g',        // kg â†’ g  (not lb)
+  l:'ml',        // l â†’ ml  (not gal)
+  'km/h':'m/s',  // km/h â†’ m/s  (not mph)
+  m2:'ha',       // mÂ² â†’ ha  (not sqft)
+  ha:'m2',       // ha â†’ mÂ²  (not acre)
 };
 
 /** Pick the best auto-suggest target key given the source unit + current country. */
@@ -9217,8 +9866,8 @@ function _getAutoSuggestTarget(fromU, value) {
   if (fromU.t === 'currency') {
     const local = country && country.currency;
     if (local) {
-      if (fromU.k !== local) return local;            // foreign → local
-      return fromU.k === 'usd' ? 'eur' : 'usd';     // local → international reference
+      if (fromU.k !== local) return local;            // foreign â†’ local
+      return fromU.k === 'usd' ? 'eur' : 'usd';     // local â†’ international reference
     }
     return _AUTO_SUGGEST[fromU.k] || null;
   }
@@ -9263,7 +9912,7 @@ function renderConvCard(query) {
   const rounded  = parseFloat(result.toPrecision(sigFigs));
   const formatted = fmtCalcResult(rounded);
   const copyVal   = String(rounded);
-  const expr  = `${conv.value} ${conv.fromStr} → ${conv.toStr}`;
+  const expr  = `${conv.value} ${conv.fromStr} â†’ ${conv.toStr}`;
   const label = _CONV_LABEL[conv.fromU.t] || conv.fromU.t;
   let disc = '';
   if (conv.fromU.t === 'currency') {
@@ -9487,7 +10136,7 @@ function tspKeydown(e) {
     input.setSelectionRange(end, end);
     return;
   }
-  // Tab → switch to AI mode (only when query exists and AI is configured)
+  // Tab â†’ switch to AI mode (only when query exists and AI is configured)
   if (e.key === 'Tab') {
     e.preventDefault();
     const val = input ? input.value.trim() : '';
@@ -9498,7 +10147,7 @@ function tspKeydown(e) {
     }
     return;
   }
-  // Escape in AI mode → exit AI mode rather than closing spotlight
+  // Escape in AI mode â†’ exit AI mode rather than closing spotlight
   if (e.key === 'Escape' && tspAiMode) {
     e.preventDefault();
     tspExitAiMode();
@@ -9689,11 +10338,17 @@ function saveAiSettings() {
     anthropic: document.getElementById('set-anthropic-key').value,
     openai: document.getElementById('set-openai-key').value,
     gemini: document.getElementById('set-gemini-key').value,
-    openrouter: document.getElementById('set-openrouter-key').value,
-    ollama_url: document.getElementById('set-ollama-url').value,
   };
   send('SaveSettings', {key: 'ai_keys', value: keys});
-  toast('API keys saved', 'success');
+  send('SaveSettings', {key: 'openai_base_url', value: document.getElementById('set-openai-base-url').value});
+  send('SaveSettings', {key: 'anthropic_base_url', value: document.getElementById('set-anthropic-base-url').value});
+  send('SaveSettings', {key: 'gemini_base_url', value: document.getElementById('set-gemini-base-url').value});
+  send('SaveSettings', {key: 'reasoning_effort', value: document.getElementById('set-reasoning-effort').value});
+  send('SaveSettings', {
+    key: 'openai_use_responses_api',
+    value: document.getElementById('toggle-openai-use-responses-api').classList.contains('on')
+  });
+  toast('AI settings saved', 'success');
 }
 
 // ============================================================
@@ -9771,7 +10426,7 @@ function renderDownloads() {
       : (d.status === 'failed' || d.status === 'cancelled') ? 'var(--danger)'
       : 'var(--text-muted)';
     const metaText = isDone && d.local_path
-      ? `${dlMeta(d)} · ${escHtml(d.local_path.split(/[\\/]/).pop())}`
+      ? `${dlMeta(d)} Â· ${escHtml(d.local_path.split(/[\\/]/).pop())}`
       : dlMeta(d);
     const id = escAttr(d.id);
     let actionBtns = '';
@@ -9881,15 +10536,15 @@ function showBrowserContextMenu(data) {
     item('open_image_tab', 'Open image in new tab');
     item('copy_image',     'Copy image');
     item('copy_image_url', 'Copy image address');
-    item('save_image',     'Save image as…');
+    item('save_image',     'Save image asâ€¦');
   }
   if (data.selectedText) {
     if (data.linkUrl || data.imageSrc) sep();
     item('copy_text', 'Copy');
     const shortText = data.selectedText.length > 25
-      ? data.selectedText.slice(0, 25) + '…'
+      ? data.selectedText.slice(0, 25) + 'â€¦'
       : data.selectedText;
-    item('search_text', `Search for “${shortText}”`);
+    item('search_text', `Search for â€œ${shortText}â€`);
   }
   if (rows.length > 0) sep();
   if (data.canBack)  item('back',    'Back',    data.canBack  ? '' : 'ctx-disabled');
@@ -9988,7 +10643,7 @@ function toggleDownloadPanel(event) {
   openDownloadPanel(false);
 }
 
-// peek=true: opened automatically on a download start — auto-dismisses unless the user
+// peek=true: opened automatically on a download start â€” auto-dismisses unless the user
 // interacts with it. peek=false: a normal user-initiated open that stays until dismissed.
 function openDownloadPanel(peek) {
   const panel = document.getElementById('download-panel');
@@ -10011,12 +10666,12 @@ function openDownloadPanel(peek) {
     panel.classList.remove('dl-peek');
     panel.dataset.peek = '0';
   }
-  // Clip to the panel rect only — page underneath stays scrollable/interactive.
+  // Clip to the panel rect only â€” page underneath stays scrollable/interactive.
   // rAF lets layout settle so getBoundingClientRect is accurate.
   requestAnimationFrame(_syncDownloadOverlay);
 }
 
-// User engaged with the peeking panel → make it sticky (cancel auto-dismiss).
+// User engaged with the peeking panel â†’ make it sticky (cancel auto-dismiss).
 function cancelDownloadPeek() {
   const panel = document.getElementById('download-panel');
   if (!panel) return;
@@ -10046,7 +10701,7 @@ function flashDownloadStart() {
   const panel = document.getElementById('download-panel');
   if (!panel) return;
   if (panel.classList.contains('open')) {
-    // Already open — just refresh contents and keep the panel rect clip in sync.
+    // Already open â€” just refresh contents and keep the panel rect clip in sync.
     renderDownloadPanel();
     requestAnimationFrame(_syncDownloadOverlay);
   } else {
@@ -10055,7 +10710,7 @@ function flashDownloadStart() {
 }
 
 // A press landed in the live web page (relayed by the content WebView). Close the
-// download panel — it's clipped to its own rect, so the page never received the chrome's
+// download panel â€” it's clipped to its own rect, so the page never received the chrome's
 // own document-level click handler that would otherwise dismiss it.
 function onContentPointerDown() {
   const panel = document.getElementById('download-panel');
@@ -10154,7 +10809,7 @@ document.getElementById('download-panel').addEventListener('click', e => {
   if (delBtn) { e.stopPropagation(); send('DeleteDownload', {id: delBtn.dataset.delDlId}); return; }
 });
 
-// Close download panel on click outside (also on Escape — handled in keydown)
+// Close download panel on click outside (also on Escape â€” handled in keydown)
 document.addEventListener('click', e => {
   const panel = document.getElementById('download-panel');
   const dlBtn = toolbarAnchor('downloads') || document.getElementById('btn-more');
@@ -10274,7 +10929,7 @@ function updateBmBarOverflow() {
   const items = Array.from(bar.querySelectorAll('.bm-bar-item'));
   if (!items.length) return;
 
-  // No overflow at all — done
+  // No overflow at all â€” done
   if (bar.scrollWidth <= bar.clientWidth) return;
 
   // Reserve ~42px for the overflow button and find items to pull out
@@ -10795,8 +11450,8 @@ function dlMeta(d) {
   if (d.status === 'cancelled') return 'Canceled';
   const pct = dlPct(d);
   const sizePart = pct !== null ? pct + '%' : formatBytes(d.received_bytes);
-  if (d.status === 'paused') return ['Paused', sizePart].filter(Boolean).join(' · ');
-  return [sizePart, formatSpeed(d.speed_bps), formatEta(d)].filter(Boolean).join(' · ');
+  if (d.status === 'paused') return ['Paused', sizePart].filter(Boolean).join(' Â· ');
+  return [sizePart, formatSpeed(d.speed_bps), formatEta(d)].filter(Boolean).join(' Â· ');
 }
 function dlProgressHtml(d) {
   const isPaused = d.status === 'paused';
@@ -10911,7 +11566,7 @@ function handleDelegatedListClick(e) {
   }
   const nav = e.target.closest('[data-nav-url]');
   // Elements that carry their own onclick (sidebar tab items, bookmark-bar
-  // items) handle clicks themselves — `data-nav-url` on them exists only as a
+  // items) handle clicks themselves â€” `data-nav-url` on them exists only as a
   // drag source. Navigating here too would reload a tab on every switch.
   if (nav && !nav.hasAttribute('onclick')) {
     e.preventDefault();
@@ -10966,7 +11621,7 @@ function obPopulateRegionSelect(current) {
   const sel = document.getElementById('ob-region-select');
   if (!sel) return;
   const sorted = Object.entries(_COUNTRY_DATA).sort((a,b) => a[1].name.localeCompare(b[1].name));
-  sel.innerHTML = '<option value="">— Not set —</option>' +
+  sel.innerHTML = '<option value="">â€” Not set â€”</option>' +
     sorted.map(([code, c]) =>
       `<option value="${escAttr(code)}"${code === current ? ' selected' : ''}>${countryFlag(code)} ${escHtml(c.name)}</option>`
     ).join('');
@@ -11063,9 +11718,8 @@ function obSaveAndFinish() {
   const anthropic  = (document.getElementById('ob-anthropic-key')  || {}).value || '';
   const openai     = (document.getElementById('ob-openai-key')      || {}).value || '';
   const gemini     = (document.getElementById('ob-gemini-key')      || {}).value || '';
-  const openrouter = (document.getElementById('ob-openrouter-key')  || {}).value || '';
-  if (anthropic || openai || gemini || openrouter) {
-    send('SaveSettings', {key: 'ai_keys', value: {anthropic, openai, gemini, openrouter}});
+  if (anthropic || openai || gemini) {
+    send('SaveSettings', {key: 'ai_keys', value: {anthropic, openai, gemini}});
   }
   send('SaveSettings', {key: 'theme',          value: obTheme});
   send('SaveSettings', {key: 'sidebar_mode',   value: obSidebarMode});
@@ -11146,18 +11800,18 @@ function tabContextMenu(ev, tabId) {
   const tabs = (state.tabs || []).filter(t => t.workspace_id === ws);
   const idx = tabs.findIndex(t => t.id === tabId);
   const isWeb = !!tab.url && !tab.url.startsWith('neura://') && !tab.url.startsWith('about:');
-  // Pinned tabs are protected — skip them in bulk-close counts
+  // Pinned tabs are protected â€” skip them in bulk-close counts
   const others = tabs.filter(t => t.id !== tabId && !t.pinned);
   const below  = idx >= 0 ? tabs.slice(idx + 1).filter(t => !t.pinned) : [];
 
   const items = [
-    // ── Audio ──────────────────────────────────────────────────────────────
+    // â”€â”€ Audio â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     {
       label: tab.is_muted ? 'Unmute tab' : 'Mute tab',
       action: () => send('MuteTab', {tab_id: tabId})
     },
     {sep: true},
-    // ── Tab management ─────────────────────────────────────────────────────
+    // â”€â”€ Tab management â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     {
       label: tab.pinned ? 'Unpin tab' : 'Pin tab',
       action: () => send(tab.pinned ? 'UnpinTab' : 'PinTab', {id: tabId})
@@ -11176,13 +11830,13 @@ function tabContextMenu(ev, tabId) {
     },
   ];
 
-  // ── Open in new window (web URLs only) ───────────────────────────────────
+  // â”€â”€ Open in new window (web URLs only) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (isWeb) {
     items.push({sep: true});
     items.push({label: 'Open in new window', action: () => send('OpenInNewWindow', {url: tab.url})});
   }
 
-  // ── Bulk-close (only when there is something to close) ───────────────────
+  // â”€â”€ Bulk-close (only when there is something to close) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (others.length > 0 || below.length > 0) {
     items.push({sep: true});
     if (others.length > 0) {
@@ -11201,7 +11855,7 @@ function tabContextMenu(ev, tabId) {
     }
   }
 
-  // ── Close this tab ────────────────────────────────────────────────────────
+  // â”€â”€ Close this tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   items.push({sep: true});
   items.push({label: 'Close tab', danger: true, action: () => send('CloseTab', {id: tabId})});
 
@@ -11479,7 +12133,7 @@ document.addEventListener('auxclick', function(e) {
   // Never intercept clicks on dedicated button elements (trash, X, etc.)
   if (e.target.closest('button')) return;
 
-  // Tab items → close (standard browser middle-click-tab behaviour)
+  // Tab items â†’ close (standard browser middle-click-tab behaviour)
   const tabItem = e.target.closest('.tab-item');
   if (tabItem) {
     e.preventDefault();
@@ -11489,7 +12143,7 @@ document.addEventListener('auxclick', function(e) {
     return;
   }
 
-  // Omnibox suggestion items → open in new tab and close the panel
+  // Omnibox suggestion items â†’ open in new tab and close the panel
   const sugg = e.target.closest('.suggestion-item');
   if (sugg) {
     const idx = parseInt(sugg.dataset.index, 10);
@@ -11513,7 +12167,7 @@ document.addEventListener('auxclick', function(e) {
   }
 }, false);
 
-// ── Drag helpers ──────────────────────────────────────────────────────────────
+// â”€â”€ Drag helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function dropHasUriList(dt) {
   if (!dt) return false;
   const t = dt.types || [];
@@ -11542,7 +12196,7 @@ function extractDropUrl(dt) {
   return '';
 }
 
-// ── Drag sources: any [data-nav-url][draggable] element ───────────────────────
+// â”€â”€ Drag sources: any [data-nav-url][draggable] element â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // dragKind classifies what is being dragged so drop zones can react: a tab and a bookmark
 // reorder within their own list; anything else is treated as a plain URL.
 let dragKind = null;   // 'tab' | 'bookmark' | 'url'
@@ -11669,7 +12323,7 @@ function moveBookmarkToBar(id, before) {
   send('MoveBookmark', {id, before});
 }
 
-// ── Address bar: drop → paste URL, focus, open suggestions ───────────────────
+// â”€â”€ Address bar: drop â†’ paste URL, focus, open suggestions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 (function() {
   const bar = document.getElementById('address-bar');
   const inp = document.getElementById('url-input');
@@ -11697,7 +12351,7 @@ function moveBookmarkToBar(id, before) {
   }, false);
 })();
 
-// ── URL input: text-selection drag that also carries URI data when text is a URL ──
+// â”€â”€ URL input: text-selection drag that also carries URI data when text is a URL â”€â”€
 // This fires before the global dragstart listener. If the selected (or full) input
 // text is a valid URL we piggyback text/uri-list so bookmark drop zones accept it.
 // If it is just plain text we leave dataTransfer alone and the native copy drag works.
@@ -11712,7 +12366,7 @@ function moveBookmarkToBar(id, before) {
       if (/^https?:\/\//i.test(candidate)) url = candidate;
       else if (/^[a-z0-9.-]+\.[a-z]{2,}([\/?#]|$)/i.test(candidate)) url = candidate;
     } catch (_) {}
-    if (!url) return; // plain text — let native drag proceed untouched
+    if (!url) return; // plain text â€” let native drag proceed untouched
     dragKind = 'url';
     dragId = null;
     dragPinned = false;
@@ -11724,8 +12378,8 @@ function moveBookmarkToBar(id, before) {
   }, false);
 })();
 
-// ── Sidebar tab list: drop → open new tab ────────────────────────────────────
-// ── Drop zones: sidebar tab list (reorder/new tab) + bookmark areas (reorder/save) ──
+// â”€â”€ Sidebar tab list: drop â†’ open new tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€ Drop zones: sidebar tab list (reorder/new tab) + bookmark areas (reorder/save) â”€â”€
 setupDropZone(document.getElementById('sb-page'), {
   reorderKind: 'tab', item: '.tab-item', axis: 'y',
   sameGroup: (it) => it.classList.contains('pinned') === dragPinned,
@@ -11762,9 +12416,9 @@ setupDropZone(document.getElementById('bookmarks-list'), {
   folderDrop: true,
 });
 
-// ── Global fallback: drop a URL anywhere in chrome → new tab ─────────────────
+// â”€â”€ Global fallback: drop a URL anywhere in chrome â†’ new tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Skips editable elements unless the drag carries text/uri-list (URL drag, not
-// a text-selection drag) — those fall through to native text insert so users can
+// a text-selection drag) â€” those fall through to native text insert so users can
 // drop a URL into the AI input, search bar, or any settings field.
 window.addEventListener('dragover', function(e) {
   if (e.defaultPrevented) return;
@@ -11861,7 +12515,7 @@ function openReleaseLink(e) {
   trigger.addEventListener('mouseleave', e => {
     if (!document.getElementById('app').classList.contains('sidebar-auto-hide')) return;
     const to = e.relatedTarget;
-    // Moving from trigger directly into the sidebar — cancel hide
+    // Moving from trigger directly into the sidebar â€” cancel hide
     if (to && (to === sidebar || sidebar.contains(to))) return;
     scheduledHide();
   });
@@ -11873,9 +12527,9 @@ function openReleaseLink(e) {
   sidebar.addEventListener('mouseleave', function(e) {
     if (!document.getElementById('app').classList.contains('sidebar-auto-hide')) return;
     const to = e.relatedTarget;
-    if (to && this.contains(to)) return; // moving to a child element — stay open
+    if (to && this.contains(to)) return; // moving to a child element â€” stay open
     const pop = document.getElementById('sb-ws-popover');
-    if (to && pop && (to === pop || pop.contains(to))) return; // moving to popover — keep sidebar open
+    if (to && pop && (to === pop || pop.contains(to))) return; // moving to popover â€” keep sidebar open
     scheduledHide();
   });
 

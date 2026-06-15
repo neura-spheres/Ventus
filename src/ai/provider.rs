@@ -130,6 +130,8 @@ pub struct ChatRequest {
     pub temperature: f32,
     pub max_tokens: u32,
     pub stream: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<String>,
     /// Optional list of tools the model may call
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tools: Option<Vec<Tool>>,
@@ -174,6 +176,7 @@ pub trait AiProvider: Send + Sync {
             temperature: 0.0,
             max_tokens: 10,
             stream: false,
+            reasoning_effort: None,
             tools: None,
         };
         let resp = self.chat(req).await?;
