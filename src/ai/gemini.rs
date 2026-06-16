@@ -91,6 +91,10 @@ impl GeminiProvider {
             }
         });
 
+        if let Some(thinking_config) = Self::thinking_config(req) {
+            body["generationConfig"]["thinkingConfig"] = thinking_config;
+        }
+
         if !system.is_empty() {
             body["system_instruction"] = json!({
                 "parts": [{"text": system}]
@@ -98,6 +102,63 @@ impl GeminiProvider {
         }
 
         body
+    }
+
+    fn thinking_config(req: &ChatRequest) -> Option<Value> {
+        if !Self::supports_thinking_config(&req.model) {
+            return None;
+        }
+
+        let mut config = json!({ "includeThoughts": true });
+        let effort = req.reasoning_effort.as_deref().unwrap_or("default");
+
+        if Self::supports_thinking_level(&req.model) {
+            if let Some(level) = Self::api_thinking_level(effort) {
+                config["thinkingLevel"] = json!(level);
+            }
+        } else if Self::supports_thinking_budget(&req.model) {
+            if let Some(budget) = Self::api_thinking_budget(effort) {
+                config["thinkingBudget"] = json!(budget);
+            }
+        }
+
+        Some(config)
+    }
+
+    fn supports_thinking_config(model: &str) -> bool {
+        let model = model.to_ascii_lowercase();
+        model.contains("gemini-3") || model.contains("gemini-2.5")
+    }
+
+    fn supports_thinking_level(model: &str) -> bool {
+        model.to_ascii_lowercase().contains("gemini-3")
+    }
+
+    fn supports_thinking_budget(model: &str) -> bool {
+        model.to_ascii_lowercase().contains("gemini-2.5")
+    }
+
+    fn api_thinking_level(effort: &str) -> Option<&'static str> {
+        match effort.trim().to_ascii_lowercase().as_str() {
+            "" | "default" => None,
+            "none" | "minimal" => Some("MINIMAL"),
+            "low" => Some("LOW"),
+            "medium" => Some("MEDIUM"),
+            "high" | "xhigh" | "x-high" | "x_high" => Some("HIGH"),
+            _ => None,
+        }
+    }
+
+    fn api_thinking_budget(effort: &str) -> Option<i32> {
+        match effort.trim().to_ascii_lowercase().as_str() {
+            "" | "default" => None,
+            "none" => Some(0),
+            "minimal" => Some(128),
+            "low" => Some(512),
+            "medium" => Some(1024),
+            "high" | "xhigh" | "x-high" | "x_high" => Some(2048),
+            _ => None,
+        }
     }
 
     fn search_req(&self, req: &ChatRequest) -> ChatRequest {
@@ -147,12 +208,38 @@ impl GeminiProvider {
                 .unwrap_or(false)
     }
 
-    fn read_text(data: &Value) -> String {
+    fn read_content(data: &Value) -> String {
+        let Some(parts) = data["candidates"][0]["content"]["parts"].as_array() else {
+            return String::new();
+        };
+
+        let mut thinking = String::new();
+        let mut answer = String::new();
+        for part in parts {
+            let Some(text) = part["text"].as_str() else {
+                continue;
+            };
+            if part["thought"].as_bool().unwrap_or(false) {
+                thinking.push_str(text);
+            } else {
+                answer.push_str(text);
+            }
+        }
+
+        if thinking.trim().is_empty() {
+            return answer;
+        }
+
+        format!("<thinking>\n{}\n</thinking>\n{}", thinking.trim(), answer)
+    }
+
+    fn read_answer_text(data: &Value) -> String {
         data["candidates"][0]["content"]["parts"]
             .as_array()
             .map(|parts| {
                 parts
                     .iter()
+                    .filter(|p| !p["thought"].as_bool().unwrap_or(false))
                     .filter_map(|p| p["text"].as_str())
                     .collect::<String>()
             })
@@ -194,7 +281,7 @@ impl AiProvider for GeminiProvider {
         }
 
         let data: Value = resp.json().await?;
-        let text = Self::read_text(&data);
+        let text = Self::read_answer_text(&data);
         if text.is_empty() || !Self::has_grounding(&data) {
             return Ok(None);
         }
@@ -218,7 +305,7 @@ impl AiProvider for GeminiProvider {
         }
 
         let data: Value = resp.json().await?;
-        let content = Self::read_text(&data);
+        let content = Self::read_content(&data);
         let prompt_tokens = data["usageMetadata"]["promptTokenCount"]
             .as_u64()
             .map(|n| n as u32);
@@ -272,7 +359,7 @@ impl AiProvider for GeminiProvider {
                         return;
                     }
                     let val = serde_json::from_str::<Value>(data)?;
-                    let content = Self::read_text(&val);
+                    let content = Self::read_content(&val);
                     if !content.is_empty() {
                         yield content;
                     }
@@ -284,7 +371,7 @@ impl AiProvider for GeminiProvider {
             if let Some(data) = tail.strip_prefix("data: ") {
                 if !data.is_empty() && data != "[DONE]" {
                     let val = serde_json::from_str::<Value>(data)?;
-                    let content = Self::read_text(&val);
+                    let content = Self::read_content(&val);
                     if !content.is_empty() {
                         yield content;
                     }

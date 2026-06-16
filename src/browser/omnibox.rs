@@ -363,8 +363,14 @@ pub fn suggest(
             let f = features(&q, c, &learned, now);
             let base = sigmoid(dot(&model.w, &f) + model.b);
             let key = site_key(&c.url);
-            let pinned = key.as_ref().map(|k| prefs.pinned.contains(k)).unwrap_or(false);
-            let blocked = key.as_ref().map(|k| prefs.blocked.contains(k)).unwrap_or(false);
+            let pinned = key
+                .as_ref()
+                .map(|k| prefs.pinned.contains(k))
+                .unwrap_or(false);
+            let blocked = key
+                .as_ref()
+                .map(|k| prefs.blocked.contains(k))
+                .unwrap_or(false);
             Suggestion {
                 url: c.url.clone(),
                 title: c.title.clone(),

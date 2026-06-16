@@ -642,8 +642,12 @@ pub fn handle_chrome_command(
             state.push_state_to_chrome(chrome);
             None
         }
-        ChromeCommand::AiModelChange { model } => {
-            if let Some(provider) = ai_provider_for_model(&model) {
+        ChromeCommand::AiModelChange { model, provider } => {
+            if let Some(provider) = provider
+                .as_deref()
+                .map(normalize_ai_provider)
+                .or_else(|| ai_provider_for_model(&model))
+            {
                 state.current_ai_provider = provider.to_string();
                 state.settings.ai.default_provider = provider.to_string();
             }

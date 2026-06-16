@@ -99,12 +99,27 @@ impl AnthropicProvider {
             "model": req.model,
             "messages": messages,
             "max_tokens": req.max_tokens,
-            "temperature": req.temperature,
             "stream": stream,
         });
+        if Self::supports_sampling(&req.model) {
+            body["temperature"] = json!(req.temperature);
+        }
 
         if !system.is_empty() {
             body["system"] = json!(system);
+        }
+
+        if Self::supports_effort(&req.model) {
+            if let Some(effort) = req.reasoning_effort.as_deref().and_then(Self::api_effort) {
+                body["output_config"] = json!({ "effort": effort });
+            }
+        }
+
+        if Self::supports_adaptive_thinking(&req.model) {
+            body["thinking"] = json!({
+                "type": "adaptive",
+                "display": "summarized",
+            });
         }
 
         // Anthropic tool format: name + description + input_schema (same JSON Schema as our parameters)
@@ -122,6 +137,45 @@ impl AnthropicProvider {
         body
     }
 
+    fn api_effort(effort: &str) -> Option<&'static str> {
+        match effort.trim().to_ascii_lowercase().as_str() {
+            "" | "default" | "none" => None,
+            "minimal" => Some("low"),
+            "low" => Some("low"),
+            "medium" => Some("medium"),
+            "high" => Some("high"),
+            "xhigh" | "x-high" | "x_high" => Some("xhigh"),
+            "max" => Some("max"),
+            _ => None,
+        }
+    }
+
+    fn supports_effort(model: &str) -> bool {
+        let model = model.to_ascii_lowercase();
+        model.contains("claude-fable")
+            || model.contains("claude-mythos")
+            || model.contains("claude-opus-4")
+            || model.contains("claude-sonnet-4-6")
+    }
+
+    fn supports_adaptive_thinking(model: &str) -> bool {
+        let model = model.to_ascii_lowercase();
+        model.contains("claude-fable")
+            || model.contains("claude-mythos")
+            || model.contains("claude-opus-4-6")
+            || model.contains("claude-opus-4-7")
+            || model.contains("claude-opus-4-8")
+            || model.contains("claude-sonnet-4-6")
+    }
+
+    fn supports_sampling(model: &str) -> bool {
+        let model = model.to_ascii_lowercase();
+        !(model.contains("claude-fable")
+            || model.contains("claude-mythos")
+            || model.contains("claude-opus-4-7")
+            || model.contains("claude-opus-4-8"))
+    }
+
     fn parse_content_blocks(data: &Value) -> (String, Option<Vec<ToolCall>>) {
         let Some(arr) = data["content"].as_array() else {
             let text = data["content"][0]["text"]
@@ -132,6 +186,7 @@ impl AnthropicProvider {
         };
 
         let mut text = String::new();
+        let mut thinking = String::new();
         let mut tool_calls: Vec<ToolCall> = vec![];
 
         for block in arr {
@@ -139,6 +194,11 @@ impl AnthropicProvider {
                 Some("text") => {
                     if let Some(t) = block["text"].as_str() {
                         text.push_str(t);
+                    }
+                }
+                Some("thinking") => {
+                    if let Some(t) = block["thinking"].as_str() {
+                        thinking.push_str(t);
                     }
                 }
                 Some("tool_use") => {
@@ -159,12 +219,47 @@ impl AnthropicProvider {
             }
         }
 
+        if !thinking.trim().is_empty() {
+            text = format!("<thinking>\n{}\n</thinking>\n{}", thinking.trim(), text);
+        }
+
         let tcs = if tool_calls.is_empty() {
             None
         } else {
             Some(tool_calls)
         };
         (text, tcs)
+    }
+
+    fn close_thinking_if_open(thinking_open: &mut bool, content: &mut String) {
+        if *thinking_open {
+            content.push_str("</thinking>\n");
+            *thinking_open = false;
+        }
+    }
+
+    fn parse_stream_event(event: &Value, thinking_open: &mut bool) -> String {
+        let mut content = String::new();
+        match event["type"].as_str() {
+            Some("content_block_delta") => {
+                let delta = &event["delta"];
+                if let Some(thinking) = delta["thinking"].as_str() {
+                    if !*thinking_open {
+                        content.push_str("<thinking>\n");
+                        *thinking_open = true;
+                    }
+                    content.push_str(thinking);
+                } else if let Some(text) = delta["text"].as_str() {
+                    Self::close_thinking_if_open(thinking_open, &mut content);
+                    content.push_str(text);
+                }
+            }
+            Some("content_block_stop") | Some("message_stop") => {
+                Self::close_thinking_if_open(thinking_open, &mut content);
+            }
+            _ => {}
+        }
+        content
     }
 }
 
@@ -282,40 +377,52 @@ impl AiProvider for AnthropicProvider {
             return Err(anyhow!("Anthropic API error {}: {}", status, text));
         }
 
-        let mut thinking_open = false;
-        let stream = resp.bytes_stream().map(move |chunk| -> Result<String> {
-            let bytes = chunk?;
-            let text = std::str::from_utf8(&bytes).unwrap_or("");
-            let mut content = String::new();
-            for line in text.lines() {
-                if let Some(data) = line.strip_prefix("data: ") {
-                    if let Ok(val) = serde_json::from_str::<Value>(data) {
-                        if val["type"] == "content_block_delta" {
-                            if let Some(delta) = val["delta"]["thinking"].as_str() {
-                                if !thinking_open {
-                                    content.push_str("<thinking>");
-                                    thinking_open = true;
-                                }
-                                content.push_str(delta);
-                            } else if let Some(delta) = val["delta"]["text"].as_str() {
-                                if thinking_open {
-                                    content.push_str("</thinking>\n");
-                                    thinking_open = false;
-                                }
-                                content.push_str(delta);
-                            }
-                        } else if thinking_open
-                            && (val["type"] == "content_block_stop"
-                                || val["type"] == "message_stop")
-                        {
-                            content.push_str("</thinking>");
-                            thinking_open = false;
-                        }
+        let mut byte_stream = resp.bytes_stream();
+        let stream = async_stream::try_stream! {
+            let mut buffer = String::new();
+            let mut thinking_open = false;
+            while let Some(chunk) = byte_stream.next().await {
+                let bytes = chunk?;
+                let text = std::str::from_utf8(&bytes).unwrap_or("");
+                buffer.push_str(text);
+
+                while let Some(line_end) = buffer.find('\n') {
+                    let line = buffer[..line_end].trim_end_matches('\r').trim().to_string();
+                    buffer.drain(..=line_end);
+                    if line.is_empty() {
+                        continue;
+                    }
+                    let Some(data) = line.strip_prefix("data:").map(str::trim_start) else {
+                        continue;
+                    };
+                    let val = serde_json::from_str::<Value>(data)?;
+                    if val["type"].as_str() == Some("error") {
+                        Err(anyhow!("Anthropic stream error: {}", val))?;
+                    }
+                    let content = Self::parse_stream_event(&val, &mut thinking_open);
+                    if !content.is_empty() {
+                        yield content;
                     }
                 }
             }
-            Ok(content)
-        });
+
+            let tail = buffer.trim();
+            if let Some(data) = tail.strip_prefix("data:").map(str::trim_start) {
+                if !data.is_empty() {
+                    let val = serde_json::from_str::<Value>(data)?;
+                    if val["type"].as_str() == Some("error") {
+                        Err(anyhow!("Anthropic stream error: {}", val))?;
+                    }
+                    let content = Self::parse_stream_event(&val, &mut thinking_open);
+                    if !content.is_empty() {
+                        yield content;
+                    }
+                }
+            }
+            if thinking_open {
+                yield "</thinking>\n".to_string();
+            }
+        };
 
         Ok(Box::pin(stream))
     }

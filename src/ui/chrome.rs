@@ -1377,15 +1377,22 @@ button,input,select,textarea{font-family:var(--font)}
 .ai-thinking-summary{
   align-self:stretch;color:rgb(175,175,175);font-weight:400;
   font-size:12.5px;line-height:1.5;max-width:100%;
+  --ai-shimmer-base:rgb(175,175,175);
+  --ai-shimmer-highlight:rgb(245,245,245);
 }
-[data-theme="light"] .ai-thinking-summary{color:rgb(93,93,93)}
+[data-theme="light"] .ai-thinking-summary{
+  color:rgb(93,93,93);
+  --ai-shimmer-base:rgb(93,93,93);
+  --ai-shimmer-highlight:rgb(20,20,20);
+}
 .ai-thinking-preview{
   display:flex;flex-direction:column;gap:3px;cursor:pointer;
   padding:8px 2px 6px;user-select:none;-webkit-user-select:none;
 }
 .ai-thinking-title-row{display:flex;align-items:center;gap:6px;min-width:0}
 .ai-thinking-title{
-  font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  position:relative;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  color:inherit;
 }
 .ai-thinking-chevron{opacity:.7;transition:transform .18s ease;flex-shrink:0}
 .ai-thinking-summary.expanded .ai-thinking-chevron{transform:rotate(90deg)}
@@ -1395,24 +1402,51 @@ button,input,select,textarea{font-family:var(--font)}
 .ai-thinking-summary.done .ai-thinking-preview-text,
 .ai-thinking-summary.expanded .ai-thinking-preview-text{display:none}
 .ai-thinking-timeline{
-  display:none;flex-direction:column;gap:10px;
-  padding:4px 2px 8px 14px;border-left:1px solid var(--border-subtle);
+  display:none;flex-direction:column;gap:0;
+  padding:4px 2px 8px 0;
 }
 .ai-thinking-summary.expanded .ai-thinking-timeline{display:flex}
-.ai-thinking-node{position:relative;padding-left:9px}
-.ai-thinking-node::before{
-  content:"";position:absolute;left:-18px;top:7px;width:5px;height:5px;
-  border-radius:50%;background:currentColor;opacity:.72;
+.ai-thinking-node{
+  position:relative;display:grid;grid-template-columns:16px minmax(0,1fr);gap:8px;
+  padding:2px 0 13px 0;
 }
-.ai-thinking-node-title{font-weight:500;margin-bottom:2px;color:inherit}
-.ai-thinking-node-body{white-space:pre-wrap;color:inherit;font-weight:400}
+.ai-thinking-node:not(:last-child)::after{
+  content:"";position:absolute;left:9px;top:18px;bottom:0;width:1px;
+  background:color-mix(in srgb,var(--ai-muted) 18%,transparent);
+}
+.ai-thinking-node-bullet{
+  width:5px;height:5px;border-radius:50%;background:currentColor;
+  margin:8px 0 0 7px;z-index:1;opacity:.82;
+}
+.ai-thinking-node-content{min-width:0}
+.ai-thinking-node-title{
+  font-weight:500;margin-bottom:2px;color:var(--ai-text);font-size:12.5px;line-height:1.45;
+}
+[data-theme="light"] .ai-thinking-node-title{color:rgb(28,28,28)}
+.ai-thinking-node-body{white-space:pre-wrap;color:inherit;font-weight:400;opacity:.9}
+.ai-thinking-summary.raw .ai-thinking-node-body{font-weight:400;opacity:.92}
 .ai-thinking-summary.streaming.raw .ai-thinking-title,
-.ai-thinking-summary.streaming.gpt .ai-thinking-title,
-.ai-thinking-summary.streaming.gpt .ai-thinking-node.active .ai-thinking-node-title{
-  animation:ai-thinking-pulse 1.6s ease-in-out infinite;
-  will-change:opacity;
+.ai-thinking-summary.streaming.gpt .ai-thinking-title{
+  color:transparent;-webkit-text-fill-color:transparent;
+  background:linear-gradient(90deg,
+    var(--ai-shimmer-base) 0%,
+    var(--ai-shimmer-base) 42%,
+    var(--ai-shimmer-highlight) 50%,
+    var(--ai-shimmer-base) 58%,
+    var(--ai-shimmer-base) 100%);
+  background-size:360% 100%;
+  -webkit-background-clip:text;background-clip:text;
+  animation:ai-thinking-shimmer 4.6s linear infinite;
+  will-change:background-position;
 }
-@keyframes ai-thinking-pulse{0%,100%{opacity:.68}50%{opacity:1}}
+.ai-msg.assistant.ai-streaming-response{animation:ai-stream-fade-in .24s ease-out both}
+.ai-msg.assistant.ai-stream-tick{animation:ai-stream-tick .18s ease-out both}
+@keyframes ai-thinking-shimmer{
+  0%,12%{background-position:220% 0}
+  88%,100%{background-position:-220% 0}
+}
+@keyframes ai-stream-fade-in{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:translateY(0)}}
+@keyframes ai-stream-tick{from{opacity:.72;transform:translateY(2px)}to{opacity:1;transform:translateY(0)}}
 .ai-tool-call{
   display:flex;gap:8px;align-items:center;align-self:flex-start;
   padding:8px 10px;border-radius:10px;
@@ -4242,7 +4276,7 @@ svg{display:block;flex-shrink:0}
             <option value="high">High</option>
             <option value="xhigh">X-High</option>
           </select>
-          <div class="hint">Used by OpenAI-compatible reasoning models when Responses API is enabled.</div>
+          <div class="hint">Applies to supported OpenAI, Claude, and Gemini compatible models. Default leaves provider effort automatic while still requesting reasoning summaries when available.</div>
         </div>
         <div class="settings-group">
           <label>Anthropic Compatible</label>
@@ -4813,6 +4847,8 @@ let aiThinkingFrozen = false;
 let aiStreamStopped = false;
 let aiThinkingStartedAt = 0;
 let aiThinkingWorkedApplied = false;
+let aiStreamVisualTextLength = 0;
+let aiStreamFadeTimer = null;
 let _thinkThrottleTimer = null;
 let _lastThinkingHtml = '';
 let loadProgress = 0;
@@ -4937,6 +4973,9 @@ window.__neura = {
     if (done) {
       flushThinkingRender();
       freezeAiThinkingSummary();
+      if (aiStreamFadeTimer) { clearTimeout(aiStreamFadeTimer); aiStreamFadeTimer = null; }
+      if (currentStreamEl) currentStreamEl.classList.remove('ai-streaming-response','ai-stream-tick');
+      aiStreamVisualTextLength = 0;
       currentStreamEl = null;
       currentThinkingEl = null;
       aiStreamRawText = '';
@@ -8802,7 +8841,7 @@ function selectModel(provider, modelId, modelName) {
   if (provider !== prevProvider) {
     send('AiProviderChange', {provider});
   }
-  send('AiModelChange', {model: modelId});
+  send('AiModelChange', {model: modelId, provider});
   // Optimistically update local state for immediate UI feedback
   if (!state.settings) state.settings = {};
   if (!state.settings.ai) state.settings.ai = {};
@@ -8817,12 +8856,17 @@ function applyCustomModel() {
   const id = input.value.trim();
   if (!id) return;
   const ai = (state.settings && state.settings.ai) || {};
-  const provider = normalizeAiProvider(ai.default_provider || state.ai_provider || 'openai');
-  send('AiModelChange', {model: id});
+  const provider = normalizeAiProvider(mmActiveProvider || ai.default_provider || state.ai_provider || 'openai');
+  const prevProvider = normalizeAiProvider(ai.default_provider || state.ai_provider || '');
+  if (provider !== prevProvider) {
+    send('AiProviderChange', {provider});
+  }
+  send('AiModelChange', {model: id, provider});
   if (!state.settings) state.settings = {};
   if (!state.settings.ai) state.settings.ai = {};
   state.settings.ai.default_provider = provider;
   state.settings.ai.default_model = id;
+  state.ai_provider = provider;
   const pill = document.getElementById('ai-model-pill');
   if (pill) pill.textContent = id.length > 18 ? id.slice(0, 16) + '..' : id;
   closeModelModal();
@@ -9071,7 +9115,9 @@ function resetAiStreamState() {
   aiStreamStopped = false;
   aiThinkingStartedAt = Date.now();
   aiThinkingWorkedApplied = false;
+  aiStreamVisualTextLength = 0;
   _lastThinkingHtml = '';
+  if (aiStreamFadeTimer) { clearTimeout(aiStreamFadeTimer); aiStreamFadeTimer = null; }
   if (_thinkThrottleTimer) { clearTimeout(_thinkThrottleTimer); _thinkThrottleTimer = null; }
   removeAiThinkingDots();
   removeAiToolStatuses();
@@ -9143,7 +9189,8 @@ function parseThinkingNodes(text) {
   const clean = normalizeThinkingText(text);
   if (!clean) return {style: 'raw', nodes: []};
 
-  if (/\*\*([^*\n]+)\*\*/.test(clean)) {
+  const startsWithBoldTitle = /^\s*\*\*([^*\n]+)\*\*/.test(clean);
+  if (startsWithBoldTitle) {
     const titleRe = /(?:^|\n|\.\s+)\s*\*\*([^*\n]+)\*\*\s*/g;
     const matches = [];
     let match;
@@ -9162,13 +9209,32 @@ function parseThinkingNodes(text) {
         nodes: splitRawThinking(cleanThinkingBody(clean)).map(body => ({title: '', body})),
       };
     }
-    const nodes = matches.map((item, index) => {
-      const next = matches[index + 1];
+
+    let rawTailStart = -1;
+    const titleMatches = [];
+    for (let i = 0; i < matches.length; i++) {
+      if (i > 0) {
+        const bridge = clean.slice(matches[i - 1].end, matches[i].start);
+        if (/(^|\n)\s*\d+\s*($|\n)/.test(bridge)) {
+          rawTailStart = matches[i].start;
+          break;
+        }
+      }
+      titleMatches.push(matches[i]);
+    }
+
+    const nodes = titleMatches.map((item, index) => {
+      const next = titleMatches[index + 1];
       return {
         title: cleanThinkingTitle(item.title),
-        body: cleanThinkingBody(clean.slice(item.end, next ? next.start : clean.length)),
+        body: cleanThinkingBody(clean.slice(item.end, next ? next.start : (rawTailStart >= 0 ? rawTailStart : clean.length))),
       };
     }).filter(node => node.title || node.body);
+
+    if (rawTailStart >= 0) {
+      nodes.push(...splitRawThinking(cleanThinkingBody(clean.slice(rawTailStart))).map(body => ({title: '', body})));
+    }
+
     return {style: 'gpt', nodes};
   }
 
@@ -9196,6 +9262,7 @@ function cleanThinkingBody(text) {
     .replace(/~~([^~]+?)~~/g, '$1')
     .replace(/`([^`\n]+)`/g, '$1')
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/^\s*\d+\s*$/gm, '')
     .replace(/^\s*[-*\u2022]\s+/gm, '')
     .replace(/^\s*\d+[.)\s]+/gm, '')
     .replace(/[ \t]+\n/g, '\n')
@@ -9204,7 +9271,8 @@ function cleanThinkingBody(text) {
 }
 function splitRawThinking(text) {
   if (!text) return [];
-  const paragraphs = String(text)
+  const normalized = normalizeRawThinkingForNodes(text);
+  const paragraphs = normalized
     .split(/\n\s*\n+/)
     .map(p => p.trim())
     .filter(Boolean);
@@ -9215,10 +9283,19 @@ function splitRawThinking(text) {
   }
   return chunks;
 }
+function normalizeRawThinkingForNodes(text) {
+  return String(text || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/^\s*\d+\s*$/gm, '\n')
+    .replace(/^\s*(?:[-*\u2022]|\d+[.)])\s+/gm, '')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
 function splitRawThinkingParagraph(paragraph) {
   const sentenceRegex = /[^.!?]+(?:[.!?]+|$)/g;
   const sentences = (String(paragraph || '').match(sentenceRegex) || [paragraph])
-    .map(s => s.trim())
+    .map(s => tidyRawThinkingSentence(s))
     .filter(Boolean);
   if (sentences.length <= 1) return splitLongSentence(paragraph);
 
@@ -9241,7 +9318,7 @@ function splitRawThinkingParagraph(paragraph) {
       );
 
     if (shouldSplit) {
-      chunks.push(currentChunk.trim());
+      chunks.push(ensureSentenceEnding(currentChunk.trim()));
       currentChunk = '';
       currentWords = 0;
       currentSentences = 0;
@@ -9254,7 +9331,7 @@ function splitRawThinkingParagraph(paragraph) {
     if (currentWords > 110) {
       const subChunks = splitLongSentence(currentChunk);
       for (let i = 0; i < subChunks.length - 1; i++) {
-        chunks.push(subChunks[i].trim());
+        chunks.push(ensureSentenceEnding(subChunks[i].trim()));
       }
       currentChunk = subChunks[subChunks.length - 1] || '';
       currentWords = wordCount(currentChunk);
@@ -9262,7 +9339,7 @@ function splitRawThinkingParagraph(paragraph) {
     }
   }
 
-  if (currentChunk.trim()) chunks.push(currentChunk.trim());
+  if (currentChunk.trim()) chunks.push(ensureSentenceEnding(currentChunk.trim()));
   return chunks;
 }
 function isRawThinkingTransition(sentence) {
@@ -9272,7 +9349,7 @@ function isRawThinkingTransition(sentence) {
 function splitLongSentence(sentence) {
   const clauseRegex = /[^,;—]+(?:[,;—]+|$)/g;
   const clauses = (sentence.match(clauseRegex) || [sentence])
-    .map(c => c.trim())
+    .map(c => tidyRawThinkingSentence(c))
     .filter(Boolean);
   const subChunks = [];
   let current = '';
@@ -9280,7 +9357,7 @@ function splitLongSentence(sentence) {
   for (const clause of clauses) {
     const clauseWords = wordCount(clause);
     if (current && currentWords + clauseWords > 100) {
-      subChunks.push(current.trim());
+      subChunks.push(ensureSentenceEnding(current.trim()));
       current = '';
       currentWords = 0;
     }
@@ -9292,7 +9369,7 @@ function splitLongSentence(sentence) {
       let tempWords = 0;
       for (const word of words) {
         if (tempWords >= 80) {
-          subChunks.push(temp.trim());
+          subChunks.push(ensureSentenceEnding(temp.trim()));
           temp = '';
           tempWords = 0;
         }
@@ -9304,9 +9381,20 @@ function splitLongSentence(sentence) {
     }
   }
   if (current.trim()) {
-    subChunks.push(current.trim());
+    subChunks.push(ensureSentenceEnding(current.trim()));
   }
   return subChunks;
+}
+function tidyRawThinkingSentence(text) {
+  return String(text || '')
+    .replace(/^\s*(?:[-*\u2022]|\d+[.)])\s+/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+function ensureSentenceEnding(text) {
+  const s = tidyRawThinkingSentence(text);
+  if (!s) return '';
+  return /[.!?]["')\]]?$/.test(s) ? s : s + '.';
 }
 function wordCount(text) {
   const words = String(text || '').trim().match(/\S+/g);
@@ -9360,14 +9448,21 @@ function renderAiThinkingSummary(text, streaming) {
   const classNames = ['ai-thinking-summary', parsed.style];
   if (streaming) classNames.push('streaming');
   if (expanded) classNames.push('expanded');
-  currentThinkingEl.className = classNames.join(' ');
+  const nextClassName = classNames.join(' ');
+  if (currentThinkingEl.className !== nextClassName) {
+    currentThinkingEl.className = nextClassName;
+  }
 
   /* Stable DOM patching: only rebuild innerHTML when content actually changed.
      This prevents CSS animation restarts on every streaming chunk. */
   const timeline = parsed.nodes.map((node, index) => {
+    const status = index < activeIndex ? 'complete' : (index === activeIndex ? 'active' : 'pending');
     const title = node.title ? `<div class="ai-thinking-node-title">${escHtml(node.title)}</div>` : '';
     const body = node.body ? `<div class="ai-thinking-node-body">${escHtml(node.body)}</div>` : '';
-    return `<div class="ai-thinking-node${index === activeIndex ? ' active' : ''}">${title}${body}</div>`;
+    return `<div class="ai-thinking-node ${status}">
+      <div class="ai-thinking-node-bullet"></div>
+      <div class="ai-thinking-node-content">${title}${body}</div>
+    </div>`;
   }).join('');
 
   const newHtml = `
@@ -9419,6 +9514,22 @@ function freezeAiThinkingSummary() {
   }
   aiThinkingFrozen = true;
 }
+function triggerAiStreamFade(content) {
+  if (!currentStreamEl) return;
+  const len = String(content || '').length;
+  if (len <= aiStreamVisualTextLength) return;
+  const delta = len - aiStreamVisualTextLength;
+  aiStreamVisualTextLength = len;
+  if (delta < 8 && aiStreamFadeTimer) return;
+  currentStreamEl.classList.remove('ai-stream-tick');
+  void currentStreamEl.offsetWidth;
+  currentStreamEl.classList.add('ai-stream-tick');
+  if (aiStreamFadeTimer) clearTimeout(aiStreamFadeTimer);
+  aiStreamFadeTimer = setTimeout(() => {
+    if (currentStreamEl) currentStreamEl.classList.remove('ai-stream-tick');
+    aiStreamFadeTimer = null;
+  }, 190);
+}
 function renderAiFinalAnswer(text) {
   const content = String(text || '');
   if (!content.trim() && !currentStreamEl) return;
@@ -9426,10 +9537,11 @@ function renderAiFinalAnswer(text) {
   if (!currentStreamEl || !currentStreamEl.isConnected) {
     const msgs = document.getElementById('ai-messages');
     currentStreamEl = document.createElement('div');
-    currentStreamEl.className = 'ai-msg assistant';
+    currentStreamEl.className = 'ai-msg assistant ai-streaming-response';
     msgs.appendChild(currentStreamEl);
   }
   currentStreamEl.innerHTML = renderAiMarkdown(content);
+  triggerAiStreamFade(content);
 }
 function addAiMessage(role, text) {
   startAiChat();

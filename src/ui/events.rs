@@ -90,6 +90,8 @@ pub enum ChromeCommand {
     },
     AiModelChange {
         model: String,
+        #[serde(default)]
+        provider: Option<String>,
     },
     AiQuickAction {
         action: String,
