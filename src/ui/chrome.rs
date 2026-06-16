@@ -23,7 +23,7 @@ pub fn chrome_html() -> String {
   --transition:0.15s ease;
   --font:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
 
-  /* Ventus dark theme â€” pure neutral dark grey */
+  /* Ventus dark theme — pure neutral dark grey */
   --bg:#0f0f0f;
   --bg-elevated:#1a1a1a;
   --bg-hover:#212121;
@@ -34,7 +34,7 @@ pub fn chrome_html() -> String {
   --text:#e8e8e8;
   --text-muted:#888888;
   --text-dim:#8a8a8a;
-  /* Blue-purple accent â€” matches the Ventus logo gradient */
+  /* Blue-purple accent — matches the Ventus logo gradient */
   --accent:#6366f1;
   --accent-hover:#7c7ef8;
   --accent-dim:rgba(99,102,241,0.14);
@@ -138,7 +138,7 @@ pub fn chrome_html() -> String {
   --load-ring-faint:rgba(255,255,255,0.09);
 }
 [data-theme="light"]{
-  /* Ventus light theme â€” soft paper-white with purple tint */
+  /* Ventus light theme — soft paper-white with purple tint */
   --bg:#f7f8ff;
   --bg-elevated:#ffffff;
   --bg-hover:#eef0fd;
@@ -254,7 +254,7 @@ button,input,select,textarea{font-family:var(--font)}
 ::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
 ::-webkit-scrollbar-thumb:hover{background:var(--text-dim)}
 
-/* layout â€” sidebar is a fixed overlay, not a grid column */
+/* layout — sidebar is a fixed overlay, not a grid column */
 #app{
   display:grid;
   grid-template-columns:1fr;
@@ -658,7 +658,7 @@ button,input,select,textarea{font-family:var(--font)}
 
 .tb-sep{width:1px;height:20px;background:var(--border-subtle);flex-shrink:0;margin:0 2px}
 
-/* â”€â”€ More menu â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── More menu ──────────────────────────────────────────────────────────────â”€ */
 #btn-more{position:relative}
 #more-btn-badge{
   position:absolute;top:4px;right:4px;
@@ -726,7 +726,7 @@ button,input,select,textarea{font-family:var(--font)}
 }
 #more-zoom-pct:hover{background:var(--bg-active)}
 
-/* â”€â”€ Tab audio indicator â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Tab audio indicator ────────────────────────────────────────────────────â”€ */
 .tab-audio-btn{
   width:18px;height:18px;border-radius:4px;
   display:flex;align-items:center;justify-content:center;
@@ -770,9 +770,9 @@ button,input,select,textarea{font-family:var(--font)}
   #toolbar-nav .tb-sep{display:none}
 }
 
-/* â”€â”€ Window edge resize handles â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+/* ── Window edge resize handles ──────────────────────────────────────────────â”€
    Transparent strips anchored to the window edges inside the chrome clip region.
-   Mousedown fires send('BeginResize',{edge}) â†’ Rust â†’ ReleaseCapture + WM_NCLBUTTONDOWN.
+   Mousedown fires send('BeginResize',{edge}) → Rust → ReleaseCapture + WM_NCLBUTTONDOWN.
 */
 .resize-handle{
   position:fixed;z-index:9999;
@@ -786,7 +786,7 @@ button,input,select,textarea{font-family:var(--font)}
 .resize-handle[data-edge="bottomleft"] {left:0;bottom:0;width:12px;height:12px;cursor:nesw-resize}
 .resize-handle[data-edge="bottomright"]{right:0;bottom:0;width:12px;height:12px;cursor:nwse-resize}
 
-/* â”€â”€ Spotlight calculator card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+/* ── Spotlight calculator card ────────────────────────────────────────────────
    Shown above search results when the query is a pure math expression.
 */
 .tsp-calc-card{
@@ -813,7 +813,7 @@ button,input,select,textarea{font-family:var(--font)}
 .tsp-conv-disclaimer{
   font-size:10px;color:var(--text-dim);margin-top:2px;opacity:.55;align-self:flex-start;
 }
-/* â”€â”€ Region settings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Region settings ──────────────────────────────────────────────────────── */
 .region-preview-card{
   background:color-mix(in srgb,var(--accent) 6%,var(--bg-elevated));
   border:1px solid color-mix(in srgb,var(--accent) 20%,var(--border));
@@ -864,55 +864,63 @@ button,input,select,textarea{font-family:var(--font)}
 
 .newtab-logo{width:56px;height:56px;object-fit:contain}
 
-/* â”€â”€ Workspace dot hover popover â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Workspace dot hover popover ────────────────────────────â”€ */
 .sb-ws-popover{
   position:fixed;z-index:295;
   background:var(--bg-elevated);border:1px solid var(--border);
-  border-radius:var(--radius-lg);
-  box-shadow:0 8px 24px rgba(0,0,0,0.18),0 2px 8px rgba(0,0,0,0.12);
-  padding:10px 12px;
-  flex-direction:column;align-items:center;gap:5px;
-  min-width:150px;max-width:190px;
-  opacity:0;transform:translateY(4px) scale(0.97);
-  transition:opacity 0.15s ease,transform 0.18s cubic-bezier(0.34,1.15,0.64,1);
+  border-radius:13px;
+  box-shadow:0 12px 32px rgba(0,0,0,0.30),0 2px 8px rgba(0,0,0,0.16),inset 0 1px 0 rgba(255,255,255,0.05);
+  -webkit-backdrop-filter:blur(22px) saturate(180%);
+  backdrop-filter:blur(22px) saturate(180%);
+  padding:6px;
+  flex-direction:column;gap:5px;
+  min-width:176px;max-width:216px;
+  opacity:0;transform:translateY(4px) scale(0.96);
+  transition:opacity 0.16s ease,transform 0.2s cubic-bezier(0.34,1.2,0.64,1);
   pointer-events:none;display:none;
 }
 .sb-ws-popover.visible{
   opacity:1;transform:translateY(0) scale(1);
   pointer-events:auto;
 }
+.sb-ws-pop-head{display:flex;align-items:center;gap:9px;padding:3px 4px 1px}
 .sb-ws-pop-avatar{
-  width:34px;height:34px;border-radius:10px;
+  width:28px;height:28px;border-radius:8px;flex-shrink:0;
   display:flex;align-items:center;justify-content:center;
-  font-size:13px;font-weight:700;color:rgba(255,255,255,0.95);
-  letter-spacing:0.02em;flex-shrink:0;margin-bottom:1px;
+  font-size:14px;font-weight:700;color:rgba(255,255,255,0.96);
+  letter-spacing:0.01em;line-height:1;box-shadow:0 2px 6px rgba(0,0,0,0.18);
 }
+.sb-ws-pop-info{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1}
 .sb-ws-pop-name{
-  font-size:12px;font-weight:700;color:var(--text);
-  text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-  max-width:100%;
+  font-size:12.5px;font-weight:650;color:var(--text);letter-spacing:-0.01em;
+  line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;
 }
-.sb-ws-pop-count{
-  font-size:10px;color:var(--text-dim);text-align:center;margin-top:-2px;
+.sb-ws-pop-count{font-size:10.5px;color:var(--text-dim);line-height:1.2}
+.sb-ws-pop-badge{
+  display:none;align-items:center;gap:3px;flex-shrink:0;
+  font-size:8.5px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;
+  color:var(--accent-text);background:var(--accent-dim);
+  border:1px solid var(--ai-line);border-radius:999px;padding:2px 6px 2px 5px;
 }
-.sb-ws-pop-note{
-  display:none;
-  font-size:10px;line-height:1.35;color:var(--accent-text);text-align:center;
-  background:var(--accent-dim);border:1px solid var(--ai-line);
-  border-radius:8px;padding:6px 8px;margin-top:3px;width:100%;
+.sb-ws-pop-badge.visible{display:inline-flex}
+.sb-ws-pop-badge svg{flex-shrink:0;width:9px;height:9px}
+.sb-ws-pop-actions{
+  display:flex;gap:3px;width:100%;
+  padding-top:5px;border-top:1px solid var(--border-subtle);
 }
-.sb-ws-pop-actions{display:flex;gap:5px;width:100%;margin-top:4px}
 .sb-ws-pop-btn{
-  flex:1;padding:5px 0;border:none;border-radius:6px;
-  font-size:10px;font-weight:600;cursor:pointer;
-  background:var(--bg-hover);color:var(--text);
-  transition:all 0.14s ease;
+  flex:1;height:26px;border:none;border-radius:7px;
+  font-family:var(--font);font-size:11px;font-weight:600;letter-spacing:-0.01em;cursor:pointer;
+  background:transparent;color:var(--text-muted);
+  display:flex;align-items:center;justify-content:center;gap:5px;
+  transition:background 0.13s ease,color 0.13s ease;
 }
-.sb-ws-pop-btn:hover{background:var(--bg-active);color:var(--text)}
-.sb-ws-pop-btn.danger:hover{background:rgba(239,68,68,0.12);color:#f87171}
+.sb-ws-pop-btn svg{width:11px;height:11px;flex-shrink:0;opacity:0.85}
+.sb-ws-pop-btn:hover{background:var(--bg-hover);color:var(--text)}
+.sb-ws-pop-btn.danger:hover{background:rgba(239,68,68,0.13);color:#f87171}
 .sb-ws-pop-btn:disabled{opacity:.35;cursor:not-allowed;pointer-events:none}
 
-/* â”€â”€ Pages viewport â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Pages viewport ──────────────────────────────────────────â”€ */
 .sb-viewport{flex:1;overflow:hidden;position:relative}
 .sb-page{
   height:100%;overflow-y:auto;overflow-x:hidden;
@@ -924,7 +932,7 @@ button,input,select,textarea{font-family:var(--font)}
 .sb-page::-webkit-scrollbar-track{background:transparent}
 .sb-page::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
 
-/* â”€â”€ Sidebar bottom bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Sidebar bottom bar ──────────────────────────────────────â”€ */
 .sb-bottom{
   display:flex;align-items:center;justify-content:space-between;
   padding:0 8px;border-top:1px solid var(--border-subtle);
@@ -977,7 +985,7 @@ button,input,select,textarea{font-family:var(--font)}
 .ws-dot.muted:hover .ws-dot-mark{opacity:0;transform:scale(.45)}
 .ws-dot:hover{transform:scale(1.08)}
 
-/* â”€â”€ Emoji picker (workspace modal) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Emoji picker (workspace modal) ──────────────────────────â”€ */
 .ws-emoji-row{display:flex;align-items:flex-start;gap:10px;width:100%}
 .ws-emoji-preview{
   width:40px;height:40px;border-radius:10px;flex-shrink:0;
@@ -1017,7 +1025,7 @@ button,input,select,textarea{font-family:var(--font)}
   padding:0;flex-shrink:0;
 }
 
-/* â”€â”€ Preserve workspace modal avatar in dialogs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Preserve workspace modal avatar in dialogs ──────────────â”€ */
 .workspace-avatar{
   width:22px;height:22px;border-radius:6px;
   display:flex;align-items:center;justify-content:center;
@@ -1027,6 +1035,53 @@ button,input,select,textarea{font-family:var(--font)}
 #toolbar-incognito-badge{display:none;align-items:center;gap:4px;font-size:10px;font-weight:700;color:#fff;background:linear-gradient(135deg,#3730a3,#6366f1);border-radius:5px;padding:2px 7px 2px 5px;flex-shrink:0;cursor:default;white-space:nowrap;letter-spacing:0.03em;box-shadow:0 1px 4px rgba(99,102,241,0.4)}
 #toolbar-incognito-badge.visible{display:flex}
 #toolbar-incognito-badge svg{flex-shrink:0}
+
+#ws-switcher-modal{
+  display:none;position:fixed;inset:0;z-index:285;
+  align-items:center;justify-content:center;
+  background:var(--overlay-bg);
+  -webkit-backdrop-filter:blur(20px) saturate(150%);
+  backdrop-filter:blur(20px) saturate(150%);
+}
+#ws-switcher-modal.open{display:flex}
+.ws-switcher-dialog{
+  width:min(360px,calc(100vw - 32px));max-height:min(70vh,520px);
+  background:var(--modal-bg);border:1px solid var(--modal-border);
+  border-radius:16px;box-shadow:var(--modal-shadow);
+  padding:18px;display:flex;flex-direction:column;gap:12px;
+  animation:ventus-scale-in 0.2s cubic-bezier(0.16,1,0.3,1);
+}
+[data-theme="light"] .ws-switcher-dialog{box-shadow:0 24px 60px rgba(30,40,100,0.16),0 0 0 1px rgba(0,0,0,0.05)}
+.ws-switcher-list{
+  display:flex;flex-direction:column;gap:4px;
+  overflow-y:auto;overflow-x:hidden;margin:0 -4px;padding:0 4px;
+}
+.ws-switcher-row{
+  display:flex;align-items:center;gap:11px;width:100%;
+  padding:8px 10px;border-radius:10px;cursor:pointer;text-align:left;
+  border:1px solid transparent;background:transparent;font-family:var(--font);
+  transition:background 0.12s ease,border-color 0.12s ease;
+}
+.ws-switcher-row:hover{background:var(--bg-hover)}
+.ws-switcher-row.active{background:var(--accent-dim);border-color:var(--accent)}
+.ws-switcher-avatar{
+  width:30px;height:30px;border-radius:8px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  font-size:16px;line-height:1;color:#fff;font-weight:700;text-transform:uppercase;
+}
+.ws-switcher-meta{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1}
+.ws-switcher-name{font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ws-switcher-sub{font-size:11px;color:var(--text-muted)}
+.ws-switcher-check{margin-left:auto;color:var(--accent);flex-shrink:0;display:none}
+.ws-switcher-row.active .ws-switcher-check{display:flex}
+.ws-switcher-new{
+  height:38px;border:1px dashed var(--modal-border);border-radius:10px;flex-shrink:0;
+  background:transparent;color:var(--text-muted);font-family:var(--font);
+  font-size:12px;font-weight:600;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;gap:7px;
+  transition:background 0.12s ease,color 0.12s ease,border-color 0.12s ease;
+}
+.ws-switcher-new:hover{background:var(--bg-hover);color:var(--text);border-color:var(--accent)}
 
 #workspace-modal{
   display:none;position:fixed;inset:0;z-index:285;
@@ -1133,7 +1188,7 @@ button,input,select,textarea{font-family:var(--font)}
 .delete-btn-danger{border-color:rgba(255,105,97,0.3);background:#ff453a;color:#fff}
 .delete-btn-danger:hover{background:#ff5c52}
 
-/* legacy alias â€” sb-page now handles this */
+/* legacy alias — sb-page now handles this */
 .sidebar-tabs{flex:1;overflow:hidden}
 .tab-item{
   display:flex;align-items:center;gap:9px;
@@ -1391,7 +1446,7 @@ button,input,select,textarea{font-family:var(--font)}
 #ai-page-chip:hover,.ai-qa-btn:hover{
   background:var(--bg-hover);border-color:var(--border);color:var(--ai-text);
 }
-/* Chevron rotates 90Â° when quick-actions are collapsed */
+/* Chevron rotates 90° when quick-actions are collapsed */
 #ai-page-chip .ai-chip-chevron{transition:transform .22s ease}
 #ai-quick-actions.qa-collapsed #ai-page-chip .ai-chip-chevron{transform:rotate(-90deg)}
 #ai-quick-actions.qa-collapsed .ai-qa-btn{display:none}
@@ -1445,7 +1500,7 @@ button,input,select,textarea{font-family:var(--font)}
 .ai-model-select svg{opacity:.62;flex-shrink:0}
 .ai-model-select:hover svg{opacity:.9}
 #ai-model-pill{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;font-size:14.5px;font-weight:700;letter-spacing:0;color:inherit}
-/* â”€â”€ Model picker modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Model picker modal ────────────────────────────────────────────────────â”€ */
 #model-modal{
   position:fixed;top:var(--top-chrome-h);right:0;width:var(--ai-w);height:calc(100% - var(--top-chrome-h));
   z-index:9000;display:flex;align-items:stretch;justify-content:flex-end;
@@ -1583,7 +1638,7 @@ button,input,select,textarea{font-family:var(--font)}
 #ai-send-btn.stop:hover{background:color-mix(in srgb,var(--danger) 88%,white);border-color:color-mix(in srgb,var(--danger) 88%,white)}
 #ai-clear-btn{display:none}
 
-/* settings overlay â€” sits in front of the live content WebView */
+/* settings overlay — sits in front of the live content WebView */
 #settings-overlay{
   position:fixed;inset:0;
   background:var(--overlay-bg);
@@ -1805,7 +1860,7 @@ button,input,select,textarea{font-family:var(--font)}
 }
 .theme-card .theme-name{font-size:12px;font-weight:500;color:var(--text)}
 
-/* onboarding â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* onboarding ──────────────────────────────────────────────────────────────â”€ */
 #onboarding-overlay{
   position:fixed;inset:0;background:rgba(0,0,0,0.72);
   -webkit-backdrop-filter:blur(20px) saturate(160%);
@@ -2125,7 +2180,7 @@ button,input,select,textarea{font-family:var(--font)}
 @media(max-width:820px){.newtab-feed-main{grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:170px}.news-card.featured,.news-card.wide{grid-column:span 2}.newtab-shortcuts{grid-template-columns:repeat(4,minmax(72px,1fr))}}
 @media(max-width:720px){#newtab-placeholder{padding:18px 14px 26px}.newtab-top{align-items:flex-start}.newtab-date{display:none}.newtab-hero{padding-top:clamp(16px,6vh,44px)}.newtab-greeting{font-size:14px}.newtab-shortcuts{grid-template-columns:repeat(3,minmax(64px,1fr))}.newtab-feed-main{grid-template-columns:1fr;grid-auto-rows:250px}.news-card.featured,.news-card.wide{grid-column:span 1}.news-card.tall,.news-card.featured{grid-row:span 1}.newtab-feed{gap:14px}}
 
-/* â”€â”€ Newtab clock â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Newtab clock ──────────────────────────────────────────â”€ */
 #newtab-clock{
   font-family:'Segoe UI Variable Display','SF Pro Display',-apple-system,BlinkMacSystemFont,var(--font);
   font-size:clamp(72px,8vw,128px);font-weight:200;letter-spacing:-0.07em;line-height:.9;
@@ -2154,7 +2209,7 @@ button,input,select,textarea{font-family:var(--font)}
 #newtab-placeholder.nt-theme-minimal .newtab-shortcut{background:transparent!important;border:none!important;box-shadow:none!important}
 #newtab-placeholder.nt-theme-minimal .newtab-shortcut:hover{background:var(--nt-shortcut-hover-bg)!important;transform:translateY(-1px)}
 #newtab-placeholder.nt-theme-minimal .newtab-shortcut-label{color:var(--nt-hero-text)}
-/* â”€â”€ Newtab theme: FOCUS (wallpaper, centered, huge clock) â”€â”€ */
+/* ── Newtab theme: FOCUS (wallpaper, centered, huge clock) ── */
 #newtab-placeholder.nt-theme-focus .newtab-shell{justify-content:center;gap:18px}
 #newtab-placeholder.nt-theme-focus .newtab-top{display:none}
 #newtab-placeholder.nt-theme-focus .newtab-feed{display:none!important}
@@ -2164,7 +2219,7 @@ button,input,select,textarea{font-family:var(--font)}
 #newtab-placeholder.nt-theme-focus .newtab-greeting{font-size:16px;font-weight:400;opacity:1}
 #newtab-placeholder.nt-theme-focus .newtab-search-wrap{width:min(580px,100%)}
 #newtab-placeholder.nt-theme-focus .newtab-shortcuts{width:min(580px,100%)}
-/* â”€â”€ Newtab theme: HORIZON (wallpaper, top bar, no feed) â”€â”€â”€â”€ */
+/* ── Newtab theme: HORIZON (wallpaper, top bar, no feed) ──── */
 #newtab-placeholder.nt-theme-horizon .newtab-feed{display:none!important}
 [data-theme="light"] #newtab-placeholder:not(.nt-hide-background){
   --nt-scrim:linear-gradient(rgba(8,10,18,0.16),rgba(8,10,18,0.22));
@@ -2174,7 +2229,7 @@ button,input,select,textarea{font-family:var(--font)}
   --nt-scrim:linear-gradient(transparent,transparent);
   --nt-vignette:linear-gradient(transparent,transparent);
 }
-/* â”€â”€ Light mode: opaque search bar over dark wallpapers â”€â”€â”€â”€ */
+/* ── Light mode: opaque search bar over dark wallpapers ──── */
 [data-theme="light"] #newtab-placeholder .newtab-search{
   background:rgba(255,255,255,0.92);backdrop-filter:none;
   box-shadow:0 4px 24px rgba(30,40,100,0.12),0 0 0 1px rgba(0,0,0,0.06);
@@ -2193,9 +2248,9 @@ button,input,select,textarea{font-family:var(--font)}
   border-radius:26px 26px 0 0;
   box-shadow:none;
 }
-/* â”€â”€ Newtab theme: INFORMATIVE is the default (no overrides) */
+/* ── Newtab theme: INFORMATIVE is the default (no overrides) */
 
-/* â”€â”€ Wallpaper settings panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Wallpaper settings panel ──────────────────────────────â”€ */
 .nt-theme-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:4px}
 .nt-theme-card{display:flex;flex-direction:column;align-items:center;gap:7px;border:2px solid var(--border);border-radius:12px;padding:8px 6px 10px;background:var(--bg-elevated);cursor:pointer;transition:border-color var(--transition),background var(--transition);width:100%}
 .nt-theme-card:hover{border-color:var(--accent-hover);background:var(--bg-hover)}
@@ -2230,47 +2285,47 @@ button,input,select,textarea{font-family:var(--font)}
 }
 #update-modal.open{display:flex}
 .update-modal-panel{
-  width:min(468px,calc(100vw - 32px));max-height:78vh;
-  background:color-mix(in srgb,var(--modal-bg) 92%,transparent);
+  width:min(392px,calc(100vw - 28px));max-height:72vh;
+  background:var(--modal-bg);
   border:1px solid var(--modal-border);
-  border-radius:24px;
+  border-radius:18px;
   box-shadow:var(--modal-shadow);
-  -webkit-backdrop-filter:blur(24px) saturate(150%);
-  backdrop-filter:blur(24px) saturate(150%);
   overflow:hidden;pointer-events:auto;
   animation:ventus-scale-in 0.24s cubic-bezier(0.16,1,0.3,1);
 }
-.update-modal-head{display:flex;align-items:flex-start;gap:14px;padding:22px 22px 16px}
+.update-modal-head{display:flex;align-items:center;gap:12px;padding:18px 18px 14px}
 .update-modal-icon{
-  width:42px;height:42px;border-radius:14px;display:flex;align-items:center;justify-content:center;
-  background:var(--accent-dim);color:var(--accent);flex-shrink:0;
+  width:28px;height:28px;display:flex;align-items:center;justify-content:center;
+  background:transparent;color:var(--accent);flex-shrink:0;
 }
-.update-modal-icon.is-plain{background:transparent}
+.update-modal-icon svg{width:22px;height:22px;display:block}
+.update-modal-icon[data-status="up_to_date"]{color:var(--success)}
+.update-modal-icon[data-status="installing"]{color:var(--text)}
+.update-modal-icon[data-status="error"]{color:var(--danger)}
 .update-modal-copy{flex:1;min-width:0}
-.update-modal-title{font-size:18px;font-weight:700;letter-spacing:-0.3px;color:var(--text)}
-.update-modal-sub{font-size:12px;color:var(--text-muted);line-height:1.5;margin-top:4px}
+.update-modal-title{font-size:16px;font-weight:680;letter-spacing:0;color:var(--text)}
+.update-modal-sub{font-size:12px;color:var(--text-muted);line-height:1.45;margin-top:2px}
 .update-modal-close{
-  width:30px;height:30px;border-radius:999px;border:none;background:var(--soft-btn-bg);
+  width:26px;height:26px;border-radius:999px;border:none;background:transparent;
   color:var(--text-muted);display:flex;align-items:center;justify-content:center;cursor:pointer;
   transition:background var(--transition),color var(--transition);flex-shrink:0;
 }
 .update-modal-close:hover{background:var(--soft-btn-bg-hover);color:var(--text)}
-.update-modal-body{padding:0 22px 20px}
+.update-modal-body{padding:0 18px 16px}
 .update-modal-notes{
-  display:none;border-radius:16px;overflow:hidden;
-  background:var(--modal-bg-2);border:1px solid var(--modal-border);
+  display:none;overflow:hidden;margin-top:2px;
 }
 .update-modal-notes.visible{display:block}
-.rn-head{display:flex;align-items:center;gap:8px;padding:11px 16px 10px;border-bottom:1px solid var(--modal-border)}
-.rn-head-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0}
-.rn-head-label{font-size:10.5px;font-weight:680;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-dim)}
-.rn-body{max-height:248px;overflow-y:auto;padding:14px 16px 16px;color:var(--text-muted);font-size:12.5px;line-height:1.62;overscroll-behavior:contain}
+.rn-head{display:none}
+.rn-head-dot{display:none}
+.rn-head-label{display:none}
+.rn-body{max-height:220px;overflow-y:auto;padding:0 2px 2px;color:var(--text-muted);font-size:12.5px;line-height:1.58;overscroll-behavior:contain}
 .rn-body::-webkit-scrollbar{width:8px}
-.rn-body::-webkit-scrollbar-thumb{background:var(--border);border-radius:6px;border:2px solid var(--modal-bg-2)}
+.rn-body::-webkit-scrollbar-thumb{background:var(--border);border-radius:6px;border:2px solid var(--modal-bg)}
 .rn-body::-webkit-scrollbar-thumb:hover{background:var(--text-dim)}
 .rn-body>*:first-child{margin-top:0}
 .rn-body>*:last-child{margin-bottom:0}
-.rn-h{color:var(--text);font-weight:680;letter-spacing:-0.012em;line-height:1.32;margin:16px 0 7px}
+.rn-h{color:var(--text);font-weight:680;letter-spacing:0;line-height:1.32;margin:14px 0 7px}
 .rn-h1{font-size:15.5px}
 .rn-h2{font-size:13.5px}
 .rn-h3{font-size:12.5px}
@@ -2288,14 +2343,17 @@ button,input,select,textarea{font-family:var(--font)}
 .rn-body hr{border:none;height:1px;background:var(--modal-border);margin:14px 0}
 .rn-body blockquote{margin:0 0 10px;padding:2px 0 2px 12px;border-left:2px solid var(--border);color:var(--text-dim)}
 .rn-empty{color:var(--text-dim);font-style:italic;margin:0}
-.update-modal-progress{display:none;margin-top:4px}
+.update-modal-progress{display:none;margin-top:2px}
 .update-modal-progress.visible{display:block}
-.update-modal-track{height:5px;background:var(--border);border-radius:999px;overflow:hidden}
+.update-modal-progress-label{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:11px;color:var(--text-muted);margin-bottom:8px}
+.update-modal-progress-pct{font-variant-numeric:tabular-nums;color:var(--text);font-weight:650}
+.update-modal-track{height:6px;background:var(--border-subtle);border-radius:999px;overflow:hidden}
 .update-modal-bar{height:100%;width:0%;background:var(--accent);border-radius:999px;transition:width 0.25s ease}
-.update-modal-progress-label{font-size:11px;color:var(--text-muted);margin-top:8px}
 .update-modal-actions{
-  display:flex;justify-content:flex-end;gap:8px;padding:14px 22px 22px;border-top:1px solid var(--modal-border);
+  display:flex;justify-content:flex-end;gap:8px;padding:0 18px 18px;
 }
+.update-modal-actions .ob-btn-primary{height:32px;padding:0 15px;border-radius:9px;font-size:12px}
+.update-modal-actions .ob-btn-secondary{height:32px;padding:0 8px;font-size:12px}
 .update-spin{animation:spin 1s linear infinite}
 
 /* tab search modal */
@@ -2358,19 +2416,18 @@ button,input,select,textarea{font-family:var(--font)}
 .find-btn:hover{background:var(--bg-hover);color:var(--text)}
 .find-btn:disabled{opacity:.35;cursor:default}
 
-/* download badge lives on #btn-more â€” see #more-btn-badge CSS above */
+/* download badge lives on #btn-more — see #more-btn-badge CSS above */
 
-/* â”€â”€ Download panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Download panel ──────────────────────────────────────────────────────────â”€ */
 #download-panel{
   position:fixed;display:none;flex-direction:column;
-  width:348px;max-height:500px;overflow:hidden;
-  background:var(--modal-bg);
+  width:min(360px,calc(100vw - 24px));max-height:min(430px,calc(100vh - var(--top-chrome-h) - 24px));overflow:hidden;
+  background:color-mix(in srgb,var(--modal-bg) 96%,transparent);
   border:1px solid var(--modal-border);
-  border-radius:20px;
-  /* Tighter shadow than other modals: the panel's chrome overlay is clipped to its own
-     rect (so the page stays interactive), and a big soft shadow would either be cut off
-     or force a large click-dead halo over the page. */
-  box-shadow:var(--shadow);
+  border-radius:14px;
+  box-shadow:var(--modal-shadow);
+  -webkit-backdrop-filter:blur(24px) saturate(130%);
+  backdrop-filter:blur(24px) saturate(130%);
   z-index:350;
   transform-origin:top right;
 }
@@ -2399,87 +2456,79 @@ button,input,select,textarea{font-family:var(--font)}
 }
 .dl-panel-head{
   display:flex;align-items:center;gap:10px;
-  padding:16px 18px 14px;
-  border-bottom:1px solid var(--modal-border);
+  min-height:48px;padding:0 12px 0 16px;
+  border-bottom:1px solid var(--border-subtle);
   flex-shrink:0;
 }
-.dl-panel-head-icon{
-  width:30px;height:30px;border-radius:9px;flex-shrink:0;
-  background:var(--accent-dim);
-  display:flex;align-items:center;justify-content:center;
-  color:var(--accent);
-}
-.dl-panel-head-title{font-size:14px;font-weight:700;color:var(--text);letter-spacing:-0.3px;flex:1}
+.dl-panel-head-title{font-size:15px;font-weight:650;color:var(--text);letter-spacing:0;flex:1}
 .dl-panel-head-right{display:flex;align-items:center;gap:2px}
 .dl-clear-btn{
-  background:none;border:none;color:var(--text-muted);cursor:pointer;
+  height:26px;background:transparent;border:none;color:var(--text-muted);cursor:pointer;
   font-size:11px;font-family:var(--font);font-weight:500;
-  padding:5px 9px;border-radius:8px;
-  transition:all var(--transition);
+  padding:0 8px;border-radius:7px;
+  transition:background var(--transition),color var(--transition);
 }
 .dl-clear-btn:hover{color:var(--text);background:var(--bg-hover)}
-#dl-panel-list{overflow-y:auto;flex:1;min-height:0;padding:4px 0}
+#dl-panel-list{
+  overflow-y:auto;flex:1;min-height:0;padding:6px;
+  scrollbar-width:thin;scrollbar-color:var(--border) transparent;
+}
+#dl-panel-list::-webkit-scrollbar{width:8px}
+#dl-panel-list::-webkit-scrollbar-track{background:transparent}
+#dl-panel-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:999px;border:2px solid transparent;background-clip:padding-box}
 .dl-panel-empty{
   display:flex;flex-direction:column;align-items:center;justify-content:center;
-  padding:40px 20px;gap:10px;
+  padding:34px 20px;gap:6px;
 }
 .dl-panel-empty-icon{
-  width:48px;height:48px;border-radius:14px;
-  background:var(--bg-hover);
+  width:32px;height:32px;border-radius:8px;
+  background:var(--modal-bg-2);
   display:flex;align-items:center;justify-content:center;
   color:var(--text-dim);margin-bottom:4px;
 }
-.dl-panel-empty-label{font-size:13px;color:var(--text-muted);font-weight:600}
-.dl-panel-empty-sub{font-size:11px;color:var(--text-dim);font-weight:400;text-align:center;max-width:200px;line-height:1.5}
+.dl-panel-empty-label{font-size:12px;color:var(--text);font-weight:600}
+.dl-panel-empty-sub{font-size:11px;color:var(--text-muted);font-weight:400;text-align:center;max-width:190px;line-height:1.45}
 .dl-panel-item{
-  display:flex;align-items:center;gap:12px;
-  padding:10px 18px;
-  border-bottom:1px solid var(--border-subtle);
+  display:grid;grid-template-columns:26px minmax(0,1fr) auto;align-items:center;gap:10px;
+  min-height:54px;padding:7px 8px;border-radius:9px;
   transition:background var(--transition);
 }
-.dl-panel-item:last-child{border-bottom:none}
+.dl-panel-item + .dl-panel-item{margin-top:2px}
 .dl-panel-item:hover{background:var(--bg-hover)}
 .dl-pi-icon-wrap{
-  width:36px;height:36px;border-radius:10px;
+  position:relative;width:24px;height:28px;border-radius:6px;
+  border:1px solid var(--border-subtle);background:var(--modal-bg-2);
   display:flex;align-items:center;justify-content:center;
-  flex-shrink:0;font-size:11px;font-weight:700;letter-spacing:0.03em;
+  flex-shrink:0;color:var(--text-muted);font-size:7.5px;font-weight:700;letter-spacing:0;
 }
-/* file type color tints */
-.dl-pi-icon-wrap.ft-img{background:var(--success-dim);color:var(--success)}
-.dl-pi-icon-wrap.ft-vid{background:rgba(139,92,246,0.12);color:#a78bfa}
-.dl-pi-icon-wrap.ft-aud{background:rgba(236,72,153,0.12);color:#f472b6}
-.dl-pi-icon-wrap.ft-doc{background:rgba(59,130,246,0.12);color:#60a5fa}
-.dl-pi-icon-wrap.ft-arc{background:rgba(245,158,11,0.12);color:#fbbf24}
-.dl-pi-icon-wrap.ft-exe{background:rgba(239,68,68,0.12);color:#f87171}
-.dl-pi-icon-wrap.ft-code{background:rgba(20,184,166,0.12);color:#2dd4bf}
-.dl-pi-icon-wrap.ft-active{background:var(--accent-dim);color:var(--accent)}
-.dl-pi-icon-wrap.ft-default{background:var(--bg-hover);color:var(--text-muted)}
+.dl-pi-icon-wrap::before{
+  content:'';position:absolute;right:-1px;top:-1px;width:8px;height:8px;
+  border-left:1px solid var(--border-subtle);border-bottom:1px solid var(--border-subtle);
+  border-radius:0 5px 0 3px;background:var(--modal-bg);
+}
+.dl-pi-icon-wrap.ft-active{background:var(--accent-dim);border-color:var(--accent);color:var(--accent)}
+.dl-pi-icon-wrap.ft-active::before{display:none}
+.dl-pi-ext{position:relative;z-index:1;max-width:18px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-transform:uppercase}
 .dl-pi-body{flex:1;min-width:0}
-.dl-pi-name{font-size:12px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.35}
-.dl-pi-row{display:flex;align-items:center;gap:7px;margin-top:3px}
-.dl-pi-status-badge{
-  display:inline-flex;align-items:center;
-  padding:1px 7px;border-radius:999px;
-  font-size:10px;font-weight:600;letter-spacing:0.02em;
+.dl-pi-name{font-size:12px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.32}
+.dl-pi-sub{display:flex;align-items:center;gap:5px;margin-top:3px;min-width:0;font-size:11px;color:var(--text-muted);line-height:1.25}
+.dl-pi-link{
+  border:none;background:transparent;color:var(--accent);font:inherit;font-weight:500;
+  padding:0;cursor:pointer;white-space:nowrap;
 }
-.dl-pi-status-badge.done{background:var(--success-dim);color:var(--success)}
-.dl-pi-status-badge.failed{background:rgba(239,68,68,0.12);color:#f87171}
-.dl-pi-status-badge.active{background:var(--accent-dim);color:var(--accent)}
-.dl-pi-status-badge.paused{background:var(--bg-active);color:var(--text-muted)}
-.dl-pi-meta{font-size:10.5px;color:var(--text-dim);line-height:1.3}
+.dl-pi-link:hover{color:var(--accent-hover)}
+.dl-pi-state{white-space:nowrap;font-weight:500;color:var(--text-muted)}
+.dl-pi-state.active{color:var(--accent)}
+.dl-pi-state.failed{color:var(--danger)}
+.dl-pi-sep{width:2px;height:2px;border-radius:50%;background:var(--text-dim);flex-shrink:0}
+.dl-pi-meta{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-muted)}
 .dl-pi-bar{
-  height:3px;background:var(--bg-active);
-  border-radius:2px;margin-top:6px;overflow:hidden;
+  height:2px;background:var(--bg-active);
+  border-radius:999px;margin-top:7px;overflow:hidden;
 }
 .dl-pi-bar-fill{
-  height:100%;background:var(--accent-gradient);border-radius:2px;
+  height:100%;background:var(--accent);border-radius:999px;
   transition:width 0.3s ease;
-  background-size:200% 100%;
-  animation:dl-bar-shimmer 1.8s linear infinite;
-}
-@keyframes dl-bar-shimmer{
-  0%{background-position:100% 0}
-  100%{background-position:-100% 0}
 }
 .dl-pi-bar.paused .dl-pi-bar-fill{animation:none;background:var(--text-dim)}
 .dl-pi-bar.indeterminate .dl-pi-bar-fill{
@@ -2489,32 +2538,33 @@ button,input,select,textarea{font-family:var(--font)}
   0%{margin-left:-35%}
   100%{margin-left:100%}
 }
-.dl-pi-actions{display:flex;gap:4px;flex-shrink:0;align-items:center}
+.dl-pi-actions{display:flex;gap:2px;flex-shrink:0;align-items:center;justify-content:flex-end;opacity:.78}
+.dl-panel-item:hover .dl-pi-actions{opacity:1}
 .dl-pi-btn{
-  background:var(--bg-hover);border:none;
-  color:var(--text-muted);cursor:pointer;border-radius:7px;
-  height:26px;padding:0 9px;font-size:11px;font-family:var(--font);font-weight:500;
-  transition:all var(--transition);white-space:nowrap;
-  display:flex;align-items:center;
+  background:transparent;border:none;
+  color:var(--text-muted);cursor:pointer;border-radius:6px;
+  height:24px;min-width:24px;padding:0 7px;font-size:11px;font-family:var(--font);font-weight:500;
+  transition:background var(--transition),color var(--transition);white-space:nowrap;
+  display:inline-flex;align-items:center;justify-content:center;
 }
 .dl-pi-btn:hover{background:var(--bg-active);color:var(--text)}
-.dl-pi-btn.icon{width:26px;padding:0;justify-content:center}
+.dl-pi-btn.icon{width:24px;padding:0}
 .dl-pi-btn.icon svg{display:block}
-.dl-pi-btn.danger:hover{background:rgba(239,68,68,0.12);color:#f87171}
+.dl-pi-btn.danger:hover{background:var(--danger-dim);color:var(--danger)}
 .dl-panel-foot{
-  padding:12px 18px;
-  border-top:1px solid var(--modal-border);
+  padding:9px 12px 10px;
+  border-top:1px solid var(--border-subtle);
   flex-shrink:0;text-align:center;
 }
 .dl-panel-foot a{
   display:inline-flex;align-items:center;gap:5px;
-  font-size:12px;font-weight:500;color:var(--text-muted);
+  font-size:11px;font-weight:500;color:var(--text-muted);
   text-decoration:none;cursor:pointer;
   transition:color var(--transition);
 }
 .dl-panel-foot a:hover{color:var(--accent)}
 
-/* â”€â”€ Adblock modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Adblock modal ──────────────────────────────────────────────────────────── */
 #adblock-backdrop{
   display:none;position:fixed;inset:0;z-index:9998;background:transparent;
 }
@@ -2966,7 +3016,7 @@ button,input,select,textarea{font-family:var(--font)}
 .dl-action-btn:hover{background:var(--bg-active);color:var(--text)}
 .dl-action-btn.danger:hover{background:rgba(239,68,68,0.12);color:#f87171}
 
-/* â”€â”€ About section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── About section ──────────────────────────────────────────────────────────â”€ */
 .about-identity-card{
   display:flex;align-items:center;gap:18px;
   padding:20px 20px 18px;
@@ -3086,6 +3136,24 @@ button,input,select,textarea{font-family:var(--font)}
 
 /* collapsed sidebar */
 #app.sidebar-collapsed .sb-bottom{display:none}
+.sb-bottom-compact{display:none}
+#app.sidebar-collapsed .sb-bottom-compact{
+  display:flex;align-items:center;justify-content:center;
+  padding:6px 0;border-top:1px solid var(--border-subtle);flex-shrink:0;
+}
+.sb-ws-compact-btn{
+  width:34px;height:34px;border:none;border-radius:9px;padding:0;
+  background:transparent;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:background 0.15s ease,transform 0.2s cubic-bezier(0.34,1.15,0.64,1);
+}
+.sb-ws-compact-btn:hover{background:var(--bg-hover);transform:scale(1.05)}
+.sb-ws-compact-avatar{
+  width:26px;height:26px;border-radius:8px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:14px;line-height:1;color:#fff;font-weight:700;text-transform:uppercase;
+  box-shadow:0 1px 4px var(--ai-shadow);
+}
 #app.sidebar-collapsed .tab-info,
 #app.sidebar-collapsed .tab-close,
 #app.sidebar-collapsed .tab-audio-btn{display:none}
@@ -3130,7 +3198,7 @@ button,input,select,textarea{font-family:var(--font)}
 /* while sidebar is floating open the left strip passes events through */
 #app.sidebar-auto-hide.sidebar-floating-open #sidebar-float-trigger{pointer-events:none}
 
-/* pill indicator inside left frame â€” only shown in auto-hide mode */
+/* pill indicator inside left frame — only shown in auto-hide mode */
 #sidebar-pill{
   position:absolute;
   left:0;top:50%;
@@ -3157,14 +3225,14 @@ button,input,select,textarea{font-family:var(--font)}
 }
 /* hide pill while sidebar is showing */
 #app.sidebar-auto-hide.sidebar-floating-open #sidebar-pill{opacity:0;pointer-events:none}
-/* transparent backdrop â€” catches clicks outside to close, no visual dim */
+/* transparent backdrop — catches clicks outside to close, no visual dim */
 #sidebar-float-backdrop{
   display:none;position:fixed;
   top:var(--top-chrome-h);left:0;right:0;bottom:0;
   z-index:148;background:transparent;
 }
 #app.sidebar-auto-hide.sidebar-floating-open #sidebar-float-backdrop{display:block}
-/* pinned: sidebar is solid â€” remove float shadow, hide backdrop, add border */
+/* pinned: sidebar is solid — remove float shadow, hide backdrop, add border */
 #app.sidebar-auto-hide.sidebar-pinned #sidebar{
   box-shadow:none;
   border-right:1px solid var(--border);
@@ -3355,9 +3423,6 @@ svg{display:block;flex-shrink:0}
 <!-- DOWNLOAD PANEL -->
 <div id="download-panel" onmouseenter="cancelDownloadPeek()" onmousedown="cancelDownloadPeek()" onwheel="cancelDownloadPeek()">
   <div class="dl-panel-head">
-    <div class="dl-panel-head-icon">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-    </div>
     <span class="dl-panel-head-title">Downloads</span>
     <div class="dl-panel-head-right">
       <button id="dl-clear-btn" class="dl-clear-btn" onclick="send('ClearDownloads')" title="Clear all">Clear all</button>
@@ -3366,7 +3431,6 @@ svg{display:block;flex-shrink:0}
   <div id="dl-panel-list"></div>
   <div class="dl-panel-foot">
     <a onclick="closeDownloadPanel();openSettings('downloads')">
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
       Manage downloads
     </a>
   </div>
@@ -3383,7 +3447,7 @@ svg{display:block;flex-shrink:0}
     <span class="more-item-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><polyline points="9 3 9 9 3 9"/></svg></span>
     <span class="more-item-label">New Window</span>
   </button>
-  <button class="more-item" onclick="closeMoreMenu();send('NewWorkspace',{name:'Incognito',is_incognito:true,icon:'ðŸ”',accent_color:'#6b7280'})" role="menuitem">
+  <button class="more-item" onclick="closeMoreMenu();send('NewWorkspace',{name:'Incognito',is_incognito:true,icon:'🔐',accent_color:'#6b7280'})" role="menuitem">
     <span class="more-item-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="2" y1="2" x2="22" y2="22"/></svg></span>
     <span class="more-item-label">New Incognito Tab</span>
   </button>
@@ -3488,7 +3552,7 @@ svg{display:block;flex-shrink:0}
     </button>
   </div>
 
-  <!-- Tab pages viewport â€” clips animated slide -->
+  <!-- Tab pages viewport — clips animated slide -->
   <div class="sb-viewport">
     <div class="sb-page" id="sb-page">
       <!-- populated by renderTabs() -->
@@ -3516,6 +3580,13 @@ svg{display:block;flex-shrink:0}
     </button>
   </div>
 
+  <!-- Compact bottom: single workspace button → switcher modal -->
+  <div class="sb-bottom-compact">
+    <button class="sb-ws-compact-btn" id="sb-ws-compact-btn" onclick="openWsSwitcher()" title="Workspaces">
+      <span class="sb-ws-compact-avatar" id="sb-ws-compact-avatar"></span>
+    </button>
+  </div>
+
 </div>
 
 <div id="sidebar-float-trigger"><div id="sidebar-pill"></div></div>
@@ -3525,13 +3596,42 @@ svg{display:block;flex-shrink:0}
 
 <!-- Workspace dot hover popover -->
 <div id="sb-ws-popover" class="sb-ws-popover" onmouseenter="keepWsPop()" onmouseleave="hideWsPop()">
-  <div class="sb-ws-pop-avatar" id="sb-ws-pop-avatar"></div>
-  <div class="sb-ws-pop-name" id="sb-ws-pop-name"></div>
-  <div class="sb-ws-pop-count" id="sb-ws-pop-count"></div>
-  <div class="sb-ws-pop-note" id="sb-ws-pop-note"></div>
+  <div class="sb-ws-pop-head">
+    <div class="sb-ws-pop-avatar" id="sb-ws-pop-avatar"></div>
+    <div class="sb-ws-pop-info">
+      <div class="sb-ws-pop-name" id="sb-ws-pop-name"></div>
+      <div class="sb-ws-pop-count" id="sb-ws-pop-count"></div>
+    </div>
+    <span class="sb-ws-pop-badge" id="sb-ws-pop-badge" title="Incognito - history not saved">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="2" y1="2" x2="22" y2="22"/></svg>
+      Private
+    </span>
+  </div>
   <div class="sb-ws-pop-actions">
-    <button class="sb-ws-pop-btn" onclick="showWsPopRename()">Rename</button>
-    <button class="sb-ws-pop-btn danger" id="sb-ws-pop-delete" onclick="showWsPopDelete()">Delete</button>
+    <button class="sb-ws-pop-btn" onclick="showWsPopRename()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+      Edit
+    </button>
+    <button class="sb-ws-pop-btn danger" id="sb-ws-pop-delete" onclick="showWsPopDelete()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
+      Delete
+    </button>
+  </div>
+</div>
+
+<div id="ws-switcher-modal" onclick="handleWsSwitcherClick(event)">
+  <div class="ws-switcher-dialog" role="dialog" aria-modal="true" aria-labelledby="ws-switcher-title">
+    <div class="workspace-dialog-head">
+      <div class="workspace-dialog-title" id="ws-switcher-title">Workspaces</div>
+      <button class="workspace-dialog-close" onclick="closeWsSwitcher()" title="Close">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="ws-switcher-list" id="ws-switcher-list"></div>
+    <button class="ws-switcher-new" onclick="newWorkspaceFromSwitcher()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14m-7-7h14"/></svg>
+      New workspace
+    </button>
   </div>
 </div>
 
@@ -3547,9 +3647,9 @@ svg{display:block;flex-shrink:0}
       <div class="workspace-field" id="ws-icon-field">
         <label>Icon</label>
         <div class="ws-emoji-row">
-          <div class="ws-emoji-preview" id="ws-emoji-preview">ðŸ“</div>
+          <div class="ws-emoji-preview" id="ws-emoji-preview">📁</div>
           <div class="ws-emoji-grid">
-            <button type="button" class="ws-emoji-opt" data-emoji="ðŸŒ" onclick="selectWsEmoji(this,'ðŸŒ')">ðŸŒ</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸ’¼" onclick="selectWsEmoji(this,'ðŸ’¼')">ðŸ’¼</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸ " onclick="selectWsEmoji(this,'ðŸ ')">ðŸ </button><button type="button" class="ws-emoji-opt" data-emoji="ðŸ”¬" onclick="selectWsEmoji(this,'ðŸ”¬')">ðŸ”¬</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸ’¬" onclick="selectWsEmoji(this,'ðŸ’¬')">ðŸ’¬</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸ›ï¸" onclick="selectWsEmoji(this,'ðŸ›ï¸')">ðŸ›ï¸</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸ“°" onclick="selectWsEmoji(this,'ðŸ“°')">ðŸ“°</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸ’»" onclick="selectWsEmoji(this,'ðŸ’»')">ðŸ’»</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸŽµ" onclick="selectWsEmoji(this,'ðŸŽµ')">ðŸŽµ</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸŽ¬" onclick="selectWsEmoji(this,'ðŸŽ¬')">ðŸŽ¬</button><button type="button" class="ws-emoji-opt selected" data-emoji="ðŸ“" onclick="selectWsEmoji(this,'ðŸ“')">ðŸ“</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸŽ¨" onclick="selectWsEmoji(this,'ðŸŽ¨')">ðŸŽ¨</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸš€" onclick="selectWsEmoji(this,'ðŸš€')">ðŸš€</button><button type="button" class="ws-emoji-opt" data-emoji="â¤ï¸" onclick="selectWsEmoji(this,'â¤ï¸')">â¤ï¸</button><button type="button" class="ws-emoji-opt" data-emoji="â­" onclick="selectWsEmoji(this,'â­')">â­</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸ”¥" onclick="selectWsEmoji(this,'ðŸ”¥')">ðŸ”¥</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸ’¡" onclick="selectWsEmoji(this,'ðŸ’¡')">ðŸ’¡</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸ†" onclick="selectWsEmoji(this,'ðŸ†')">ðŸ†</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸŽ¯" onclick="selectWsEmoji(this,'ðŸŽ¯')">ðŸŽ¯</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸ“š" onclick="selectWsEmoji(this,'ðŸ“š')">ðŸ“š</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸŒŸ" onclick="selectWsEmoji(this,'ðŸŒŸ')">ðŸŒŸ</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸ•" onclick="selectWsEmoji(this,'ðŸ•')">ðŸ•</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸŽ®" onclick="selectWsEmoji(this,'ðŸŽ®')">ðŸŽ®</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸŒˆ" onclick="selectWsEmoji(this,'ðŸŒˆ')">ðŸŒˆ</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸ¦‹" onclick="selectWsEmoji(this,'ðŸ¦‹')">ðŸ¦‹</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸŒ¸" onclick="selectWsEmoji(this,'ðŸŒ¸')">ðŸŒ¸</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸŽ¸" onclick="selectWsEmoji(this,'ðŸŽ¸')">ðŸŽ¸</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸŒ™" onclick="selectWsEmoji(this,'ðŸŒ™')">ðŸŒ™</button><button type="button" class="ws-emoji-opt" data-emoji="â˜€ï¸" onclick="selectWsEmoji(this,'â˜€ï¸')">â˜€ï¸</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸŒŠ" onclick="selectWsEmoji(this,'ðŸŒŠ')">ðŸŒŠ</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸ§©" onclick="selectWsEmoji(this,'ðŸ§©')">ðŸ§©</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸ”" onclick="selectWsEmoji(this,'ðŸ”')">ðŸ”</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸ“Š" onclick="selectWsEmoji(this,'ðŸ“Š')">ðŸ“Š</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸŽ­" onclick="selectWsEmoji(this,'ðŸŽ­')">ðŸŽ­</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸ–ï¸" onclick="selectWsEmoji(this,'ðŸ–ï¸')">ðŸ–ï¸</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸš—" onclick="selectWsEmoji(this,'ðŸš—')">ðŸš—</button><button type="button" class="ws-emoji-opt" data-emoji="âœˆï¸" onclick="selectWsEmoji(this,'âœˆï¸')">âœˆï¸</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸŽ“" onclick="selectWsEmoji(this,'ðŸŽ“')">ðŸŽ“</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸ’Ž" onclick="selectWsEmoji(this,'ðŸ’Ž')">ðŸ’Ž</button><button type="button" class="ws-emoji-opt" data-emoji="ðŸŽª" onclick="selectWsEmoji(this,'ðŸŽª')">ðŸŽª</button>
+            <button type="button" class="ws-emoji-opt" data-emoji="🌐" onclick="selectWsEmoji(this,'🌐')">🌐</button><button type="button" class="ws-emoji-opt" data-emoji="💼" onclick="selectWsEmoji(this,'💼')">💼</button><button type="button" class="ws-emoji-opt" data-emoji="🏠" onclick="selectWsEmoji(this,'🏠')">🏠</button><button type="button" class="ws-emoji-opt" data-emoji="🔬" onclick="selectWsEmoji(this,'🔬')">🔬</button><button type="button" class="ws-emoji-opt" data-emoji="💬" onclick="selectWsEmoji(this,'💬')">💬</button><button type="button" class="ws-emoji-opt" data-emoji="🛍️" onclick="selectWsEmoji(this,'🛍️')">🛍️</button><button type="button" class="ws-emoji-opt" data-emoji="📰" onclick="selectWsEmoji(this,'📰')">📰</button><button type="button" class="ws-emoji-opt" data-emoji="💻" onclick="selectWsEmoji(this,'💻')">💻</button><button type="button" class="ws-emoji-opt" data-emoji="🎵" onclick="selectWsEmoji(this,'🎵')">🎵</button><button type="button" class="ws-emoji-opt" data-emoji="🎬" onclick="selectWsEmoji(this,'🎬')">🎬</button><button type="button" class="ws-emoji-opt selected" data-emoji="📁" onclick="selectWsEmoji(this,'📁')">📁</button><button type="button" class="ws-emoji-opt" data-emoji="🎨" onclick="selectWsEmoji(this,'🎨')">🎨</button><button type="button" class="ws-emoji-opt" data-emoji="🚀" onclick="selectWsEmoji(this,'🚀')">🚀</button><button type="button" class="ws-emoji-opt" data-emoji="❤️" onclick="selectWsEmoji(this,'❤️')">❤️</button><button type="button" class="ws-emoji-opt" data-emoji="⭐" onclick="selectWsEmoji(this,'⭐')">⭐</button><button type="button" class="ws-emoji-opt" data-emoji="🔥" onclick="selectWsEmoji(this,'🔥')">🔥</button><button type="button" class="ws-emoji-opt" data-emoji="💡" onclick="selectWsEmoji(this,'💡')">💡</button><button type="button" class="ws-emoji-opt" data-emoji="🏆" onclick="selectWsEmoji(this,'🏆')">🏆</button><button type="button" class="ws-emoji-opt" data-emoji="🎯" onclick="selectWsEmoji(this,'🎯')">🎯</button><button type="button" class="ws-emoji-opt" data-emoji="📚" onclick="selectWsEmoji(this,'📚')">📚</button><button type="button" class="ws-emoji-opt" data-emoji="🌟" onclick="selectWsEmoji(this,'🌟')">🌟</button><button type="button" class="ws-emoji-opt" data-emoji="🍕" onclick="selectWsEmoji(this,'🍕')">🍕</button><button type="button" class="ws-emoji-opt" data-emoji="🎮" onclick="selectWsEmoji(this,'🎮')">🎮</button><button type="button" class="ws-emoji-opt" data-emoji="🌈" onclick="selectWsEmoji(this,'🌈')">🌈</button><button type="button" class="ws-emoji-opt" data-emoji="🦋" onclick="selectWsEmoji(this,'🦋')">🦋</button><button type="button" class="ws-emoji-opt" data-emoji="🌸" onclick="selectWsEmoji(this,'🌸')">🌸</button><button type="button" class="ws-emoji-opt" data-emoji="🎸" onclick="selectWsEmoji(this,'🎸')">🎸</button><button type="button" class="ws-emoji-opt" data-emoji="🌙" onclick="selectWsEmoji(this,'🌙')">🌙</button><button type="button" class="ws-emoji-opt" data-emoji="☀️" onclick="selectWsEmoji(this,'☀️')">☀️</button><button type="button" class="ws-emoji-opt" data-emoji="🌊" onclick="selectWsEmoji(this,'🌊')">🌊</button><button type="button" class="ws-emoji-opt" data-emoji="🧩" onclick="selectWsEmoji(this,'🧩')">🧩</button><button type="button" class="ws-emoji-opt" data-emoji="🔐" onclick="selectWsEmoji(this,'🔐')">🔐</button><button type="button" class="ws-emoji-opt" data-emoji="📊" onclick="selectWsEmoji(this,'📊')">📊</button><button type="button" class="ws-emoji-opt" data-emoji="🎭" onclick="selectWsEmoji(this,'🎭')">🎭</button><button type="button" class="ws-emoji-opt" data-emoji="🏖️" onclick="selectWsEmoji(this,'🏖️')">🏖️</button><button type="button" class="ws-emoji-opt" data-emoji="🚗" onclick="selectWsEmoji(this,'🚗')">🚗</button><button type="button" class="ws-emoji-opt" data-emoji="✈️" onclick="selectWsEmoji(this,'✈️')">✈️</button><button type="button" class="ws-emoji-opt" data-emoji="🎓" onclick="selectWsEmoji(this,'🎓')">🎓</button><button type="button" class="ws-emoji-opt" data-emoji="💎" onclick="selectWsEmoji(this,'💎')">💎</button><button type="button" class="ws-emoji-opt" data-emoji="🎪" onclick="selectWsEmoji(this,'🎪')">🎪</button>
           </div>
         </div>
       </div>
@@ -4302,6 +4402,14 @@ svg{display:block;flex-shrink:0}
             <div style="font-size:12px;font-weight:600;color:var(--text)">Ctrl+K</div>
           </div>
           <div style="padding:8px;border-radius:var(--radius-sm);background:var(--bg)">
+            <div style="font-size:11px;color:var(--text-muted)">Next tab</div>
+            <div style="font-size:12px;font-weight:600;color:var(--text)">Ctrl+Tab</div>
+          </div>
+          <div style="padding:8px;border-radius:var(--radius-sm);background:var(--bg)">
+            <div style="font-size:11px;color:var(--text-muted)">Previous tab</div>
+            <div style="font-size:12px;font-weight:600;color:var(--text)">Ctrl+Shift+Tab</div>
+          </div>
+          <div style="padding:8px;border-radius:var(--radius-sm);background:var(--bg)">
             <div style="font-size:11px;color:var(--text-muted)">Find in page</div>
             <div style="font-size:12px;font-weight:600;color:var(--text)">Ctrl+F</div>
           </div>
@@ -4553,12 +4661,14 @@ svg{display:block;flex-shrink:0}
     </div>
     <div class="update-modal-body">
       <div class="update-modal-notes" id="update-modal-notes">
-        <div class="rn-head"><span class="rn-head-dot"></span><span class="rn-head-label">What's new</span></div>
         <div class="rn-body" id="update-modal-notes-body"></div>
       </div>
       <div class="update-modal-progress" id="update-modal-progress">
+        <div class="update-modal-progress-label" id="update-modal-progress-label">
+          <span id="update-modal-progress-text">Downloading</span>
+          <span class="update-modal-progress-pct" id="update-modal-progress-pct"></span>
+        </div>
         <div class="update-modal-track"><div class="update-modal-bar" id="update-modal-bar"></div></div>
-        <div class="update-modal-progress-label" id="update-modal-progress-label"></div>
       </div>
     </div>
     <div class="update-modal-actions" id="update-modal-actions"></div>
@@ -4580,7 +4690,7 @@ svg{display:block;flex-shrink:0}
   </div>
 </div>
 
-<!-- Window edge resize handles â€” transparent hit zones, trigger native Win32 resize.
+<!-- Window edge resize handles — transparent hit zones, trigger native Win32 resize.
      LEFT edge is intentionally omitted: it conflicts with #sidebar-float-trigger.
      Left/bottom/right are handled by the content WebView initialization script instead.
      Chrome handles only the right edge (when AI panel is open) and top corners
@@ -4718,7 +4828,7 @@ let findIndex = 0;
 let findTimer = 0;
 let findLastTabId = null;
 let findLastUrl = '';
-let selectedWsEmoji = 'ðŸ“';
+let selectedWsEmoji = '📁';
 let selectedWsColor = '#8b5cf6';
 let wsColorManual = false;
 let activeSuggestions = [];
@@ -4954,7 +5064,7 @@ window.__neura = {
     if (findOpen) closeFindBar(true);
     const updateModal = document.getElementById('update-modal');
     if (updateModal && updateModal.classList.contains('open')) closeUpdateModal(false);
-    ['settings-overlay','tab-search-modal','workspace-modal','workspace-delete-modal','context-menu','adblock-modal','adblock-backdrop','download-panel','model-modal','tab-spotlight-overlay','update-modal','folder-modal','bm-edit-backdrop','bm-edit-modal','site-info-popover'].forEach(id => {
+    ['settings-overlay','tab-search-modal','workspace-modal','ws-switcher-modal','workspace-delete-modal','context-menu','adblock-modal','adblock-backdrop','download-panel','model-modal','tab-spotlight-overlay','update-modal','folder-modal','bm-edit-backdrop','bm-edit-modal','site-info-popover'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.classList.remove('open');
     });
@@ -4986,7 +5096,7 @@ window.__neura = {
   },
   closeSidebar() {
     // Called by Rust when content WebView detects cursor in the content area.
-    // Respects sidebarPinned â€” only closes hover-triggered (unpinned) sidebar.
+    // Respects sidebarPinned — only closes hover-triggered (unpinned) sidebar.
     scheduledHide();
   },
   openSidebar() {
@@ -5235,7 +5345,7 @@ function renderAdBlockExceptions(exceptions) {
   list.innerHTML = exceptions.map(host => `
     <div style="display:flex;align-items:center;justify-content:space-between;padding:3px 0">
       <span style="font-size:12px;color:var(--text)">${host}</span>
-      <button onclick="removeAdBlockException('${host}')" style="background:none;border:none;color:var(--text-muted);cursor:pointer;padding:2px 4px;font-size:11px;border-radius:3px" title="Remove exception">âœ•</button>
+      <button onclick="removeAdBlockException('${host}')" style="background:none;border:none;color:var(--text-muted);cursor:pointer;padding:2px 4px;font-size:11px;border-radius:3px" title="Remove exception">✕</button>
     </div>`).join('');
 }
 
@@ -5263,7 +5373,7 @@ function renderWorkspaces() {
   const multi = wsList.length > 1;
   setSidebarGlow(wsList.find(w => w.id === activeId));
 
-  // Workspace page dots â€” always shown, with hover popover
+  // Workspace page dots — always shown, with hover popover
   const dotsEl = document.getElementById('sb-ws-dots');
   if (dotsEl) {
     dotsEl.classList.toggle('scrollable', wsList.length > 4);
@@ -5287,6 +5397,80 @@ function renderWorkspaces() {
     nextBtn.classList.toggle('visible', multi);
     nextBtn.disabled = activeIdx >= wsList.length - 1;
   }
+
+  renderWsCompactBtn();
+  const switcher = document.getElementById('ws-switcher-modal');
+  if (switcher && switcher.classList.contains('open')) renderWsSwitcher();
+}
+
+function renderWsCompactBtn() {
+  const avatar = document.getElementById('sb-ws-compact-avatar');
+  const btn = document.getElementById('sb-ws-compact-btn');
+  if (!avatar) return;
+  const ws = (state.workspaces || []).find(w => w.id === state.active_workspace_id);
+  if (!ws) { avatar.textContent = ''; return; }
+  const icon = ws.icon || '';
+  if (icon) {
+    avatar.textContent = icon;
+    avatar.style.background = 'var(--bg-hover)';
+  } else {
+    avatar.textContent = (ws.name || '').substring(0, 2);
+    avatar.style.background = cleanHex(ws.accent_color) || '#8b5cf6';
+  }
+  if (btn) btn.title = ws.name ? ('Workspace: ' + ws.name) : 'Workspaces';
+}
+
+function openWsSwitcher() {
+  const modal = document.getElementById('ws-switcher-modal');
+  if (!modal) return;
+  renderWsSwitcher();
+  modal.classList.add('open');
+  send('SuggestionOverlay', {visible:true, x:0, y:0, width:window.innerWidth, height:window.innerHeight});
+}
+
+function closeWsSwitcher() {
+  const modal = document.getElementById('ws-switcher-modal');
+  if (modal) modal.classList.remove('open');
+  send('SuggestionOverlay', {visible:false, x:0, y:0, width:0, height:0});
+}
+
+function handleWsSwitcherClick(e) {
+  if (e.target.id === 'ws-switcher-modal') closeWsSwitcher();
+}
+
+function renderWsSwitcher() {
+  const list = document.getElementById('ws-switcher-list');
+  if (!list) return;
+  const wsList = state.workspaces || [];
+  const activeId = state.active_workspace_id;
+  const counts = state.workspace_tab_counts || {};
+  list.innerHTML = wsList.map(ws => {
+    const active = ws.id === activeId ? 'active' : '';
+    const icon = ws.icon || '';
+    const avatarInner = icon ? escHtml(icon) : escHtml((ws.name || '').substring(0, 2));
+    const avatarBg = icon ? 'var(--bg-hover)' : (cleanHex(ws.accent_color) || '#8b5cf6');
+    const tabs = (state.tabs || []).filter(t => t.workspace_id === ws.id);
+    const tabCount = Number.isFinite(counts[ws.id]) ? counts[ws.id] : tabs.length;
+    const sub = (ws.is_incognito ? 'Incognito · ' : '') + tabCount + ' tab' + (tabCount !== 1 ? 's' : '');
+    return `<button class="ws-switcher-row ${active}" onclick="switchWorkspaceFromSwitcher('${ws.id}')" oncontextmenu="wsContextMenu(event,'${ws.id}')">
+      <span class="ws-switcher-avatar" style="background:${avatarBg}">${avatarInner}</span>
+      <span class="ws-switcher-meta">
+        <span class="ws-switcher-name">${escHtml(ws.name)}</span>
+        <span class="ws-switcher-sub">${escHtml(sub)}</span>
+      </span>
+      <span class="ws-switcher-check"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+    </button>`;
+  }).join('');
+}
+
+function switchWorkspaceFromSwitcher(id) {
+  closeWsSwitcher();
+  switchWorkspace(id);
+}
+
+function newWorkspaceFromSwitcher() {
+  closeWsSwitcher();
+  openWorkspaceModal();
 }
 
 function setSidebarGlow(ws) {
@@ -5344,14 +5528,13 @@ function showWsPop(wsId, el) {
   const avatarEl = document.getElementById('sb-ws-pop-avatar');
   avatarEl.textContent = ws.icon || ws.name.substring(0, 2).toUpperCase();
   avatarEl.style.background = ws.icon ? 'var(--bg-hover)' : color;
-  avatarEl.style.border = ws.icon ? '1.5px solid var(--border)' : 'none';
+  avatarEl.style.border = ws.icon ? '1px solid var(--border)' : 'none';
   document.getElementById('sb-ws-pop-name').textContent = ws.name;
-  document.getElementById('sb-ws-pop-count').textContent = tabCount + ' tab' + (tabCount !== 1 ? 's' : '');
-  const note = document.getElementById('sb-ws-pop-note');
-  if (note) {
-    note.textContent = ws.is_incognito ? 'Incognito workspace. History is not saved here.' : '';
-    note.style.display = ws.is_incognito ? 'block' : 'none';
-  }
+  const countText = tabCount + ' tab' + (tabCount !== 1 ? 's' : '');
+  const active = wsId === state.active_workspace_id;
+  document.getElementById('sb-ws-pop-count').textContent = active ? ('Current · ' + countText) : countText;
+  const badge = document.getElementById('sb-ws-pop-badge');
+  if (badge) badge.classList.toggle('visible', !!ws.is_incognito);
   const delBtn = document.getElementById('sb-ws-pop-delete');
   if (delBtn) delBtn.disabled = (state.workspaces || []).length <= 1;
   pop.dataset.wsId = wsId;
@@ -5420,7 +5603,7 @@ function renderTabs() {
       ? `<button class="tab-audio-btn" onclick="muteTab(event,'${tab.id}')" title="${audioTitle}">${audioSvg}</button>`
       : '';
     const sleepIcon = tab.sleeping
-      ? `<svg class="tab-sleep-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" title="Tab is sleeping â€” click to wake"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`
+      ? `<svg class="tab-sleep-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" title="Tab is sleeping — click to wake"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`
       : '';
     return `<div class="tab-item ${active} ${loading} ${pinned} ${audioPlaying} ${tabMuted} ${sleeping}" draggable="true" data-reorder-id="${escAttr(tab.id)}" data-nav-url="${escAttr(tab.url)}" onclick="switchTab('${tab.id}')" oncontextmenu="tabContextMenu(event,'${tab.id}')">
       ${faviconEl}
@@ -5955,7 +6138,7 @@ function clearToolbarDropMarks() {
 // ============================================================
 function switchTab(id) { send('SwitchTab', {id}); }
 
-// â”€â”€ Workspace page-slide animation state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Workspace page-slide animation state ──────────────────────────────────â”€
 let __wsSlideDir = 0; // -1 = going left (higher index), 1 = going right (lower index)
 
 function switchWorkspace(id) {
@@ -6058,7 +6241,7 @@ function openIncognitoWorkspace() {
   openWorkspaceModal();
   const check = document.getElementById('workspace-incognito-check');
   if (check) check.checked = true;
-  selectedWsEmoji = 'ðŸ”';
+  selectedWsEmoji = '🔐';
   selectedWsColor = '#6b7280';
   wsColorManual = false;
   const preview = document.getElementById('ws-emoji-preview');
@@ -6087,7 +6270,7 @@ function openWorkspaceModal(wsId = null) {
   if (title) title.textContent = ws ? 'Rename workspace' : 'New workspace';
   if (submit) submit.textContent = ws ? 'Save' : 'Create';
   input.value = ws ? ws.name : '';
-  const wsIcon = ws ? (ws.icon || 'ðŸ“') : 'ðŸ“';
+  const wsIcon = ws ? (ws.icon || '📁') : '📁';
   selectedWsEmoji = wsIcon;
   selectedWsColor = cleanHex(ws && ws.accent_color) || emojiColor(wsIcon);
   wsColorManual = !!ws;
@@ -6182,7 +6365,7 @@ function hexRgb(color) {
 
 function emojiColor(emoji) {
   const colors = {
-    'ðŸŒ':'#3b82f6','ðŸ’¼':'#6366f1','ðŸ ':'#f97316','ðŸ”¬':'#06b6d4','ðŸ’¬':'#22c55e','ðŸ›ï¸':'#ec4899','ðŸ“°':'#64748b','ðŸ’»':'#3b82f6','ðŸŽµ':'#8b5cf6','ðŸŽ¬':'#ef4444','ðŸ“':'#8b5cf6','ðŸŽ¨':'#ec4899','ðŸš€':'#f97316','â¤ï¸':'#ef4444','â­':'#eab308','ðŸ”¥':'#f97316','ðŸ’¡':'#eab308','ðŸ†':'#eab308','ðŸŽ¯':'#ef4444','ðŸ“š':'#3b82f6','ðŸŒŸ':'#eab308','ðŸ•':'#f97316','ðŸŽ®':'#8b5cf6','ðŸŒˆ':'#ec4899','ðŸ¦‹':'#06b6d4','ðŸŒ¸':'#ec4899','ðŸŽ¸':'#ef4444','ðŸŒ™':'#6366f1','â˜€ï¸':'#eab308','ðŸŒŠ':'#06b6d4','ðŸ§©':'#22c55e','ðŸ”':'#6b7280','ðŸ“Š':'#3b82f6','ðŸŽ­':'#8b5cf6','ðŸ–ï¸':'#06b6d4','ðŸš—':'#ef4444','âœˆï¸':'#3b82f6','ðŸŽ“':'#6366f1','ðŸ’Ž':'#06b6d4','ðŸŽª':'#ec4899'
+    '🌐':'#3b82f6','💼':'#6366f1','🏠':'#f97316','🔬':'#06b6d4','💬':'#22c55e','🛍️':'#ec4899','📰':'#64748b','💻':'#3b82f6','🎵':'#8b5cf6','🎬':'#ef4444','📁':'#8b5cf6','🎨':'#ec4899','🚀':'#f97316','❤️':'#ef4444','⭐':'#eab308','🔥':'#f97316','💡':'#eab308','🏆':'#eab308','🎯':'#ef4444','📚':'#3b82f6','🌟':'#eab308','🍕':'#f97316','🎮':'#8b5cf6','🌈':'#ec4899','🦋':'#06b6d4','🌸':'#ec4899','🎸':'#ef4444','🌙':'#6366f1','☀️':'#eab308','🌊':'#06b6d4','🧩':'#22c55e','🔐':'#6b7280','📊':'#3b82f6','🎭':'#8b5cf6','🏖️':'#06b6d4','🚗':'#ef4444','✈️':'#3b82f6','🎓':'#6366f1','💎':'#06b6d4','🎪':'#ec4899'
   };
   return colors[emoji] || '#8b5cf6';
 }
@@ -6325,14 +6508,14 @@ function animSidebarClip() {
     if (now - startT < DUR) {
       requestAnimationFrame(frame);
     } else {
-      send('SidebarClipWidth', {w: -1}); // release override â†’ normal clip logic
+      send('SidebarClipWidth', {w: -1}); // release override → normal clip logic
     }
   }
   requestAnimationFrame(frame);
 }
 
-// pin=true: opened via button click â€” stays open until explicitly closed
-// pin=false: hover â€” never activates the button, never pins
+// pin=true: opened via button click — stays open until explicitly closed
+// pin=false: hover — never activates the button, never pins
 function showFloatingSidebar(pin) {
   cancelSidebarHide();
   clearSidebarClipTimer();
@@ -6352,12 +6535,12 @@ function showFloatingSidebar(pin) {
   _syncSidebarBtnState();
 }
 
-// Schedule a close with debounce â€” allows mouse to travel from trigger to sidebar
+// Schedule a close with debounce — allows mouse to travel from trigger to sidebar
 function scheduledHide() {
   if (!sidebarPeeking || sidebarPinned) return;
   const pop = document.getElementById('sb-ws-popover');
   if (pop && pop.classList.contains('visible')) return;
-  // Keep the auto-hide sidebar open while a context menu spawned from it is showing â€”
+  // Keep the auto-hide sidebar open while a context menu spawned from it is showing —
   // moving onto the menu must not collapse the tabs out from under it.
   const ctx = document.getElementById('ctx-menu');
   if (ctx && ctx.style.display === 'block') return;
@@ -7878,7 +8061,7 @@ function ntPickWallpaperFile() {
       toast('Image too large (max 20 MB)', 'error');
       return;
     }
-    toast('Processing imageâ€¦', 'info');
+    toast('Processing image…', 'info');
     _compressWallpaperImage(file, dataUrl => {
       if (!dataUrl) {
         toast('Could not process image', 'error');
@@ -8121,6 +8304,11 @@ function syncSuggestionOverlay(panel) {
 function refreshSuggestionOverlayBounds() {
   const workspaceModal = document.getElementById('workspace-modal');
   if (workspaceModal && workspaceModal.classList.contains('open')) {
+    send('SuggestionOverlay', {visible:true, x:0, y:0, width:window.innerWidth, height:window.innerHeight});
+    return;
+  }
+  const wsSwitcher = document.getElementById('ws-switcher-modal');
+  if (wsSwitcher && wsSwitcher.classList.contains('open')) {
     send('SuggestionOverlay', {visible:true, x:0, y:0, width:window.innerWidth, height:window.innerHeight});
     return;
   }
@@ -8747,7 +8935,7 @@ function renderAiMarkdownLegacy(text) {
       items.map(i => '<li>' + i.replace(/^[ \t]*[-*] /, '') + '</li>').join('') +
       '</ul>';
   });
-  // Newlines â†’ line breaks (after block elements are handled)
+  // Newlines → line breaks (after block elements are handled)
   s = s.replace(/\n\n/g, '<br><br>').replace(/\n/g, '<br>');
   return s;
 }
@@ -9082,7 +9270,7 @@ function isRawThinkingTransition(sentence) {
     .test(String(sentence || '').trim());
 }
 function splitLongSentence(sentence) {
-  const clauseRegex = /[^,;â€”]+(?:[,;â€”]+|$)/g;
+  const clauseRegex = /[^,;—]+(?:[,;—]+|$)/g;
   const clauses = (sentence.match(clauseRegex) || [sentence])
     .map(c => c.trim())
     .filter(Boolean);
@@ -9787,7 +9975,7 @@ function tspRow(title, url, favicon, isSearch, subText, pinned) {
 }
 const omniPinSvg = '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M16 3l5 5-2 2-1-1-4 4v5l-2 2-3-3-4 4-1-1 4-4-3-3 2-2h5l4-4-1-1z"/></svg>';
 
-// â”€â”€ Spotlight calculator â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Spotlight calculator ──────────────────────────────────────────────────────â”€
 
 /** Returns true if the query looks like a pure math expression (no plain words). */
 function isMathExpr(q) {
@@ -9808,11 +9996,11 @@ function isMathExpr(q) {
 function evaluateMath(q) {
   try {
     let expr = q.replace(/\s+/g, '').toLowerCase();
-    // Normalise implicit multiplication: 2(3+4) â†’ 2*(3+4), (3)(4) â†’ (3)*(4)
+    // Normalise implicit multiplication: 2(3+4) → 2*(3+4), (3)(4) → (3)*(4)
     expr = expr.replace(/(\d)\(/g, '$1*(').replace(/\)(\d)/g, ')*$1').replace(/\)\(/g, ')*(');
-    // Exponentiation: ^ â†’ **
+    // Exponentiation: ^ → **
     expr = expr.replace(/\^/g, '**');
-    // sin30 / cos45 style (no parens) â†’ sin(30) / cos(45)
+    // sin30 / cos45 style (no parens) → sin(30) / cos(45)
     expr = expr.replace(/(sin|cos|tan|asin|acos|atan|sqrt|log|ln|abs|ceil|floor|round)([0-9.]+)/g, '$1($2)');
     // Validate: after substitution only math chars remain
     const check = expr.replace(/[0-9+\-*\/().e%]/g, '').replace(/(sin|cos|tan|asin|acos|atan|sinh|cosh|tanh|sqrt|log|ln|abs|floor|ceil|round|pow|max|min|pi)/g, '');
@@ -9850,7 +10038,7 @@ function fmtCalcResult(n) {
   return parts.join('.');
 }
 
-// â”€â”€ Spotlight unit converter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Spotlight unit converter ──────────────────────────────────────────────────
 // Matches: <number> <from-unit> <bridge> <to-unit>
 // Bridge words: to, into, in, as
 // Handles plural 's'/'es', abbreviations, and multi-word unit names.
@@ -9865,7 +10053,7 @@ const _CONV_UNITS = (()=>{
   //        pressure=pascal, currency=USD
   // Temperature: factor is scale id string (C/F/K/R), not a numeric factor
   const groups = [
-    // â”€â”€â”€ Length â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ──â”€ Length ────────────────────────────────────────────────────────────â”€
     [['mm','millimeter','millimetre'],                   L, 0.001],
     [['cm','centimeter','centimetre'],                   L, 0.01],
     [['dm','decimeter','decimetre'],                     L, 0.1],
@@ -9878,7 +10066,7 @@ const _CONV_UNITS = (()=>{
     [['nmi','nautical mile'],                            L, 1852],
     [['ly','light year','light-year','lightyear'],       L, 9.461e15],
     [['au','astronomical unit'],                         L, 1.496e11],
-    // â”€â”€â”€ Weight / Mass â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ──â”€ Weight / Mass ──────────────────────────────────────────────────────â”€
     [['mcg','ug','microgram'],                           W, 1e-6],
     [['mg','milligram'],                                 W, 0.001],
     [['g','gram'],                                       W, 1],
@@ -9889,7 +10077,7 @@ const _CONV_UNITS = (()=>{
     [['st','stone'],                                     W, 6350.29],
     [['short ton'],                                      W, 907185],
     [['long ton'],                                       W, 1016047],
-    // â”€â”€â”€ Time â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ──â”€ Time ──────────────────────────────────────────────────────────────â”€
     [['ms','millisecond'],                               TM, 0.001],
     [['s','sec','second'],                               TM, 1],
     [['min','minute'],                                   TM, 60],
@@ -9900,12 +10088,12 @@ const _CONV_UNITS = (()=>{
     [['yr','year'],                                      TM, 31536000],
     [['decade'],                                         TM, 315360000],
     [['century','centuries'],                            TM, 3153600000],
-    // â”€â”€â”€ Temperature â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    [['c','celsius','Â°c','degc','deg c'],                TP, 'C'],
-    [['f','fahrenheit','Â°f','degf','deg f'],             TP, 'F'],
+    // ──â”€ Temperature ────────────────────────────────────────────────────────
+    [['c','celsius','°c','degc','deg c'],                TP, 'C'],
+    [['f','fahrenheit','°f','degf','deg f'],             TP, 'F'],
     [['k','kelvin'],                                     TP, 'K'],
     [['r','rankine'],                                    TP, 'R'],
-    // â”€â”€â”€ Volume â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ──â”€ Volume ────────────────────────────────────────────────────────────â”€
     [['ml','milliliter','millilitre'],                   V, 0.001],
     [['cl','centiliter','centilitre'],                   V, 0.01],
     [['dl','deciliter','decilitre'],                     V, 0.1],
@@ -9921,7 +10109,7 @@ const _CONV_UNITS = (()=>{
     [['cm3','cubic centimeter','cubic centimetre','cc'], V, 0.001],
     [['ft3','cubic foot','cubic feet'],                  V, 28.3168],
     [['in3','cubic inch','cubic inches'],                V, 0.0163871],
-    // â”€â”€â”€ Area â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ──â”€ Area ──────────────────────────────────────────────────────────────â”€
     [['mm2','sq mm','square mm'],                        A, 1e-6],
     [['cm2','sq cm','square cm'],                        A, 1e-4],
     [['m2','sqm','sq m','square meter','square metre'],  A, 1],
@@ -9931,13 +10119,13 @@ const _CONV_UNITS = (()=>{
     [['sqft','sq ft','square foot','square feet'],       A, 0.092903],
     [['sqin','sq in','square inch','square inches'],     A, 6.4516e-4],
     [['sqmi','sq mi','square mile'],                     A, 2589988.11],
-    // â”€â”€â”€ Speed â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ──â”€ Speed ──────────────────────────────────────────────────────────────
     [['m/s','mps','meter per second'],                   SP, 1],
     [['km/h','kph','kmh','kilometer per hour'],          SP, 0.277778],
     [['mph','mile per hour'],                            SP, 0.44704],
     [['knot','kn','knots'],                              SP, 0.514444],
     [['ft/s','fps','foot per second','feet per second'], SP, 0.3048],
-    // â”€â”€â”€ Digital Storage â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ──â”€ Digital Storage ────────────────────────────────────────────────────
     [['bit'],                                            DT, 0.125],
     [['b','byte'],                                       DT, 1],
     [['kb','kilobyte'],                                  DT, 1000],
@@ -9949,7 +10137,7 @@ const _CONV_UNITS = (()=>{
     [['mib','mebibyte'],                                 DT, 1048576],
     [['gib','gibibyte'],                                 DT, 1073741824],
     [['tib','tebibyte'],                                 DT, 1099511627776],
-    // â”€â”€â”€ Energy â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ──â”€ Energy ────────────────────────────────────────────────────────────â”€
     [['j','joule'],                                      EN, 1],
     [['kj','kilojoule'],                                 EN, 1000],
     [['mj','megajoule'],                                 EN, 1e6],
@@ -9959,7 +10147,7 @@ const _CONV_UNITS = (()=>{
     [['kwh','kilowatt-hour'],                            EN, 3600000],
     [['btu'],                                            EN, 1055.06],
     [['ev','electronvolt'],                              EN, 1.602e-19],
-    // â”€â”€â”€ Pressure â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ──â”€ Pressure ──────────────────────────────────────────────────────────â”€
     [['pa','pascal'],                                    PR, 1],
     [['kpa','kilopascal'],                               PR, 1000],
     [['mpa','megapascal'],                               PR, 1e6],
@@ -9968,7 +10156,7 @@ const _CONV_UNITS = (()=>{
     [['psi'],                                            PR, 6894.76],
     [['atm','atmosphere'],                               PR, 101325],
     [['torr','mmhg'],                                    PR, 133.322],
-    // â”€â”€â”€ Currency (static approximate rates â€” base 1 USD) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ──â”€ Currency (static approximate rates — base 1 USD) ──────────────────â”€
     [['usd','dollar'],                                   CU, 1],
     [['eur','euro'],                                     CU, 1.087],
     [['gbp','pound sterling'],                           CU, 1.268],
@@ -10019,15 +10207,15 @@ const _CONV_UNITS = (()=>{
 
 /**
  * Look up a unit string, handling:
- *  â€¢ exact match   "meter"
- *  â€¢ plural -s     "meters" â†’ "meter"
- *  â€¢ plural -es    "inches" â†’ check without 'es' (though 'inches' is in map directly)
- *  â€¢ normalise whitespace so "sq  ft" â†’ "sq ft"
+ *  • exact match   "meter"
+ *  • plural -s     "meters" → "meter"
+ *  • plural -es    "inches" → check without 'es' (though 'inches' is in map directly)
+ *  • normalise whitespace so "sq  ft" → "sq ft"
  */
 function _convLookup(raw) {
   const s = raw.toLowerCase().trim().replace(/\s+/g, ' ');
   if (_CONV_UNITS[s]) return _CONV_UNITS[s];
-  // Strip trailing 's' (hoursâ†’hour, metersâ†’meter, poundsâ†’pound, gallonsâ†’gallonâ€¦)
+  // Strip trailing 's' (hours→hour, meters→meter, pounds→pound, gallons→gallon…)
   if (s.length > 2 && s.endsWith('s') && _CONV_UNITS[s.slice(0, -1)])
     return _CONV_UNITS[s.slice(0, -1)];
   // Strip trailing 'es' (catches irregular plurals not already in the map)
@@ -10056,7 +10244,7 @@ function _parseConversion(q) {
   const rest = s.slice(numM[0].length);
   if (!rest) return null;
   // Scan every bridge position left-to-right; stop at first valid unit pair
-  const bridgeRE = /\s+(?:to|into|in|as|â†’|->)\s+/gi;
+  const bridgeRE = /\s+(?:to|into|in|as|→|->)\s+/gi;
   let m;
   while ((m = bridgeRE.exec(rest)) !== null) {
     const fromStr = rest.slice(0, m.index);
@@ -10101,10 +10289,10 @@ const _CONV_LABEL = {
   energy:'Energy', pressure:'Pressure', currency:'Currency'
 };
 
-// Auto-suggest targets: canonical-key â†’ canonical-key of the best "default" target.
+// Auto-suggest targets: canonical-key → canonical-key of the best "default" target.
 // Keys must be the first alias of their group (the canonical key stored in .k).
 const _AUTO_SUGGEST = {
-  // Length â€” suggest adjacent scale or imperial equivalent
+  // Length — suggest adjacent scale or imperial equivalent
   mm:'cm', cm:'m', dm:'m', m:'ft', km:'mi',
   'in':'cm', ft:'m', yd:'m', mi:'km', nmi:'km',
   // Weight
@@ -10123,7 +10311,7 @@ const _AUTO_SUGGEST = {
   ha:'ac', ac:'ha', sqft:'m2', sqin:'cm2', sqmi:'km2',
   // Speed
   'm/s':'km/h', 'km/h':'mph', mph:'km/h', knot:'mph', 'ft/s':'m/s',
-  // Data â€” always go up one SI step
+  // Data — always go up one SI step
   bit:'b', b:'kb', kb:'mb', mb:'gb', gb:'tb', tb:'pb',
   kib:'mib', mib:'gib', gib:'tib', tib:'gib',
   // Energy
@@ -10132,7 +10320,7 @@ const _AUTO_SUGGEST = {
   // Pressure
   pa:'atm', kpa:'psi', mpa:'bar', bar:'psi', mbar:'pa',
   psi:'bar', atm:'psi', torr:'pa',
-  // Currency â€” suggest USD (or EUR for USD itself)
+  // Currency — suggest USD (or EUR for USD itself)
   usd:'eur', eur:'usd', gbp:'usd', jpy:'usd', cny:'usd', krw:'usd',
   aud:'usd', cad:'usd', chf:'usd', inr:'usd', idr:'usd', sgd:'usd',
   hkd:'usd', mxn:'usd', brl:'usd', rub:'usd', 'try':'usd', php:'usd',
@@ -10156,7 +10344,7 @@ function _parseUnitOnly(q) {
   return {value, fromU, fromStr: rest};
 }
 
-// Country registry: ISO-3166-1 alpha-2 â†’ {name, currency (canonical key|null), sys}
+// Country registry: ISO-3166-1 alpha-2 → {name, currency (canonical key|null), sys}
 // sys: 'metric' | 'imperial' | 'uk'
 const _COUNTRY_DATA = {
   AE:{name:'UAE',               currency:'aed', sys:'metric'},
@@ -10226,13 +10414,13 @@ const _COUNTRY_DATA = {
 
 // Unit-system overrides for metric countries (keys that _AUTO_SUGGEST biases toward imperial).
 const _METRIC_OVERRIDES = {
-  m:'km',        // m â†’ km  (not ft)
-  km:'m',        // km â†’ m  (not mi)
-  kg:'g',        // kg â†’ g  (not lb)
-  l:'ml',        // l â†’ ml  (not gal)
-  'km/h':'m/s',  // km/h â†’ m/s  (not mph)
-  m2:'ha',       // mÂ² â†’ ha  (not sqft)
-  ha:'m2',       // ha â†’ mÂ²  (not acre)
+  m:'km',        // m → km  (not ft)
+  km:'m',        // km → m  (not mi)
+  kg:'g',        // kg → g  (not lb)
+  l:'ml',        // l → ml  (not gal)
+  'km/h':'m/s',  // km/h → m/s  (not mph)
+  m2:'ha',       // m² → ha  (not sqft)
+  ha:'m2',       // ha → m²  (not acre)
 };
 
 /** Pick the best auto-suggest target key given the source unit + current country. */
@@ -10244,8 +10432,8 @@ function _getAutoSuggestTarget(fromU, value) {
   if (fromU.t === 'currency') {
     const local = country && country.currency;
     if (local) {
-      if (fromU.k !== local) return local;            // foreign â†’ local
-      return fromU.k === 'usd' ? 'eur' : 'usd';     // local â†’ international reference
+      if (fromU.k !== local) return local;            // foreign → local
+      return fromU.k === 'usd' ? 'eur' : 'usd';     // local → international reference
     }
     return _AUTO_SUGGEST[fromU.k] || null;
   }
@@ -10290,7 +10478,7 @@ function renderConvCard(query) {
   const rounded  = parseFloat(result.toPrecision(sigFigs));
   const formatted = fmtCalcResult(rounded);
   const copyVal   = String(rounded);
-  const expr  = `${conv.value} ${conv.fromStr} â†’ ${conv.toStr}`;
+  const expr  = `${conv.value} ${conv.fromStr} → ${conv.toStr}`;
   const label = _CONV_LABEL[conv.fromU.t] || conv.fromU.t;
   let disc = '';
   if (conv.fromU.t === 'currency') {
@@ -10570,14 +10758,11 @@ function isUpdateModalOpen() {
 }
 function updateModalCopy(status, data) {
   if (status === 'up_to_date') return {title: 'Ventus is up to date', sub: 'You already have the newest version.'};
-  if (status === 'available') return {title: 'Update available', sub: data.version ? `Ventus v${data.version} is ready.` : 'A new Ventus update is ready.'};
-  if (status === 'downloading') {
-    const pct = data.total > 0 ? Math.round((data.received / data.total) * 100) : null;
-    return {title: 'Downloading update', sub: pct !== null ? `${pct}% downloaded.` : 'Getting the installer ready.'};
-  }
-  if (status === 'installing') return {title: 'Installing update', sub: 'Ventus will restart when it is done.'};
+  if (status === 'available') return {title: 'Update available', sub: data.version ? `Ventus v${data.version} is ready to install.` : 'A new Ventus update is ready.'};
+  if (status === 'downloading') return {title: 'Downloading update', sub: 'Getting the installer ready.'};
+  if (status === 'installing') return {title: 'Installing update', sub: 'Ventus will reopen right after this.'};
   if (status === 'error') return {title: 'Could not check updates', sub: data.error || 'Something went wrong.'};
-  return {title: 'Checking for updates', sub: 'This should only take a moment.'};
+  return {title: 'Checking for updates', sub: 'Looking for the newest build.'};
 }
 function setUpdateModalIcon(status) {
   const icon = document.getElementById('update-modal-icon');
@@ -10589,7 +10774,7 @@ function setUpdateModalIcon(status) {
   if (status === 'error') html = '<circle cx="12" cy="12" r="9"/><path d="M12 8v5"/><path d="M12 16h.01"/>';
   svg.innerHTML = html;
   svg.classList.toggle('update-spin', status === 'checking' || status === 'downloading' || status === 'installing');
-  if (icon) icon.classList.toggle('is-plain', status === 'up_to_date');
+  if (icon) icon.dataset.status = status;
 }
 function setUpdateModalActions(status) {
   const actions = document.getElementById('update-modal-actions');
@@ -10603,18 +10788,21 @@ function setUpdateModalActions(status) {
 function setUpdateModalProgress(status, data) {
   const box = document.getElementById('update-modal-progress');
   const bar = document.getElementById('update-modal-bar');
-  const label = document.getElementById('update-modal-progress-label');
-  if (!box || !bar || !label) return;
+  const text = document.getElementById('update-modal-progress-text');
+  const pctText = document.getElementById('update-modal-progress-pct');
+  if (!box || !bar || !text || !pctText) return;
   if (status !== 'downloading') {
     box.classList.remove('visible');
     bar.style.width = '0%';
-    label.textContent = '';
+    text.textContent = 'Downloading';
+    pctText.textContent = '';
     return;
   }
   const pct = data.total > 0 ? Math.round((data.received / data.total) * 100) : null;
   box.classList.add('visible');
   bar.style.width = pct !== null ? `${pct}%` : '18%';
-  label.textContent = pct !== null ? `Downloading... ${pct}%` : 'Downloading...';
+  text.textContent = pct !== null ? 'Downloading' : 'Starting download';
+  pctText.textContent = pct !== null ? `${pct}%` : '';
 }
 function showUpdateModal(data) {
   const modal = document.getElementById('update-modal');
@@ -10907,15 +11095,15 @@ function showBrowserContextMenu(data) {
     item('open_image_tab', 'Open image in new tab');
     item('copy_image',     'Copy image');
     item('copy_image_url', 'Copy image address');
-    item('save_image',     'Save image asâ€¦');
+    item('save_image',     'Save image as…');
   }
   if (data.selectedText) {
     if (data.linkUrl || data.imageSrc) sep();
     item('copy_text', 'Copy');
     const shortText = data.selectedText.length > 25
-      ? data.selectedText.slice(0, 25) + 'â€¦'
+      ? data.selectedText.slice(0, 25) + '…'
       : data.selectedText;
-    item('search_text', `Search for â€œ${shortText}â€`);
+    item('search_text', `Search for “${shortText}â€`);
   }
   if (rows.length > 0) sep();
   if (data.canBack)  item('back',    'Back',    data.canBack  ? '' : 'ctx-disabled');
@@ -11021,7 +11209,7 @@ function toggleDownloadPanel(event) {
   openDownloadPanel(false);
 }
 
-// peek=true: opened automatically on a download start â€” auto-dismisses unless the user
+// peek=true: opened automatically on a download start — auto-dismisses unless the user
 // interacts with it. peek=false: a normal user-initiated open that stays until dismissed.
 function openDownloadPanel(peek) {
   const panel = document.getElementById('download-panel');
@@ -11044,12 +11232,12 @@ function openDownloadPanel(peek) {
     panel.classList.remove('dl-peek');
     panel.dataset.peek = '0';
   }
-  // Clip to the panel rect only â€” page underneath stays scrollable/interactive.
+  // Clip to the panel rect only — page underneath stays scrollable/interactive.
   // rAF lets layout settle so getBoundingClientRect is accurate.
   requestAnimationFrame(_syncDownloadOverlay);
 }
 
-// User engaged with the peeking panel â†’ make it sticky (cancel auto-dismiss).
+// User engaged with the peeking panel → make it sticky (cancel auto-dismiss).
 function cancelDownloadPeek() {
   const panel = document.getElementById('download-panel');
   if (!panel) return;
@@ -11079,7 +11267,7 @@ function flashDownloadStart() {
   const panel = document.getElementById('download-panel');
   if (!panel) return;
   if (panel.classList.contains('open')) {
-    // Already open â€” just refresh contents and keep the panel rect clip in sync.
+    // Already open — just refresh contents and keep the panel rect clip in sync.
     renderDownloadPanel();
     requestAnimationFrame(_syncDownloadOverlay);
   } else {
@@ -11088,7 +11276,7 @@ function flashDownloadStart() {
 }
 
 // A press landed in the live web page (relayed by the content WebView). Close the
-// download panel â€” it's clipped to its own rect, so the page never received the chrome's
+// download panel — it's clipped to its own rect, so the page never received the chrome's
 // own document-level click handler that would otherwise dismiss it.
 function onContentPointerDown() {
   const panel = document.getElementById('download-panel');
@@ -11103,23 +11291,11 @@ function isPdfFile(name) {
   return /\.pdf(?:$|[?#])/i.test(String(name || '').trim());
 }
 
-function dlFileTypeClass(filename) {
-  const ext = (filename || '').split('.').pop().toLowerCase();
-  if (['jpg','jpeg','png','gif','webp','svg','avif','ico','bmp'].includes(ext)) return 'ft-img';
-  if (['mp4','mkv','avi','mov','webm','flv','wmv'].includes(ext)) return 'ft-vid';
-  if (['mp3','flac','wav','aac','ogg','m4a'].includes(ext)) return 'ft-aud';
-  if (['pdf','doc','docx','xls','xlsx','ppt','pptx','odt','txt','md','csv'].includes(ext)) return 'ft-doc';
-  if (['zip','rar','7z','tar','gz','bz2'].includes(ext)) return 'ft-arc';
-  if (['exe','msi','dmg','pkg','deb','rpm','appimage'].includes(ext)) return 'ft-exe';
-  if (['js','ts','py','rs','go','java','cpp','c','cs','json','html','css','xml','yaml'].includes(ext)) return 'ft-code';
-  return 'ft-default';
-}
-function dlFileTypeIcon(cls) {
-  const icons = {
-    'ft-img':'IMG','ft-vid':'VID','ft-aud':'AUD','ft-doc':'DOC',
-    'ft-arc':'ZIP','ft-exe':'EXE','ft-code':'SRC','ft-default':'FILE',
-  };
-  return icons[cls] || 'FILE';
+function dlFileExt(filename) {
+  const name = String(filename || '').split(/[?#]/)[0].split(/[\\/]/).pop() || '';
+  const parts = name.split('.');
+  if (parts.length < 2) return 'file';
+  return (parts.pop() || 'file').slice(0, 4).toLowerCase();
 }
 function renderDownloadPanel() {
   const list = document.getElementById('dl-panel-list');
@@ -11139,28 +11315,40 @@ function renderDownloadPanel() {
     const isPaused = d.status === 'paused';
     const isLive = dlIsActive(d) || isPaused;
     const isPdf = isPdfFile(d.local_path || d.filename);
-    const [badgeClass, badgeText] = dlBadge(d);
     const metaText = dlMeta(d);
-    const ftClass = dlIsActive(d) ? 'ft-active' : dlFileTypeClass(d.filename);
+    const ftClass = dlIsActive(d) ? 'ft-active' : '';
     const iconContent = dlIsActive(d)
       ? `<span class="dl-spin"></span>`
-      : `<span style="font-size:9px;font-weight:800;letter-spacing:0.03em">${dlFileTypeIcon(ftClass)}</span>`;
-    const fileBtns = isDone && d.local_path
-      ? `<button class="dl-pi-btn" data-open-file-path="${escAttr(d.local_path)}">${isPdf ? 'Read' : 'Open'}</button>
-         <button class="dl-pi-btn" data-reveal-file-path="${escAttr(d.local_path)}">Show</button>`
+      : `<span class="dl-pi-ext">${escHtml(dlFileExt(d.filename))}</span>`;
+    const revealBtn = isDone && d.local_path
+      ? `<button class="dl-pi-btn icon" data-reveal-file-path="${escAttr(d.local_path)}" title="Show in folder">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        </button>`
       : '';
     const removeBtn = !isLive
       ? `<button class="dl-pi-btn icon danger" data-del-dl-id="${escAttr(d.id)}" title="Remove">${DL_SVG_X}</button>`
       : '';
-    const actionsHtml = dlControlBtns(d) + fileBtns + removeBtn;
+    const actionsHtml = dlControlBtns(d) + revealBtn + removeBtn;
+    let subHtml = '';
+    if (isDone && d.local_path) {
+      subHtml = `<button class="dl-pi-link" data-open-file-path="${escAttr(d.local_path)}">${isPdf ? 'Read PDF' : 'Open file'}</button>${metaText ? `<span class="dl-pi-sep"></span><span class="dl-pi-meta">${escHtml(metaText)}</span>` : ''}`;
+    } else if (isDone) {
+      subHtml = `<span class="dl-pi-state">Done</span>${metaText ? `<span class="dl-pi-sep"></span><span class="dl-pi-meta">${escHtml(metaText)}</span>` : ''}`;
+    } else if (d.status === 'failed') {
+      subHtml = '<span class="dl-pi-state failed">Download failed</span>';
+    } else if (d.status === 'cancelled') {
+      subHtml = '<span class="dl-pi-state failed">Canceled</span>';
+    } else if (isPaused) {
+      const pausedMeta = metaText.replace(/^Paused\s*\u00B7\s*/, '');
+      subHtml = `<span class="dl-pi-state">Paused</span>${pausedMeta ? `<span class="dl-pi-sep"></span><span class="dl-pi-meta">${escHtml(pausedMeta)}</span>` : ''}`;
+    } else {
+      subHtml = `<span class="dl-pi-state active">Downloading</span>${metaText ? `<span class="dl-pi-sep"></span><span class="dl-pi-meta">${escHtml(metaText)}</span>` : ''}`;
+    }
     return `<div class="dl-panel-item">
       <div class="dl-pi-icon-wrap ${ftClass}">${iconContent}</div>
       <div class="dl-pi-body">
         <div class="dl-pi-name">${escHtml(d.filename)}</div>
-        <div class="dl-pi-row">
-          <span class="dl-pi-status-badge ${badgeClass}">${badgeText}</span>
-          ${metaText ? `<span class="dl-pi-meta">${escHtml(metaText)}</span>` : ''}
-        </div>
+        <div class="dl-pi-sub">${subHtml}</div>
         ${dlProgressHtml(d)}
       </div>
       <div class="dl-pi-actions">${actionsHtml}</div>
@@ -11187,7 +11375,7 @@ document.getElementById('download-panel').addEventListener('click', e => {
   if (delBtn) { e.stopPropagation(); send('DeleteDownload', {id: delBtn.dataset.delDlId}); return; }
 });
 
-// Close download panel on click outside (also on Escape â€” handled in keydown)
+// Close download panel on click outside (also on Escape — handled in keydown)
 document.addEventListener('click', e => {
   const panel = document.getElementById('download-panel');
   const dlBtn = toolbarAnchor('downloads') || document.getElementById('btn-more');
@@ -11354,7 +11542,7 @@ function updateBmBarOverflow() {
   const items = Array.from(bar.querySelectorAll('.bm-bar-item'));
   if (!items.length) return;
 
-  // No overflow at all â€” done
+  // No overflow at all — done
   if (bar.scrollWidth <= bar.clientWidth) return;
 
   // Reserve ~42px for the overflow button and find items to pull out
@@ -11872,13 +12060,6 @@ function formatEta(d) {
   if (remain <= 0) return '';
   return formatDuration(remain / d.speed_bps) + ' left';
 }
-function dlBadge(d) {
-  if (d.status === 'complete') return ['done', 'Done'];
-  if (d.status === 'failed') return ['failed', 'Failed'];
-  if (d.status === 'cancelled') return ['failed', 'Canceled'];
-  if (d.status === 'paused') return ['paused', 'Paused'];
-  return ['active', 'Downloading'];
-}
 function dlMeta(d) {
   if (d.status === 'complete') return d.total_bytes ? formatBytes(d.total_bytes) : (formatBytes(d.received_bytes) || 'Done');
   if (d.status === 'failed') return 'Download failed';
@@ -12001,7 +12182,7 @@ function handleDelegatedListClick(e) {
   }
   const nav = e.target.closest('[data-nav-url]');
   // Elements that carry their own onclick (sidebar tab items, bookmark-bar
-  // items) handle clicks themselves â€” `data-nav-url` on them exists only as a
+  // items) handle clicks themselves — `data-nav-url` on them exists only as a
   // drag source. Navigating here too would reload a tab on every switch.
   if (nav && !nav.hasAttribute('onclick')) {
     e.preventDefault();
@@ -12056,7 +12237,7 @@ function obPopulateRegionSelect(current) {
   const sel = document.getElementById('ob-region-select');
   if (!sel) return;
   const sorted = Object.entries(_COUNTRY_DATA).sort((a,b) => a[1].name.localeCompare(b[1].name));
-  sel.innerHTML = '<option value="">â€” Not set â€”</option>' +
+  sel.innerHTML = '<option value="">— Not set —</option>' +
     sorted.map(([code, c]) =>
       `<option value="${escAttr(code)}"${code === current ? ' selected' : ''}>${countryFlag(code)} ${escHtml(c.name)}</option>`
     ).join('');
@@ -12235,18 +12416,18 @@ function tabContextMenu(ev, tabId) {
   const tabs = (state.tabs || []).filter(t => t.workspace_id === ws);
   const idx = tabs.findIndex(t => t.id === tabId);
   const isWeb = !!tab.url && !tab.url.startsWith('neura://') && !tab.url.startsWith('about:');
-  // Pinned tabs are protected â€” skip them in bulk-close counts
+  // Pinned tabs are protected — skip them in bulk-close counts
   const others = tabs.filter(t => t.id !== tabId && !t.pinned);
   const below  = idx >= 0 ? tabs.slice(idx + 1).filter(t => !t.pinned) : [];
 
   const items = [
-    // â”€â”€ Audio â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Audio ──────────────────────────────────────────────────────────────
     {
       label: tab.is_muted ? 'Unmute tab' : 'Mute tab',
       action: () => send('MuteTab', {tab_id: tabId})
     },
     {sep: true},
-    // â”€â”€ Tab management â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Tab management ────────────────────────────────────────────────────â”€
     {
       label: tab.pinned ? 'Unpin tab' : 'Pin tab',
       action: () => send(tab.pinned ? 'UnpinTab' : 'PinTab', {id: tabId})
@@ -12265,13 +12446,13 @@ function tabContextMenu(ev, tabId) {
     },
   ];
 
-  // â”€â”€ Open in new window (web URLs only) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Open in new window (web URLs only) ──────────────────────────────────â”€
   if (isWeb) {
     items.push({sep: true});
     items.push({label: 'Open in new window', action: () => send('OpenInNewWindow', {url: tab.url})});
   }
 
-  // â”€â”€ Bulk-close (only when there is something to close) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Bulk-close (only when there is something to close) ──────────────────â”€
   if (others.length > 0 || below.length > 0) {
     items.push({sep: true});
     if (others.length > 0) {
@@ -12290,7 +12471,7 @@ function tabContextMenu(ev, tabId) {
     }
   }
 
-  // â”€â”€ Close this tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Close this tab ────────────────────────────────────────────────────────
   items.push({sep: true});
   items.push({label: 'Close tab', danger: true, action: () => send('CloseTab', {id: tabId})});
 
@@ -12298,10 +12479,11 @@ function tabContextMenu(ev, tabId) {
 }
 function wsContextMenu(ev, wsId) {
   ev.preventDefault();
-  const items = [{label:'Rename', action:() => openWorkspaceModal(wsId)}];
+  ev.stopPropagation();
+  const items = [{label:'Edit', action:() => { closeWsSwitcher(); openWorkspaceModal(wsId); }}];
   if ((state.workspaces || []).length > 1) {
     items.push({sep:true});
-    items.push({label:'Delete workspace', danger:true, action:() => deleteWorkspace(ev, wsId)});
+    items.push({label:'Delete workspace', danger:true, action:() => { closeWsSwitcher(); deleteWorkspace(null, wsId); }});
   }
   showContextMenu(ev.clientX, ev.clientY, items);
 }
@@ -12312,6 +12494,11 @@ function _hideCtxMenu() {
   _ctxOverlayActive = false;
   // Restore whatever popover the menu was floating over, instead of blindly clearing the
   // clip — otherwise dismissing the menu over a suggestions dropdown cuts off the dropdown.
+  const wsSwitcher = document.getElementById('ws-switcher-modal');
+  if (wsSwitcher && wsSwitcher.classList.contains('open')) {
+    send('SuggestionOverlay', {visible:true, x:0, y:0, width:window.innerWidth, height:window.innerHeight});
+    return;
+  }
   if (_activeFolderId) { syncFolderModalClip(); return; }
   const panel = activeSuggestionTarget
     ? document.getElementById(activeSuggestionTarget === 'newtab' ? 'newtab-suggestions' : 'url-suggestions')
@@ -12500,6 +12687,7 @@ document.addEventListener('keydown', e => {
   else if (ctrl && e.shiftKey && key === 'n') { e.preventDefault(); send('OpenIncognito'); }
   else if (ctrl && key === 'n') { e.preventDefault(); send('OpenInNewWindow', {url: 'neura://newtab'}); }
   else if (ctrl && !e.shiftKey && /^[1-9]$/.test(e.key)) { e.preventDefault(); switchToTabIndex(parseInt(e.key, 10) - 1); }
+  else if (ctrl && key === 'tab') { e.preventDefault(); send('SwitchTabOffset', {delta: e.shiftKey ? -1 : 1}); }
   else if (ctrl && key === 't') { e.preventDefault(); openNewTabSpotlight(); }
   else if (ctrl && e.key === 'w') { e.preventDefault(); if (state.active_tab_id) send('CloseTab', {id: state.active_tab_id}); }
   else if (ctrl && key === 'l') { e.preventDefault(); focusUrl(); }
@@ -12525,6 +12713,7 @@ document.addEventListener('keydown', e => {
     else if (findOpen) closeFindBar(true);
     else if (document.getElementById('workspace-delete-modal').classList.contains('open')) closeWorkspaceDeleteModal();
     else if (document.getElementById('workspace-modal').classList.contains('open')) closeWorkspaceModal();
+    else if (document.getElementById('ws-switcher-modal').classList.contains('open')) closeWsSwitcher();
     else if (document.getElementById('app').classList.contains('content-fullscreen')) { send('ToggleFullscreen'); }
     else if (document.getElementById('context-menu').classList.contains('open')) closeContextMenu();
     else if (document.getElementById('adblock-modal').classList.contains('open')) closeAdBlockModal();
@@ -12575,7 +12764,7 @@ document.addEventListener('auxclick', function(e) {
   // Never intercept clicks on dedicated button elements (trash, X, etc.)
   if (e.target.closest('button')) return;
 
-  // Tab items â†’ close (standard browser middle-click-tab behaviour)
+  // Tab items → close (standard browser middle-click-tab behaviour)
   const tabItem = e.target.closest('.tab-item');
   if (tabItem) {
     e.preventDefault();
@@ -12585,7 +12774,7 @@ document.addEventListener('auxclick', function(e) {
     return;
   }
 
-  // Omnibox suggestion items â†’ open in new tab and close the panel
+  // Omnibox suggestion items → open in new tab and close the panel
   const sugg = e.target.closest('.suggestion-item');
   if (sugg) {
     const idx = parseInt(sugg.dataset.index, 10);
@@ -12609,7 +12798,7 @@ document.addEventListener('auxclick', function(e) {
   }
 }, false);
 
-// â”€â”€ Drag helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Drag helpers ──────────────────────────────────────────────────────────────
 function dropHasUriList(dt) {
   if (!dt) return false;
   const t = dt.types || [];
@@ -12638,7 +12827,7 @@ function extractDropUrl(dt) {
   return '';
 }
 
-// â”€â”€ Drag sources: any [data-nav-url][draggable] element â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Drag sources: any [data-nav-url][draggable] element ──────────────────────â”€
 // dragKind classifies what is being dragged so drop zones can react: a tab and a bookmark
 // reorder within their own list; anything else is treated as a plain URL.
 let dragKind = null;   // 'tab' | 'bookmark' | 'url'
@@ -12765,7 +12954,7 @@ function moveBookmarkToBar(id, before) {
   send('MoveBookmark', {id, before});
 }
 
-// â”€â”€ Address bar: drop â†’ paste URL, focus, open suggestions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Address bar: drop → paste URL, focus, open suggestions ──────────────────â”€
 (function() {
   const bar = document.getElementById('address-bar');
   const inp = document.getElementById('url-input');
@@ -12793,7 +12982,7 @@ function moveBookmarkToBar(id, before) {
   }, false);
 })();
 
-// â”€â”€ URL input: text-selection drag that also carries URI data when text is a URL â”€â”€
+// ── URL input: text-selection drag that also carries URI data when text is a URL ──
 // This fires before the global dragstart listener. If the selected (or full) input
 // text is a valid URL we piggyback text/uri-list so bookmark drop zones accept it.
 // If it is just plain text we leave dataTransfer alone and the native copy drag works.
@@ -12808,7 +12997,7 @@ function moveBookmarkToBar(id, before) {
       if (/^https?:\/\//i.test(candidate)) url = candidate;
       else if (/^[a-z0-9.-]+\.[a-z]{2,}([\/?#]|$)/i.test(candidate)) url = candidate;
     } catch (_) {}
-    if (!url) return; // plain text â€” let native drag proceed untouched
+    if (!url) return; // plain text — let native drag proceed untouched
     dragKind = 'url';
     dragId = null;
     dragPinned = false;
@@ -12820,8 +13009,8 @@ function moveBookmarkToBar(id, before) {
   }, false);
 })();
 
-// â”€â”€ Sidebar tab list: drop â†’ open new tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// â”€â”€ Drop zones: sidebar tab list (reorder/new tab) + bookmark areas (reorder/save) â”€â”€
+// ── Sidebar tab list: drop → open new tab ────────────────────────────────────
+// ── Drop zones: sidebar tab list (reorder/new tab) + bookmark areas (reorder/save) ──
 setupDropZone(document.getElementById('sb-page'), {
   reorderKind: 'tab', item: '.tab-item', axis: 'y',
   sameGroup: (it) => it.classList.contains('pinned') === dragPinned,
@@ -12858,9 +13047,9 @@ setupDropZone(document.getElementById('bookmarks-list'), {
   folderDrop: true,
 });
 
-// â”€â”€ Global fallback: drop a URL anywhere in chrome â†’ new tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Global fallback: drop a URL anywhere in chrome → new tab ────────────────â”€
 // Skips editable elements unless the drag carries text/uri-list (URL drag, not
-// a text-selection drag) â€” those fall through to native text insert so users can
+// a text-selection drag) — those fall through to native text insert so users can
 // drop a URL into the AI input, search bar, or any settings field.
 window.addEventListener('dragover', function(e) {
   if (e.defaultPrevented) return;
@@ -12957,7 +13146,7 @@ function openReleaseLink(e) {
   trigger.addEventListener('mouseleave', e => {
     if (!document.getElementById('app').classList.contains('sidebar-auto-hide')) return;
     const to = e.relatedTarget;
-    // Moving from trigger directly into the sidebar â€” cancel hide
+    // Moving from trigger directly into the sidebar — cancel hide
     if (to && (to === sidebar || sidebar.contains(to))) return;
     scheduledHide();
   });
@@ -12969,9 +13158,9 @@ function openReleaseLink(e) {
   sidebar.addEventListener('mouseleave', function(e) {
     if (!document.getElementById('app').classList.contains('sidebar-auto-hide')) return;
     const to = e.relatedTarget;
-    if (to && this.contains(to)) return; // moving to a child element â€” stay open
+    if (to && this.contains(to)) return; // moving to a child element — stay open
     const pop = document.getElementById('sb-ws-popover');
-    if (to && pop && (to === pop || pop.contains(to))) return; // moving to popover â€” keep sidebar open
+    if (to && pop && (to === pop || pop.contains(to))) return; // moving to popover — keep sidebar open
     scheduledHide();
   });
 

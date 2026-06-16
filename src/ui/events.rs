@@ -42,6 +42,9 @@ pub enum ChromeCommand {
     SwitchTab {
         id: String,
     },
+    SwitchTabOffset {
+        delta: i32,
+    },
     PinTab {
         id: String,
     },
@@ -405,6 +408,7 @@ impl ChromeCommand {
             ChromeCommand::NewTab => Some("new_tab"),
             ChromeCommand::CloseTab { .. } => Some("close_tab"),
             ChromeCommand::SwitchTab { .. } => Some("switch_tab"),
+            ChromeCommand::SwitchTabOffset { .. } => Some("switch_tab_offset"),
             ChromeCommand::PinTab { .. } => Some("pin_tab"),
             ChromeCommand::UnpinTab { .. } => Some("unpin_tab"),
             ChromeCommand::MoveTab { .. } => Some("move_tab"),

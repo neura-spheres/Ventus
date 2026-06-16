@@ -37,7 +37,7 @@ use wry::{Rect, WebView, WebViewBuilder};
 #[cfg(windows)]
 use tao::platform::windows::{EventLoopBuilderExtWindows, WindowExtWindows};
 #[cfg(windows)]
-use wry::{WebViewBuilderExtWindows, WebViewExtWindows};
+use wry::{MemoryUsageLevel, WebViewBuilderExtWindows, WebViewExtWindows};
 
 use app::{handle_app_event_inner, tab_zoom, AppState, DownloadCtl, TabAction};
 use image::GenericImageView;
@@ -73,11 +73,15 @@ const SC_INCOGNITO: usize = 21;
 const SC_TAB_1: usize = 22;
 const SC_TAB_9: usize = 30;
 const SC_FIND: usize = 31;
+const SC_NEXT_TAB: usize = 32;
+const SC_PREV_TAB: usize = 33;
 const LOAD_STALL_AFTER: u64 = 6;
 const BLACK_PROBE_AFTER: u64 = 3;
 const COVER_MAX_MS: u64 = 1000;
 const TAB_SLEEP_CHECK_EVERY: Duration = Duration::from_secs(20);
 const SUSPEND_IDLE_MS: i64 = 180_000;
+const DISCARD_FREE_MB: u64 = 512;
+const MAX_PRESERVED_WEBVIEWS: usize = 32;
 const HEAL_CONTENT_EVERY: Duration = Duration::from_millis(750);
 const MAX_DOWNLOAD_RESUMES: u32 = 8;
 const DOWNLOAD_RESUME_DELAY: Duration = Duration::from_secs(2);
@@ -2464,13 +2468,17 @@ state.settings.privacy.default_permissions.clone(),
                                         tab.status == crate::browser::tab::TabStatus::Loading
                                     })
                                     .unwrap_or(loading);
+                                let was_suspended = suspended_tabs.remove(&tab_id);
                                 state.tab_manager.wake_tab(&tab_id);
                                 let _ = wv.focus();
                                 let _ = wv.zoom(tab_zoom(&state, &tab_id));
-                                if suspended_tabs.remove(&tab_id) {
+                                if was_suspended {
                                     wake_content_webview(wv);
                                     state.push_state_to_chrome(&chrome);
-                                } else if (restored || sleeping) && !is_loading {
+                                } else if sleeping && !restored {
+                                    wake_content_webview(wv);
+                                    state.push_state_to_chrome(&chrome);
+                                } else if restored && !is_loading {
                                     state.load_recoveries.remove(&app::load_key(&tab_id, &url));
                                     begin_native_load(&mut state, &chrome, &tab_id);
                                     state.push_state_to_chrome(&chrome);
@@ -2717,6 +2725,39 @@ state.settings.privacy.default_permissions.clone(),
                                     }
                                 }
                             });
+                        }
+                        TabAction::ApplyUpdate(path) => {
+                            if let Err(e) = updater::apply_update(std::path::Path::new(&path)) {
+                                let m = serde_json::to_string(&e.to_string()).unwrap_or_default();
+                                let _ = chrome.evaluate_script(&format!(
+                                    "window.__neura && window.__neura.setUpdateState({{status:'error',error:{}}})",
+                                    m
+                                ));
+                                return;
+                            }
+                            if !new_window {
+                                save_window_size(&window, &mut state, custom_maximized);
+                                save_session(&state);
+                            }
+                            save_open_cookies(&content_views, &state, &data_dir);
+                            #[cfg(windows)]
+                            {
+                                let _ = auth_window.take();
+                            }
+                            popups.clear();
+                            close_chrome_controller(&chrome);
+                            shutdown_webview2(
+                                crash_sentinel.as_deref(),
+                                &[webview_data_dir.as_path(), incognito_data_dir.as_path()],
+                                &mut content_views,
+                                &mut content_hwnds,
+                                &mut content_web_context,
+                                &mut incognito_web_context,
+                            );
+                            if new_window {
+                                std::fs::remove_dir_all(&webview_data_dir).ok();
+                            }
+                            *control_flow = ControlFlow::Exit;
                         }
                         TabAction::SaveImageAs { url } => {
                             let filename = image_filename_from_url(&url);
@@ -3015,8 +3056,8 @@ state.settings.privacy.default_permissions.clone(),
                     let now_ms = chrono::Utc::now().timestamp_millis();
                     let free_mb = available_memory_mb();
                     let threshold_ms = sleep_threshold_ms(free_mb) as i64;
-                    let max_live = max_live_webviews(free_mb);
                     let active = state.tab_manager.active_tab_id.clone().unwrap_or_default();
+                    let mut tabs_changed = false;
                     let to_suspend: Vec<String> = state
                         .tab_manager
                         .tabs
@@ -3028,6 +3069,7 @@ state.settings.privacy.default_permissions.clone(),
                                 && !t.is_media_active
                                 && !tab_notifications_allowed(&t.url, &state.settings)
                                 && content_views.contains_key(&t.id)
+                                && !t.sleeping
                                 && !suspended_tabs.contains(&t.id)
                                 && (now_ms - t.last_active_at) >= SUSPEND_IDLE_MS
                         })
@@ -3035,32 +3077,48 @@ state.settings.privacy.default_permissions.clone(),
                         .collect();
                     for id in to_suspend {
                         if let Some(wv) = content_views.get(&id) {
-                            suspend_content_webview(wv);
-                            suspended_tabs.insert(id.clone());
-                            tracing::debug!("tab_suspend: froze tab {} (free_mb={})", id, free_mb);
+                            if sleep_content_webview(wv) {
+                                suspended_tabs.insert(id.clone());
+                                state.tab_manager.sleep_tab(&id);
+                                tabs_changed = true;
+                                tracing::debug!(
+                                    "tab_sleep: suspended tab {} (free_mb={})",
+                                    id,
+                                    free_mb
+                                );
+                            }
                         }
                     }
 
-                    let mut to_discard: Vec<String> = state
-                        .tab_manager
-                        .tabs
-                        .iter()
-                        .filter(|t| {
-                            t.id != active
-                                && !t.is_neura_page()
-                                && !t.pinned
-                                && !t.is_essential
-                                && t.status != crate::browser::tab::TabStatus::Loading
-                                && !t.is_media_active
-                                && !tab_notifications_allowed(&t.url, &state.settings)
-                                && content_views.contains_key(&t.id)
-                                && (now_ms - t.last_active_at) >= threshold_ms
-                        })
-                        .map(|t| t.id.clone())
-                        .collect();
+                    let mut to_discard: Vec<String> = if free_mb <= DISCARD_FREE_MB {
+                        state
+                            .tab_manager
+                            .tabs
+                            .iter()
+                            .filter(|t| {
+                                t.id != active
+                                    && !t.is_neura_page()
+                                    && !t.pinned
+                                    && !t.is_essential
+                                    && t.status != crate::browser::tab::TabStatus::Loading
+                                    && !t.is_media_active
+                                    && !tab_notifications_allowed(&t.url, &state.settings)
+                                    && content_views.contains_key(&t.id)
+                                    && (now_ms - t.last_active_at) >= threshold_ms
+                            })
+                            .map(|t| t.id.clone())
+                            .collect()
+                    } else {
+                        Vec::new()
+                    };
+                    let max_live = if free_mb <= DISCARD_FREE_MB {
+                        max_live_webviews(free_mb)
+                    } else {
+                        MAX_PRESERVED_WEBVIEWS
+                    };
                     if content_views.len() > max_live {
                         let need = content_views.len() - max_live;
-                        let mut extra: Vec<(String, bool, i64)> = state
+                        let mut extra: Vec<(String, bool, bool, i64)> = state
                             .tab_manager
                             .tabs
                             .iter()
@@ -3075,11 +3133,12 @@ state.settings.privacy.default_permissions.clone(),
                             })
                             .map(|t| {
                                 let protected = t.pinned || t.is_essential;
-                                (t.id.clone(), protected, t.last_active_at)
+                                let awake = !suspended_tabs.contains(&t.id);
+                                (t.id.clone(), protected, awake, t.last_active_at)
                             })
                             .collect();
-                        extra.sort_by(|a, b| a.1.cmp(&b.1).then(a.2.cmp(&b.2)));
-                        to_discard.extend(extra.into_iter().take(need).map(|(id, _, _)| id));
+                        extra.sort_by(|a, b| a.1.cmp(&b.1).then(a.2.cmp(&b.2)).then(a.3.cmp(&b.3)));
+                        to_discard.extend(extra.into_iter().take(need).map(|(id, _, _, _)| id));
                     }
                     to_discard.sort();
                     to_discard.dedup();
@@ -3089,6 +3148,7 @@ state.settings.privacy.default_permissions.clone(),
                         suspended_tabs.remove(&id);
                         clear_load_watches(&mut load_watches, &id);
                         state.tab_manager.sleep_tab(&id);
+                        tabs_changed = true;
                         tracing::debug!(
                             "tab_discard: unloaded tab {} (free_mb={}, max_live={}, threshold={}min)",
                             id,
@@ -3097,8 +3157,7 @@ state.settings.privacy.default_permissions.clone(),
                             threshold_ms / 60_000
                         );
                     }
-                    let had_sleepers = state.tab_manager.tabs.iter().any(|t| t.sleeping);
-                    if had_sleepers {
+                    if tabs_changed {
                         state.push_state_to_chrome(&chrome);
                     }
                 }
@@ -5593,6 +5652,7 @@ fn build_content_webview_once(
                         | ChromeCommand::ContentFullscreenChange { .. } // video-player fullscreen
                         | ChromeCommand::BeginSpotlight              // Ctrl+T
                         | ChromeCommand::ReopenTab                   // Ctrl+Shift+T
+                        | ChromeCommand::SwitchTabOffset { .. }
                         | ChromeCommand::OpenHistoryPanel            // Ctrl+H
                         | ChromeCommand::OpenDownloadsPanel          // Ctrl+J
                         | ChromeCommand::ZoomDelta { .. }            // Ctrl+wheel zoom
@@ -5714,16 +5774,33 @@ fn build_content_webview_once(
 }
 
 fn wake_content_webview(wv: &WebView) {
+    resume_content_webview(wv);
     let _ = wv.evaluate_script(
         "try{window.focus();window.dispatchEvent(new Event('focus'));window.dispatchEvent(new Event('resize'));document.dispatchEvent(new Event('visibilitychange'));}catch(_){ }",
     );
 }
 
 #[cfg(windows)]
-fn suspend_content_webview(wv: &WebView) {
+fn set_content_memory_low(wv: &WebView) {
+    let _ = wv.set_memory_usage_level(MemoryUsageLevel::Low);
+}
+
+#[cfg(not(windows))]
+fn set_content_memory_low(_wv: &WebView) {}
+
+#[cfg(windows)]
+fn set_content_memory_normal(wv: &WebView) {
+    let _ = wv.set_memory_usage_level(MemoryUsageLevel::Normal);
+}
+
+#[cfg(not(windows))]
+fn set_content_memory_normal(_wv: &WebView) {}
+
+#[cfg(windows)]
+fn resume_content_webview(wv: &WebView) {
     use webview2_com::Microsoft::Web::WebView2::Win32::{ICoreWebView2, ICoreWebView2_3};
-    use webview2_com::TrySuspendCompletedHandler;
     use wv2core::Interface;
+    set_content_memory_normal(wv);
     let controller = wv.controller();
     let core: ICoreWebView2 = match unsafe { controller.CoreWebView2() } {
         Ok(c) => c,
@@ -5732,14 +5809,37 @@ fn suspend_content_webview(wv: &WebView) {
     let Ok(core3) = core.cast::<ICoreWebView2_3>() else {
         return;
     };
-    let handler = TrySuspendCompletedHandler::create(Box::new(move |_err, _ok| Ok(())));
     unsafe {
-        let _ = core3.TrySuspend(&handler);
+        let _ = core3.Resume();
     }
 }
 
 #[cfg(not(windows))]
-fn suspend_content_webview(_wv: &WebView) {}
+fn resume_content_webview(_wv: &WebView) {}
+
+#[cfg(windows)]
+fn sleep_content_webview(wv: &WebView) -> bool {
+    use webview2_com::Microsoft::Web::WebView2::Win32::{ICoreWebView2, ICoreWebView2_3};
+    use webview2_com::TrySuspendCompletedHandler;
+    use wv2core::Interface;
+    set_content_memory_low(wv);
+    let _ = wv.set_visible(false);
+    let controller = wv.controller();
+    let core: ICoreWebView2 = match unsafe { controller.CoreWebView2() } {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+    let Ok(core3) = core.cast::<ICoreWebView2_3>() else {
+        return false;
+    };
+    let handler = TrySuspendCompletedHandler::create(Box::new(move |_err, _ok| Ok(())));
+    unsafe { core3.TrySuspend(&handler).is_ok() }
+}
+
+#[cfg(not(windows))]
+fn sleep_content_webview(_wv: &WebView) -> bool {
+    false
+}
 
 fn clear_tab_favicon(state: &mut AppState, tab_id: &str) {
     if let Some(tab) = state.tab_manager.tabs.iter_mut().find(|t| t.id == tab_id) {
@@ -6572,6 +6672,12 @@ fn content_initialization_script(
     }
     const ctrl = e.ctrlKey || e.metaKey;
     if (!ctrl) return;
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      e.stopPropagation();
+      post({cmd:'switch_tab_offset', delta:e.shiftKey ? -1 : 1});
+      return;
+    }
     const key = e.key.toLowerCase();
     if (key === 't' && !e.shiftKey) {
       e.preventDefault();
@@ -6940,45 +7046,53 @@ fn privacy_initialization_script(
   const askByDefault = key => key === 'microphone' || key === 'camera' || key === 'notifications';
   const action = key => decisive(rules[key]) || decisive(defaultPermissions[key]) || ((strictDefault && !askByDefault(key)) ? 'block' : 'ask');
   const isBlocked = key => action(key) === 'block';
-  const blocked = () => Promise.reject(new DOMException('Blocked by Ventus strict permissions', 'NotAllowedError'));
+  const nativeMask = (fn, name) => {
+    try { if (name) Object.defineProperty(fn, 'name', {value: name, configurable: true}); } catch (_) {}
+    try {
+      const s = 'function ' + (name || fn.name || '') + '() { [native code] }';
+      Object.defineProperty(fn, 'toString', {value: () => s, configurable: true, writable: true});
+    } catch (_) {}
+    return fn;
+  };
+  const blk = name => nativeMask(function () { return Promise.reject(new DOMException('Blocked by Ventus strict permissions', 'NotAllowedError')); }, name);
   try {
     if (navigator.geolocation && isBlocked('geolocation')) {
-      navigator.geolocation.getCurrentPosition = function(_, err) {
+      navigator.geolocation.getCurrentPosition = nativeMask(function(_, err) {
         if (typeof err === 'function') setTimeout(() => err({code:1, message:'Blocked by Ventus strict permissions'}), 0);
-      };
-      navigator.geolocation.watchPosition = function(_, err) {
+      }, 'getCurrentPosition');
+      navigator.geolocation.watchPosition = nativeMask(function(_, err) {
         if (typeof err === 'function') setTimeout(() => err({code:1, message:'Blocked by Ventus strict permissions'}), 0);
         return 0;
-      };
-      navigator.geolocation.clearWatch = function() {};
+      }, 'watchPosition');
+      navigator.geolocation.clearWatch = nativeMask(function() {}, 'clearWatch');
     }
   } catch (_) {}
   try {
     if (navigator.clipboard && isBlocked('clipboard')) {
-      navigator.clipboard.read = blocked;
-      navigator.clipboard.readText = blocked;
+      navigator.clipboard.read = blk('read');
+      navigator.clipboard.readText = blk('readText');
     }
   } catch (_) {}
   try {
-    if (window.queryLocalFonts && isBlocked('local_fonts')) window.queryLocalFonts = blocked;
+    if (window.queryLocalFonts && isBlocked('local_fonts')) window.queryLocalFonts = blk('queryLocalFonts');
   } catch (_) {}
   try {
-    if (navigator.requestMIDIAccess && isBlocked('midi')) navigator.requestMIDIAccess = blocked;
+    if (navigator.requestMIDIAccess && isBlocked('midi')) navigator.requestMIDIAccess = blk('requestMIDIAccess');
   } catch (_) {}
   try {
-    if (window.getScreenDetails && isBlocked('window_management')) window.getScreenDetails = blocked;
+    if (window.getScreenDetails && isBlocked('window_management')) window.getScreenDetails = blk('getScreenDetails');
   } catch (_) {}
   try {
-    if (window.showOpenFilePicker && isBlocked('file_system')) window.showOpenFilePicker = blocked;
-    if (window.showSaveFilePicker && isBlocked('file_system')) window.showSaveFilePicker = blocked;
-    if (window.showDirectoryPicker && isBlocked('file_system')) window.showDirectoryPicker = blocked;
+    if (window.showOpenFilePicker && isBlocked('file_system')) window.showOpenFilePicker = blk('showOpenFilePicker');
+    if (window.showSaveFilePicker && isBlocked('file_system')) window.showSaveFilePicker = blk('showSaveFilePicker');
+    if (window.showDirectoryPicker && isBlocked('file_system')) window.showDirectoryPicker = blk('showDirectoryPicker');
   } catch (_) {}
   try {
     if (window.Notification && Notification.requestPermission && isBlocked('notifications')) {
-      Notification.requestPermission = function(cb) {
+      Notification.requestPermission = nativeMask(function(cb) {
         if (typeof cb === 'function') setTimeout(() => cb('denied'), 0);
         return Promise.resolve('denied');
-      };
+      }, 'requestPermission');
     }
   } catch (_) {}
 })();
@@ -7582,6 +7696,8 @@ fn msg_shortcut(vk: u32, mods: usize, repeat: bool) -> usize {
     }
     if ctrl {
         return match vk {
+            0x09 if shift => SC_PREV_TAB,
+            0x09 => SC_NEXT_TAB,
             0x54 if shift => SC_REOPEN_TAB,
             0x54 => SC_SPOTLIGHT,
             0x4e if shift => SC_INCOGNITO,
@@ -7643,6 +7759,8 @@ fn run_shortcut(code: usize, proxy: &tao::event_loop::EventLoopProxy<AppEvent>, 
         SC_FULLSCREEN => Some(ChromeCommand::ToggleFullscreen),
         SC_DEVTOOLS => Some(ChromeCommand::OpenDevtools),
         SC_INCOGNITO => Some(ChromeCommand::OpenIncognito),
+        SC_NEXT_TAB => Some(ChromeCommand::SwitchTabOffset { delta: 1 }),
+        SC_PREV_TAB => Some(ChromeCommand::SwitchTabOffset { delta: -1 }),
         code if (SC_TAB_1..=SC_TAB_9).contains(&code) => state
             .tab_manager
             .active_workspace_tabs()
@@ -7940,6 +8058,7 @@ fn sync_content_views(
     if !active_is_neura_page {
         if let Some(wv) = content_views.get(active_id) {
             set_content_bounds(wv, layout.content);
+            set_content_memory_normal(wv);
             let _ = wv.set_visible(true);
             let _ = wv.evaluate_script(&format!(
                 "window.__neuraContentFullscreen={};{}",
@@ -7953,15 +8072,15 @@ fn sync_content_views(
             continue;
         }
         set_content_bounds(wv, layout.content);
+        set_content_memory_low(wv);
         let _ = wv.set_visible(false);
-        let _ = wv.evaluate_script(&left_edge_js);
     }
 
     if active_is_neura_page {
         if let Some(wv) = content_views.get(active_id) {
             set_content_bounds(wv, layout.content);
+            set_content_memory_low(wv);
             let _ = wv.set_visible(false);
-            let _ = wv.evaluate_script(&left_edge_js);
         }
     }
 }
@@ -10838,6 +10957,8 @@ mod shortcut_tests {
             msg_shortcut(0x54, MOD_CTRL | MOD_SHIFT, false),
             SC_REOPEN_TAB
         );
+        assert_eq!(msg_shortcut(0x09, MOD_CTRL, false), SC_NEXT_TAB);
+        assert_eq!(msg_shortcut(0x09, MOD_CTRL | MOD_SHIFT, false), SC_PREV_TAB);
         assert_eq!(msg_shortcut(0x57, MOD_CTRL, false), SC_CLOSE_TAB);
         assert_eq!(msg_shortcut(0x46, MOD_CTRL, false), SC_FIND);
     }

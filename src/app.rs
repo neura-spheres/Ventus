@@ -132,8 +132,10 @@ impl AppState {
         let cached_bookmarks = repositories::list_bookmarks(&conn).unwrap_or_default();
         let cached_bookmark_folders =
             repositories::list_bookmark_folders(&conn).unwrap_or_default();
-        let bookmark_bar_order =
-            settings_store::get(&conn, "bookmark_bar_order").ok().flatten().unwrap_or_default();
+        let bookmark_bar_order = settings_store::get(&conn, "bookmark_bar_order")
+            .ok()
+            .flatten()
+            .unwrap_or_default();
         let cached_history = repositories::list_history(&conn, 30).unwrap_or_default();
         let omnibox = crate::browser::omnibox::load(&conn);
         Self {
@@ -401,6 +403,7 @@ pub enum TabAction {
     },
     ApplyWebSecurity,
     DownloadUpdate(String),
+    ApplyUpdate(String),
     DownloadControl {
         id: String,
         action: DownloadCtl,
@@ -428,6 +431,34 @@ pub enum TabAction {
         allow: bool,
     },
     SendReport(Box<crate::cloud::report::Report>),
+}
+
+fn switch_to_tab(state: &mut AppState, chrome: &WebView, id: String) -> Option<TabAction> {
+    if !state.tab_manager.switch_tab(&id) {
+        return None;
+    }
+
+    if let Some(tab) = state.tab_manager.tabs.iter().find(|t| t.id == id) {
+        let url = serde_json::to_string(&tab.url).unwrap_or_default();
+        let title = serde_json::to_string(&tab.title).unwrap_or_default();
+        let _ = chrome.evaluate_script(&format!(
+            "window.__neura && window.__neura.setUrl({}, {})",
+            url, title
+        ));
+    }
+
+    state.push_state_to_chrome(chrome);
+    let Some(tab) = state.tab_manager.get_tab(&id) else {
+        return Some(TabAction::SyncViews);
+    };
+    if tab.is_neura_page() {
+        return Some(TabAction::SyncViews);
+    }
+    Some(TabAction::ActivateContent {
+        tab_id: id,
+        url: tab.url.clone(),
+        loading: tab.status == crate::browser::tab::TabStatus::Loading,
+    })
 }
 
 pub fn handle_chrome_command(
@@ -502,32 +533,21 @@ pub fn handle_chrome_command(
             }
             Some(TabAction::Remove(id))
         }
-        ChromeCommand::SwitchTab { id } => {
-            if !state.tab_manager.switch_tab(&id) {
-                return None;
-            }
-
-            if let Some(tab) = state.tab_manager.tabs.iter().find(|t| t.id == id) {
-                let url = serde_json::to_string(&tab.url).unwrap_or_default();
-                let title = serde_json::to_string(&tab.title).unwrap_or_default();
-                let _ = chrome.evaluate_script(&format!(
-                    "window.__neura && window.__neura.setUrl({}, {})",
-                    url, title
-                ));
-            }
-
-            state.push_state_to_chrome(chrome);
-            let Some(tab) = state.tab_manager.get_tab(&id) else {
-                return Some(TabAction::SyncViews);
+        ChromeCommand::SwitchTab { id } => switch_to_tab(state, chrome, id),
+        ChromeCommand::SwitchTabOffset { delta } => {
+            let id = {
+                let tabs = state.tab_manager.active_workspace_tabs();
+                if tabs.len() < 2 {
+                    return None;
+                }
+                let current = state.tab_manager.active_tab_id.as_deref();
+                let index = current
+                    .and_then(|id| tabs.iter().position(|tab| tab.id == id))
+                    .unwrap_or(0);
+                let next = (index as i32 + delta).rem_euclid(tabs.len() as i32) as usize;
+                tabs[next].id.clone()
             };
-            if tab.is_neura_page() {
-                return Some(TabAction::SyncViews);
-            }
-            Some(TabAction::ActivateContent {
-                tab_id: id,
-                url: tab.url.clone(),
-                loading: tab.status == crate::browser::tab::TabStatus::Loading,
-            })
+            switch_to_tab(state, chrome, id)
         }
         ChromeCommand::PinTab { id } => {
             let tab = state.tab_manager.get_tab(&id);
@@ -3347,14 +3367,7 @@ pub fn handle_app_event_inner(
             if let Some(v) = &state.pending_update_version {
                 let _ = settings_store::set(&state.conn, "dismissed_update_version", v);
             }
-            if let Err(e) = crate::updater::apply_update(std::path::Path::new(&path)) {
-                let m = serde_json::to_string(&e.to_string()).unwrap_or_default();
-                let _ = chrome.evaluate_script(&format!(
-                    "window.__neura && window.__neura.setUpdateState({{status:'error',error:{}}})",
-                    m
-                ));
-            }
-            None
+            Some(TabAction::ApplyUpdate(path))
         }
         AppEvent::UpdateDownloadFailed { message } => {
             let m = serde_json::to_string(&message).unwrap_or_default();

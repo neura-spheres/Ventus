@@ -137,7 +137,7 @@ pub fn apply_update(new_exe: &std::path::Path) -> Result<()> {
             if not errorlevel 1 (\r\n    timeout /t 1 /nobreak >nul\r\n    goto WAIT\r\n)\r\n\
             \"{new}\" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART\r\n\
             if errorlevel 1 goto WAIT\r\n\
-            start \"\" \"{exe}\"\r\n\
+            start \"\" \"{exe}\" --restore-session\r\n\
             del \"{new}\"\r\n\
             del \"%~f0\"\r\n",
             pid = pid,
@@ -152,7 +152,7 @@ pub fn apply_update(new_exe: &std::path::Path) -> Result<()> {
             if not errorlevel 1 (\r\n    timeout /t 1 /nobreak >nul\r\n    goto WAIT\r\n)\r\n\
             copy /y \"{new}\" \"{exe}\"\r\n\
             if errorlevel 1 goto WAIT\r\n\
-            start \"\" \"{exe}\"\r\n\
+            start \"\" \"{exe}\" --restore-session\r\n\
             del \"{new}\"\r\n\
             del \"%~f0\"\r\n",
             pid = pid,
@@ -185,8 +185,7 @@ pub fn apply_update(new_exe: &std::path::Path) -> Result<()> {
             ))
             .spawn()?;
     }
-
-    std::process::exit(0);
+    Ok(())
 }
 
 fn update_file_name(url: &str) -> String {
