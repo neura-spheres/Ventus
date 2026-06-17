@@ -53,6 +53,7 @@ pub struct AppState {
     pub settings: AppSettings,
     pub conn: Connection,
     pub ai_messages: Vec<crate::ai::ChatMessage>,
+    pub current_ai_session_id: Option<String>,
     pub current_ai_provider: String,
     pub sidebar_collapsed: bool,
     pub ai_sidebar_open: bool,
@@ -156,6 +157,7 @@ impl AppState {
             settings,
             conn,
             ai_messages: Vec::new(),
+            current_ai_session_id: None,
             current_ai_provider: ai_provider,
             sidebar_collapsed,
             ai_sidebar_open: false,
@@ -409,6 +411,9 @@ pub enum TabAction {
         url: String,
     },
     DropContent {
+        tab_id: String,
+    },
+    ShowErrorPage {
         tab_id: String,
     },
     ApplyWebSecurity,
@@ -668,6 +673,59 @@ pub fn handle_chrome_command(
         }
         ChromeCommand::AiClearChat => {
             state.ai_messages.clear();
+            state.current_ai_session_id = None;
+            None
+        }
+        ChromeCommand::GetAiSessions => {
+            let json = ai_sessions_json(&state.conn);
+            let _ = chrome.evaluate_script(&format!(
+                "window.__neura && window.__neura.setAiSessions({})",
+                json
+            ));
+            None
+        }
+        ChromeCommand::LoadAiSession { id } => {
+            match crate::ai::chat::load_messages(&state.conn, &id) {
+                Ok(messages) if !messages.is_empty() => {
+                    let payload = ai_messages_json(&messages);
+                    state.ai_messages = messages;
+                    state.current_ai_session_id = Some(id);
+                    state.ai_sidebar_open = true;
+                    let _ = chrome.evaluate_script(&format!(
+                        "window.__neura && window.__neura.showAiConversation({})",
+                        payload
+                    ));
+                    state.push_state_to_chrome(chrome);
+                    Some(TabAction::SyncViews)
+                }
+                Ok(_) => None,
+                Err(e) => {
+                    tracing::warn!("LoadAiSession failed: {}", e);
+                    None
+                }
+            }
+        }
+        ChromeCommand::DeleteAiSession { id } => {
+            if let Err(e) = crate::ai::chat::delete_session(&state.conn, &id) {
+                tracing::warn!("DeleteAiSession failed: {}", e);
+            }
+            if state.current_ai_session_id.as_deref() == Some(id.as_str()) {
+                state.current_ai_session_id = None;
+            }
+            let json = ai_sessions_json(&state.conn);
+            let _ = chrome.evaluate_script(&format!(
+                "window.__neura && window.__neura.setAiSessions({})",
+                json
+            ));
+            None
+        }
+        ChromeCommand::SaveSpotlightChat {
+            session_id,
+            title,
+            query,
+            answer,
+        } => {
+            persist_ai_exchange(state, &session_id, &title, &query, &answer);
             None
         }
         ChromeCommand::AiStop => None,
@@ -1174,6 +1232,24 @@ pub fn handle_chrome_command(
             ));
             None
         }
+        ChromeCommand::GetHistoryPage { q, offset } => {
+            const PAGE: i64 = 100;
+            let mut entries =
+                repositories::list_history_page(&state.conn, &q, offset, PAGE).unwrap_or_default();
+            let has_more = entries.len() as i64 == PAGE;
+            if let Ok(favmap) = repositories::all_favicons(&state.conn) {
+                for e in entries.iter_mut() {
+                    let domain = crate::utils::url::extract_domain(&e.url);
+                    e.favicon = favmap.get(&domain).cloned();
+                }
+            }
+            let json = serde_json::to_string(&entries).unwrap_or_else(|_| "[]".to_string());
+            let _ = chrome.evaluate_script(&format!(
+                "window.__neura && window.__neura.setHistoryPage({}, {}, {})",
+                json, offset, has_more
+            ));
+            None
+        }
         ChromeCommand::OmniboxSuggest { q } => {
             let items =
                 crate::browser::omnibox::suggest(&state.conn, &state.omnibox, &q, &state.trends, 8);
@@ -1207,12 +1283,10 @@ pub fn handle_chrome_command(
         ChromeCommand::RefreshTrends => None,
         ChromeCommand::DeleteHistoryEntry { id } => {
             let _ = repositories::delete_history_entry(&state.conn, id);
-            let results = repositories::list_history(&state.conn, 100).unwrap_or_default();
-            let json = serde_json::to_string(&results).unwrap_or_default();
-            let _ = chrome.evaluate_script(&format!(
-                "window.__neura && window.__neura.setHistory({})",
-                json
-            ));
+            None
+        }
+        ChromeCommand::DeleteHistoryDay { start, end } => {
+            let _ = repositories::delete_history_range(&state.conn, start, end);
             None
         }
         ChromeCommand::OpenFile { path } => {
@@ -1670,13 +1744,17 @@ fn commit_stack_nav(
 
 fn reload_current_tab(state: &mut AppState, chrome: &WebView) -> Option<TabAction> {
     let tab_id = state.tab_manager.active_tab_id.clone()?;
-    let raw_url = state.tab_manager.get_tab(&tab_id)?.url.clone();
+    let current_url = state.tab_manager.get_tab(&tab_id)?.url.clone();
+    let raw_url = error_page_target(&current_url)
+        .map(|(url, _)| url)
+        .unwrap_or(current_url);
     let url = secure_nav_url(&raw_url, state);
     track_https_upgrade(state, &tab_id, &raw_url, &url);
     if url.starts_with("neura://") || url.trim().is_empty() {
         return None;
     }
     begin_user_nav(state, chrome, &tab_id);
+    state.tab_manager.replace_tab_nav(&tab_id, &url, &url);
     state.pending_nav_urls.insert(tab_id.clone(), url.clone());
     clear_loading_favicon(state, &tab_id);
     state.tab_manager.set_tab_loading(&tab_id, true);
@@ -1685,6 +1763,41 @@ fn reload_current_tab(state: &mut AppState, chrome: &WebView) -> Option<TabActio
     let _ = chrome.evaluate_script("window.__neura && window.__neura.startLoadProgress()");
     state.push_state_to_chrome(chrome);
     Some(TabAction::ReloadContent { tab_id, url })
+}
+
+fn show_error_page(
+    tab_id: String,
+    url: String,
+    code: i32,
+    state: &mut AppState,
+    chrome: &WebView,
+) -> Option<TabAction> {
+    tracing::warn!(
+        target: "ventus::nav",
+        url = %crate::utils::url::log_url(&url),
+        code,
+        "error page shown"
+    );
+    let page = error_page_url(&url, code);
+    state.pending_nav_urls.remove(&tab_id);
+    clear_https_upgrades(state, &tab_id);
+    clear_native_nav(state, &tab_id);
+    clear_tab_recoveries(state, &tab_id);
+    state.load_progress.remove(&tab_id);
+    state.nav_started_at.remove(&tab_id);
+    state.set_content_cover(chrome, false);
+    state
+        .tab_manager
+        .replace_tab_nav(&tab_id, &page, "Can't reach this page");
+    if let Some(tab) = state.tab_manager.get_tab_mut(&tab_id) {
+        tab.favicon = None;
+        tab.status = crate::browser::tab::TabStatus::Error;
+        tab.engine_can_back = None;
+        tab.engine_can_forward = None;
+    }
+    let _ = chrome.evaluate_script("window.__neura && window.__neura.finishLoadProgress()");
+    state.push_state_to_chrome(chrome);
+    Some(TabAction::ShowErrorPage { tab_id })
 }
 
 fn set_tab_zoom(state: &mut AppState, id: &str, level: f64) {
@@ -1768,6 +1881,7 @@ fn recover_loading_tab(
     tab_id: String,
     url: String,
     failed: bool,
+    error_code: i32,
     state: &mut AppState,
     chrome: &WebView,
 ) -> Option<TabAction> {
@@ -1852,23 +1966,7 @@ fn recover_loading_tab(
     // anything destructive: a soft reload, then a full rebuild, then give up WITHOUT
     // blanking the tab — WebView2 shows its own error page, never a black void.
     if failed {
-        if tries == 0 {
-            state.load_recoveries.insert(key, 1);
-            state.load_progress.insert(tab_id.clone(), 0.0);
-            return Some(TabAction::ReloadContent {
-                tab_id,
-                url: recover_url,
-            });
-        }
-        if tries == 1 {
-            state.load_recoveries.insert(key, 2);
-            state.load_progress.insert(tab_id.clone(), 0.0);
-            return Some(TabAction::RebuildContent {
-                tab_id,
-                url: recover_url,
-            });
-        }
-        return stop_failed_load(state, chrome, &tab_id, &key);
+        return show_error_page(tab_id, recover_url, error_code, state, chrome);
     }
 
     // Did the navigation ever commit a document? The injected script fires its first
@@ -2403,6 +2501,93 @@ fn mb_or_null(mb: u64) -> serde_json::Value {
     }
 }
 
+fn ai_session_title(text: &str) -> String {
+    let t: String = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    if t.is_empty() {
+        "New Chat".to_string()
+    } else if t.chars().count() > 60 {
+        let s: String = t.chars().take(57).collect();
+        format!("{}…", s)
+    } else {
+        t
+    }
+}
+
+fn ai_sessions_json(conn: &rusqlite::Connection) -> String {
+    let sessions = crate::ai::chat::list_sessions(conn, 100).unwrap_or_default();
+    let arr: Vec<serde_json::Value> = sessions
+        .iter()
+        .map(|s| {
+            serde_json::json!({
+                "id": s.id,
+                "title": s.title,
+                "provider": s.provider,
+                "model": s.model,
+                "updated_at": s.updated_at,
+            })
+        })
+        .collect();
+    serde_json::to_string(&arr).unwrap_or_else(|_| "[]".to_string())
+}
+
+fn ai_messages_json(messages: &[crate::ai::ChatMessage]) -> String {
+    use crate::ai::provider::ChatRole;
+    let arr: Vec<serde_json::Value> = messages
+        .iter()
+        .filter(|m| matches!(m.role, ChatRole::User | ChatRole::Assistant))
+        .map(|m| {
+            let role = if matches!(m.role, ChatRole::Assistant) {
+                "assistant"
+            } else {
+                "user"
+            };
+            serde_json::json!({ "role": role, "content": m.content })
+        })
+        .collect();
+    serde_json::to_string(&arr).unwrap_or_else(|_| "[]".to_string())
+}
+
+fn persist_ai_exchange(
+    state: &AppState,
+    session_id: &str,
+    title: &str,
+    user_text: &str,
+    assistant_text: &str,
+) {
+    let conn = &state.conn;
+    let now = chrono::Utc::now().timestamp_millis();
+    let existing_title: Option<String> = conn
+        .query_row(
+            "SELECT title FROM ai_chat_sessions WHERE id=?1",
+            rusqlite::params![session_id],
+            |r| r.get(0),
+        )
+        .ok();
+    let session = crate::ai::chat::ChatSession {
+        id: session_id.to_string(),
+        title: existing_title.unwrap_or_else(|| title.to_string()),
+        provider: state.settings.ai.default_provider.clone(),
+        model: state.settings.ai.default_model.clone(),
+        page_url: None,
+        created_at: now,
+        updated_at: now,
+    };
+    if let Err(e) = crate::ai::chat::save_session(conn, &session) {
+        tracing::warn!("persist_ai_exchange: save_session failed: {}", e);
+        return;
+    }
+    let _ = crate::ai::chat::save_message(
+        conn,
+        session_id,
+        &crate::ai::ChatMessage::user(user_text.to_string()),
+    );
+    let _ = crate::ai::chat::save_message(
+        conn,
+        session_id,
+        &crate::ai::ChatMessage::assistant(assistant_text.to_string()),
+    );
+}
+
 fn trim_report_text(text: &str, max: usize) -> String {
     if text.chars().count() <= max {
         return text.to_string();
@@ -2887,7 +3072,7 @@ pub fn handle_app_event_inner(
             None
         }
         AppEvent::ContentLoadStalled { tab_id, url, .. } => {
-            recover_loading_tab(tab_id, url, false, state, chrome)
+            recover_loading_tab(tab_id, url, false, 0, state, chrome)
         }
         AppEvent::ContentBlackProbe { tab_id, url, .. } => {
             rebuild_black_tab(tab_id, url, state, chrome)
@@ -2917,7 +3102,8 @@ pub fn handle_app_event_inner(
             if canceled_nav_status(status) {
                 return stop_failed_load(state, chrome, &tab_id, &key);
             }
-            let action = recover_loading_tab(tab_id.clone(), clean_url, true, state, chrome);
+            let action =
+                recover_loading_tab(tab_id.clone(), clean_url, true, status, state, chrome);
             state.native_loads.remove(&tab_id);
             state.native_nav_ids.remove(&tab_id);
             action
@@ -2940,6 +3126,12 @@ pub fn handle_app_event_inner(
             if !same_nav(&upgraded_url, &http_url) {
                 return None;
             }
+            tracing::warn!(
+                target: "ventus::autolog",
+                https = %crate::utils::url::log_url(&https_url),
+                http = %crate::utils::url::log_url(&upgraded_url),
+                "dangerous http warning shown"
+            );
             let url = http_warning_url(&https_url, &upgraded_url);
             state.tab_manager.visit_tab(&tab_id, &url, "HTTPS warning");
             state.pending_nav_urls.remove(&tab_id);
@@ -3009,6 +3201,7 @@ pub fn handle_app_event_inner(
                     .visit_tab(&tab_id, &clean_url, &safe_title);
             }
             let icon = favicon_for_url(&clean_url, favicon);
+            let icon_for_store = icon.clone();
             if let Some(tab) = state.tab_manager.tabs.iter_mut().find(|t| t.id == tab_id) {
                 tab.favicon = icon.clone();
             }
@@ -3050,6 +3243,10 @@ pub fn handle_app_event_inner(
                 && !clean_url.starts_with("about:")
                 && !in_incognito
             {
+                if let Some(ic) = icon_for_store.as_deref() {
+                    let domain = crate::utils::url::extract_domain(&clean_url);
+                    let _ = repositories::set_favicon(&state.conn, &domain, ic);
+                }
                 let last = state.history_last_saved.get(&tab_id).cloned();
                 let is_url_fallback = |t: &str, u: &str| {
                     t == u || t.starts_with("http://") || t.starts_with("https://")
@@ -3098,6 +3295,7 @@ pub fn handle_app_event_inner(
                                         title: safe_title.clone(),
                                         workspace_id: None,
                                         visited_at: chrono::Utc::now().timestamp_millis(),
+                                        favicon: None,
                                     },
                                 );
                                 state.cached_history.truncate(30);
@@ -3179,6 +3377,18 @@ pub fn handle_app_event_inner(
                 assistant_chars = assistant_text.chars().count(),
                 "ai exchange saved"
             );
+            let session_id = state
+                .current_ai_session_id
+                .clone()
+                .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+            persist_ai_exchange(
+                state,
+                &session_id,
+                &ai_session_title(&user_text),
+                &user_text,
+                &assistant_text,
+            );
+            state.current_ai_session_id = Some(session_id);
             state
                 .ai_messages
                 .push(crate::ai::ChatMessage::user(user_text));
@@ -4330,6 +4540,30 @@ fn http_warning_url(https_url: &str, http_url: &str) -> String {
         query_encode(https_url),
         query_encode(http_url)
     )
+}
+
+fn error_page_url(url: &str, code: i32) -> String {
+    format!("neura://error?url={}&code={}", query_encode(url), code)
+}
+
+fn error_page_target(url: &str) -> Option<(String, i32)> {
+    let parsed = url::Url::parse(url).ok()?;
+    if parsed.scheme() != "neura" || parsed.host_str() != Some("error") {
+        return None;
+    }
+    let mut target = String::new();
+    let mut code = 0;
+    for (key, value) in parsed.query_pairs() {
+        if key == "url" {
+            target = value.into_owned();
+        } else if key == "code" {
+            code = value.parse().unwrap_or(0);
+        }
+    }
+    if target.trim().is_empty() {
+        return None;
+    }
+    Some((target, code))
 }
 
 fn query_encode(value: &str) -> String {

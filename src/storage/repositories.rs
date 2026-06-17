@@ -623,6 +623,8 @@ pub struct HistoryEntry {
     pub title: String,
     pub workspace_id: Option<String>,
     pub visited_at: i64,
+    #[serde(default)]
+    pub favicon: Option<String>,
 }
 
 pub const HISTORY_LIMIT: i64 = 1000;
@@ -638,12 +640,74 @@ pub fn add_history(
         "INSERT INTO history(url, title, workspace_id, visited_at) VALUES(?1,?2,?3,?4)",
         params![url, title, workspace_id, now],
     )?;
-    let row_id = conn.last_insert_rowid();
+    Ok(conn.last_insert_rowid())
+}
+
+pub fn set_favicon(conn: &Connection, domain: &str, favicon_url: &str) -> Result<()> {
+    if domain.is_empty() || favicon_url.is_empty() {
+        return Ok(());
+    }
+    let now = chrono::Utc::now().timestamp_millis();
     conn.execute(
-        "DELETE FROM history WHERE id NOT IN (SELECT id FROM history ORDER BY visited_at DESC LIMIT ?1)",
-        params![HISTORY_LIMIT],
+        "INSERT INTO favicons(domain, favicon_url, updated_at) VALUES(?1,?2,?3)
+         ON CONFLICT(domain) DO UPDATE SET favicon_url=?2, updated_at=?3",
+        params![domain, favicon_url, now],
     )?;
-    Ok(row_id)
+    Ok(())
+}
+
+pub fn all_favicons(conn: &Connection) -> Result<std::collections::HashMap<String, String>> {
+    let mut stmt = conn.prepare("SELECT domain, favicon_url FROM favicons")?;
+    let rows = stmt.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    })?;
+    let mut map = std::collections::HashMap::new();
+    for r in rows {
+        let (d, u) = r?;
+        map.insert(d, u);
+    }
+    Ok(map)
+}
+
+pub fn list_history_page(
+    conn: &Connection,
+    q: &str,
+    offset: i64,
+    limit: i64,
+) -> Result<Vec<HistoryEntry>> {
+    let trimmed = q.trim();
+    let pattern = if trimmed.is_empty() {
+        "%".to_string()
+    } else {
+        format!("%{}%", trimmed)
+    };
+    let mut stmt = conn.prepare(
+        "SELECT id, url, title, workspace_id, visited_at FROM history
+         WHERE (url LIKE ?1 OR title LIKE ?1)
+           AND url NOT LIKE 'neura://%'
+           AND url NOT LIKE 'about:%'
+         ORDER BY visited_at DESC
+         LIMIT ?2 OFFSET ?3",
+    )?;
+    let rows = stmt.query_map(params![pattern, limit, offset], |row| {
+        Ok(HistoryEntry {
+            id: row.get(0)?,
+            url: row.get(1)?,
+            title: row.get(2)?,
+            workspace_id: row.get(3)?,
+            visited_at: row.get(4)?,
+            favicon: None,
+        })
+    })?;
+    Ok(rows.collect::<rusqlite::Result<_>>()?)
+}
+
+pub fn delete_history_range(conn: &Connection, start_ms: i64, end_ms: i64) -> Result<()> {
+    conn.execute(
+        "DELETE FROM history WHERE visited_at >= ?1 AND visited_at < ?2",
+        params![start_ms, end_ms],
+    )?;
+    Ok(())
 }
 
 pub fn update_history_title(conn: &Connection, id: i64, title: &str) -> Result<()> {
@@ -665,6 +729,7 @@ pub fn list_history(conn: &Connection, limit: usize) -> Result<Vec<HistoryEntry>
             title: row.get(2)?,
             workspace_id: row.get(3)?,
             visited_at: row.get(4)?,
+            favicon: None,
         })
     })?;
     Ok(rows.collect::<rusqlite::Result<_>>()?)
@@ -682,6 +747,7 @@ pub fn search_history(conn: &Connection, q: &str) -> Result<Vec<HistoryEntry>> {
             title: row.get(2)?,
             workspace_id: row.get(3)?,
             visited_at: row.get(4)?,
+            favicon: None,
         })
     })?;
     Ok(rows.collect::<rusqlite::Result<_>>()?)
@@ -718,6 +784,7 @@ pub fn search_history_frecency(
             title: row.get(2)?,
             workspace_id: row.get(3)?,
             visited_at: row.get(4)?,
+            favicon: None,
         })
     })?;
     Ok(rows.collect::<rusqlite::Result<_>>()?)

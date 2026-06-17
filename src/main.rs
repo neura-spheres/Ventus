@@ -752,9 +752,6 @@ fn main() {
     // Pending wake-build (tab_id, url): a switched-to tab with no WebView yet. The actual build
     // is deferred to MainEventsCleared so a burst of switches coalesces to just the final tab.
     let mut pending_wake_build: Option<(String, String)> = None;
-    // Secondary windows and same-session relaunches (--restore-session) aren't "real" launches;
-    // don't emit a heartbeat for them.
-    let mut launch_reported = new_window || restore_session;
     let mut save_id = 0u64;
     let mut sync_id = 0u64;
     let mut sync_dirty = (false, false, false);
@@ -2256,6 +2253,20 @@ state.settings.privacy.default_permissions.clone(),
                                 let _ = wv.evaluate_script(&js);
                             }
                         }
+                        TabAction::ShowErrorPage { tab_id } => {
+                            content_views.remove(&tab_id);
+                            content_hwnds.remove(&tab_id);
+                            suspended_tabs.remove(&tab_id);
+                            clear_load_watches(&mut load_watches, &tab_id);
+                            apply_layout(
+                                &chrome,
+                                chrome_hwnd,
+                                &content_views,
+                                &state,
+                                &layout_config,
+                                &window,
+                            );
+                        }
                         TabAction::ContentGoBack => {
                             if let Some(id) = &state.tab_manager.active_tab_id {
                                 if let Some(wv) = content_views.get(id) {
@@ -3259,35 +3270,25 @@ state.settings.privacy.default_permissions.clone(),
                 if state.settings.privacy.auto_crash_report
                     && cloud::config::is_configured()
                     && Instant::now() >= error_report_at
-                    && utils::log_buffer::take_error_pending()
                 {
-                    error_report_at = Instant::now() + ERROR_REPORT_COOLDOWN;
-                    let report =
-                        app::build_report(&state, "error", "Automatic error report".into(), String::new());
-                    rt.spawn(async move {
-                        match cloud::report::send(report).await {
-                            Ok(()) => tracing::info!(target: "ventus::report", "automatic report uploaded"),
-                            Err(e) => tracing::warn!(target: "ventus::report", error = %e, "automatic report upload failed"),
-                        }
-                    });
-                }
-                // One-time launch heartbeat: a lightweight record of every real cold start so
-                // versions, install counts and host hardware can be tracked over time.
-                if !launch_reported
-                    && state.settings.privacy.auto_crash_report
-                    && cloud::config::is_configured()
-                {
-                    launch_reported = true;
-                    let report =
-                        app::build_report(&state, "launch", "Session start".into(), String::new());
-                    rt.spawn(async move {
-                        match cloud::report::send(report).await {
-                            Ok(()) => tracing::info!(target: "ventus::report", "launch report uploaded"),
-                            Err(e) => {
-                                tracing::debug!(target: "ventus::report", error = %e, "launch report skipped")
+                    if let Some(kind) = utils::log_buffer::take_auto_pending() {
+                        error_report_at = Instant::now() + ERROR_REPORT_COOLDOWN;
+                        let (kind, msg) = match kind {
+                            utils::log_buffer::AutoLogKind::Error => {
+                                ("error", "Automatic error report")
                             }
-                        }
-                    });
+                            utils::log_buffer::AutoLogKind::Warning => {
+                                ("warning", "Automatic warning report")
+                            }
+                        };
+                        let report = app::build_report(&state, kind, msg.into(), String::new());
+                        rt.spawn(async move {
+                            match cloud::report::send(report).await {
+                                Ok(()) => tracing::info!(target: "ventus::report", "automatic report uploaded"),
+                                Err(e) => tracing::warn!(target: "ventus::report", error = %e, "automatic report upload failed"),
+                            }
+                        });
+                    }
                 }
                 // A handler blocked the UI long enough to count as a real freeze: report it
                 // (cooldown-gated) with the offending event + duration. The ride-along logs make
@@ -6066,7 +6067,14 @@ fn build_woken_content_tab(
             track_content_hwnd(hwnd, tab_id, content_hwnds);
             #[cfg(not(windows))]
             let _ = &mut *content_hwnds;
-            apply_layout(chrome, chrome_hwnd, content_views, state, layout_config, window);
+            apply_layout(
+                chrome,
+                chrome_hwnd,
+                content_views,
+                state,
+                layout_config,
+                window,
+            );
             if let Some(wv) = content_views.get(tab_id) {
                 let _ = wv.focus();
                 let _ = wv.load_url(url);
@@ -7744,7 +7752,7 @@ fn restore_startup_cookies(
         return;
     }
     *restored = true;
-    let have = browser::cookie_manager::snapshot(wv, Duration::from_millis(1200));
+    let have = browser::cookie_manager::snapshot_settled(wv, Duration::from_millis(3000));
     let have_keys: HashSet<(String, String, String)> = have
         .iter()
         .map(|c| (c.domain.clone(), c.path.clone(), c.name.clone()))
@@ -10917,8 +10925,8 @@ mod webview_arg_tests {
         let sites = config::SitePermissionMap::new();
         let defaults = config::SitePermissions::default();
         let script = privacy_initialization_script(false, true, &sites, &defaults);
-        assert!(script.contains("navigator.clipboard.read = blocked;"));
-        assert!(script.contains("navigator.clipboard.readText = blocked;"));
+        assert!(script.contains("navigator.clipboard.read = blk('read');"));
+        assert!(script.contains("navigator.clipboard.readText = blk('readText');"));
         assert!(!script.contains("navigator.clipboard.write = blocked;"));
         assert!(!script.contains("navigator.clipboard.writeText = blocked;"));
     }

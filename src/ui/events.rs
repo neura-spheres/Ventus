@@ -98,6 +98,19 @@ pub enum ChromeCommand {
     },
     AiStop,
     AiClearChat,
+    GetAiSessions,
+    LoadAiSession {
+        id: String,
+    },
+    DeleteAiSession {
+        id: String,
+    },
+    SaveSpotlightChat {
+        session_id: String,
+        title: String,
+        query: String,
+        answer: String,
+    },
     BookmarkAdd,
     /// Save a bookmark from a dropped link (drag-to-bookmark).
     BookmarkAddUrl {
@@ -204,6 +217,10 @@ pub enum ChromeCommand {
     GetHistory {
         q: String,
     },
+    GetHistoryPage {
+        q: String,
+        offset: i64,
+    },
     OmniboxSuggest {
         q: String,
     },
@@ -228,6 +245,10 @@ pub enum ChromeCommand {
     RefreshTrends,
     DeleteHistoryEntry {
         id: i64,
+    },
+    DeleteHistoryDay {
+        start: i64,
+        end: i64,
     },
     PwdSaveConfirm,
     PwdSaveDismiss,
@@ -425,6 +446,10 @@ impl ChromeCommand {
             ChromeCommand::AiQuickAction { .. } => Some("ai_quick_action"),
             ChromeCommand::AiStop => Some("ai_stop"),
             ChromeCommand::AiClearChat => Some("ai_clear_chat"),
+            ChromeCommand::GetAiSessions => Some("get_ai_sessions"),
+            ChromeCommand::LoadAiSession { .. } => Some("load_ai_session"),
+            ChromeCommand::DeleteAiSession { .. } => Some("delete_ai_session"),
+            ChromeCommand::SaveSpotlightChat { .. } => Some("save_spotlight_chat"),
             ChromeCommand::BookmarkAdd => Some("bookmark_add"),
             ChromeCommand::BookmarkAddUrl { .. } => Some("bookmark_add_url"),
             ChromeCommand::MoveBookmark { .. } => Some("move_bookmark"),
@@ -467,6 +492,8 @@ impl ChromeCommand {
             ChromeCommand::OmniboxSetPref { .. } => Some("omnibox_set_pref"),
             ChromeCommand::RefreshTrends => Some("refresh_trends"),
             ChromeCommand::DeleteHistoryEntry { .. } => Some("delete_history_entry"),
+            ChromeCommand::GetHistoryPage { .. } => Some("get_history_page"),
+            ChromeCommand::DeleteHistoryDay { .. } => Some("delete_history_day"),
             ChromeCommand::PwdSaveConfirm => Some("password_save_confirm"),
             ChromeCommand::PwdSaveDismiss => Some("password_save_dismiss"),
             ChromeCommand::PwdList => Some("password_list"),

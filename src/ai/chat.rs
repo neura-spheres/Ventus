@@ -71,6 +71,36 @@ pub fn list_sessions(conn: &Connection, limit: usize) -> Result<Vec<ChatSession>
     Ok(rows.collect::<rusqlite::Result<_>>()?)
 }
 
+pub fn load_messages(conn: &Connection, session_id: &str) -> Result<Vec<ChatMessage>> {
+    let mut stmt = conn.prepare(
+        "SELECT role, content FROM ai_chat_messages WHERE session_id=?1 ORDER BY id ASC",
+    )?;
+    let rows = stmt.query_map(params![session_id], |row| {
+        let role: String = row.get(0)?;
+        let content: String = row.get(1)?;
+        Ok((role, content))
+    })?;
+    let mut out = Vec::new();
+    for r in rows {
+        let (role, content) = r?;
+        out.push(match role.as_str() {
+            "assistant" => ChatMessage::assistant(content),
+            "system" => ChatMessage::system(content),
+            _ => ChatMessage::user(content),
+        });
+    }
+    Ok(out)
+}
+
+pub fn delete_session(conn: &Connection, id: &str) -> Result<()> {
+    conn.execute(
+        "DELETE FROM ai_chat_messages WHERE session_id=?1",
+        params![id],
+    )?;
+    conn.execute("DELETE FROM ai_chat_sessions WHERE id=?1", params![id])?;
+    Ok(())
+}
+
 pub fn clear_history(conn: &Connection) -> Result<()> {
     conn.execute("DELETE FROM ai_chat_messages", [])?;
     conn.execute("DELETE FROM ai_chat_sessions", [])?;

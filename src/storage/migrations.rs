@@ -72,6 +72,12 @@ CREATE TABLE IF NOT EXISTS history (
 CREATE INDEX IF NOT EXISTS idx_history_url ON history(url);
 CREATE INDEX IF NOT EXISTS idx_history_visited ON history(visited_at DESC);
 
+CREATE TABLE IF NOT EXISTS favicons (
+    domain TEXT PRIMARY KEY NOT NULL,
+    favicon_url TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS downloads (
     id TEXT PRIMARY KEY NOT NULL,
     url TEXT NOT NULL,

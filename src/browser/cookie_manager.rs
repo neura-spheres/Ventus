@@ -162,6 +162,18 @@ mod win {
         tracing::info!("cookie_manager: restored {} cookies ({} skipped)", ok, fail);
     }
 
+    pub fn navigate_to_string(wv: &WebView, html: &str) {
+        let controller = wv.controller();
+        let webview: ICoreWebView2 = match unsafe { controller.CoreWebView2() } {
+            Ok(w) => w,
+            Err(_) => return,
+        };
+        let (ptr, _buf) = to_wide(html);
+        unsafe {
+            let _ = webview.NavigateToString(ptr);
+        }
+    }
+
     fn records_from_list(list: ICoreWebView2CookieList) -> Vec<CookieRecord> {
         let mut count = 0u32;
         unsafe {
@@ -315,6 +327,34 @@ mod win {
         }
     }
 
+    pub fn snapshot_settled(wv: &WebView, max_wait: Duration) -> Vec<CookieRecord> {
+        let start = Instant::now();
+        let mut best = snapshot(wv, Duration::from_millis(1000));
+        let initial = best.len();
+        let mut stable = 0u32;
+        while start.elapsed() < max_wait {
+            std::thread::sleep(Duration::from_millis(100));
+            let cur = snapshot(wv, Duration::from_millis(600));
+            if cur.len() > best.len() {
+                best = cur;
+                stable = 0;
+            } else if !cur.is_empty() {
+                stable += 1;
+                if stable >= 2 {
+                    break;
+                }
+            }
+        }
+        tracing::info!(
+            target: "ventus::browser::cookie_manager",
+            initial = initial,
+            settled = best.len(),
+            elapsed_ms = start.elapsed().as_millis() as u64,
+            "cookie snapshot settled (waited for WebView2 profile load to finish)"
+        );
+        best
+    }
+
     fn pump_messages_once() {
         use windows::Win32::UI::WindowsAndMessaging::{
             DispatchMessageW, PeekMessageW, TranslateMessage, MSG, PM_REMOVE,
@@ -362,4 +402,20 @@ pub fn snapshot(wv: &WebView, wait: std::time::Duration) -> Vec<CookieRecord> {
     }
     #[cfg(not(windows))]
     Vec::new()
+}
+
+#[cfg_attr(not(windows), allow(unused_variables))]
+pub fn snapshot_settled(wv: &WebView, max_wait: std::time::Duration) -> Vec<CookieRecord> {
+    #[cfg(windows)]
+    {
+        return win::snapshot_settled(wv, max_wait);
+    }
+    #[cfg(not(windows))]
+    Vec::new()
+}
+
+#[cfg_attr(not(windows), allow(unused_variables))]
+pub fn navigate_to_string(wv: &WebView, html: &str) {
+    #[cfg(windows)]
+    win::navigate_to_string(wv, html);
 }

@@ -364,6 +364,7 @@ button,input,select,textarea{font-family:var(--font)}
   color:var(--ai-text);
   min-width:0;
   overflow:hidden;
+  position:relative;
 }
 
 /* toolbar items */
@@ -1679,6 +1680,33 @@ button,input,select,textarea{font-family:var(--font)}
 #ai-send-btn.stop{background:var(--danger);color:var(--danger-btn-text);border-color:var(--danger)}
 #ai-send-btn.stop:hover{background:color-mix(in srgb,var(--danger) 88%,white);border-color:color-mix(in srgb,var(--danger) 88%,white)}
 #ai-clear-btn{display:none}
+#ai-history-panel{
+  display:none;position:absolute;inset:0;z-index:8;
+  background:var(--ai-bg);flex-direction:column;
+}
+#ai-sidebar.ai-history-open #ai-history-panel{display:flex}
+#ai-history-head{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding:14px 12px 11px 16px;font-size:13px;font-weight:650;color:var(--ai-text);
+  border-bottom:1px solid var(--ai-line);
+}
+#ai-history-list{flex:1;overflow-y:auto;padding:7px 8px 14px}
+.ai-hist-item{
+  display:flex;align-items:center;gap:8px;width:100%;
+  padding:9px 8px 9px 11px;border-radius:9px;cursor:pointer;border:0;
+  background:transparent;text-align:left;color:var(--ai-text);
+}
+.ai-hist-item:hover{background:var(--bg-hover)}
+.ai-hist-main{flex:1;min-width:0}
+.ai-hist-title{font-size:12.5px;font-weight:550;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ai-hist-sub{font-size:11px;color:var(--ai-muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ai-hist-del{
+  opacity:0;flex-shrink:0;border:0;background:transparent;color:var(--ai-muted);
+  cursor:pointer;padding:5px;border-radius:6px;display:flex;align-items:center;
+}
+.ai-hist-item:hover .ai-hist-del{opacity:1}
+.ai-hist-del:hover{background:var(--bg-hover);color:var(--ai-danger)}
+.ai-hist-empty{padding:34px 18px;text-align:center;color:var(--ai-muted);font-size:12px;line-height:1.6}
 
 /* settings overlay — sits in front of the live content WebView */
 #settings-overlay{
@@ -1756,34 +1784,44 @@ button,input,select,textarea{font-family:var(--font)}
 .acct-google{width:100%;display:flex;align-items:center;justify-content:center;gap:10px;padding:10px;font-size:13px;font-weight:600;color:var(--text);background:var(--soft-btn-bg);border:1px solid var(--modal-border);border-radius:10px;cursor:pointer;font-family:var(--font);transition:background .12s ease}
 .acct-google:hover{background:var(--modal-bg-2)}
 .acct-google:disabled{opacity:.6;cursor:default}
-.acct-profile{display:grid;grid-template-columns:188px minmax(0,1fr);gap:28px;align-items:start}
-.acct-summary{display:flex;flex-direction:column;align-items:flex-start;gap:14px;min-width:0}
-.acct-avatar{position:relative;width:82px;height:82px;flex-shrink:0}
-.acct-avatar-img{width:82px;height:82px;border-radius:50%;object-fit:cover;border:1px solid var(--modal-border)}
-.acct-avatar-ph{width:82px;height:82px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:650;color:#fff;background:var(--accent)}
-.acct-avatar-edit{position:absolute;right:0;bottom:0;width:25px;height:25px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--primary-btn-text);background:var(--primary-btn-bg);border:2px solid var(--modal-bg);cursor:pointer;padding:0;transition:background .12s ease}
-.acct-avatar-edit:hover{background:var(--primary-btn-bg-hover)}
-.acct-head-info{min-width:0}
-.acct-head-name{font-size:17px;font-weight:700;color:var(--text);letter-spacing:-0.2px;line-height:1.25}
-.acct-head-email{font-size:12px;color:var(--text-muted);margin-top:3px;overflow:hidden;text-overflow:ellipsis;max-width:170px}
-.acct-status{display:inline-flex;align-items:center;gap:6px;padding:4px 9px;border-radius:999px;background:var(--soft-btn-bg);border:1px solid var(--modal-border);color:var(--text-muted);font-size:11px;font-weight:600}
+.acct-profile{display:flex;flex-direction:column;gap:20px}
+.acct-hero{display:grid;grid-template-columns:104px minmax(0,1fr) auto;align-items:center;gap:18px;padding:4px 0 20px;border-bottom:1px solid var(--modal-border)}
+.acct-avatar{position:relative;width:96px;height:96px;flex-shrink:0}
+.acct-avatar-img,.acct-avatar-ph{width:96px;height:96px;border-radius:50%;border:1px solid var(--modal-border);box-shadow:var(--shadow-sm)}
+.acct-avatar-img{object-fit:cover}
+.acct-avatar-ph{display:flex;align-items:center;justify-content:center;font-size:34px;font-weight:700;color:var(--primary-btn-text);background:var(--primary-btn-bg)}
+.acct-avatar-edit{position:absolute;right:2px;bottom:2px;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--primary-btn-text);background:var(--primary-btn-bg);border:2px solid var(--modal-bg);cursor:pointer;padding:0;box-shadow:var(--shadow-sm);transition:background .12s ease,transform .12s ease}
+.acct-avatar-edit:hover{background:var(--primary-btn-bg-hover);transform:translateY(-1px)}
+.acct-head-info{min-width:0;display:flex;flex-direction:column;align-items:flex-start}
+.acct-head-name{font-size:21px;font-weight:760;color:var(--text);letter-spacing:0;line-height:1.16;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acct-head-email{font-size:12.5px;color:var(--text-muted);margin-top:5px;overflow:hidden;text-overflow:ellipsis;max-width:100%;white-space:nowrap}
+.acct-status{display:inline-flex;align-items:center;gap:6px;padding:5px 9px;margin-top:12px;border-radius:999px;background:var(--soft-btn-bg);border:1px solid var(--modal-border);color:var(--text-muted);font-size:11.5px;font-weight:600;white-space:nowrap}
 .acct-status-dot{width:6px;height:6px;border-radius:50%;background:var(--success)}
-.acct-main{min-width:0}
+.acct-hero-actions{display:flex;align-items:center;justify-content:flex-end}
+.acct-photo-btn{height:32px;display:flex;align-items:center;gap:7px;padding:0 12px;border:1px solid var(--modal-border);border-radius:8px;background:var(--soft-btn-bg);color:var(--text);font-family:var(--font);font-size:12px;font-weight:650;cursor:pointer;white-space:nowrap;transition:background .12s ease,border-color .12s ease}
+.acct-photo-btn:hover{background:var(--soft-btn-bg-hover);border-color:var(--border)}
+.acct-photo-btn:disabled{opacity:.6;cursor:default}
+.acct-main{min-width:0;display:flex;flex-direction:column;gap:18px}
+.acct-form-panel{display:flex;flex-direction:column;gap:14px}
 .acct-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px 16px}
-.acct-field-wide{margin-top:14px}
-.acct-actions{display:flex;justify-content:flex-start;margin-top:16px}
-.acct-actions .acct-primary{width:auto;min-width:150px}
-.acct-sep{height:1px;background:var(--modal-border);margin:22px 0}
-.acct-pw summary{height:38px;display:flex;align-items:center;justify-content:space-between;font-size:12.5px;font-weight:650;color:var(--text);cursor:pointer;list-style:none}
+.acct-field-wide{margin-top:0}
+.acct-actions{display:flex;justify-content:flex-end;margin-top:2px}
+.acct-actions .acct-primary{width:auto;min-width:138px;border-radius:8px}
+.acct-sep{height:1px;background:var(--modal-border);margin:0}
+.acct-list{display:flex;flex-direction:column;border-top:1px solid var(--modal-border);border-bottom:1px solid var(--modal-border)}
+.acct-pw summary{min-height:50px;display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12.5px;font-weight:650;color:var(--text);cursor:pointer;list-style:none}
 .acct-pw summary::-webkit-details-marker{display:none}
-.acct-pw summary::after{content:'';width:7px;height:7px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(-45deg);opacity:.55;transition:transform .12s ease}
+.acct-pw summary::after{content:'';width:7px;height:7px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(-45deg);opacity:.55;transition:transform .12s ease;flex-shrink:0}
 .acct-pw[open] summary::after{transform:rotate(45deg)}
-.acct-pw-fields{display:grid;grid-template-columns:1fr 1fr;gap:14px 16px;padding:4px 0 2px}
-.acct-pw .acct-secondary{margin-top:12px}
-.acct-danger-row{display:flex;justify-content:flex-start}
-.acct-signout{padding:9px 18px;font-size:12.5px;font-weight:600;color:var(--danger);background:transparent;border:1px solid color-mix(in srgb,var(--danger) 36%,transparent);border-radius:9px;cursor:pointer;font-family:var(--font);transition:background .12s ease}
+.acct-row-text{display:flex;flex-direction:column;gap:3px;min-width:0}
+.acct-row-title{font-size:13px;font-weight:700;color:var(--text)}
+.acct-row-sub{font-size:11.5px;font-weight:500;color:var(--text-muted)}
+.acct-pw-fields{display:grid;grid-template-columns:1fr 1fr;gap:14px 16px;padding:0 0 14px}
+.acct-pw .acct-secondary{margin:0 0 16px}
+.acct-danger-row{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:54px}
+.acct-signout{padding:8px 15px;font-size:12.5px;font-weight:650;color:var(--danger);background:transparent;border:1px solid color-mix(in srgb,var(--danger) 36%,transparent);border-radius:8px;cursor:pointer;font-family:var(--font);transition:background .12s ease}
 .acct-signout:hover{background:var(--danger-dim)}
-@media(max-width:760px){.acct-profile{grid-template-columns:1fr}.acct-grid,.acct-pw-fields{grid-template-columns:1fr}.acct-head-email{max-width:100%}}
+@media(max-width:760px){.acct-hero{grid-template-columns:96px minmax(0,1fr);gap:14px}.acct-hero-actions{grid-column:1 / -1;justify-content:flex-start}.acct-grid,.acct-pw-fields{grid-template-columns:1fr}.acct-head-email{max-width:100%}}
 .settings-group{margin-bottom:24px}
 .settings-group label{
   display:block;font-size:12px;font-weight:600;
@@ -2100,6 +2138,19 @@ button,input,select,textarea{font-family:var(--font)}
 .http-warning-actions{display:flex;gap:10px;flex-wrap:wrap}
 .http-warning-btn{height:38px;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.10);color:#fff;border-radius:8px;padding:0 14px;font-family:var(--font);font-size:13px;font-weight:800;cursor:pointer}
 .http-warning-btn.primary{background:#fff;color:#310707;border-color:#fff}
+#error-placeholder{position:absolute;top:0;right:0;bottom:0;left:calc(var(--sidebar-w) + var(--frame-side-w,5px));display:none;align-items:center;justify-content:center;padding:36px clamp(18px,5vw,72px);background:var(--bg);color:var(--text);z-index:7;pointer-events:auto;box-sizing:border-box}
+.error-shell{width:min(560px,100%);display:flex;flex-direction:column;align-items:flex-start}
+.error-brand{position:absolute;top:34px;left:34px;display:flex;align-items:center;gap:9px;color:var(--text);font-size:13px;font-weight:800}
+.error-brand img{width:28px;height:28px;object-fit:contain}
+.error-icon{width:64px;height:64px;margin-bottom:28px;color:var(--text-muted);opacity:.9}
+.error-title{font-size:26px;line-height:1.12;font-weight:750;letter-spacing:0;color:var(--text);margin:0 0 16px}
+.error-copy{font-size:13.5px;line-height:1.65;color:var(--text-muted);margin:0 0 10px;max-width:540px}
+.error-url{color:var(--text);font-weight:650;overflow-wrap:anywhere}
+.error-code{margin-top:18px;font-size:11px;color:var(--text-dim);letter-spacing:0;text-transform:uppercase}
+.error-actions{margin-top:30px;display:flex;gap:10px;flex-wrap:wrap}
+.error-btn{height:38px;border:1px solid var(--border);background:var(--bg-hover);color:var(--text);border-radius:8px;padding:0 15px;font-family:var(--font);font-size:13px;font-weight:750;cursor:pointer}
+.error-btn:hover{background:var(--bg-active)}
+.error-btn.primary{background:var(--text);color:var(--bg);border-color:var(--text)}
 #newtab-bg{
   display:none;
 }
@@ -3023,6 +3074,38 @@ button,input,select,textarea{font-family:var(--font)}
 .fm-empty{color:var(--text-muted);font-size:12px;text-align:center;padding:18px 0}
 .fm-footer{padding:10px 14px;border-top:1px solid var(--border-subtle)}
 
+.history-tools{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.history-search{height:38px;flex:1;min-width:0;display:flex;align-items:center;gap:8px;padding:0 10px;border:1px solid var(--modal-border);border-radius:8px;background:var(--modal-bg-2);transition:border-color var(--transition),box-shadow var(--transition),background var(--transition)}
+.history-search:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-dim);background:var(--modal-bg)}
+.history-search svg{color:var(--text-muted);flex-shrink:0}
+.history-search input{flex:1;min-width:0;border:none;outline:none;background:transparent;color:var(--text);font-family:var(--font);font-size:13px}
+.history-search input::placeholder{color:var(--text-muted)}
+.history-actions{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.history-icon-btn,.history-clear-btn{height:32px;border:1px solid var(--modal-border);border-radius:8px;background:var(--modal-bg-2);color:var(--text-muted);display:flex;align-items:center;justify-content:center;cursor:pointer;font-family:var(--font);transition:background var(--transition),border-color var(--transition),color var(--transition),opacity var(--transition)}
+.history-icon-btn{width:32px;padding:0}
+.history-icon-btn:hover:not(:disabled),.history-clear-btn:hover:not(:disabled){background:var(--bg-hover);border-color:var(--border);color:var(--text)}
+.history-icon-btn:disabled,.history-clear-btn:disabled{opacity:.45;cursor:default}
+.history-search-clear{display:none}
+.history-search-clear.show{display:flex}
+.history-clear-btn{padding:0 12px;font-size:12px;font-weight:600;color:var(--danger);border-color:color-mix(in srgb,var(--danger) 32%,var(--modal-border))}
+.history-clear-btn:hover:not(:disabled){background:var(--danger-dim);border-color:color-mix(in srgb,var(--danger) 45%,var(--modal-border));color:var(--danger)}
+.history-filter{display:flex;align-items:center;gap:4px;margin-bottom:8px;padding:3px;width:max-content;max-width:100%;border:1px solid var(--modal-border);border-radius:8px;background:var(--modal-bg-2);overflow:auto;scrollbar-width:none}
+.history-filter::-webkit-scrollbar{display:none}
+.history-chip{height:26px;padding:0 10px;border:none;border-radius:6px;background:transparent;color:var(--text-muted);font-family:var(--font);font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;transition:background var(--transition),color var(--transition)}
+.history-chip:hover{color:var(--text);background:var(--bg-hover)}
+.history-chip.active{background:var(--bg);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.18)}
+.history-summary{min-height:16px;margin:0 0 12px;color:var(--text-muted);font-size:11.5px}
+.history-confirm-backdrop{position:fixed;inset:0;z-index:9120;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.42);backdrop-filter:blur(4px)}
+.history-confirm-backdrop.open{display:flex}
+.history-confirm{width:330px;max-width:calc(100vw - 48px);padding:18px;border:1px solid var(--modal-border);border-radius:8px;background:var(--modal-bg);box-shadow:var(--modal-shadow)}
+.history-confirm-mark{width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--danger);background:var(--danger-dim);margin-bottom:13px}
+.history-confirm h3{margin:0;color:var(--text);font-size:17px;font-weight:700}
+.history-confirm p{margin:7px 0 17px;color:var(--text-muted);font-size:12.5px;line-height:1.45}
+.history-confirm-actions{display:flex;justify-content:flex-end;gap:8px}
+.history-confirm-btn{height:32px;padding:0 13px;border:1px solid var(--modal-border);border-radius:8px;background:var(--modal-bg-2);color:var(--text);font-family:var(--font);font-size:12px;font-weight:600;cursor:pointer;transition:background var(--transition),border-color var(--transition),color var(--transition)}
+.history-confirm-btn:hover{background:var(--bg-hover)}
+.history-confirm-btn.danger{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 36%,var(--modal-border))}
+.history-confirm-btn.danger:hover{background:var(--danger-dim);border-color:color-mix(in srgb,var(--danger) 48%,var(--modal-border))}
 .hist-item{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:var(--radius-sm);transition:background var(--transition);cursor:pointer}
 .hist-item:hover{background:var(--bg-hover)}
 .hist-item-info{flex:1;min-width:0}
@@ -3032,8 +3115,17 @@ button,input,select,textarea{font-family:var(--font)}
 .hist-item-del{width:24px;height:24px;border:none;background:transparent;color:var(--text-dim);cursor:pointer;border-radius:3px;display:flex;align-items:center;justify-content:center;transition:all var(--transition);flex-shrink:0;opacity:0}
 .hist-item:hover .hist-item-del{opacity:1}
 .hist-item-del:hover{background:var(--danger-dim);color:var(--danger)}
+.hist-day-header{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:16px 4px 7px;font-size:11.5px;font-weight:650;color:var(--text-muted);letter-spacing:.02em}
+.hist-day-header:first-child{padding-top:4px}
+.hist-day-clear{border:none;background:transparent;color:var(--text-dim);cursor:pointer;font-size:11px;font-weight:500;padding:2px 7px;border-radius:5px;opacity:0;transition:all var(--transition)}
+.hist-day-header:hover .hist-day-clear{opacity:1}
+.hist-day-clear:hover{background:var(--danger-dim);color:var(--danger)}
+.hist-fav{width:20px;height:20px;flex-shrink:0;border-radius:5px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:var(--bg-active);color:var(--text-muted);font-size:10px;font-weight:700;text-transform:uppercase;position:relative}
+.hist-fav img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:var(--bg-active)}
+.hist-empty-state{color:var(--text-muted);font-size:12px;text-align:center;padding:36px 0}
+#history-sentinel{height:1px;width:100%}
 
-#downloads-list .dl-panel-item[data-nav-url]{cursor:pointer}
+.dl-panel-item[data-dl-file-path]{cursor:pointer}
 
 /* ── About section ──────────────────────────────────────────────────────────â”€ */
 .about-identity-card{
@@ -3491,7 +3583,7 @@ svg{display:block;flex-shrink:0}
     <span class="more-item-label">New Window</span>
   </button>
   <button class="more-item" onclick="closeMoreMenu();send('NewWorkspace',{name:'Incognito',is_incognito:true,icon:'🔐',accent_color:'#6b7280'})" role="menuitem">
-    <span class="more-item-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="2" y1="2" x2="22" y2="22"/></svg></span>
+    <span class="more-item-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12.5h18"/><path d="M6 12.5l1.2-4.6A2 2 0 0 1 9.1 6.5h5.8a2 2 0 0 1 1.9 1.4l1.2 4.6"/><circle cx="8" cy="16" r="2.4"/><circle cx="16" cy="16" r="2.4"/><path d="M10.4 16h3.2"/></svg></span>
     <span class="more-item-label">New Incognito Tab</span>
   </button>
   <div class="more-sep"></div>
@@ -3646,7 +3738,7 @@ svg{display:block;flex-shrink:0}
       <div class="sb-ws-pop-count" id="sb-ws-pop-count"></div>
     </div>
     <span class="sb-ws-pop-badge" id="sb-ws-pop-badge" title="Incognito - history not saved">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="2" y1="2" x2="22" y2="22"/></svg>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12.5h18"/><path d="M6 12.5l1.2-4.6A2 2 0 0 1 9.1 6.5h5.8a2 2 0 0 1 1.9 1.4l1.2 4.6"/><circle cx="8" cy="16" r="2.4"/><circle cx="16" cy="16" r="2.4"/><path d="M10.4 16h3.2"/></svg>
       Private
     </span>
   </div>
@@ -3822,6 +3914,20 @@ svg{display:block;flex-shrink:0}
       </div>
     </div>
   </div>
+  <div id="error-placeholder">
+    <div class="error-brand"><img src="__LOGO_URL__" alt=""><span>Ventus</span></div>
+    <div class="error-shell">
+      <svg class="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19a4.5 4.5 0 0 0 .9-8.9 6 6 0 0 0-11.4-1.6A4 4 0 0 0 6 19"/><path d="M3 3l18 18"/></svg>
+      <h1 class="error-title">Hmm... can't reach this page</h1>
+      <p class="error-copy">The page at <span class="error-url" id="error-url"></span> might be down, or it may have moved to a new address.</p>
+      <p class="error-copy">Check your connection and the address, then try again.</p>
+      <div class="error-code" id="error-code"></div>
+      <div class="error-actions">
+        <button class="error-btn primary" onclick="retryErrorPage()">Try again</button>
+        <button class="error-btn" onclick="send('Back')">Go back</button>
+      </div>
+    </div>
+  </div>
   <div id="apps-placeholder"></div>
   <div id="content-loading"></div>
 </div>
@@ -3836,13 +3942,22 @@ svg{display:block;flex-shrink:0}
       </button>
     </div>
     <div class="ai-top-right">
-      <button class="ai-icon-btn" onclick="toast('Chat history is not available yet')" title="Chat history">
+      <button class="ai-icon-btn" onclick="openAiHistory()" title="Chat history">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v6h6"/><path d="M12 7v5l3 2"/></svg>
       </button>
       <button class="ai-icon-btn" onclick="aiClear()" title="New chat">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
       </button>
     </div>
+  </div>
+  <div id="ai-history-panel">
+    <div id="ai-history-head">
+      <span>Chat history</span>
+      <button class="ai-icon-btn" onclick="closeAiHistory()" title="Close">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      </button>
+    </div>
+    <div id="ai-history-list"></div>
   </div>
   <div class="ai-hero">
     <h3>Assistant</h3>
@@ -4241,12 +4356,46 @@ svg{display:block;flex-shrink:0}
       <div class="settings-section" id="section-history">
         <h2>History</h2>
         <p class="subtitle">Pages you have visited</p>
-        <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
-          <input class="settings-input" id="history-search" placeholder="Search history..." oninput="searchHistory(this.value)" style="flex:1">
-          <button class="ob-btn-primary ob-btn-danger" style="flex-shrink:0" onclick="clearHistory()">Clear all</button>
+        <div class="history-tools">
+          <div class="history-search">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            <input id="history-search" placeholder="Search history" oninput="searchHistory(this.value)">
+            <button class="history-icon-btn history-search-clear" id="history-search-clear" onclick="clearHistorySearch()" title="Clear search">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <div class="history-actions">
+            <button class="history-icon-btn" id="history-copy-btn" onclick="copyHistoryLinks()" title="Copy visible links">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            </button>
+            <button class="history-icon-btn" id="history-open-btn" onclick="openHistoryShown()" title="Open visible pages">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
+            </button>
+            <button class="history-clear-btn" id="history-clear-btn" onclick="clearHistory()">Clear</button>
+          </div>
         </div>
+        <div class="history-filter" id="history-filter">
+          <button class="history-chip active" data-history-filter="all" onclick="setHistoryFilter('all')">All</button>
+          <button class="history-chip" data-history-filter="today" onclick="setHistoryFilter('today')">Today</button>
+          <button class="history-chip" data-history-filter="week" onclick="setHistoryFilter('week')">7 days</button>
+          <button class="history-chip" data-history-filter="month" onclick="setHistoryFilter('month')">30 days</button>
+        </div>
+        <div class="history-summary" id="history-summary"></div>
         <div id="history-list" style="display:flex;flex-direction:column;gap:2px">
           <div style="color:var(--text-muted);font-size:12px;text-align:center;padding:24px 0">No history yet.</div>
+        </div>
+        <div class="history-confirm-backdrop" id="history-clear-confirm" onclick="handleHistoryConfirmClick(event)">
+          <div class="history-confirm" role="dialog" aria-modal="true" aria-labelledby="history-clear-title">
+            <div class="history-confirm-mark">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+            </div>
+            <h3 id="history-clear-title">Clear all history?</h3>
+            <p>This removes every saved page from this browser. You cannot undo this.</p>
+            <div class="history-confirm-actions">
+              <button class="history-confirm-btn" onclick="closeHistoryClearConfirm()">Cancel</button>
+              <button class="history-confirm-btn danger" onclick="confirmClearHistory()">Clear history</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -4405,8 +4554,8 @@ svg{display:block;flex-shrink:0}
         <p class="subtitle">Send recent logs so bugs can be tracked down</p>
         <div class="settings-toggle">
           <div class="settings-toggle-info">
-            <div class="toggle-title">Automatic crash reports</div>
-            <div class="toggle-desc">Send a report on its own when Ventus crashes or hits an error.</div>
+            <div class="toggle-title">Automatic reports</div>
+            <div class="toggle-desc">Send a report when Ventus crashes, hits an error, or shows a serious warning.</div>
           </div>
           <div class="toggle-switch on" id="toggle-auto-crash-report" onclick="toggleSetting('auto_crash_report')"></div>
         </div>
@@ -5069,6 +5218,7 @@ window.__neura = {
     document.title = 'Ventus';
     checkNewtabPlaceholder(url);
     checkHttpWarningPlaceholder(url);
+    checkErrorPlaceholder(url);
     checkAppsPlaceholder(url);
   },
   setFindResult(result) {
@@ -5090,9 +5240,11 @@ window.__neura = {
   onContentPointerDown() { onContentPointerDown(); },
   setHistory(items) {
     state.history = items || [];
-    renderHistory();
     renderSuggestionPanels();
     refreshSpotlightSuggestions();
+  },
+  setHistoryPage(items, offset, hasMore) {
+    setHistoryPage(items, offset, hasMore);
   },
   setOmnibox(payload) {
     state.omnibox = (payload && payload.items) || [];
@@ -5109,7 +5261,7 @@ window.__neura = {
     if (findOpen) closeFindBar(true);
     const updateModal = document.getElementById('update-modal');
     if (updateModal && updateModal.classList.contains('open')) closeUpdateModal(false);
-    ['settings-overlay','tab-search-modal','workspace-modal','ws-switcher-modal','workspace-delete-modal','context-menu','adblock-modal','adblock-backdrop','download-panel','model-modal','tab-spotlight-overlay','update-modal','folder-modal','bm-edit-backdrop','bm-edit-modal','site-info-popover'].forEach(id => {
+    ['settings-overlay','tab-search-modal','workspace-modal','ws-switcher-modal','workspace-delete-modal','history-clear-confirm','context-menu','adblock-modal','adblock-backdrop','download-panel','model-modal','tab-spotlight-overlay','update-modal','folder-modal','bm-edit-backdrop','bm-edit-modal','site-info-popover'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.classList.remove('open');
     });
@@ -5215,6 +5367,8 @@ window.__neura = {
   },
   showContextMenu(data) { showBrowserContextMenu(data); },
   applyClipboardPaste(text) { applyClipboardPaste(text); },
+  setAiSessions(list) { setAiSessions(list); },
+  showAiConversation(messages) { showAiConversation(messages); },
   spotlightAiChunk(text, done) {
     if (!tspAiMode || !tspAiTurns.length) return;
     const turn = tspAiTurns[tspAiTurns.length - 1];
@@ -5225,6 +5379,9 @@ window.__neura = {
       tspAiHistory.push({role: 'user', content: turn.q});
       tspAiHistory.push({role: 'assistant', content: turn.a});
       renderTspAiThread();
+      if (tspAiSessionId && turn.a && turn.a.trim()) {
+        send('SaveSpotlightChat', {session_id: tspAiSessionId, title: tspAiTitle || turn.q, query: turn.q, answer: turn.a});
+      }
       const fu = document.getElementById('tsp-ai-followup');
       if (fu) fu.focus();
       return;
@@ -5700,6 +5857,7 @@ function renderAddressBar() {
   updateLockIcon(tab.url);
   checkNewtabPlaceholder(tab.url);
   checkHttpWarningPlaceholder(tab.url);
+  checkErrorPlaceholder(tab.url);
   checkAppsPlaceholder(tab.url);
   renderBookmarkIcon();
 }
@@ -7233,6 +7391,8 @@ function urlEditReplace(sel, insert) {
 }
 function formatDisplayUrl(url) {
   if (!url || url === 'about:blank') return '';
+  const err = errorPageData(url);
+  if (err) return err.url && !err.url.startsWith('neura://error') ? formatDisplayUrl(err.url) : err.url;
   if (url.startsWith('neura://')) return url;
   try {
     const u = new URL(url);
@@ -7246,9 +7406,11 @@ function syncAddressDisplay(url) {
 }
 function formatDisplayUrlHtml(url) {
   const text = formatDisplayUrl(url);
-  if (!text || !url || url.startsWith('neura://')) return escHtml(text);
+  const err = errorPageData(url);
+  const realUrl = err ? err.url : url;
+  if (!text || !realUrl || realUrl.startsWith('neura://')) return escHtml(text);
   try {
-    const u = new URL(url);
+    const u = new URL(realUrl);
     const host = u.hostname;
     if (!host || !host.includes('.') || /^[\d.]+$/.test(host)) return escHtml(text);
     const rest = text.slice(host.length);
@@ -7780,6 +7942,52 @@ function httpWarningData(url) {
   } catch (_) {
     return null;
   }
+}
+function errorPageData(url) {
+  if (!url || !url.startsWith('neura://error')) return null;
+  try {
+    const u = new URL(url);
+    const target = u.searchParams.get('url') || '';
+    if (!target) return null;
+    return {url: target, code: Number(u.searchParams.get('code') || 0)};
+  } catch (_) {
+    return null;
+  }
+}
+function errorPageReason(code) {
+  switch (Number(code) || 0) {
+    case 1: return 'Certificate name mismatch';
+    case 2: return 'Certificate expired';
+    case 3:
+    case 4:
+    case 5: return 'Certificate error';
+    case 6: return 'Server unreachable';
+    case 7: return 'Connection timed out';
+    case 8: return 'Invalid server response';
+    case 9: return 'Connection aborted';
+    case 10: return 'Connection reset';
+    case 11: return 'Disconnected';
+    case 12: return "Can't connect to the server";
+    case 13: return 'Site address not found';
+    case 15: return 'Redirect failed';
+    default: return '';
+  }
+}
+function checkErrorPlaceholder(url) {
+  const root = document.getElementById('error-placeholder');
+  if (!root) return;
+  const data = errorPageData(url);
+  root.style.display = data ? 'flex' : 'none';
+  const label = document.getElementById('error-url');
+  if (label) label.textContent = data ? data.url : '';
+  const code = document.getElementById('error-code');
+  if (code) {
+    const reason = data ? errorPageReason(data.code) : '';
+    code.textContent = data ? ((reason ? reason + ' - ' : '') + 'CODE ' + data.code) : '';
+  }
+}
+function retryErrorPage() {
+  send('Reload');
 }
 function checkHttpWarningPlaceholder(url) {
   const root = document.getElementById('http-warning-placeholder');
@@ -9604,6 +9812,100 @@ function aiClear() {
 }
 
 // ============================================================
+// AI CHAT HISTORY
+// ============================================================
+let aiHistorySessions = [];
+
+function aiGenId() {
+  try { if (window.crypto && crypto.randomUUID) return crypto.randomUUID(); } catch (e) {}
+  return 'sp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
+}
+
+function openAiHistory() {
+  const sidebar = document.getElementById('ai-sidebar');
+  if (sidebar) sidebar.classList.add('ai-history-open');
+  const list = document.getElementById('ai-history-list');
+  if (list) list.innerHTML = '<div class="ai-hist-empty">Loading…</div>';
+  send('GetAiSessions');
+}
+
+function closeAiHistory() {
+  const sidebar = document.getElementById('ai-sidebar');
+  if (sidebar) sidebar.classList.remove('ai-history-open');
+}
+
+function setAiSessions(list) {
+  aiHistorySessions = Array.isArray(list) ? list : [];
+  renderAiHistoryList();
+}
+
+function aiHistoryRelTime(ts) {
+  const n = Number(ts) || 0;
+  if (!n) return '';
+  const diff = Date.now() - n;
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return 'Just now';
+  if (min < 60) return min + 'm ago';
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return hr + 'h ago';
+  const day = Math.floor(hr / 24);
+  if (day < 7) return day + 'd ago';
+  return new Date(n).toLocaleDateString();
+}
+
+function renderAiHistoryList() {
+  const list = document.getElementById('ai-history-list');
+  if (!list) return;
+  if (!aiHistorySessions.length) {
+    list.innerHTML = '<div class="ai-hist-empty">No saved chats yet.<br>Your Assistant and Spotlight conversations show up here.</div>';
+    return;
+  }
+  const labels = {openai:'OpenAI', anthropic:'Anthropic', gemini:'Gemini', openrouter:'OpenRouter', ollama:'Ollama'};
+  list.innerHTML = aiHistorySessions.map(s => {
+    const provider = labels[s.provider] || (s.provider || 'AI');
+    const sub = provider + ' · ' + aiHistoryRelTime(s.updated_at);
+    return `<button class="ai-hist-item" onclick="loadAiSession('${s.id}')">
+      <span class="ai-hist-main">
+        <span class="ai-hist-title">${escHtml(s.title || 'Chat')}</span>
+        <span class="ai-hist-sub">${escHtml(sub)}</span>
+      </span>
+      <span class="ai-hist-del" title="Delete chat" onclick="deleteAiSession(event,'${s.id}')">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+      </span>
+    </button>`;
+  }).join('');
+}
+
+function loadAiSession(id) {
+  if (!id) return;
+  send('LoadAiSession', {id});
+  closeAiHistory();
+}
+
+function deleteAiSession(e, id) {
+  if (e) { e.stopPropagation(); e.preventDefault(); }
+  if (!id) return;
+  aiHistorySessions = aiHistorySessions.filter(s => s.id !== id);
+  renderAiHistoryList();
+  send('DeleteAiSession', {id});
+}
+
+function showAiConversation(messages) {
+  if (!state) return;
+  state.ai_open = true;
+  applyAiSidebar();
+  const msgs = document.getElementById('ai-messages');
+  if (msgs) msgs.innerHTML = '';
+  resetAiStreamState();
+  finishAiBusy();
+  startAiChat();
+  (Array.isArray(messages) ? messages : []).forEach(m => {
+    addAiMessage(m.role === 'assistant' ? 'assistant' : 'user', m.content || '');
+  });
+  scrollAiToBottom();
+}
+
+// ============================================================
 // REGION SETTINGS
 // ============================================================
 function countryFlag(code) {
@@ -9639,6 +9941,7 @@ function openSettings(section='general') {
 }
 function closeSettings() {
   send('CloseSettings');
+  closeHistoryClearConfirm();
   document.getElementById('settings-overlay').classList.remove('open');
 }
 function handleSettingsOverlayClick(e) {
@@ -9653,8 +9956,8 @@ function switchSettings(sec) {
   if (n) n.classList.add('active');
   if (sec === 'history') {
     const searchEl = document.getElementById('history-search');
-    const q = searchEl ? searchEl.value : '';
-    send('GetHistory', {q});
+    historyQuery = searchEl ? searchEl.value.trim() : '';
+    loadHistoryPage(true);
   }
   if (sec === 'bookmarks') renderBookmarks();
   if (sec === 'downloads') renderDownloads();
@@ -9717,7 +10020,7 @@ function renderAccountSignedIn(p) {
     : `<div class="acct-avatar-ph">${escHtml(initial)}</div>`;
   return `
   <div class="acct-profile">
-    <div class="acct-summary">
+    <div class="acct-hero">
       <div class="acct-avatar">${avatar}
         <button class="acct-avatar-edit" ${dis} onclick="document.getElementById('acct-photo-input').click()" title="Change photo">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
@@ -9727,31 +10030,51 @@ function renderAccountSignedIn(p) {
       <div class="acct-head-info">
         <div class="acct-head-name">${escHtml(name)}</div>
         <div class="acct-head-email">${escHtml(email)}</div>
+        <div class="acct-status"><span class="acct-status-dot"></span>Cloud sync on</div>
       </div>
-      <div class="acct-status"><span class="acct-status-dot"></span>Cloud sync on</div>
+      <div class="acct-hero-actions">
+        <button class="acct-photo-btn" ${dis} onclick="document.getElementById('acct-photo-input').click()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          Change photo
+        </button>
+      </div>
     </div>
     <div class="acct-main">
-      <div class="acct-grid">
-        <div class="acct-field"><label>Username</label><input id="acct-username" type="text" value="${escAttr(p.username||'')}" placeholder="username" ${dis}></div>
-        <div class="acct-field"><label>Full name</label><input id="acct-fullname" type="text" value="${escAttr(p.full_name||'')}" placeholder="Your name" ${dis}></div>
-        <div class="acct-field"><label>Birthdate</label><input id="acct-birthdate" type="date" value="${escAttr(p.birthdate||'')}" ${dis}></div>
-        <div class="acct-field"><label>Country</label><input type="text" value="${escAttr(p.country||'')}" placeholder="Set in General" disabled></div>
-      </div>
-      <div class="acct-field acct-field-wide"><label>Bio</label><textarea id="acct-bio" rows="3" placeholder="A little about you" ${dis}>${escHtml(p.bio||'')}</textarea></div>
-      <div class="acct-actions">
-        <button class="acct-primary" ${dis} onclick="accountSaveProfile()">${accountPending?'Saving...':'Save changes'}</button>
-      </div>
-      <div class="acct-sep"></div>
-      <details class="acct-pw">
-        <summary>Change password</summary>
-        <div class="acct-pw-fields">
-          <div class="acct-field"><label>Current password</label><input id="acct-pw-current" type="password" autocomplete="current-password" ${dis}></div>
-          <div class="acct-field"><label>New password</label><input id="acct-pw-new" type="password" autocomplete="new-password" placeholder="At least 6 characters" ${dis}></div>
+      <div class="acct-form-panel">
+        <div class="acct-grid">
+          <div class="acct-field"><label>Username</label><input id="acct-username" type="text" value="${escAttr(p.username||'')}" placeholder="username" ${dis}></div>
+          <div class="acct-field"><label>Full name</label><input id="acct-fullname" type="text" value="${escAttr(p.full_name||'')}" placeholder="Your name" ${dis}></div>
+          <div class="acct-field"><label>Birthdate</label><input id="acct-birthdate" type="date" value="${escAttr(p.birthdate||'')}" ${dis}></div>
+          <div class="acct-field"><label>Country</label><input type="text" value="${escAttr(p.country||'')}" placeholder="Set in General" disabled></div>
         </div>
-        <button class="acct-secondary" ${dis} onclick="accountChangePassword()">Update password</button>
-      </details>
-      <div class="acct-sep"></div>
-      <div class="acct-danger-row"><button class="acct-signout" ${dis} onclick="accountSignOut()">Sign out</button></div>
+        <div class="acct-field acct-field-wide"><label>Bio</label><textarea id="acct-bio" rows="3" placeholder="A little about you" ${dis}>${escHtml(p.bio||'')}</textarea></div>
+        <div class="acct-actions">
+          <button class="acct-primary" ${dis} onclick="accountSaveProfile()">${accountPending?'Saving...':'Save changes'}</button>
+        </div>
+      </div>
+      <div class="acct-list">
+        <details class="acct-pw">
+          <summary>
+            <span class="acct-row-text">
+              <span class="acct-row-title">Change password</span>
+              <span class="acct-row-sub">Update your sign-in password</span>
+            </span>
+          </summary>
+          <div class="acct-pw-fields">
+            <div class="acct-field"><label>Current password</label><input id="acct-pw-current" type="password" autocomplete="current-password" ${dis}></div>
+            <div class="acct-field"><label>New password</label><input id="acct-pw-new" type="password" autocomplete="new-password" placeholder="At least 6 characters" ${dis}></div>
+          </div>
+          <button class="acct-secondary" ${dis} onclick="accountChangePassword()">Update password</button>
+        </details>
+        <div class="acct-sep"></div>
+        <div class="acct-danger-row">
+          <span class="acct-row-text">
+            <span class="acct-row-title">Sign out</span>
+            <span class="acct-row-sub">Keep local browser data on this device</span>
+          </span>
+          <button class="acct-signout" ${dis} onclick="accountSignOut()">Sign out</button>
+        </div>
+      </div>
     </div>
   </div>`;
 }
@@ -9911,6 +10234,8 @@ let tspAiMode = false;
 let tspAiStreaming = false;
 let tspAiTurns = [];      // [{q, a, done, model, time}] rendered as chat cards
 let tspAiHistory = [];    // [{role, content}] sent to the model for follow-up context
+let tspAiSessionId = null;
+let tspAiTitle = '';
 
 const tspAiSparkSvg = '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5l1.7 5.6 5.6 1.7-5.6 1.7L12 17.1l-1.7-5.6L4.7 9.8l5.6-1.7z"/><path d="M19 14.5l.8 2.4 2.4.8-2.4.8-.8 2.4-.8-2.4-2.4-.8 2.4-.8z"/></svg>';
 
@@ -9943,6 +10268,8 @@ function tspEnterAiMode(query) {
   tspAiMode = true;
   tspAiTurns = [];
   tspAiHistory = [];
+  tspAiSessionId = aiGenId();
+  tspAiTitle = (query || '').trim();
   const wrap = document.getElementById('tsp-input-wrap');
   const results = document.getElementById('tsp-results');
   const panel = document.getElementById('tsp-ai-panel');
@@ -9970,6 +10297,8 @@ function tspExitAiMode() {
   tspAiStreaming = false;
   tspAiTurns = [];
   tspAiHistory = [];
+  tspAiSessionId = null;
+  tspAiTitle = '';
   const wrap = document.getElementById('tsp-input-wrap');
   const results = document.getElementById('tsp-results');
   const panel = document.getElementById('tsp-ai-panel');
@@ -11083,25 +11412,195 @@ function renderBookmarks() {
   setupBookmarkFolderDrop(list);
 }
 
+let historyItems = [];
+let historyOffset = 0;
+let historyQuery = '';
+let historyFilter = 'all';
+let historyHasMore = true;
+let historyLoading = false;
+let historySearchTimer = null;
+let historyObserver = null;
+
+function loadHistoryPage(reset) {
+  if (reset) {
+    historyItems = [];
+    historyOffset = 0;
+    historyHasMore = true;
+  }
+  if (historyLoading || !historyHasMore) return;
+  historyLoading = true;
+  if (reset) renderHistory();
+  send('GetHistoryPage', {q: historyQuery, offset: historyOffset});
+}
+
+function setHistoryPage(items, offset, hasMore) {
+  historyLoading = false;
+  const arr = Array.isArray(items) ? items : [];
+  if (!offset) historyItems = arr;
+  else historyItems = historyItems.concat(arr);
+  historyOffset = historyItems.length;
+  historyHasMore = !!hasMore;
+  renderHistory();
+}
+
+function historyScrollParent(el) {
+  let p = el && el.parentElement;
+  while (p) {
+    const oy = getComputedStyle(p).overflowY;
+    if ((oy === 'auto' || oy === 'scroll') && p.scrollHeight > p.clientHeight) return p;
+    p = p.parentElement;
+  }
+  return null;
+}
+
+function observeHistorySentinel() {
+  if (historyObserver) { historyObserver.disconnect(); historyObserver = null; }
+  const sentinel = document.getElementById('history-sentinel');
+  if (!sentinel) return;
+  const root = historyScrollParent(sentinel);
+  historyObserver = new IntersectionObserver(entries => {
+    if (entries.some(en => en.isIntersecting) && historyHasMore && !historyLoading) {
+      loadHistoryPage(false);
+    }
+  }, {root: root || null, rootMargin: '300px'});
+  historyObserver.observe(sentinel);
+}
+
+function historyDayLabel(ms) {
+  const d = new Date(ms);
+  const now = new Date();
+  const startOf = x => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const today = startOf(now);
+  const that = startOf(d);
+  const dayMs = 86400000;
+  if (that === today) return 'Today';
+  if (that === today - dayMs) return 'Yesterday';
+  if (today - that < 7 * dayMs) return d.toLocaleDateString(undefined, {weekday: 'long'});
+  return d.toLocaleDateString(undefined, {weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'});
+}
+
+function historyDayBounds(ms) {
+  const d = new Date(ms);
+  const start = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  return {start, end: start + 86400000};
+}
+
+function historyFilterStart() {
+  const now = new Date();
+  const dayMs = 86400000;
+  if (historyFilter === 'today') return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  if (historyFilter === 'week') return Date.now() - 7 * dayMs;
+  if (historyFilter === 'month') return Date.now() - 30 * dayMs;
+  return 0;
+}
+
+function historyFilterName() {
+  if (historyFilter === 'today') return 'today';
+  if (historyFilter === 'week') return 'the last 7 days';
+  if (historyFilter === 'month') return 'the last 30 days';
+  return '';
+}
+
+function historyShownItems() {
+  const arr = historyItems || [];
+  if (historyFilter === 'all') return arr;
+  const start = historyFilterStart();
+  return arr.filter(h => Number(h.visited_at || 0) >= start);
+}
+
+function setHistoryFilter(filter) {
+  historyFilter = ['all', 'today', 'week', 'month'].includes(filter) ? filter : 'all';
+  renderHistory();
+}
+
+function syncHistoryTools(hist) {
+  const count = Array.isArray(hist) ? hist.length : 0;
+  document.querySelectorAll('[data-history-filter]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.historyFilter === historyFilter);
+  });
+  const clearSearch = document.getElementById('history-search-clear');
+  if (clearSearch) clearSearch.classList.toggle('show', !!historyQuery);
+  const copyBtn = document.getElementById('history-copy-btn');
+  const openBtn = document.getElementById('history-open-btn');
+  if (copyBtn) copyBtn.disabled = count === 0;
+  if (openBtn) openBtn.disabled = count === 0;
+  const clearBtn = document.getElementById('history-clear-btn');
+  if (clearBtn) clearBtn.disabled = !historyQuery && !historyHasMore && !(historyItems || []).length;
+  const summary = document.getElementById('history-summary');
+  if (!summary) return;
+  let text = '';
+  if (count) {
+    text = `Showing ${count} page${count === 1 ? '' : 's'}`;
+    if (historyQuery) text += ` for "${historyQuery}"`;
+    const name = historyFilterName();
+    if (name) text += ` from ${name}`;
+  } else if (historyLoading) {
+    text = 'Loading...';
+  } else if (historyQuery || historyFilter !== 'all') {
+    text = 'Nothing matches this view';
+  }
+  summary.textContent = text;
+}
+
+function historyRowClick(el, e) {
+  if (e && e.target && e.target.closest && e.target.closest('.hist-item-del')) return;
+  const url = el && el.dataset ? el.dataset.navUrl : '';
+  if (url) navigateToUrl(url);
+}
+
+function deleteHistoryItem(e, id) {
+  if (e) { e.stopPropagation(); e.preventDefault(); }
+  historyItems = historyItems.filter(h => h.id !== id);
+  renderHistory();
+  send('DeleteHistoryEntry', {id});
+}
+
+function clearHistoryDay(start, end) {
+  historyItems = historyItems.filter(h => !(h.visited_at >= start && h.visited_at < end));
+  renderHistory();
+  send('DeleteHistoryDay', {start, end});
+}
+
 function renderHistory() {
   const list = document.getElementById('history-list');
   if (!list) return;
-  const hist = state.history || [];
+  const hist = historyShownItems();
+  syncHistoryTools(hist);
   if (!hist.length) {
-    list.innerHTML = '<div style="color:var(--text-muted);font-size:12px;text-align:center;padding:24px 0">No history yet.</div>';
+    if (historyObserver) { historyObserver.disconnect(); historyObserver = null; }
+    if (historyLoading) list.innerHTML = '<div class="hist-empty-state">Loading...</div>';
+    else if (historyQuery) list.innerHTML = '<div class="hist-empty-state">No history matches "' + escHtml(historyQuery) + '".</div>';
+    else if (historyFilter !== 'all') list.innerHTML = '<div class="hist-empty-state">No history in this range.</div>';
+    else list.innerHTML = '<div class="hist-empty-state">No history yet.</div>';
     return;
   }
-  list.innerHTML = hist.map(h => `
-    <div class="hist-item" draggable="true" data-nav-url="${escAttr(h.url)}">
+  let html = '';
+  let lastDay = null;
+  for (const h of hist) {
+    const label = historyDayLabel(h.visited_at);
+    if (label !== lastDay) {
+      lastDay = label;
+      const b = historyDayBounds(h.visited_at);
+      html += `<div class="hist-day-header"><span>${escHtml(label)}</span><button class="hist-day-clear" onclick="clearHistoryDay(${b.start},${b.end})">Remove</button></div>`;
+    }
+    const dom = siteDomain(h.url);
+    const letter = escHtml(String(dom || h.title || '?').replace(/^www\./, '').charAt(0) || '?');
+    const favImg = h.favicon ? `<img src="${escAttr(h.favicon)}" onerror="this.remove()" alt="">` : '';
+    html += `<div class="hist-item" draggable="true" data-nav-url="${escAttr(h.url)}" onclick="historyRowClick(this,event)">
+      <span class="hist-fav">${letter}${favImg}</span>
       <div class="hist-item-info">
         <div class="hist-item-title">${escHtml(h.title || friendlySiteName(h.url, h.title))}</div>
-        <div class="hist-item-url">${escHtml(siteDomain(h.url))}</div>
+        <div class="hist-item-url">${escHtml(dom)}</div>
       </div>
       <span class="hist-item-time">${formatRelativeTime(h.visited_at)}</span>
-      <button class="hist-item-del" title="Delete" data-delete-history-id="${escAttr(String(h.id))}">
+      <button class="hist-item-del" title="Remove from history" onclick="deleteHistoryItem(event,${h.id})">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
       </button>
-    </div>`).join('');
+    </div>`;
+  }
+  if (historyHasMore) html += '<div id="history-sentinel"></div>';
+  list.innerHTML = html;
+  observeHistorySentinel();
 }
 
 function renderDownloads() {
@@ -11152,7 +11651,8 @@ function renderDownloads() {
     } else {
       subHtml = `<span class="dl-pi-state active">Downloading</span>${metaText ? `<span class="dl-pi-sep"></span><span class="dl-pi-meta">${escHtml(metaText)}</span>` : ''}`;
     }
-    return `<div class="dl-panel-item"${isLive ? '' : ` data-nav-url="${escAttr(d.url)}"`}>
+    const filePath = isDone && d.local_path ? ` data-dl-file-path="${escAttr(d.local_path)}"` : '';
+    return `<div class="dl-panel-item"${filePath}>
       <div class="dl-pi-icon-wrap ${ftClass}">${iconContent}</div>
       <div class="dl-pi-body">
         <div class="dl-pi-name">${escHtml(d.filename)}</div>
@@ -11487,7 +11987,8 @@ function renderDownloadPanel() {
     } else {
       subHtml = `<span class="dl-pi-state active">Downloading</span>${metaText ? `<span class="dl-pi-sep"></span><span class="dl-pi-meta">${escHtml(metaText)}</span>` : ''}`;
     }
-    return `<div class="dl-panel-item">
+    const filePath = isDone && d.local_path ? ` data-dl-file-path="${escAttr(d.local_path)}"` : '';
+    return `<div class="dl-panel-item"${filePath}>
       <div class="dl-pi-icon-wrap ${ftClass}">${iconContent}</div>
       <div class="dl-pi-body">
         <div class="dl-pi-name">${escHtml(d.filename)}</div>
@@ -12149,11 +12650,83 @@ function _bmDrop(e) {
 }
 
 function clearHistory() {
+  const hasLoaded = (historyItems || []).length > 0;
+  if (!hasLoaded && !historyHasMore && !historyQuery) {
+    toast('No history to clear');
+    return;
+  }
+  const modal = document.getElementById('history-clear-confirm');
+  if (modal) modal.classList.add('open');
+}
+
+function closeHistoryClearConfirm() {
+  const modal = document.getElementById('history-clear-confirm');
+  if (modal) modal.classList.remove('open');
+}
+
+function handleHistoryConfirmClick(e) {
+  if (e && e.target && e.target.id === 'history-clear-confirm') closeHistoryClearConfirm();
+}
+
+function confirmClearHistory() {
+  closeHistoryClearConfirm();
+  historyItems = [];
+  historyOffset = 0;
+  historyQuery = '';
+  historyFilter = 'all';
+  historyHasMore = false;
+  historyLoading = false;
+  const search = document.getElementById('history-search');
+  if (search) search.value = '';
+  renderHistory();
   send('HistoryClear');
+  toast('History cleared');
 }
 
 function searchHistory(q) {
-  send('GetHistory', {q});
+  historyQuery = (q || '').trim();
+  if (historySearchTimer) clearTimeout(historySearchTimer);
+  syncHistoryTools(historyShownItems());
+  historySearchTimer = setTimeout(() => loadHistoryPage(true), 180);
+}
+
+function clearHistorySearch() {
+  const input = document.getElementById('history-search');
+  if (input) input.value = '';
+  searchHistory('');
+}
+
+function historyVisibleUrls() {
+  const seen = new Set();
+  const urls = [];
+  historyShownItems().forEach(h => {
+    const url = h && h.url ? h.url : '';
+    if (!url || seen.has(url)) return;
+    seen.add(url);
+    urls.push(url);
+  });
+  return urls;
+}
+
+function copyHistoryLinks() {
+  const urls = historyVisibleUrls();
+  if (!urls.length) {
+    toast('No visible links to copy');
+    return;
+  }
+  copyToClipboard(urls.join('\n'));
+  toast(`Copied ${urls.length} link${urls.length === 1 ? '' : 's'}`);
+}
+
+function openHistoryShown() {
+  const urls = historyVisibleUrls();
+  if (!urls.length) {
+    toast('No visible pages to open');
+    return;
+  }
+  const batch = urls.slice(0, 10);
+  batch.forEach(url => send('OpenInNewTab', {url}));
+  toast(urls.length > batch.length ? `Opened first ${batch.length} pages` : `Opened ${batch.length} page${batch.length === 1 ? '' : 's'}`);
 }
 
 function formatRelativeTime(ms) {
@@ -12276,6 +12849,13 @@ function handleDelegatedListClick(e) {
     e.preventDefault();
     e.stopPropagation();
     send('DeleteDownload', {id: dlDelete.dataset.delDlId});
+    return;
+  }
+  const dlFile = e.target.closest('[data-dl-file-path]');
+  if (dlFile) {
+    e.preventDefault();
+    e.stopPropagation();
+    send('OpenFile', {path: dlFile.dataset.dlFilePath});
     return;
   }
   const removeBookmark = e.target.closest('[data-remove-bookmark-url]');
@@ -12855,6 +13435,7 @@ document.addEventListener('keydown', e => {
     else if (spotlightOpen) closeSpotlight();
     else if (findOpen) closeFindBar(true);
     else if (document.getElementById('workspace-delete-modal').classList.contains('open')) closeWorkspaceDeleteModal();
+    else if (document.getElementById('history-clear-confirm').classList.contains('open')) closeHistoryClearConfirm();
     else if (document.getElementById('workspace-modal').classList.contains('open')) closeWorkspaceModal();
     else if (document.getElementById('ws-switcher-modal').classList.contains('open')) closeWsSwitcher();
     else if (document.getElementById('app').classList.contains('content-fullscreen')) { send('ToggleFullscreen'); }

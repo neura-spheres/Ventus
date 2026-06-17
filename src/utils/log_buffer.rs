@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Mutex, OnceLock};
 use tracing::field::{Field, Visit};
 use tracing::{Event, Level, Subscriber};
@@ -19,7 +19,13 @@ pub struct LogEntry {
 }
 
 static BUFFER: OnceLock<Mutex<VecDeque<LogEntry>>> = OnceLock::new();
-static ERROR_PENDING: AtomicBool = AtomicBool::new(false);
+static AUTO_PENDING: AtomicU8 = AtomicU8::new(0);
+
+#[derive(Clone, Copy)]
+pub enum AutoLogKind {
+    Error,
+    Warning,
+}
 
 fn buffer() -> &'static Mutex<VecDeque<LogEntry>> {
     BUFFER.get_or_init(|| Mutex::new(VecDeque::with_capacity(CAP)))
@@ -31,8 +37,12 @@ pub fn snapshot(max: usize) -> Vec<LogEntry> {
     buf.iter().skip(start).cloned().collect()
 }
 
-pub fn take_error_pending() -> bool {
-    ERROR_PENDING.swap(false, Ordering::Relaxed)
+pub fn take_auto_pending() -> Option<AutoLogKind> {
+    match AUTO_PENDING.swap(0, Ordering::Relaxed) {
+        1 => Some(AutoLogKind::Error),
+        2 => Some(AutoLogKind::Warning),
+        _ => None,
+    }
 }
 
 struct MsgVisitor {
@@ -74,7 +84,9 @@ impl<S: Subscriber> Layer<S> for BufferLayer {
         trim(&mut message, MAX_MSG);
         let level = *meta.level();
         if level == Level::ERROR {
-            ERROR_PENDING.store(true, Ordering::Relaxed);
+            AUTO_PENDING.store(1, Ordering::Relaxed);
+        } else if level == Level::WARN && dangerous_warning(meta.target(), &message) {
+            let _ = AUTO_PENDING.compare_exchange(0, 2, Ordering::Relaxed, Ordering::Relaxed);
         }
         let entry = LogEntry {
             ts: chrono::Utc::now().timestamp_millis(),
@@ -99,4 +111,23 @@ fn trim(text: &mut String, max: usize) {
         n -= 1;
     }
     text.truncate(n);
+}
+
+fn dangerous_warning(target: &str, message: &str) -> bool {
+    if target == "ventus::autolog" {
+        return true;
+    }
+    let text = message.to_ascii_lowercase();
+    if target == "ventus::content" && text.contains("content process failed") {
+        return true;
+    }
+    if target == "ventus::shutdown" && text.contains("profile still busy") {
+        return true;
+    }
+    if target == "ventus::session"
+        && (text.contains("stays black") || text.contains("last session may not restore"))
+    {
+        return true;
+    }
+    target == "ventus::startup" && text.contains("first content webview build failed")
 }
