@@ -5789,8 +5789,12 @@ function applyNewtabSettings() {
   initWallpaper(nt);
 }
 
-function shortcutIconUrl(domain) {
-  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`;
+function shortcutIconUrl(target) {
+  const value = String(target || '').trim();
+  if (!value) return '';
+  const isUrl = /^https?:\/\//i.test(value);
+  const param = isUrl ? 'domain_url' : 'domain';
+  return `https://www.google.com/s2/favicons?${param}=${encodeURIComponent(value)}&sz=64`;
 }
 
 function shortcutDomain(url) {
@@ -7281,10 +7285,12 @@ function bookmarkLabel(url, title) {
   if (t && !looksLikeUrl(t) && !genericSiteSuffix(t)) return t;
   return siteLabel(url);
 }
-function bookmarkIconUrl(url) {
-  const domain = siteDomain(url);
-  if (!domain || domain.startsWith('neura://')) return '';
-  return shortcutIconUrl(domain);
+function bookmarkIconUrl(url, favicon) {
+  const saved = String(favicon || '').trim();
+  if (/^https?:\/\//i.test(saved)) return saved;
+  const target = String(url || '').trim();
+  if (!target || target.startsWith('neura://')) return '';
+  return shortcutIconUrl(target);
 }
 function siteInitial(text) {
   const t = cleanSiteText(text);
@@ -11622,7 +11628,7 @@ function renderBookmarksBar() {
   const bmChip = b => {
     const title = bookmarkLabel(b.url, b.title);
     const tip = [b.title, b.url].filter(Boolean).join(' - ');
-    const icon = bookmarkIconUrl(b.url);
+    const icon = bookmarkIconUrl(b.url, b.favicon);
     const img = icon ? `<img class="bm-bar-icon" src="${escAttr(icon)}" alt="" onerror="this.style.display='none';this.nextElementSibling.classList.remove('hidden')">` : '';
     const fallback = `<span class="bm-bar-fallback ${icon ? 'hidden' : ''}">${escHtml(siteInitial(title))}</span>`;
     const text = b.icon_only ? '' : `<span class="bm-bar-text">${escHtml(title.length > 24 ? title.slice(0,22)+'...' : title)}</span>`;
@@ -12013,7 +12019,7 @@ function renderFolderModalBody(folderId) {
     return;
   }
   body.innerHTML = bms.map(b => {
-    const icon = bookmarkIconUrl(b.url);
+    const icon = bookmarkIconUrl(b.url, b.favicon);
     const img = icon ? `<img style="width:14px;height:14px;border-radius:3px;flex-shrink:0" src="${escAttr(icon)}" alt="" onerror="this.style.display='none'">` : '';
     return `<div class="fm-item" draggable="true" data-reorder-id="${escAttr(b.id)}" data-folder-source="${escAttr(folderId)}" data-nav-url="${escAttr(b.url)}" onclick="closeFolderModal();navigateToUrl('${escAttr(b.url)}')" oncontextmenu="bmItemContextMenu(event,this)">
       ${img}

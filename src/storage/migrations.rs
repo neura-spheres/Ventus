@@ -9,6 +9,7 @@ pub fn run(conn: &Connection) -> Result<()> {
     );
     let _ = conn
         .execute_batch("ALTER TABLE bookmarks ADD COLUMN icon_only INTEGER NOT NULL DEFAULT 0;");
+    let _ = conn.execute_batch("ALTER TABLE bookmarks ADD COLUMN favicon TEXT;");
     Ok(())
 }
 
@@ -49,6 +50,7 @@ CREATE TABLE IF NOT EXISTS bookmarks (
     position INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL,
     icon_only INTEGER NOT NULL DEFAULT 0,
+    favicon TEXT,
     FOREIGN KEY (folder_id) REFERENCES bookmark_folders(id) ON DELETE SET NULL
 );
 

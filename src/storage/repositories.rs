@@ -370,6 +370,8 @@ pub struct Bookmark {
     pub id: String,
     pub url: String,
     pub title: String,
+    #[serde(default)]
+    pub favicon: Option<String>,
     pub folder_id: Option<String>,
     pub position: i32,
     pub created_at: i64,
@@ -380,10 +382,12 @@ pub fn add_bookmark(
     conn: &Connection,
     url: &str,
     title: &str,
+    favicon: Option<&str>,
     folder_id: Option<&str>,
 ) -> Result<Bookmark> {
     let id = Uuid::new_v4().to_string();
     let now = chrono::Utc::now().timestamp_millis();
+    let favicon = favicon.filter(|url| safe_url(url));
     // New bookmarks go to the top of the list (smallest position).
     let position: i32 = conn
         .query_row(
@@ -393,18 +397,34 @@ pub fn add_bookmark(
         )
         .unwrap_or(0);
     conn.execute(
-        "INSERT INTO bookmarks(id, url, title, folder_id, position, created_at) VALUES(?1,?2,?3,?4,?5,?6)",
-        params![id, url, title, folder_id, position, now],
+        "INSERT INTO bookmarks(id, url, title, favicon, folder_id, position, created_at) VALUES(?1,?2,?3,?4,?5,?6,?7)",
+        params![id, url, title, favicon, folder_id, position, now],
     )?;
     Ok(Bookmark {
         id,
         url: url.to_string(),
         title: title.to_string(),
+        favicon: favicon.map(String::from),
         folder_id: folder_id.map(String::from),
         position,
         created_at: now,
         icon_only: false,
     })
+}
+
+pub fn set_bookmark_favicon_for_url(
+    conn: &Connection,
+    url: &str,
+    favicon: Option<&str>,
+) -> Result<()> {
+    let Some(favicon) = favicon.filter(|url| safe_url(url)) else {
+        return Ok(());
+    };
+    conn.execute(
+        "UPDATE bookmarks SET favicon = ?1 WHERE url = ?2",
+        params![favicon, url],
+    )?;
+    Ok(())
 }
 
 pub fn rename_bookmark(conn: &Connection, id: &str, title: &str) -> Result<()> {
@@ -460,17 +480,18 @@ pub fn is_bookmarked(conn: &Connection, url: &str) -> Result<bool> {
 
 pub fn list_bookmarks(conn: &Connection) -> Result<Vec<Bookmark>> {
     let mut stmt = conn.prepare(
-        "SELECT id, url, title, folder_id, position, created_at, icon_only FROM bookmarks ORDER BY position ASC, created_at DESC",
+        "SELECT id, url, title, favicon, folder_id, position, created_at, icon_only FROM bookmarks ORDER BY position ASC, created_at DESC",
     )?;
     let rows = stmt.query_map([], |row| {
         Ok(Bookmark {
             id: row.get(0)?,
             url: row.get(1)?,
             title: row.get(2)?,
-            folder_id: row.get(3)?,
-            position: row.get(4)?,
-            created_at: row.get(5)?,
-            icon_only: row.get(6)?,
+            favicon: row.get(3)?,
+            folder_id: row.get(4)?,
+            position: row.get(5)?,
+            created_at: row.get(6)?,
+            icon_only: row.get(7)?,
         })
     })?;
     Ok(rows.collect::<rusqlite::Result<_>>()?)
@@ -479,17 +500,18 @@ pub fn list_bookmarks(conn: &Connection) -> Result<Vec<Bookmark>> {
 pub fn search_bookmarks(conn: &Connection, q: &str) -> Result<Vec<Bookmark>> {
     let pattern = format!("%{}%", q);
     let mut stmt = conn.prepare(
-        "SELECT id, url, title, folder_id, position, created_at, icon_only FROM bookmarks WHERE title LIKE ?1 OR url LIKE ?1 ORDER BY position ASC, created_at DESC LIMIT 50"
+        "SELECT id, url, title, favicon, folder_id, position, created_at, icon_only FROM bookmarks WHERE title LIKE ?1 OR url LIKE ?1 ORDER BY position ASC, created_at DESC LIMIT 50"
     )?;
     let rows = stmt.query_map([&pattern], |row| {
         Ok(Bookmark {
             id: row.get(0)?,
             url: row.get(1)?,
             title: row.get(2)?,
-            folder_id: row.get(3)?,
-            position: row.get(4)?,
-            created_at: row.get(5)?,
-            icon_only: row.get(6)?,
+            favicon: row.get(3)?,
+            folder_id: row.get(4)?,
+            position: row.get(5)?,
+            created_at: row.get(6)?,
+            icon_only: row.get(7)?,
         })
     })?;
     Ok(rows.collect::<rusqlite::Result<_>>()?)
@@ -1007,5 +1029,37 @@ mod tests {
         assert_eq!(saved.tabs[0].id, normal_tab.id);
         assert_eq!(saved.active_workspace_id, normal_ws.id);
         assert_eq!(saved.active_tab_id, Some(normal_tab.id));
+    }
+
+    #[test]
+    fn bookmark_stores_and_updates_favicon() {
+        let conn = database::in_memory().unwrap();
+        migrations::run(&conn).unwrap();
+
+        add_bookmark(
+            &conn,
+            "https://mail.google.com/mail/u/0/",
+            "Gmail",
+            Some("https://ssl.gstatic.com/ui/v1/icons/mail/rfr/gmail.ico"),
+            None,
+        )
+        .unwrap();
+        let saved = list_bookmarks(&conn).unwrap();
+        assert_eq!(
+            saved[0].favicon.as_deref(),
+            Some("https://ssl.gstatic.com/ui/v1/icons/mail/rfr/gmail.ico")
+        );
+
+        set_bookmark_favicon_for_url(
+            &conn,
+            "https://mail.google.com/mail/u/0/",
+            Some("https://www.gstatic.com/images/branding/product/1x/gmail_2020q4_32dp.png"),
+        )
+        .unwrap();
+        let updated = list_bookmarks(&conn).unwrap();
+        assert_eq!(
+            updated[0].favicon.as_deref(),
+            Some("https://www.gstatic.com/images/branding/product/1x/gmail_2020q4_32dp.png")
+        );
     }
 }

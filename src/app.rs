@@ -675,7 +675,14 @@ pub fn handle_chrome_command(
             if let Some(tab) = state.tab_manager.active_tab() {
                 let url = tab.url.clone();
                 let title = tab.title.clone();
-                match repositories::add_bookmark(&state.conn, &url, &title, None) {
+                let favicon = favicon_for_url(&url, tab.favicon.clone());
+                match repositories::add_bookmark(
+                    &state.conn,
+                    &url,
+                    &title,
+                    favicon.as_deref(),
+                    None,
+                ) {
                     Ok(_) => {
                         state.cached_bookmarks =
                             repositories::list_bookmarks(&state.conn).unwrap_or_default();
@@ -708,7 +715,13 @@ pub fn handle_chrome_command(
             } else {
                 title
             };
-            match repositories::add_bookmark(&state.conn, &url, &title, None) {
+            let favicon = state
+                .tab_manager
+                .active_tab()
+                .filter(|tab| tab.url == url)
+                .and_then(|tab| favicon_for_url(&url, tab.favicon.clone()))
+                .or_else(|| favicon_for_url(&url, None));
+            match repositories::add_bookmark(&state.conn, &url, &title, favicon.as_deref(), None) {
                 Ok(_) => {
                     state.cached_bookmarks =
                         repositories::list_bookmarks(&state.conn).unwrap_or_default();
@@ -2997,7 +3010,18 @@ pub fn handle_app_event_inner(
             }
             let icon = favicon_for_url(&clean_url, favicon);
             if let Some(tab) = state.tab_manager.tabs.iter_mut().find(|t| t.id == tab_id) {
-                tab.favicon = icon;
+                tab.favicon = icon.clone();
+            }
+            if icon.is_some()
+                && repositories::is_bookmarked(&state.conn, &clean_url).unwrap_or(false)
+            {
+                let _ = repositories::set_bookmark_favicon_for_url(
+                    &state.conn,
+                    &clean_url,
+                    icon.as_deref(),
+                );
+                state.cached_bookmarks =
+                    repositories::list_bookmarks(&state.conn).unwrap_or_default();
             }
             if was_loading {
                 state.tab_manager.set_tab_loading(&tab_id, true);
@@ -3616,12 +3640,16 @@ fn merge_cloud_bookmarks(state: &AppState, blob: &str) {
                 .as_str()
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+            let favicon = b["favicon"]
+                .as_str()
+                .filter(|url| url.starts_with("http://") || url.starts_with("https://"));
             let _ = tx.execute(
-                "INSERT OR IGNORE INTO bookmarks(id, url, title, folder_id, position, created_at, icon_only) VALUES(?1,?2,?3,?4,?5,?6,?7)",
+                "INSERT OR IGNORE INTO bookmarks(id, url, title, favicon, folder_id, position, created_at, icon_only) VALUES(?1,?2,?3,?4,?5,?6,?7,?8)",
                 rusqlite::params![
                     id,
                     url,
                     b["title"].as_str().unwrap_or(url),
+                    favicon,
                     b["folder_id"].as_str(),
                     b["position"].as_i64().unwrap_or(0),
                     b["created_at"].as_i64().unwrap_or_else(|| chrono::Utc::now().timestamp_millis()),
