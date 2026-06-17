@@ -9457,6 +9457,14 @@ fn handle_ai_quick_action(
         other => other,
     };
     let task_label = task_label.to_string();
+    let history_user_text = match action.as_str() {
+        "summarize" => "Summarize page",
+        "explain" => "Explain this topic",
+        "key_points" => "Extract key points",
+        "ask_anything" => "What can you help with on this page?",
+        other => other,
+    }
+    .to_string();
 
     let pending = state.ai_pending_tools.clone();
     let proxy_task = proxy.clone();
@@ -9609,14 +9617,19 @@ fn handle_ai_quick_action(
                                 });
                                 return;
                             }
-                            let chars = resp.content.chars().count();
+                            let assistant_text = resp.content;
+                            let chars = assistant_text.chars().count();
                             let _ = proxy_task.send_event(AppEvent::AiChunk {
-                                text: resp.content,
+                                text: assistant_text.clone(),
                                 done: false,
                             });
                             let _ = proxy_task.send_event(AppEvent::AiChunk {
                                 text: String::new(),
                                 done: true,
+                            });
+                            let _ = proxy_task.send_event(AppEvent::AiSaveMessages {
+                                user_text: history_user_text.clone(),
+                                assistant_text,
                             });
                             tracing::info!(
                                 target: "ventus::ai",
@@ -9651,10 +9664,15 @@ fn handle_ai_quick_action(
                     text: String::new(),
                     done: true,
                 });
+                let chars = accumulated.chars().count();
+                let _ = proxy_task.send_event(AppEvent::AiSaveMessages {
+                    user_text: history_user_text.clone(),
+                    assistant_text: accumulated,
+                });
                 tracing::info!(
                     target: "ventus::ai",
                     kind = "quick_action",
-                    chars = accumulated.chars().count(),
+                    chars,
                     elapsed_ms = started.elapsed().as_millis() as u64,
                     "ai request finished"
                 );
@@ -9682,14 +9700,19 @@ fn handle_ai_quick_action(
                             });
                             return;
                         }
-                        let chars = resp.content.chars().count();
+                        let assistant_text = resp.content;
+                        let chars = assistant_text.chars().count();
                         let _ = proxy_task.send_event(AppEvent::AiChunk {
-                            text: resp.content,
+                            text: assistant_text.clone(),
                             done: false,
                         });
                         let _ = proxy_task.send_event(AppEvent::AiChunk {
                             text: String::new(),
                             done: true,
+                        });
+                        let _ = proxy_task.send_event(AppEvent::AiSaveMessages {
+                            user_text: history_user_text.clone(),
+                            assistant_text,
                         });
                         tracing::info!(
                             target: "ventus::ai",
