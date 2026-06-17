@@ -208,9 +208,17 @@ impl TabManager {
         }
     }
 
+    pub fn discard_tab(&mut self, id: &str) {
+        if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == id) {
+            tab.sleeping = true;
+            tab.discarded = true;
+        }
+    }
+
     pub fn wake_tab(&mut self, id: &str) {
         if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == id) {
             tab.sleeping = false;
+            tab.discarded = false;
             tab.last_active_at = chrono::Utc::now().timestamp_millis();
         }
     }

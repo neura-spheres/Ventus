@@ -27,6 +27,8 @@ pub struct Report {
     pub session_id: String,
     pub panic: String,
     pub context: String,
+    /// JSON string of static host info (CPU, GPU, RAM, OS build, screen) from `utils::sysinfo`.
+    pub system: String,
     pub logs: Vec<LogEntry>,
 }
 
@@ -38,6 +40,10 @@ pub struct CrashRecord {
     pub arch: String,
     pub ts: i64,
     pub panic: String,
+    /// Captured at crash-write time; persisted with the record so the next-launch upload still
+    /// carries the host info even though `AppState` is gone by then.
+    #[serde(default)]
+    pub system: String,
     pub logs: Vec<LogEntry>,
 }
 
@@ -110,6 +116,7 @@ pub async fn send(report: Report) -> Result<()> {
         "sessionId": s(&report.session_id),
         "panic": s(&report.panic),
         "context": s(&context),
+        "system": s(&report.system),
         "createdAt": { "timestampValue": chrono::Utc::now().to_rfc3339() },
         "logs": logs_value(&report.logs),
     }});
@@ -142,6 +149,7 @@ pub async fn send_crash(record: CrashRecord, uid: String, email: String, device_
             "crash_ts": record.ts,
         })
         .to_string(),
+        system: record.system,
         logs: record.logs,
     };
     let _ = send(report).await;

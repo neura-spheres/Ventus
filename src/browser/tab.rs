@@ -41,6 +41,7 @@ pub struct Tab {
     pub is_media_active: bool,
     pub is_muted: bool,
     pub sleeping: bool,
+    pub discarded: bool,
 }
 
 impl Tab {
@@ -74,6 +75,7 @@ impl Tab {
             is_media_active: false,
             is_muted: false,
             sleeping: false,
+            discarded: false,
         }
     }
 

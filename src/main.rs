@@ -93,6 +93,68 @@ const CONTENT_BG: (u8, u8, u8, u8) = (255, 255, 255, 255);
 const APP_ID: &str = "NeuraSpheres.Ventus";
 const COOKIE_SAVE_EVERY: Duration = Duration::from_secs(5 * 60);
 const ERROR_REPORT_COOLDOWN: Duration = Duration::from_secs(5 * 60);
+const FREEZE_REPORT_COOLDOWN: Duration = Duration::from_secs(2 * 60);
+const RENDERER_REPORT_COOLDOWN: Duration = Duration::from_secs(60);
+// Main-thread handler duration thresholds. Anything past WARN is janky and worth a log line;
+// anything past FREEZE was a real "Not Responding" stall and is escalated to an auto report.
+const MAIN_SLOW_WARN_MS: u128 = 350;
+const MAIN_FREEZE_MS: u128 = 3000;
+
+static WORST_FREEZE: std::sync::Mutex<Option<(u64, &'static str)>> = std::sync::Mutex::new(None);
+
+struct MainEventTimer {
+    start: Instant,
+    label: &'static str,
+}
+
+impl Drop for MainEventTimer {
+    fn drop(&mut self) {
+        let ms = self.start.elapsed().as_millis();
+        if ms < MAIN_SLOW_WARN_MS {
+            return;
+        }
+        tracing::warn!(
+            target: "ventus::perf",
+            event = self.label,
+            ms = ms as u64,
+            "main-thread handler slow — UI was unresponsive this long"
+        );
+        if ms >= MAIN_FREEZE_MS {
+            if let Ok(mut g) = WORST_FREEZE.lock() {
+                let replace = g.map(|(prev, _)| ms as u64 > prev).unwrap_or(true);
+                if replace {
+                    *g = Some((ms as u64, self.label));
+                }
+            }
+        }
+    }
+}
+
+fn event_label(ev: &Event<AppEvent>) -> &'static str {
+    use tao::event::WindowEvent as W;
+    match ev {
+        Event::NewEvents(_) => "new_events",
+        Event::MainEventsCleared => "main_cleared",
+        Event::RedrawRequested(_) => "redraw",
+        Event::RedrawEventsCleared => "redraw_cleared",
+        Event::LoopDestroyed => "loop_destroyed",
+        Event::UserEvent(AppEvent::Chrome(cmd)) => cmd.report_name().unwrap_or("chrome_cmd"),
+        Event::UserEvent(_) => "user_event",
+        Event::WindowEvent { event, .. } => match event {
+            W::CloseRequested => "win:close",
+            W::Resized(_) => "win:resized",
+            W::Moved(_) => "win:moved",
+            W::Focused(_) => "win:focused",
+            W::CursorMoved { .. } => "win:cursor",
+            W::MouseInput { .. } => "win:mouse",
+            W::MouseWheel { .. } => "win:wheel",
+            W::KeyboardInput { .. } => "win:key",
+            W::ScaleFactorChanged { .. } => "win:scale",
+            _ => "win:other",
+        },
+        _ => "other",
+    }
+}
 
 fn install_panic_hook(crash_path: std::path::PathBuf, session_id: String) {
     let prev = std::panic::take_hook();
@@ -105,6 +167,8 @@ fn install_panic_hook(crash_path: std::path::PathBuf, session_id: String) {
             arch: std::env::consts::ARCH.to_string(),
             ts: chrono::Utc::now().timestamp_millis(),
             panic,
+            // Reads the cache warmed at startup — no Win32 calls during unwinding.
+            system: utils::sysinfo::summary_json(),
             logs: utils::log_buffer::snapshot(cloud::report::MAX_LOGS),
         };
         cloud::report::write_crash(&crash_path, &record);
@@ -114,9 +178,26 @@ fn install_panic_hook(crash_path: std::path::PathBuf, session_id: String) {
 
 fn main() {
     set_app_id();
-    notify::register_aumid();
     utils::logging::init();
-    tracing::info!("Ventus starting");
+    // Warm the host-info cache once, up front: it must already be populated before the panic
+    // hook (which reads it) can fire, and doing it here keeps every later report/crash read
+    // free of any Win32 work. Also gives every log file a clear hardware banner at the top.
+    let sys = utils::sysinfo::get();
+    tracing::info!(
+        target: "ventus::startup",
+        version = version::APP_VERSION,
+        os = %sys.os,
+        os_build = %sys.os_build,
+        os_display = %sys.os_display,
+        cpu = %sys.cpu,
+        cpu_cores = sys.cpu_cores,
+        ram_total_mb = sys.ram_total_mb,
+        gpu = %sys.gpu,
+        arch = %sys.arch,
+        screen = %sys.screen,
+        monitors = sys.monitors,
+        "Ventus starting — host info"
+    );
 
     let mut cli_url: Option<String> = None;
     let mut new_window = false;
@@ -145,6 +226,7 @@ fn main() {
     wait_for_relaunch_parent(wait_for_pid);
     let data_dir = utils::platform::data_dir();
     std::fs::create_dir_all(&data_dir).expect("create data dir");
+    notify::register_aumid(&data_dir);
     let _instance = claim_instance(new_window, cli_url.as_deref(), &data_dir);
 
     let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
@@ -665,6 +747,14 @@ fn main() {
     let mut sleep_check_at = Instant::now() + TAB_SLEEP_CHECK_EVERY;
     let mut heal_content_at = Instant::now() + HEAL_CONTENT_EVERY;
     let mut error_report_at = Instant::now();
+    let mut freeze_report_at = Instant::now();
+    let mut renderer_report_at = Instant::now();
+    // Pending wake-build (tab_id, url): a switched-to tab with no WebView yet. The actual build
+    // is deferred to MainEventsCleared so a burst of switches coalesces to just the final tab.
+    let mut pending_wake_build: Option<(String, String)> = None;
+    // Secondary windows and same-session relaunches (--restore-session) aren't "real" launches;
+    // don't emit a heartbeat for them.
+    let mut launch_reported = new_window || restore_session;
     let mut save_id = 0u64;
     let mut sync_id = 0u64;
     let mut sync_dirty = (false, false, false);
@@ -830,6 +920,12 @@ fn main() {
     event_loop.run(move |event, elwt, control_flow| {
         *control_flow = ControlFlow::Wait;
         let _ = &elwt;
+        // Drop-guard times this whole turn and logs/escalates only if it ran long. Created
+        // before the match so it covers every arm, including the early-return ones.
+        let _evt_timer = MainEventTimer {
+            start: Instant::now(),
+            label: event_label(&event),
+        };
 
         match event {
             Event::UserEvent(AppEvent::ChromeReady) => {
@@ -1355,6 +1451,28 @@ fn main() {
                     .unwrap_or_default();
                 if url.is_empty() || url.starts_with("neura://") {
                     return;
+                }
+                // Auto-report renderer crashes (cooldown-gated so a crash loop can't spam). A
+                // fatal exit vs. an unresponsive renderer are reported as distinct kinds.
+                if state.settings.privacy.auto_crash_report
+                    && cloud::config::is_configured()
+                    && Instant::now() >= renderer_report_at
+                {
+                    renderer_report_at = Instant::now() + RENDERER_REPORT_COOLDOWN;
+                    let kind = if fatal {
+                        "renderer_crash"
+                    } else {
+                        "renderer_unresponsive"
+                    };
+                    let msg = format!(
+                        "content process failed (fatal={}) on {}",
+                        fatal,
+                        crate::utils::url::log_url(&url)
+                    );
+                    let report = app::build_report(&state, kind, msg, String::new());
+                    rt.spawn(async move {
+                        let _ = cloud::report::send(report).await;
+                    });
                 }
                 if !fatal {
                     if let Some(wv) = content_views.get(&tab_id) {
@@ -2504,85 +2622,17 @@ state.settings.privacy.default_permissions.clone(),
                                     );
                                 }
                             } else {
-                                let is_incog = state.tab_manager.tab_is_incognito(&tab_id);
-                                let ctx = if is_incog {
-                                    incognito_web_context.as_mut().unwrap()
-                                } else {
-                                    content_web_context.as_mut().unwrap()
-                                };
-                                let ad_script = state.ad_block_engine.init_script().to_string();
-                                match build_content_webview(
-                                    &window,
-                                    &tab_id,
-                                    &url,
-                                    layout.content,
-                                    proxy_main.clone(),
-                                    ctx,
-                                    is_incog,
-                                    std::sync::Arc::clone(&shared_dl_dir),
-                                    tab_zoom(&state, &tab_id),
-                                    &browser_args,
-                                    ad_script,
-                                    state.settings.privacy.fingerprint_protection,
-                                    state.settings.privacy.strict_permissions,
-                                    state.settings.privacy.site_permissions.clone(),
-state.settings.privacy.default_permissions.clone(),
-                                    state.settings.privacy.https_only,
-                                    false,
-                                ) {
-                                    Ok(wv) => {
-                                        #[cfg(windows)]
-                                        let hwnd = webview_hwnd(&wv);
-                                        restore_startup_cookies(
-                                            &wv,
-                                            is_incog,
-                                            &startup_cookies,
-                                            &mut cookies_restored,
-                                        );
-                                        content_views.insert(tab_id.clone(), wv);
-                                        state.tab_manager.wake_tab(&tab_id);
-                                        begin_native_load(&mut state, &chrome, &tab_id);
-                                        state.push_state_to_chrome(&chrome);
-                                        state.load_recoveries.remove(&app::load_key(&tab_id, &url));
-                                        #[cfg(windows)]
-                                        track_content_hwnd(hwnd, &tab_id, &mut content_hwnds);
-                                        apply_layout(
-                                            &chrome,
-                                            chrome_hwnd,
-                                            &content_views,
-                                            &state,
-                                            &layout_config,
-                                            &window,
-                                        );
-                                        if let Some(wv) = content_views.get(&tab_id) {
-                                            let _ = wv.focus();
-                                        }
-                                        if let Some(wv) = content_views.get(&tab_id) {
-                                            let _ = wv.load_url(&url);
-                                        }
-                                        tracing::info!(
-                                            target: "ventus::session",
-                                            tab = %tab_id,
-                                            url = %url,
-                                            "[SESSION] woke sleeping/restored tab: content WebView built OK"
-                                        );
-                                        watch_load(
-                                            &rt,
-                                            &proxy_main,
-                                            &mut load_watches,
-                                            &mut load_watch_next,
-                                            tab_id.clone(),
-                                            url.clone(),
-                                        );
-                                    }
-                                    Err(e) => tracing::error!(
-                                        target: "ventus::session",
-                                        tab = %tab_id,
-                                        url = %url,
-                                        error = %e,
-                                        "[SESSION] woke sleeping/restored tab but content WebView build FAILED — tab stays black. 0x800700AA = profile still locked"
-                                    ),
-                                }
+                                // The tab has no WebView yet (restored/discarded). Building one is
+                                // a ~400 ms synchronous, UI-thread-bound WebView2 operation, so
+                                // doing it inline froze the UI on every such switch. Defer it:
+                                // record the request and show the loading cover now (cheap), then
+                                // let the coalescer in MainEventsCleared build only the tab that is
+                                // still active once the switch burst settles — clicking through
+                                // restored tabs no longer builds every tab you pass over.
+                                state.tab_manager.wake_tab(&tab_id);
+                                state.set_content_cover(&chrome, true);
+                                state.push_state_to_chrome(&chrome);
+                                pending_wake_build = Some((tab_id.clone(), url.clone()));
                             }
                         }
                         TabAction::RebuildContent { tab_id, url } => {
@@ -2988,6 +3038,37 @@ state.settings.privacy.default_permissions.clone(),
             }
 
             Event::MainEventsCleared => {
+                // Build at most one deferred wake-tab per drained event batch, and only if it is
+                // still the active tab. Rapid tab switching enqueues several requests; they all
+                // overwrite `pending_wake_build`, so here we pay the ~400 ms WebView2 build once,
+                // for the tab the user actually landed on, instead of once per tab skipped over.
+                if let Some((wake_id, wake_url)) = pending_wake_build.take() {
+                    let still_active =
+                        state.tab_manager.active_tab_id.as_deref() == Some(wake_id.as_str());
+                    if still_active && !content_views.contains_key(&wake_id) {
+                        build_woken_content_tab(
+                            &wake_id,
+                            &wake_url,
+                            &window,
+                            &chrome,
+                            chrome_hwnd,
+                            &layout_config,
+                            &proxy_main,
+                            &rt,
+                            &mut state,
+                            &mut content_views,
+                            &mut content_hwnds,
+                            &mut content_web_context,
+                            &mut incognito_web_context,
+                            &shared_dl_dir,
+                            &browser_args,
+                            &startup_cookies,
+                            &mut cookies_restored,
+                            &mut load_watches,
+                            &mut load_watch_next,
+                        );
+                    }
+                }
                 if clear_stale_cover(&mut state, &chrome) {
                     apply_layout(
                         &chrome,
@@ -3147,7 +3228,7 @@ state.settings.privacy.default_permissions.clone(),
                         content_hwnds.remove(&id);
                         suspended_tabs.remove(&id);
                         clear_load_watches(&mut load_watches, &id);
-                        state.tab_manager.sleep_tab(&id);
+                        state.tab_manager.discard_tab(&id);
                         tabs_changed = true;
                         tracing::debug!(
                             "tab_discard: unloaded tab {} (free_mb={}, max_live={}, threshold={}min)",
@@ -3189,6 +3270,44 @@ state.settings.privacy.default_permissions.clone(),
                             Err(e) => tracing::warn!(target: "ventus::report", error = %e, "automatic report upload failed"),
                         }
                     });
+                }
+                // One-time launch heartbeat: a lightweight record of every real cold start so
+                // versions, install counts and host hardware can be tracked over time.
+                if !launch_reported
+                    && state.settings.privacy.auto_crash_report
+                    && cloud::config::is_configured()
+                {
+                    launch_reported = true;
+                    let report =
+                        app::build_report(&state, "launch", "Session start".into(), String::new());
+                    rt.spawn(async move {
+                        match cloud::report::send(report).await {
+                            Ok(()) => tracing::info!(target: "ventus::report", "launch report uploaded"),
+                            Err(e) => {
+                                tracing::debug!(target: "ventus::report", error = %e, "launch report skipped")
+                            }
+                        }
+                    });
+                }
+                // A handler blocked the UI long enough to count as a real freeze: report it
+                // (cooldown-gated) with the offending event + duration. The ride-along logs make
+                // the cause identifiable after the fact.
+                if state.settings.privacy.auto_crash_report
+                    && cloud::config::is_configured()
+                    && Instant::now() >= freeze_report_at
+                {
+                    let frozen = WORST_FREEZE.lock().ok().and_then(|mut g| g.take());
+                    if let Some((ms, label)) = frozen {
+                        freeze_report_at = Instant::now() + FREEZE_REPORT_COOLDOWN;
+                        let msg = format!(
+                            "Main-thread freeze: '{}' blocked the UI for {} ms",
+                            label, ms
+                        );
+                        let report = app::build_report(&state, "freeze", msg, String::new());
+                        rt.spawn(async move {
+                            let _ = cloud::report::send(report).await;
+                        });
+                    }
                 }
             }
 
@@ -3663,9 +3782,6 @@ async fn run_cookie_save_task(
     tracing::debug!("cookie_store save task: channel closed, exiting");
 }
 
-/// Best-effort count of running msedgewebview2.exe processes. Used only for startup
-/// diagnostics: a high count after a restart means previous WebView2 browser processes
-/// did not exit and are holding the profile lock (the root cause of stuck black tabs).
 #[cfg(windows)]
 fn count_msedgewebview2_processes() -> usize {
     use std::os::windows::process::CommandExt;
@@ -3903,11 +4019,17 @@ fn shutdown_webview2(
     incognito_web_context: &mut Option<wry::WebContext>,
 ) {
     #[cfg(windows)]
+    let t0 = Instant::now();
+    #[cfg(windows)]
+    let view_count = content_views.len();
+    #[cfg(windows)]
     drain_message_queue_ms(300);
     content_views.clear();
     content_hwnds.clear();
     drop(content_web_context.take());
     drop(incognito_web_context.take());
+    #[cfg(windows)]
+    let wait_start = Instant::now();
     #[cfg(windows)]
     let free = if crash_sentinel.is_some() {
         drain_message_queue_ms(300);
@@ -3915,6 +4037,15 @@ fn shutdown_webview2(
     } else {
         true
     };
+    #[cfg(windows)]
+    tracing::info!(
+        target: "ventus::shutdown",
+        views = view_count,
+        profile_wait_ms = wait_start.elapsed().as_millis() as u64,
+        total_ms = t0.elapsed().as_millis() as u64,
+        profile_freed = free,
+        "shutdown_webview2 complete"
+    );
     #[cfg(not(windows))]
     let free = {
         let _ = profile_roots;
@@ -5853,9 +5984,115 @@ fn begin_native_load(state: &mut AppState, chrome: &WebView, tab_id: &str) {
     state.native_nav_ids.remove(tab_id);
     state.tab_manager.set_tab_loading(tab_id, true);
     state.load_progress.insert(tab_id.to_string(), 0.0);
+    // Mark the start of this app-initiated load (cold-start, omnibox, link open). The
+    // ContentLoadStart handler takes an early-return for an already-loading tab, so without
+    // this the load-duration timer would never start for these navigations.
+    state
+        .nav_started_at
+        .insert(tab_id.to_string(), std::time::Instant::now());
     if state.tab_manager.active_tab_id.as_deref() == Some(tab_id) {
         state.set_content_cover(chrome, true);
         let _ = chrome.evaluate_script("window.__neura && window.__neura.startLoadProgress()");
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_woken_content_tab(
+    tab_id: &str,
+    url: &str,
+    window: &tao::window::Window,
+    chrome: &WebView,
+    chrome_hwnd: Option<isize>,
+    layout_config: &LayoutConfig,
+    proxy_main: &tao::event_loop::EventLoopProxy<AppEvent>,
+    rt: &tokio::runtime::Runtime,
+    state: &mut AppState,
+    content_views: &mut HashMap<String, WebView>,
+    content_hwnds: &mut HashMap<String, isize>,
+    content_web_context: &mut Option<wry::WebContext>,
+    incognito_web_context: &mut Option<wry::WebContext>,
+    shared_dl_dir: &std::sync::Arc<std::sync::Mutex<DownloadPrefs>>,
+    browser_args: &str,
+    startup_cookies: &[cookie_store::CookieRecord],
+    cookies_restored: &mut bool,
+    load_watches: &mut HashMap<String, u64>,
+    load_watch_next: &mut u64,
+) {
+    if content_views.contains_key(tab_id) {
+        return;
+    }
+    let is_incog = state.tab_manager.tab_is_incognito(tab_id);
+    let layout = AppLayout::calculate(
+        layout_size(window, state),
+        window.scale_factor(),
+        state,
+        layout_config,
+    );
+    let ad_script = state.ad_block_engine.init_script().to_string();
+    let ctx = if is_incog {
+        incognito_web_context.as_mut().unwrap()
+    } else {
+        content_web_context.as_mut().unwrap()
+    };
+    match build_content_webview(
+        window,
+        tab_id,
+        url,
+        layout.content,
+        proxy_main.clone(),
+        ctx,
+        is_incog,
+        std::sync::Arc::clone(shared_dl_dir),
+        tab_zoom(state, tab_id),
+        browser_args,
+        ad_script,
+        state.settings.privacy.fingerprint_protection,
+        state.settings.privacy.strict_permissions,
+        state.settings.privacy.site_permissions.clone(),
+        state.settings.privacy.default_permissions.clone(),
+        state.settings.privacy.https_only,
+        false,
+    ) {
+        Ok(wv) => {
+            #[cfg(windows)]
+            let hwnd = webview_hwnd(&wv);
+            restore_startup_cookies(&wv, is_incog, startup_cookies, cookies_restored);
+            content_views.insert(tab_id.to_string(), wv);
+            state.tab_manager.wake_tab(tab_id);
+            begin_native_load(state, chrome, tab_id);
+            state.push_state_to_chrome(chrome);
+            state.load_recoveries.remove(&app::load_key(tab_id, url));
+            #[cfg(windows)]
+            track_content_hwnd(hwnd, tab_id, content_hwnds);
+            #[cfg(not(windows))]
+            let _ = &mut *content_hwnds;
+            apply_layout(chrome, chrome_hwnd, content_views, state, layout_config, window);
+            if let Some(wv) = content_views.get(tab_id) {
+                let _ = wv.focus();
+                let _ = wv.load_url(url);
+            }
+            tracing::info!(
+                target: "ventus::session",
+                tab = %tab_id,
+                url = %url,
+                "[SESSION] woke sleeping/restored tab: content WebView built OK (deferred)"
+            );
+            watch_load(
+                rt,
+                proxy_main,
+                load_watches,
+                load_watch_next,
+                tab_id.to_string(),
+                url.to_string(),
+            );
+        }
+        Err(e) => tracing::error!(
+            target: "ventus::session",
+            tab = %tab_id,
+            url = %url,
+            error = %e,
+            "[SESSION] deferred wake build FAILED — tab stays black. 0x800700AA = profile still locked"
+        ),
     }
 }
 
@@ -7533,20 +7770,45 @@ fn save_open_cookies(
     state: &AppState,
     data_dir: &std::path::Path,
 ) {
+    let t0 = std::time::Instant::now();
     let Ok(conn) = cookie_store::open(data_dir) else {
         return;
     };
-    for (tid, wv) in content_views {
-        if state.tab_manager.tab_is_incognito(tid) {
-            continue;
-        }
+    // Every non-incognito tab shares ONE WebView2 profile (`content_web_context`), so its
+    // cookie store is identical across all of them — `GetCookies("")` on any one normal tab
+    // returns the whole shared set. Snapshotting per tab therefore re-reads the same cookies
+    // N times, and each snapshot is a synchronous COM round trip that parks the UI thread for
+    // up to ~900 ms. On shutdown with several tabs open that stacks into multiple seconds of a
+    // frozen ("Not Responding") window. Take a SINGLE snapshot from one non-incognito tab
+    // (prefer the active one) instead. Incognito tabs use a separate, intentionally ephemeral
+    // context and are never persisted, so they are skipped entirely.
+    let snapshot_wv = state
+        .tab_manager
+        .active_tab_id
+        .as_deref()
+        .filter(|id| !state.tab_manager.tab_is_incognito(id))
+        .and_then(|id| content_views.get(id))
+        .or_else(|| {
+            content_views
+                .iter()
+                .find(|(tid, _)| !state.tab_manager.tab_is_incognito(tid))
+                .map(|(_, wv)| wv)
+        });
+    let mut saved = 0usize;
+    if let Some(wv) = snapshot_wv {
         let cookies = browser::cookie_manager::snapshot(wv, Duration::from_millis(900));
-        if cookies.is_empty() {
-            continue;
+        saved = cookies.len();
+        if !cookies.is_empty() {
+            let _ = cookie_store::save(&conn, &cookies);
         }
-        let _ = cookie_store::save(&conn, &cookies);
     }
     let _ = cookie_store::purge_expired(&conn);
+    tracing::info!(
+        target: "ventus::shutdown",
+        cookies = saved,
+        elapsed_ms = t0.elapsed().as_millis() as u64,
+        "save_open_cookies: shared-profile snapshot done"
+    );
 }
 
 fn clear_load_watches(watches: &mut HashMap<String, u64>, tab_id: &str) {

@@ -319,11 +319,18 @@ mod win {
         use windows::Win32::UI::WindowsAndMessaging::{
             DispatchMessageW, PeekMessageW, TranslateMessage, MSG, PM_REMOVE,
         };
+        // Drain every message currently queued, not just one. While we block on the
+        // synchronous GetCookies COM callback the UI thread is otherwise frozen; dispatching a
+        // single message per 8 ms tick lets paint/input messages pile up faster than they
+        // clear, which is exactly what makes the window read as "Not Responding". The budget
+        // bounds the drain so a steady inflow of messages can't trap us here indefinitely.
         unsafe {
             let mut msg = MSG::default();
-            if PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE).as_bool() {
+            let mut budget = 256u32;
+            while budget > 0 && PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE).as_bool() {
                 let _ = TranslateMessage(&msg);
                 DispatchMessageW(&msg);
+                budget -= 1;
             }
         }
     }

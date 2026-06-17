@@ -1032,7 +1032,7 @@ button,input,select,textarea{font-family:var(--font)}
   font-size:10px;font-weight:700;color:#fff;flex-shrink:0;
   text-transform:uppercase;letter-spacing:0.02em;
 }
-#toolbar-incognito-badge{display:none;align-items:center;gap:4px;font-size:10px;font-weight:700;color:#fff;background:linear-gradient(135deg,#3730a3,#6366f1);border-radius:5px;padding:2px 7px 2px 5px;flex-shrink:0;cursor:default;white-space:nowrap;letter-spacing:0.03em;box-shadow:0 1px 4px rgba(99,102,241,0.4)}
+#toolbar-incognito-badge{display:none;align-items:center;gap:5px;font-size:10.5px;font-weight:600;color:#fff;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.16);border-radius:6px;padding:2px 7px 2px 6px;flex-shrink:0;cursor:default;white-space:nowrap;letter-spacing:0.01em}
 #toolbar-incognito-badge.visible{display:flex}
 #toolbar-incognito-badge svg{flex-shrink:0}
 
@@ -2604,70 +2604,58 @@ button,input,select,textarea{font-family:var(--font)}
 }
 #adblock-backdrop.open{display:block}
 #adblock-modal{
-  display:none;position:fixed;z-index:9999;top:50px;right:auto;left:auto;width:284px;
+  display:none;position:fixed;z-index:9999;top:50px;right:auto;left:auto;width:236px;
   background:var(--modal-bg);
   border:1px solid var(--modal-border);
-  border-radius:20px;
+  border-radius:14px;
   box-shadow:var(--modal-shadow);
-  padding:0;overflow:hidden;
+  padding:5px;overflow:hidden;
+  transform-origin:top left;
 }
-#adblock-modal.open{display:block}
+#adblock-modal.open{display:block;animation:abmIn .16s cubic-bezier(.16,1,.3,1)}
+@keyframes abmIn{from{opacity:0;transform:translateY(-6px) scale(.97)}to{opacity:1;transform:none}}
 .abm-header{
-  display:flex;align-items:center;gap:10px;
-  padding:16px 16px 14px;
-  border-bottom:1px solid var(--modal-border);
+  display:flex;align-items:center;gap:9px;
+  padding:7px 8px 8px;
 }
 .abm-header-icon{
-  width:32px;height:32px;border-radius:10px;flex-shrink:0;
-  background:var(--accent-dim);
+  width:28px;height:28px;border-radius:8px;flex-shrink:0;
+  background:var(--bg-hover);
   display:flex;align-items:center;justify-content:center;
 }
-.abm-header-icon svg{color:var(--accent)}
-.abm-title{font-size:14px;font-weight:700;color:var(--text);letter-spacing:-0.3px;flex:1}
-.abm-body{padding:16px;display:flex;flex-direction:column;gap:14px}
+.abm-header-icon svg{color:var(--text)}
+.abm-head-text{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+.abm-title{font-size:13px;font-weight:600;color:var(--text);letter-spacing:-0.2px;line-height:1.15}
 .abm-status-row{
-  display:inline-flex;align-items:center;gap:8px;
-  padding:6px 12px 6px 10px;border-radius:999px;align-self:flex-start;
-  background:var(--success-dim);
-  transition:background var(--transition);
+  display:inline-flex;align-items:center;gap:6px;align-self:flex-start;
 }
-.abm-status-row.off{background:rgba(107,114,128,0.1)}
-.abm-status-row.warn{background:var(--warning-dim)}
 .abm-status-dot{
-  width:7px;height:7px;border-radius:50%;
+  width:6px;height:6px;border-radius:50%;
   background:var(--success);flex-shrink:0;
 }
 .abm-status-dot.off{background:var(--text-dim)}
 .abm-status-dot.warn{background:var(--warning)}
 .abm-status-label{
-  font-size:11px;font-weight:600;color:var(--success);letter-spacing:0.01em;
+  font-size:11px;font-weight:450;color:var(--text-muted);letter-spacing:0;line-height:1;
 }
 .abm-status-label.muted{color:var(--text-dim)}
-.abm-status-label.warn{color:var(--warning)}
+.abm-sep{height:1px;background:var(--border-subtle);margin:3px 8px 5px}
+.abm-body{padding:0;display:flex;flex-direction:column;gap:1px}
 .abm-action-btn,
 .abm-settings-btn{
-  display:flex;align-items:center;justify-content:space-between;
-  width:100%;padding:10px 12px;border-radius:10px;
-  background:var(--bg-hover);border:1px solid var(--border-subtle);
-  color:var(--text-muted);font-size:12px;font-family:var(--font);font-weight:500;
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  width:100%;padding:8px;border-radius:8px;
+  background:transparent;border:none;
+  color:var(--text);font-size:12.5px;font-family:var(--font);font-weight:450;
   cursor:pointer;text-align:left;
-  transition:all var(--transition);
-}
-.abm-action-btn{
-  background:var(--success-dim);border-color:var(--success-glow);color:var(--success);
-}
-.abm-action-btn.warn{
-  background:var(--warning-dim);border-color:var(--warning-glow);color:var(--warning);
-}
-.abm-action-btn.off{
-  background:var(--bg-hover);border-color:var(--border-subtle);color:var(--text-dim);cursor:not-allowed;opacity:.65;
+  transition:background var(--transition);
 }
 .abm-action-btn:not(.off):hover,
 .abm-settings-btn:hover{
-  background:var(--bg-active);border-color:var(--border);color:var(--text);
+  background:var(--bg-hover);
 }
-.abm-btn-right,.abm-settings-btn-right{display:flex;align-items:center;gap:4px;color:var(--accent)}
-.abm-action-btn .abm-btn-right{color:currentColor}
+.abm-action-btn.off{color:var(--text-dim);cursor:not-allowed;opacity:.6}
+.abm-btn-right,.abm-settings-btn-right{display:flex;align-items:center;color:var(--text-dim)}
 .dl-spin{
   width:12px;height:12px;border:2px solid var(--border);
   border-top-color:var(--accent);border-radius:50%;
@@ -3037,18 +3025,7 @@ button,input,select,textarea{font-family:var(--font)}
 .hist-item:hover .hist-item-del{opacity:1}
 .hist-item-del:hover{background:var(--danger-dim);color:var(--danger)}
 
-.dl-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--radius-sm);background:var(--bg);border:1px solid var(--border-subtle);cursor:pointer;transition:background var(--transition)}
-.dl-item:hover{background:var(--bg-hover)}
-.dl-item-icon{width:32px;height:32px;border-radius:var(--radius-sm);background:var(--accent-dim);display:flex;align-items:center;justify-content:center;color:var(--accent);flex-shrink:0}
-.dl-item-info{flex:1;min-width:0}
-.dl-item-name{font-size:12px;font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.dl-item-meta{font-size:11px;color:var(--text-muted);margin-top:1px}
-.dl-item-progress{margin-top:5px;height:3px;background:var(--border);border-radius:2px;overflow:hidden}
-.dl-item-progress-bar{height:100%;background:var(--accent);transition:width 0.3s ease}
-.dl-item-actions{display:flex;gap:4px;flex-shrink:0}
-.dl-action-btn{width:26px;height:26px;border:none;background:var(--bg-hover);color:var(--text-muted);cursor:pointer;border-radius:3px;display:flex;align-items:center;justify-content:center;transition:all var(--transition)}
-.dl-action-btn:hover{background:var(--bg-active);color:var(--text)}
-.dl-action-btn.danger:hover{background:rgba(239,68,68,0.12);color:#f87171}
+#downloads-list .dl-panel-item[data-nav-url]{cursor:pointer}
 
 /* ── About section ──────────────────────────────────────────────────────────â”€ */
 .about-identity-card{
@@ -3108,22 +3085,46 @@ button,input,select,textarea{font-family:var(--font)}
 .about-row-link:hover{text-decoration:underline}
 
 .about-update-card{
-  display:flex;align-items:center;justify-content:space-between;gap:12px;
-  padding:14px 16px;
   background:var(--modal-bg-2);border:1px solid var(--modal-border);
-  border-radius:12px;margin-top:10px;
+  border-radius:14px;margin-top:10px;overflow:hidden;
 }
-.about-update-left{display:flex;align-items:center;gap:12px}
-.about-update-icon{
-  width:38px;height:38px;border-radius:11px;
-  background:transparent;
-  border:0;
+.auc-main{display:flex;align-items:center;gap:14px;padding:15px 16px}
+.auc-icon{
+  position:relative;flex-shrink:0;color:var(--text);
   display:flex;align-items:center;justify-content:center;
-  color:var(--accent);flex-shrink:0;
+  transition:color var(--transition);
 }
-.about-update-icon svg{width:19px;height:19px}
-.about-update-title{font-size:13px;font-weight:600;color:var(--text);letter-spacing:-0.1px}
-.about-update-sub{font-size:11px;color:var(--text-muted);margin-top:2px}
+.auc-icon svg{width:22px;height:22px}
+.auc-badge{
+  position:absolute;right:-5px;bottom:-5px;width:15px;height:15px;border-radius:50%;
+  border:2px solid var(--modal-bg-2);background:var(--success);
+  display:none;align-items:center;justify-content:center;
+}
+.auc-badge svg{width:8px;height:8px;color:#fff;display:none}
+.auc-text{flex:1;min-width:0}
+.auc-title{font-size:13.5px;font-weight:600;color:var(--text);letter-spacing:-0.2px}
+.auc-status{font-size:11.5px;color:var(--text-muted);margin-top:3px;display:flex;align-items:center;gap:6px;line-height:1.35}
+.auc-status svg{flex-shrink:0}
+.auc-btn{
+  flex-shrink:0;height:32px;padding:0 15px;border-radius:9px;
+  background:var(--primary-btn-bg);border:1px solid var(--primary-btn-border);
+  color:var(--primary-btn-text);font-size:12px;font-weight:600;font-family:var(--font);
+  cursor:pointer;transition:background var(--transition),opacity var(--transition);
+}
+.auc-btn:hover{background:var(--primary-btn-bg-hover)}
+.auc-btn:disabled{opacity:.5;cursor:default}
+.auc-btn.accent{background:var(--accent);border-color:var(--accent);color:#fff}
+.about-update-card[data-state="up_to_date"] .auc-icon{color:var(--success)}
+.about-update-card[data-state="up_to_date"] .auc-badge{display:flex}
+.about-update-card[data-state="up_to_date"] .auc-badge svg{display:block}
+.about-update-card[data-state="up_to_date"] .auc-status{color:var(--success)}
+.about-update-card[data-state="available"] .auc-icon{color:var(--accent)}
+.about-update-card[data-state="available"] .auc-badge{display:flex;background:var(--accent)}
+.about-update-card[data-state="available"] .auc-status{color:var(--accent)}
+.about-update-card[data-state="error"] .auc-icon{color:var(--danger)}
+.about-update-card[data-state="error"] .auc-badge{display:flex;background:var(--danger)}
+.about-update-card[data-state="error"] .auc-status{color:var(--danger)}
+#update-status-area:not(:empty){padding:13px 16px;border-top:1px solid var(--modal-border)}
 
 .about-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
 .about-act-btn{
@@ -3359,7 +3360,7 @@ svg{display:block;flex-shrink:0}
   </button>
   <div id="address-bar" onclick="focusUrl()">
     <span id="toolbar-incognito-badge" onclick="event.stopPropagation()" title="Incognito workspace - history not saved">
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="2" y1="2" x2="22" y2="22"/></svg>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12.5h18"/><path d="M6 12.5l1.2-4.6A2 2 0 0 1 9.1 6.5h5.8a2 2 0 0 1 1.9 1.4l1.2 4.6"/><circle cx="8" cy="16" r="2.4"/><circle cx="16" cy="16" r="2.4"/><path d="M10.4 16h3.2"/></svg>
       Incognito
     </span>
     <img id="active-favicon" class="favicon" style="display:none" src="" alt="" draggable="true" title="Drag to bookmark or open in new tab">
@@ -3541,25 +3542,25 @@ svg{display:block;flex-shrink:0}
 <div id="adblock-modal">
   <div class="abm-header">
     <div class="abm-header-icon">
-      <svg id="abm-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      <svg id="abm-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
     </div>
-    <span class="abm-title">Ad Blocker</span>
+    <div class="abm-head-text">
+      <span class="abm-title">Ad Blocker</span>
+      <span id="abm-status" class="abm-status-row">
+        <span id="abm-dot" class="abm-status-dot"></span>
+        <span id="abm-status-text" class="abm-status-label">Active on this page</span>
+      </span>
+    </div>
   </div>
+  <div class="abm-sep"></div>
   <div class="abm-body">
-    <div id="abm-status" class="abm-status-row">
-      <div id="abm-dot" class="abm-status-dot"></div>
-      <span id="abm-status-text" class="abm-status-label">Active on this page</span>
-    </div>
     <button class="abm-action-btn" id="abm-site-toggle" onclick="send('AdBlockToggleSite')">
       <span id="abm-site-toggle-text">Pause for this site</span>
-      <span class="abm-btn-right">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 9v6m4-6v6M5 5h14v14H5z"/></svg>
-      </span>
     </button>
     <button class="abm-settings-btn" onclick="closeAdBlockModal();openSettings('privacy')">
       <span>Manage settings</span>
       <span class="abm-settings-btn-right">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14m-7-7 7 7-7 7"/></svg>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
       </span>
     </button>
   </div>
@@ -4244,9 +4245,7 @@ svg{display:block;flex-shrink:0}
       <div class="settings-section" id="section-downloads">
         <h2>Downloads</h2>
         <p class="subtitle">Files you have downloaded</p>
-        <div id="downloads-list" style="display:flex;flex-direction:column;gap:6px">
-          <div style="color:var(--text-muted);font-size:12px;text-align:center;padding:24px 0">Nothing downloaded yet.</div>
-        </div>
+        <div id="downloads-list" style="margin-top:6px"></div>
       </div>
 
       <div class="settings-section" id="section-ai">
@@ -4521,19 +4520,20 @@ svg{display:block;flex-shrink:0}
         </div>
 
         <!-- Software updates -->
-        <div class="about-update-card">
-          <div class="about-update-left">
-            <div class="about-update-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>
+        <div class="about-update-card" id="update-card">
+          <div class="auc-main">
+            <div class="auc-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>
+              <span class="auc-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
             </div>
-            <div>
-              <div class="about-update-title">Software updates</div>
-              <div class="about-update-sub">Check for the latest Ventus build</div>
+            <div class="auc-text">
+              <div class="auc-title">Software Update</div>
+              <div class="auc-status" id="auc-status">Check for the latest Ventus build</div>
             </div>
+            <button class="auc-btn" id="btn-check-update" onclick="checkForUpdate()">Check for updates</button>
           </div>
-          <button class="ob-btn-primary" id="btn-check-update" onclick="checkForUpdate()" style="padding:7px 14px;font-size:12px;flex-shrink:0">Check for updates</button>
+          <div id="update-status-area"></div>
         </div>
-        <div id="update-status-area"></div>
 
         <!-- Actions -->
         <div class="about-actions">
@@ -5150,51 +5150,58 @@ window.__neura = {
     }
   },
   setUpdateState({ status, version, notes, error, received, total }) {
+    const card = document.getElementById('update-card');
     const area = document.getElementById('update-status-area');
+    const statusLine = document.getElementById('auc-status');
     const btn = document.getElementById('btn-check-update');
+    const setState = (s, html) => {
+      if (card) card.dataset.state = s || '';
+      if (statusLine) statusLine.innerHTML = html;
+    };
+    const resetBtn = () => {
+      if (!btn) return;
+      btn.classList.remove('accent');
+      btn.onclick = checkForUpdate;
+      btn.textContent = 'Check for updates';
+    };
+    if (area) area.innerHTML = '';
     if (status === 'checking') {
-      btn && (btn.disabled = true);
-      if (area) area.innerHTML = '<div style="display:flex;align-items:center;gap:8px;color:var(--text-muted);font-size:12px"><svg style="animation:spin 1s linear infinite" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Checking for updates...</div>';
+      if (btn) btn.disabled = true;
+      setState('checking', '<svg style="animation:spin 1s linear infinite" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Checking for updates…');
       if (__manualUpdateCheck || isUpdateModalOpen()) showUpdateModal({status});
     } else if (status === 'up_to_date') {
-      btn && (btn.disabled = false);
+      if (btn) btn.disabled = false;
+      resetBtn();
       updateAvailable = false;
-      if (area) area.innerHTML = '<div style="display:flex;align-items:center;gap:8px;color:var(--success);font-size:12px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>You\'re up to date.</div>';
+      setState('up_to_date', 'You’re up to date');
       if (__manualUpdateCheck || isUpdateModalOpen()) showUpdateModal({status});
       __manualUpdateCheck = false;
     } else if (status === 'available') {
-      btn && (btn.disabled = false);
+      if (btn) { btn.disabled = false; btn.classList.add('accent'); btn.onclick = installUpdate; btn.textContent = 'Update now'; }
       updateAvailable = true;
-      if (area) area.innerHTML = `<div style="display:flex;flex-direction:column;gap:10px">
-        <div style="display:flex;align-items:center;gap:8px">
-          <span style="padding:2px 8px;border-radius:10px;background:var(--accent-dim);color:var(--accent);font-size:11px;font-weight:600">v${escHtml(version)} available</span>
-        </div>
-        ${notes ? `<div style="font-size:11px;color:var(--text-muted);max-height:80px;overflow-y:auto;white-space:pre-wrap;line-height:1.5">${escHtml(notes.slice(0,400))}${notes.length>400?'...':''}</div>` : ''}
-        <button class="ob-btn-primary" onclick="installUpdate()" style="align-self:flex-start;padding:6px 16px;font-size:12px">Download &amp; install</button>
-      </div>`;
+      setState('available', `Version ${escHtml(version)} is available`);
+      if (area && notes) area.innerHTML = `<div style="font-size:11.5px;color:var(--text-muted);max-height:120px;overflow-y:auto;white-space:pre-wrap;line-height:1.55">${escHtml(notes.slice(0,500))}${notes.length>500?'…':''}</div>`;
       if (__manualUpdateCheck || isUpdateModalOpen()) {
         showUpdateModal({status, version, notes});
-      } else {
+      } else if (!isSettingsOpen()) {
         showUpdateToast(version, notes);
       }
       __manualUpdateCheck = false;
     } else if (status === 'downloading') {
-      btn && (btn.disabled = true);
+      if (btn) btn.disabled = true;
       const pct = total > 0 ? Math.round((received / total) * 100) : null;
-      const label = pct !== null ? `Downloading... ${pct}%` : 'Downloading...';
-      const bar = pct !== null
-        ? `<div style="margin-top:8px;height:4px;background:var(--border);border-radius:2px;overflow:hidden"><div style="height:100%;background:var(--accent);width:${pct}%;transition:width 0.3s ease"></div></div>`
-        : '';
-      if (area) area.innerHTML = `<div style="font-size:12px;color:var(--text-muted)">${label}${bar}</div>`;
+      setState('available', pct !== null ? `Downloading… ${pct}%` : 'Downloading…');
+      if (area && pct !== null) area.innerHTML = `<div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden"><div style="height:100%;background:var(--accent);width:${pct}%;border-radius:3px;transition:width 0.3s ease"></div></div>`;
       if (isUpdateModalOpen()) showUpdateModal({status, received, total});
     } else if (status === 'installing') {
-      btn && (btn.disabled = true);
+      if (btn) btn.disabled = true;
       updateAvailable = false;
-      if (area) area.innerHTML = '<div style="font-size:12px;color:var(--text-muted)">Installing update and restarting...</div>';
+      setState('available', 'Installing update and restarting…');
       if (isUpdateModalOpen()) showUpdateModal({status});
     } else if (status === 'error') {
-      btn && (btn.disabled = false);
-      if (area) area.innerHTML = `<div style="font-size:12px;color:var(--danger)">${escHtml(error || 'Update check failed.')}</div>`;
+      if (btn) btn.disabled = false;
+      resetBtn();
+      setState('error', escHtml(error || 'Update check failed.'));
       if (__manualUpdateCheck || isUpdateModalOpen()) showUpdateModal({status, error});
       __manualUpdateCheck = false;
     }
@@ -5312,7 +5319,7 @@ function openAdBlockModal() {
   const btn = document.getElementById('btn-adblock');
   if (btn) {
     const r = btn.getBoundingClientRect();
-    const modalW = 284;
+    const modalW = 236;
     let left = r.left;
     if (left + modalW > window.innerWidth - 8) left = window.innerWidth - modalW - 8;
     if (left < 8) left = 8;
@@ -5356,14 +5363,14 @@ function _syncAdBlockModal() {
   if (!active) {
     if (statusRow) statusRow.className = 'abm-status-row off';
     if (dot) dot.className = 'abm-status-dot off';
-    if (statusText) { statusText.className = 'abm-status-label muted'; statusText.textContent = 'Ad blocker is disabled globally'; }
+    if (statusText) { statusText.className = 'abm-status-label muted'; statusText.textContent = 'Disabled globally'; }
     if (toggle) { toggle.className = 'abm-action-btn off'; toggle.disabled = true; }
     if (toggleText) toggleText.textContent = 'Pause for this site';
   } else if (excepted) {
     if (statusRow) statusRow.className = 'abm-status-row warn';
     if (dot) dot.className = 'abm-status-dot warn';
-    if (statusText) { statusText.className = 'abm-status-label warn'; statusText.textContent = 'Paused for this site'; }
-    if (toggle) { toggle.className = 'abm-action-btn warn'; toggle.disabled = false; }
+    if (statusText) { statusText.className = 'abm-status-label'; statusText.textContent = 'Paused for this site'; }
+    if (toggle) { toggle.className = 'abm-action-btn'; toggle.disabled = false; }
     if (toggleText) toggleText.textContent = 'Resume for this site';
   } else {
     if (statusRow) statusRow.className = 'abm-status-row';
@@ -5627,7 +5634,7 @@ function renderTabs() {
     const pinned = tab.pinned ? 'pinned' : '';
     const audioPlaying = tab.is_audio_playing ? 'audio-playing' : '';
     const tabMuted = tab.is_muted ? 'tab-muted' : '';
-    const sleeping = tab.sleeping ? 'sleeping' : '';
+    const sleeping = tab.discarded ? 'sleeping' : '';
     const icon = tabIconUrl(tab);
     const fallback = tabFallbackIcon(loading, !!icon);
     const faviconEl = icon
@@ -5641,7 +5648,7 @@ function renderTabs() {
     const audioBtn = showAudioBtn
       ? `<button class="tab-audio-btn" onclick="muteTab(event,'${tab.id}')" title="${audioTitle}">${audioSvg}</button>`
       : '';
-    const sleepIcon = tab.sleeping
+    const sleepIcon = tab.discarded
       ? `<svg class="tab-sleep-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" title="Tab is sleeping — click to wake"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`
       : '';
     return `<div class="tab-item ${active} ${loading} ${pinned} ${audioPlaying} ${tabMuted} ${sleeping}" draggable="true" data-reorder-id="${escAttr(tab.id)}" data-nav-url="${escAttr(tab.url)}" onclick="switchTab('${tab.id}')" oncontextmenu="tabContextMenu(event,'${tab.id}')">
@@ -5650,7 +5657,7 @@ function renderTabs() {
         <div class="tab-title">${escHtml(tab.title || 'New Tab')}</div>
         <div class="tab-url">${escHtml(formatDisplayUrl(tab.url))}</div>
       </div>
-      ${tab.sleeping ? sleepIcon : audioBtn}
+      ${tab.discarded ? sleepIcon : audioBtn}
       <button class="tab-close" onclick="closeTab(event,'${tab.id}')" title="Close tab">
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
       </button>
@@ -9873,13 +9880,16 @@ function setTheme(t) {
   send('SaveSettings', {key: 'theme', value: t});
 }
 function checkForUpdate() {
-  __manualUpdateCheck = true;
-  showUpdateModal({status: 'checking'});
+  const inSettings = isSettingsOpen();
+  __manualUpdateCheck = !inSettings;
+  if (!inSettings) showUpdateModal({status: 'checking'});
   send('CheckForUpdate');
 }
 function installUpdate() {
-  __manualUpdateCheck = true;
-  showUpdateModal({status: 'downloading', received: 0, total: 0});
+  if (!isSettingsOpen()) {
+    __manualUpdateCheck = true;
+    showUpdateModal({status: 'downloading', received: 0, total: 0});
+  }
   send('InstallUpdate');
 }
 
@@ -10868,6 +10878,10 @@ function isUpdateModalOpen() {
   const modal = document.getElementById('update-modal');
   return !!modal && modal.classList.contains('open');
 }
+function isSettingsOpen() {
+  const o = document.getElementById('settings-overlay');
+  return !!o && o.classList.contains('open');
+}
 function updateModalCopy(status, data) {
   if (status === 'up_to_date') return {title: 'Ventus is up to date', sub: 'You already have the newest version.'};
   if (status === 'available') return {title: 'Update available', sub: data.version ? `Ventus v${data.version} is ready to install.` : 'A new Ventus update is ready.'};
@@ -11085,7 +11099,13 @@ function renderDownloads() {
   if (!list) return;
   const dls = state.downloads || [];
   if (!dls.length) {
-    list.innerHTML = '<div style="color:var(--text-muted);font-size:12px;text-align:center;padding:24px 0">Nothing downloaded yet.</div>';
+    list.innerHTML = `<div class="dl-panel-empty">
+      <div class="dl-panel-empty-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      </div>
+      <span class="dl-panel-empty-label">No downloads yet</span>
+      <span class="dl-panel-empty-sub">Files you download will appear here</span>
+    </div>`;
     return;
   }
   list.innerHTML = dls.slice().reverse().map(d => {
@@ -11093,42 +11113,43 @@ function renderDownloads() {
     const isPaused = d.status === 'paused';
     const isLive = dlIsActive(d) || isPaused;
     const isPdf = isPdfFile(d.local_path || d.filename);
-    const statusColor = isDone ? 'var(--success)'
-      : (d.status === 'failed' || d.status === 'cancelled') ? 'var(--danger)'
-      : 'var(--text-muted)';
-    const metaText = isDone && d.local_path
-      ? `${dlMeta(d)} \u00B7 ${escHtml(d.local_path.split(/[\\/]/).pop())}`
-      : dlMeta(d);
-    const id = escAttr(d.id);
-    let actionBtns = '';
-    if (d.status === 'paused') {
-      actionBtns = `<button class="dl-action-btn" title="Resume" data-dl-resume="${id}">${DL_SVG_PLAY}</button>
-        <button class="dl-action-btn danger" title="Cancel" data-dl-cancel="${id}">${DL_SVG_X}</button>`;
-    } else if (dlIsActive(d)) {
-      actionBtns = `<button class="dl-action-btn" title="Pause" data-dl-pause="${id}">${DL_SVG_PAUSE}</button>
-        <button class="dl-action-btn danger" title="Cancel" data-dl-cancel="${id}">${DL_SVG_X}</button>`;
+    const metaText = dlMeta(d);
+    const ftClass = dlIsActive(d) ? 'ft-active' : '';
+    const iconContent = dlIsActive(d)
+      ? `<span class="dl-spin"></span>`
+      : `<span class="dl-pi-ext">${escHtml(dlFileExt(d.filename))}</span>`;
+    const revealBtn = isDone && d.local_path
+      ? `<button class="dl-pi-btn icon" data-reveal-file-path="${escAttr(d.local_path)}" title="Show in folder">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        </button>`
+      : '';
+    const removeBtn = !isLive
+      ? `<button class="dl-pi-btn icon danger" data-del-dl-id="${escAttr(d.id)}" title="Remove">${DL_SVG_X}</button>`
+      : '';
+    const actionsHtml = dlControlBtns(d) + revealBtn + removeBtn;
+    let subHtml = '';
+    if (isDone && d.local_path) {
+      subHtml = `<button class="dl-pi-link" data-open-file-path="${escAttr(d.local_path)}">${isPdf ? 'Read PDF' : 'Open file'}</button>${metaText ? `<span class="dl-pi-sep"></span><span class="dl-pi-meta">${escHtml(metaText)}</span>` : ''}`;
+    } else if (isDone) {
+      subHtml = `<span class="dl-pi-state">Done</span>${metaText ? `<span class="dl-pi-sep"></span><span class="dl-pi-meta">${escHtml(metaText)}</span>` : ''}`;
+    } else if (d.status === 'failed') {
+      subHtml = '<span class="dl-pi-state failed">Download failed</span>';
+    } else if (d.status === 'cancelled') {
+      subHtml = '<span class="dl-pi-state failed">Canceled</span>';
+    } else if (isPaused) {
+      const pausedMeta = metaText.replace(/^Paused\s*\u00B7\s*/, '');
+      subHtml = `<span class="dl-pi-state">Paused</span>${pausedMeta ? `<span class="dl-pi-sep"></span><span class="dl-pi-meta">${escHtml(pausedMeta)}</span>` : ''}`;
     } else {
-      if (isDone && d.local_path) {
-        actionBtns = `<button class="dl-action-btn" title="${isPdf ? 'Read PDF' : 'Open file'}" data-open-file-path="${escAttr(d.local_path)}">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5z"/><polyline points="14 2 14 8 20 8"/></svg>
-          </button>
-          <button class="dl-action-btn" title="Show in folder" data-reveal-file-path="${escAttr(d.local_path)}">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-          </button>`;
-      }
-      actionBtns += `<button class="dl-action-btn danger" title="Remove" data-del-dl-id="${id}">${DL_SVG_X}</button>`;
+      subHtml = `<span class="dl-pi-state active">Downloading</span>${metaText ? `<span class="dl-pi-sep"></span><span class="dl-pi-meta">${escHtml(metaText)}</span>` : ''}`;
     }
-    return `
-    <div class="dl-item"${isLive ? '' : ` data-nav-url="${escAttr(d.url)}"`}>
-      <div class="dl-item-icon">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-      </div>
-      <div class="dl-item-info">
-        <div class="dl-item-name">${escHtml(d.filename)}</div>
-        <div class="dl-item-meta" style="color:${statusColor}">${metaText}</div>
+    return `<div class="dl-panel-item"${isLive ? '' : ` data-nav-url="${escAttr(d.url)}"`}>
+      <div class="dl-pi-icon-wrap ${ftClass}">${iconContent}</div>
+      <div class="dl-pi-body">
+        <div class="dl-pi-name">${escHtml(d.filename)}</div>
+        <div class="dl-pi-sub">${subHtml}</div>
         ${dlProgressHtml(d)}
       </div>
-      <div class="dl-item-actions">${actionBtns}</div>
+      <div class="dl-pi-actions">${actionsHtml}</div>
     </div>`;
   }).join('');
 }
@@ -11299,15 +11320,15 @@ function _syncDownloadOverlay() {
     return;
   }
   const r = panel.getBoundingClientRect();
-  // Halo must contain the panel's soft shadow (var(--shadow) = 0 4px 24px) or the Win32
-  // clip hard-cuts it. ~28px covers the blur on the left/top/bottom; the right edge sits
-  // near the window edge so its shadow falls off-screen and needs little padding.
+  // Halo must contain the panel's soft shadow (var(--modal-shadow) = 0 32px 80px) or the
+  // Win32 clip hard-cuts it. Blur 80 spreads ~80px left/right, ~48px up (blur - y-offset)
+  // and ~112px down (blur + y-offset); pad past that on every side with a small margin.
   send('SuggestionOverlay', {
     visible:true,
-    x: r.left - 28,
-    y: r.top - 24,
-    width: r.width + 40,
-    height: r.height + 52
+    x: r.left - 88,
+    y: r.top - 56,
+    width: r.width + 176,
+    height: r.height + 176
   });
 }
 

@@ -20,13 +20,24 @@ const WEB_ERROR_UNKNOWN: i32 = 0;
 const WEB_ERROR_CONNECTION_ABORTED: i32 = 9;
 const WEB_ERROR_OPERATION_CANCELED: i32 = 14;
 
-// How many times to extend the stall watchdog for an uncommitted-but-in-flight navigation
-// before concluding the controller is actually wedged and rebuilding it. Each extension is
-// one LOAD_STALL_AFTER window (~6 s), so this grants a slow main-document download roughly
-// UNCOMMITTED_PATIENT_TRIES * 6 s to commit before any disruptive recovery. This keeps heavy
-// sites (YouTube) from being torn down mid-load, which previously aborted their connection
-// (status 9) and left the tab stuck black.
+// How many times to rebuild the controller for a tab that is uncommitted AND has NO native
+// navigation in flight — i.e. the controller produced no navigation at all and is genuinely
+// wedged (the original black-tab bug). After this many rebuilds we stop the spinner. This
+// path is NEVER taken while a navigation is still in flight; see IN_FLIGHT_PATIENT_TRIES.
 const UNCOMMITTED_PATIENT_TRIES: u8 = 3;
+
+// How many LOAD_STALL_AFTER windows (~6 s each) to keep extending the watchdog for an
+// uncommitted navigation that is still genuinely in flight (WebView2 holds the tab in
+// `native_nav_ids` from NavigationStarting until it fires Completed/Failed). A slow or cold
+// main-document download — YouTube on an old machine, several tabs open — can take far longer
+// than the wedged-controller budget to commit while its connection is perfectly alive.
+// Rebuilding such a load aborts the live connection (status 9) and restarts from scratch,
+// which on a slow machine never finishes and churns the tab black; so while in flight we only
+// ever wait, never rebuild. This grants ~IN_FLIGHT_PATIENT_TRIES * 6 s (~72 s) before we give
+// up the spinner — and even then we leave the connection untouched. A real network failure
+// arrives much sooner as a NavigationCompleted/Failed (the `failed` retry ladder), so this
+// ceiling only bites when the response is genuinely just very slow.
+const IN_FLIGHT_PATIENT_TRIES: u8 = 12;
 
 #[derive(Debug, Clone, Copy)]
 pub struct ChromeClipRect {
@@ -67,6 +78,7 @@ pub struct AppState {
     /// load starts. Used to avoid reloading a page that has already rendered content but is
     /// just slow to fire its final load event (heavy page on a slow device).
     pub load_progress: HashMap<String, f64>,
+    pub nav_started_at: HashMap<String, std::time::Instant>,
     pub spotlight_open: bool,
     pub zoom_levels: HashMap<String, f64>,
     /// Pending AI page-tool channels — keyed by call_id.
@@ -163,6 +175,7 @@ impl AppState {
             native_nav_ids: HashMap::new(),
             load_recoveries: HashMap::new(),
             load_progress: HashMap::new(),
+            nav_started_at: HashMap::new(),
             spotlight_open: false,
             zoom_levels: HashMap::new(),
             ai_pending_tools: Arc::new(Mutex::new(HashMap::new())),
@@ -391,9 +404,6 @@ pub enum TabAction {
         tab_id: String,
         url: String,
     },
-    /// Re-arm the stall watchdog for a tab whose navigation is still legitimately
-    /// in-flight (slow main-document download). Keeps the live connection instead of
-    /// rebuilding, which would abort it (WebView2 ConnectionAborted / status 9).
     ExtendLoadWatch {
         tab_id: String,
         url: String,
@@ -1787,6 +1797,12 @@ fn recover_loading_tab(
     let key = load_key(&tab_id, &recover_url);
     let pct = state.load_progress.get(&tab_id).copied().unwrap_or(0.0);
     let tries = state.load_recoveries.get(&key).copied().unwrap_or(0);
+    let elapsed_ms = state
+        .nav_started_at
+        .get(&tab_id)
+        .map(|t| t.elapsed().as_millis() as u64)
+        .unwrap_or(0);
+    let free_mb = crate::utils::sysinfo::available_memory_mb();
     tracing::info!(
         target: "ventus::nav",
         tab = %tab_id,
@@ -1795,6 +1811,9 @@ fn recover_loading_tab(
         active,
         pct,
         tries,
+        elapsed_ms,
+        free_mb = if free_mb == u64::MAX { 0 } else { free_mb },
+        in_flight = state.native_nav_ids.contains_key(&tab_id),
         "recover_loading_tab: stall/failure detected"
     );
 
@@ -1850,38 +1869,53 @@ fn recover_loading_tab(
     if !committed {
         // pct == 0 means no document has committed yet — but that alone does NOT mean the
         // controller is wedged. A heavy main document over a slow or cold connection
-        // (YouTube with many tabs open) can take 10-30 s to commit while its network
-        // request is very much alive. The decisive signal is whether a NATIVE NAVIGATION
-        // is still in-flight: `native_nav_ids` holds the tab between NavigationStarting and
-        // NavigationCompleted/Failed.
-        //
-        // If a nav is in-flight, rebuilding the controller would ABORT that live connection
-        // (WebView2 reports WebErrorStatus::ConnectionAborted, status 9) and restart from
-        // scratch — and doing it on a 3-6 s timer is exactly what churned YouTube into a
-        // permanent black screen (each rebuild aborts the slow load before it can commit,
-        // then the next one aborts again). So:
-        //   - in-flight        -> be patient: keep the connection, re-arm a longer watch.
-        //   - NOT in-flight     -> the controller produced no navigation at all: genuinely
-        //                          wedged, rebuild promptly (the original black-tab bug).
+        // (YouTube with many tabs open, on an old machine) can take far longer than usual to
+        // commit while its network request is very much alive. The decisive signal is whether
+        // a NATIVE NAVIGATION is still in flight: `native_nav_ids` holds the tab between
+        // NavigationStarting and NavigationCompleted/Failed.
         let in_flight = state.native_nav_ids.contains_key(&tab_id);
-        if in_flight && tries < UNCOMMITTED_PATIENT_TRIES {
-            state.load_recoveries.insert(key, tries + 1);
+
+        // In flight => the connection is ALIVE. Rebuilding here would abort it (WebView2
+        // reports WebErrorStatus::ConnectionAborted, status 9) and restart from scratch — on
+        // a 6 s timer that is exactly what churned YouTube into a permanent "loading… failed,
+        // try again" loop on slow machines (each rebuild aborts the slow load before it can
+        // commit, then the next one aborts again). So while a nav is in flight we NEVER
+        // rebuild: we only keep the connection and re-arm the watchdog. WebView2 will itself
+        // fire NavigationCompleted (success) or NavigationFailed (a real error, which routes
+        // through the `failed` retry ladder) — both clear `native_nav_ids` — so this waiting
+        // resolves on its own. Only if it blows past a generous ceiling do we stop the
+        // spinner, and even then we leave the live connection untouched (it commits when the
+        // response finally arrives, or WebView2 shows its own timeout page — never a void we
+        // created by aborting it ourselves).
+        if in_flight {
+            if tries < IN_FLIGHT_PATIENT_TRIES {
+                state.load_recoveries.insert(key, tries + 1);
+                tracing::info!(
+                    target: "ventus::nav",
+                    tab = %tab_id,
+                    url = %recover_url,
+                    tries,
+                    "recover: uncommitted but navigation still in-flight — staying patient (NOT rebuilding, which would abort the live connection)"
+                );
+                return Some(TabAction::ExtendLoadWatch {
+                    tab_id,
+                    url: recover_url,
+                });
+            }
             tracing::info!(
                 target: "ventus::nav",
                 tab = %tab_id,
                 url = %recover_url,
                 tries,
-                "recover: uncommitted but navigation still in-flight — staying patient (NOT rebuilding, which would abort the live connection)"
+                "recover: uncommitted but still in-flight past patience ceiling — stopping spinner, keeping the live connection (no rebuild)"
             );
-            return Some(TabAction::ExtendLoadWatch {
-                tab_id,
-                url: recover_url,
-            });
+            return stop_failed_load(state, chrome, &tab_id, &key);
         }
-        // Either no nav is in-flight (truly wedged controller) or we have been patient long
-        // enough and it still has not committed: recreate the controller, twice, then stop
-        // the spinner (the tab is never left a permanent black void).
-        if tries < UNCOMMITTED_PATIENT_TRIES + 2 {
+
+        // NOT in flight => the controller produced no navigation at all: genuinely wedged
+        // (the original black-tab bug). Recreate it promptly, a few times, then stop the
+        // spinner (the tab is never left a permanent black void).
+        if tries < UNCOMMITTED_PATIENT_TRIES {
             state.load_recoveries.insert(key, tries + 1);
             state.load_progress.insert(tab_id.clone(), 0.0);
             tracing::info!(
@@ -1889,8 +1923,7 @@ fn recover_loading_tab(
                 tab = %tab_id,
                 url = %recover_url,
                 tries,
-                in_flight,
-                "recover: uncommitted and controller appears wedged — rebuilding"
+                "recover: uncommitted with no navigation in-flight — controller wedged, rebuilding"
             );
             return Some(TabAction::RebuildContent {
                 tab_id,
@@ -1929,15 +1962,6 @@ fn recover_loading_tab(
     stop_failed_load(state, chrome, &tab_id, &key)
 }
 
-/// Early, conservative recovery for a tab that is still showing a pure black screen
-/// (no document ever committed) a few seconds into its load. This fires BEFORE the full
-/// stall timeout so a wedged WebView2 controller is recreated promptly instead of making
-/// the user stare at black for the whole stall window. It is deliberately strict so it can
-/// never disrupt a healthy load:
-///   - only the ACTIVE tab (a background tab loading slowly is fine, leave it),
-///   - only when progress is EXACTLY 0.0 (any commit means a renderer is alive — not black),
-///   - only on the FIRST detection (tries == 0); deeper retries stay on the gentle stall
-///     ladder so we never thrash a controller.
 fn rebuild_black_tab(
     tab_id: String,
     url: String,
@@ -2028,6 +2052,7 @@ fn stop_failed_load(
     state.native_loads.remove(tab_id);
     state.native_nav_ids.remove(tab_id);
     state.load_progress.remove(tab_id);
+    state.nav_started_at.remove(tab_id);
     clear_https_upgrades(state, tab_id);
     state.tab_manager.set_tab_loading(tab_id, false);
     if state.tab_manager.active_tab_id.as_deref() != Some(tab_id) {
@@ -2062,6 +2087,7 @@ fn drop_failed_load(
     state.native_loads.remove(&tab_id);
     state.native_nav_ids.remove(&tab_id);
     state.load_progress.remove(&tab_id);
+    state.nav_started_at.remove(&tab_id);
     clear_https_upgrades(state, &tab_id);
     state.tab_manager.set_tab_loading(&tab_id, false);
     if state.tab_manager.active_tab_id.as_deref() == Some(tab_id.as_str()) {
@@ -2229,6 +2255,7 @@ pub fn build_report(
         session_id: state.session_id.clone(),
         panic,
         context: report_context(state),
+        system: crate::utils::sysinfo::summary_json(),
         logs: crate::utils::log_buffer::snapshot(crate::cloud::report::MAX_LOGS),
     }
 }
@@ -2272,6 +2299,13 @@ fn report_context(state: &AppState) -> String {
             )
         })
         .count();
+    let loading_tabs = state
+        .tab_manager
+        .tabs
+        .iter()
+        .filter(|t| t.status == crate::browser::tab::TabStatus::Loading)
+        .count();
+    let sleeping_tabs = state.tab_manager.tabs.iter().filter(|t| t.sleeping).count();
     serde_json::json!({
         "active": {
             "tab_id": state.tab_manager.active_tab_id.clone(),
@@ -2328,12 +2362,32 @@ fn report_context(state: &AppState) -> String {
             "pending_version": state.pending_update_version.clone(),
             "has_pending_url": state.pending_update_url.is_some(),
         },
+        "runtime": {
+            "loading_tabs": loading_tabs,
+            "sleeping_tabs": sleeping_tabs,
+            "navs_in_flight": state.native_nav_ids.len(),
+            "loads_recovering": state.load_recoveries.len(),
+            "https_upgrades_pending": state.https_upgrades.len(),
+            "downloads_sampling": state.download_samples.len(),
+        },
+        "memory": {
+            "avail_mb": mb_or_null(crate::utils::sysinfo::available_memory_mb()),
+            "total_mb": crate::utils::sysinfo::total_memory_mb(),
+        },
         "session": {
             "id": state.session_id.clone(),
             "signed_in": state.auth.is_some(),
         },
     })
     .to_string()
+}
+
+fn mb_or_null(mb: u64) -> serde_json::Value {
+    if mb == u64::MAX {
+        serde_json::Value::Null
+    } else {
+        serde_json::Value::from(mb)
+    }
 }
 
 fn trim_report_text(text: &str, max: usize) -> String {
@@ -2594,8 +2648,15 @@ pub fn handle_app_event_inner(
             state.tab_manager.set_tab_loading(&tab_id, true);
             if new_url || !was_loading {
                 state.load_progress.insert(tab_id.clone(), 0.0);
+                state
+                    .nav_started_at
+                    .insert(tab_id.clone(), std::time::Instant::now());
             } else {
                 state.load_progress.entry(tab_id.clone()).or_insert(0.0);
+                state
+                    .nav_started_at
+                    .entry(tab_id.clone())
+                    .or_insert_with(std::time::Instant::now);
             }
             if state.tab_manager.active_tab_id.as_deref() == Some(tab_id.as_str()) {
                 let active = state
@@ -2676,6 +2737,20 @@ pub fn handle_app_event_inner(
             state.native_loads.remove(&tab_id);
             state.native_nav_ids.remove(&tab_id);
             state.load_progress.remove(&tab_id);
+            if let Some(started) = state.nav_started_at.remove(&tab_id) {
+                let dur_ms = started.elapsed().as_millis() as u64;
+                let free_mb = crate::utils::sysinfo::available_memory_mb();
+                tracing::info!(
+                    target: "ventus::nav",
+                    tab = %tab_id,
+                    url = %crate::utils::url::log_url(&clean_url),
+                    duration_ms = dur_ms,
+                    free_mb = if free_mb == u64::MAX { 0 } else { free_mb },
+                    tabs = state.tab_manager.tabs.len(),
+                    slow = dur_ms >= 8000,
+                    "load complete"
+                );
+            }
             clear_https_upgrades(state, &tab_id);
             state.tab_manager.set_tab_loading(&tab_id, false);
             if state.tab_manager.active_tab_id.as_deref() == Some(tab_id.as_str()) {
@@ -2760,6 +2835,20 @@ pub fn handle_app_event_inner(
                 state.native_nav_ids.remove(&tab_id);
                 state.load_recoveries.remove(&load_key(&tab_id, &clean_url));
                 state.load_progress.remove(&tab_id);
+                if let Some(started) = state.nav_started_at.remove(&tab_id) {
+                    let dur_ms = started.elapsed().as_millis() as u64;
+                    let free_mb = crate::utils::sysinfo::available_memory_mb();
+                    tracing::info!(
+                        target: "ventus::nav",
+                        tab = %tab_id,
+                        url = %crate::utils::url::log_url(&clean_url),
+                        duration_ms = dur_ms,
+                        free_mb = if free_mb == u64::MAX { 0 } else { free_mb },
+                        tabs = state.tab_manager.tabs.len(),
+                        slow = dur_ms >= 8000,
+                        "load complete"
+                    );
+                }
                 clear_https_upgrades(state, &tab_id);
                 state.tab_manager.set_tab_loading(&tab_id, false);
                 if state.tab_manager.active_tab_id.as_deref() == Some(tab_id.as_str()) {
@@ -3489,13 +3578,23 @@ fn merge_cloud_bookmarks(state: &AppState, blob: &str) {
             .into_iter()
             .map(|f| f.id)
             .collect();
+    let have_urls: std::collections::HashSet<String> = repositories::list_bookmarks(&state.conn)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|b| b.url)
+        .collect();
+    // One transaction for the whole merge — same per-row-autocommit cost as history, just at a
+    // smaller scale.
+    let Ok(tx) = state.conn.unchecked_transaction() else {
+        return;
+    };
     if let Some(folders) = v["folders"].as_array() {
         for f in folders {
             let id = f["id"].as_str().unwrap_or_default();
             if id.is_empty() || have_folders.contains(id) {
                 continue;
             }
-            let _ = state.conn.execute(
+            let _ = tx.execute(
                 "INSERT OR IGNORE INTO bookmark_folders(id, name, parent_id, position, created_at) VALUES(?1,?2,?3,?4,?5)",
                 rusqlite::params![
                     id,
@@ -3507,11 +3606,6 @@ fn merge_cloud_bookmarks(state: &AppState, blob: &str) {
             );
         }
     }
-    let have_urls: std::collections::HashSet<String> = repositories::list_bookmarks(&state.conn)
-        .unwrap_or_default()
-        .into_iter()
-        .map(|b| b.url)
-        .collect();
     if let Some(items) = v["bookmarks"].as_array() {
         for b in items {
             let url = b["url"].as_str().unwrap_or_default();
@@ -3522,7 +3616,7 @@ fn merge_cloud_bookmarks(state: &AppState, blob: &str) {
                 .as_str()
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-            let _ = state.conn.execute(
+            let _ = tx.execute(
                 "INSERT OR IGNORE INTO bookmarks(id, url, title, folder_id, position, created_at, icon_only) VALUES(?1,?2,?3,?4,?5,?6,?7)",
                 rusqlite::params![
                     id,
@@ -3536,31 +3630,54 @@ fn merge_cloud_bookmarks(state: &AppState, blob: &str) {
             );
         }
     }
+    let _ = tx.commit();
 }
 
 fn merge_cloud_history(state: &AppState, blob: &str) {
-    let Ok(items) = serde_json::from_str::<Vec<repositories::HistoryEntry>>(blob) else {
+    let Ok(mut items) = serde_json::from_str::<Vec<repositories::HistoryEntry>>(blob) else {
         return;
     };
-    let have: std::collections::HashSet<(String, i64)> =
-        repositories::list_history(&state.conn, 1000)
+    if items.is_empty() {
+        return;
+    }
+    // Local history is capped at HISTORY_LIMIT rows, so only the newest HISTORY_LIMIT cloud
+    // entries can ever survive the trim below. The cloud blob, however, can grow into the tens
+    // of thousands — feeding the whole thing in meant inserting ~24k rows and then immediately
+    // deleting them again on EVERY sync, as thousands of separate auto-committed INSERTs on the
+    // UI thread. That is the multi-second "everything is unresponsive after restore" stall.
+    // Keep only the newest HISTORY_LIMIT, dedup against the full local table, and apply the
+    // genuinely-missing rows in ONE transaction (≈100x fewer fsyncs; usually near-zero work
+    // once local and cloud agree).
+    items.sort_by(|a, b| b.visited_at.cmp(&a.visited_at));
+    items.truncate(repositories::HISTORY_LIMIT as usize);
+    let mut have: std::collections::HashSet<(String, i64)> =
+        repositories::list_history(&state.conn, repositories::HISTORY_LIMIT as usize)
             .unwrap_or_default()
             .into_iter()
             .map(|e| (e.url, e.visited_at))
             .collect();
+    let Ok(tx) = state.conn.unchecked_transaction() else {
+        return;
+    };
+    let mut inserted = 0usize;
     for e in items {
-        if e.url.is_empty() || have.contains(&(e.url.clone(), e.visited_at)) {
+        if e.url.is_empty() || !have.insert((e.url.clone(), e.visited_at)) {
             continue;
         }
-        let _ = state.conn.execute(
+        let _ = tx.execute(
             "INSERT INTO history(url, title, workspace_id, visited_at) VALUES(?1,?2,?3,?4)",
             rusqlite::params![e.url, e.title, e.workspace_id, e.visited_at],
         );
+        inserted += 1;
     }
-    let _ = state.conn.execute(
-        "DELETE FROM history WHERE id NOT IN (SELECT id FROM history ORDER BY visited_at DESC LIMIT ?1)",
-        rusqlite::params![repositories::HISTORY_LIMIT],
-    );
+    if inserted > 0 {
+        let _ = tx.execute(
+            "DELETE FROM history WHERE id NOT IN (SELECT id FROM history ORDER BY visited_at DESC LIMIT ?1)",
+            rusqlite::params![repositories::HISTORY_LIMIT],
+        );
+    }
+    let _ = tx.commit();
+    tracing::info!(target: "ventus::sync", inserted, "merge_cloud_history applied");
 }
 
 fn apply_cloud_settings(state: &mut AppState, blob: &str) {

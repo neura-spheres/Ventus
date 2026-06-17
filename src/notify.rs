@@ -30,14 +30,13 @@ mod imp {
         NOTIFIER.get()
     }
 
-    pub fn register_aumid() {
+    pub fn register_aumid(data_dir: &std::path::Path) {
         use windows::Win32::System::Registry::{
-            RegCloseKey, RegCreateKeyExW, RegSetValueExW, HKEY, HKEY_CURRENT_USER, KEY_WRITE,
-            REG_OPTION_NON_VOLATILE, REG_SZ,
+            RegCloseKey, RegCreateKeyExW, HKEY, HKEY_CURRENT_USER, KEY_WRITE,
+            REG_OPTION_NON_VOLATILE,
         };
         let subkey = wide("Software\\Classes\\AppUserModelId\\NeuraSpheres.Ventus");
-        let name = wide("DisplayName");
-        let value = wide("Ventus");
+        let icon_path = ensure_toast_icon(data_dir);
         unsafe {
             let mut hkey = HKEY::default();
             let created = RegCreateKeyExW(
@@ -51,13 +50,40 @@ mod imp {
                 &mut hkey,
                 None,
             );
-            if created.is_ok() {
-                let bytes =
-                    std::slice::from_raw_parts(value.as_ptr() as *const u8, value.len() * 2);
-                let _ = RegSetValueExW(hkey, PCWSTR(name.as_ptr()), 0, REG_SZ, Some(bytes));
-                let _ = RegCloseKey(hkey);
+            if created.is_err() {
+                return;
             }
+            set_reg_sz(hkey, "DisplayName", "Ventus");
+            if let Some(path) = icon_path.as_deref().and_then(|p| p.to_str()) {
+                set_reg_sz(hkey, "IconUri", path);
+            }
+            let _ = RegCloseKey(hkey);
         }
+    }
+
+    unsafe fn set_reg_sz(
+        hkey: windows::Win32::System::Registry::HKEY,
+        name: &str,
+        value: &str,
+    ) {
+        use windows::Win32::System::Registry::{RegSetValueExW, REG_SZ};
+        let name_w = wide(name);
+        let value_w = wide(value);
+        let bytes =
+            std::slice::from_raw_parts(value_w.as_ptr() as *const u8, value_w.len() * 2);
+        let _ = RegSetValueExW(hkey, PCWSTR(name_w.as_ptr()), 0, REG_SZ, Some(bytes));
+    }
+
+    fn ensure_toast_icon(data_dir: &std::path::Path) -> Option<std::path::PathBuf> {
+        const ICON_BYTES: &[u8] = include_bytes!("../public/ventus.png");
+        let path = data_dir.join("ventus_toast_icon.png");
+        let up_to_date = std::fs::metadata(&path)
+            .map(|m| m.len() == ICON_BYTES.len() as u64)
+            .unwrap_or(false);
+        if !up_to_date && std::fs::write(&path, ICON_BYTES).is_err() {
+            return None;
+        }
+        Some(path)
     }
 
     pub fn show(
@@ -153,7 +179,7 @@ mod imp {
 pub use imp::{hide, register_aumid, show};
 
 #[cfg(not(windows))]
-pub fn register_aumid() {}
+pub fn register_aumid(_data_dir: &std::path::Path) {}
 
 #[cfg(not(windows))]
 pub fn show(
