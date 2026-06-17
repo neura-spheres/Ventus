@@ -495,6 +495,7 @@ button,input,select,textarea{font-family:var(--font)}
 #url-input:focus::placeholder{color:var(--text-muted)}
 #url-field{flex:1;min-width:0;height:100%;position:relative;display:flex;align-items:center}
 #url-field:not(.editing) #url-input{color:transparent;caret-color:transparent}
+#url-field:not(.editing) #url-input::selection{background:transparent;color:transparent}
 #url-field.editing #url-display{display:none}
 #url-display{
   position:absolute;inset:0;display:flex;align-items:center;
@@ -1440,13 +1441,11 @@ button,input,select,textarea{font-family:var(--font)}
   will-change:background-position;
 }
 .ai-msg.assistant.ai-streaming-response{animation:ai-stream-fade-in .24s ease-out both}
-.ai-msg.assistant.ai-stream-tick{animation:ai-stream-tick .18s ease-out both}
 @keyframes ai-thinking-shimmer{
   0%,12%{background-position:220% 0}
   88%,100%{background-position:-220% 0}
 }
 @keyframes ai-stream-fade-in{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:translateY(0)}}
-@keyframes ai-stream-tick{from{opacity:.72;transform:translateY(2px)}to{opacity:1;transform:translateY(0)}}
 .ai-tool-call{
   display:flex;gap:8px;align-items:center;align-self:flex-start;
   padding:8px 10px;border-radius:10px;
@@ -1668,6 +1667,15 @@ button,input,select,textarea{font-family:var(--font)}
 #ai-send-btn:hover{background:var(--primary-btn-bg-hover)}
 #ai-send-btn:active{transform:scale(.96)}
 #ai-send-btn:disabled{opacity:0.45;cursor:default;transform:none}
+[data-theme="light"] #ai-send-btn{
+  background:#111;
+  border-color:#111;
+  color:#fff;
+}
+[data-theme="light"] #ai-send-btn:hover{
+  background:#000;
+  border-color:#000;
+}
 #ai-send-btn.stop{background:var(--danger);color:var(--danger-btn-text);border-color:var(--danger)}
 #ai-send-btn.stop:hover{background:color-mix(in srgb,var(--danger) 88%,white);border-color:color-mix(in srgb,var(--danger) 88%,white)}
 #ai-clear-btn{display:none}
@@ -4848,7 +4856,6 @@ let aiStreamStopped = false;
 let aiThinkingStartedAt = 0;
 let aiThinkingWorkedApplied = false;
 let aiStreamVisualTextLength = 0;
-let aiStreamFadeTimer = null;
 let _thinkThrottleTimer = null;
 let _lastThinkingHtml = '';
 let loadProgress = 0;
@@ -4973,8 +4980,7 @@ window.__neura = {
     if (done) {
       flushThinkingRender();
       freezeAiThinkingSummary();
-      if (aiStreamFadeTimer) { clearTimeout(aiStreamFadeTimer); aiStreamFadeTimer = null; }
-      if (currentStreamEl) currentStreamEl.classList.remove('ai-streaming-response','ai-stream-tick');
+      if (currentStreamEl) currentStreamEl.classList.remove('ai-streaming-response');
       aiStreamVisualTextLength = 0;
       currentStreamEl = null;
       currentThinkingEl = null;
@@ -7069,9 +7075,11 @@ function handleUrlInput(e) {
   send('OmniboxSuggest', {q: value});
 }
 function handleUrlBlur() {
-  delete document.getElementById('url-input').dataset.showingCurrent;
+  const input = document.getElementById('url-input');
+  if (input) delete input.dataset.showingCurrent;
   scheduleSuggestionClose();
   restoreDisplayUrl();
+  clearUrlSelection(input);
 }
 function handleUrlKey(e) {
   const input = e.target;
@@ -7101,9 +7109,17 @@ function handleUrlKey(e) {
 function restoreDisplayUrl() {
   const tab = state.tabs && state.tabs.find(t => t.id === state.active_tab_id);
   if (!tab) return;
-  document.getElementById('url-input').value = formatDisplayUrl(tab.url);
+  const input = document.getElementById('url-input');
+  if (input) input.value = formatDisplayUrl(tab.url);
   syncAddressDisplay(tab.url);
   setUrlEditing(false);
+}
+function clearUrlSelection(input) {
+  if (!input) return;
+  try {
+    const pos = input.value.length;
+    input.setSelectionRange(pos, pos);
+  } catch (_) {}
 }
 function currentTabUrl() {
   const tab = state.tabs && state.tabs.find(t => t.id === state.active_tab_id);
@@ -9130,7 +9146,6 @@ function resetAiStreamState() {
   aiThinkingWorkedApplied = false;
   aiStreamVisualTextLength = 0;
   _lastThinkingHtml = '';
-  if (aiStreamFadeTimer) { clearTimeout(aiStreamFadeTimer); aiStreamFadeTimer = null; }
   if (_thinkThrottleTimer) { clearTimeout(_thinkThrottleTimer); _thinkThrottleTimer = null; }
   removeAiThinkingDots();
   removeAiToolStatuses();
@@ -9527,21 +9542,10 @@ function freezeAiThinkingSummary() {
   }
   aiThinkingFrozen = true;
 }
-function triggerAiStreamFade(content) {
-  if (!currentStreamEl) return;
+function updateAiStreamVisualLength(content) {
   const len = String(content || '').length;
   if (len <= aiStreamVisualTextLength) return;
-  const delta = len - aiStreamVisualTextLength;
   aiStreamVisualTextLength = len;
-  if (delta < 8 && aiStreamFadeTimer) return;
-  currentStreamEl.classList.remove('ai-stream-tick');
-  void currentStreamEl.offsetWidth;
-  currentStreamEl.classList.add('ai-stream-tick');
-  if (aiStreamFadeTimer) clearTimeout(aiStreamFadeTimer);
-  aiStreamFadeTimer = setTimeout(() => {
-    if (currentStreamEl) currentStreamEl.classList.remove('ai-stream-tick');
-    aiStreamFadeTimer = null;
-  }, 190);
 }
 function renderAiFinalAnswer(text) {
   const content = String(text || '');
@@ -9554,7 +9558,7 @@ function renderAiFinalAnswer(text) {
     msgs.appendChild(currentStreamEl);
   }
   currentStreamEl.innerHTML = renderAiMarkdown(content);
-  triggerAiStreamFade(content);
+  updateAiStreamVisualLength(content);
 }
 function addAiMessage(role, text) {
   startAiChat();
