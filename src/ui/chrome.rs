@@ -338,6 +338,16 @@ button,input,select,textarea{font-family:var(--font)}
   transition:width .2s cubic-bezier(.2,.75,.25,1),flex-basis .2s cubic-bezier(.2,.75,.25,1),background var(--transition),border-color var(--transition),box-shadow var(--transition);
 }
 #horizontal-tab-list .tab-item:hover{background:var(--soft-btn-bg)}
+#horizontal-tab-list .tab-item:has(+ .tab-item)::after{
+  content:'';position:absolute;top:9px;right:-2px;width:1px;height:14px;
+  border-radius:1px;background:rgba(255,255,255,0.20);pointer-events:none;
+  transition:opacity var(--transition);
+}
+[data-theme="light"] #horizontal-tab-list .tab-item:has(+ .tab-item)::after{
+  background:rgba(0,0,0,0.22);
+}
+#horizontal-tab-list .tab-item.active::after,
+#horizontal-tab-list .tab-item:has(+ .tab-item.active)::after{opacity:0}
 #horizontal-tab-list .tab-item.active{
   background:var(--bg-elevated);border-color:var(--chrome-border);
   box-shadow:0 1px 4px var(--ai-shadow),inset 0 1px 0 var(--soft-btn-bg-hover);
