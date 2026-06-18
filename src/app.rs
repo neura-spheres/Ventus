@@ -1003,7 +1003,8 @@ pub fn handle_chrome_command(
         }
         ChromeCommand::SaveSettings { key, value } => {
             let should_close_overlay = key == "onboarding_done";
-            let needs_layout = key == "sidebar_mode" || key == "show_bookmarks_bar";
+            let needs_layout =
+                key == "tab_layout" || key == "sidebar_mode" || key == "show_bookmarks_bar";
             let ad_blocker_toggled = key == "ad_blocker_enabled";
             let security_changed = key.starts_with("secure_dns_")
                 || matches!(
@@ -1174,6 +1175,12 @@ pub fn handle_chrome_command(
             Some(TabAction::SyncViews)
         }
         ChromeCommand::SidebarToggle => {
+            if matches!(
+                state.settings.appearance.tab_layout,
+                crate::config::TabLayout::Horizontal
+            ) {
+                return None;
+            }
             // Auto-hide counts as "needs expanding" — toggle takes it to expanded,
             // not compact, which matches what the toolbar button and SC_SIDEBAR do.
             let is_compact_or_auto_hide = matches!(
@@ -1389,6 +1396,15 @@ pub fn handle_chrome_command(
             None
         }
         ChromeCommand::SidebarPeek { visible, pinned } => {
+            if matches!(
+                state.settings.appearance.tab_layout,
+                crate::config::TabLayout::Horizontal
+            ) {
+                state.sidebar_auto_hide_open = false;
+                state.sidebar_pinned = false;
+                state.sidebar_clip_w_override = None;
+                return None;
+            }
             let was_pinned = state.sidebar_pinned;
             state.sidebar_auto_hide_open = visible;
             state.sidebar_pinned = visible && pinned;
@@ -1402,12 +1418,25 @@ pub fn handle_chrome_command(
             }
         }
         ChromeCommand::SidebarClipWidth { w } => {
+            if matches!(
+                state.settings.appearance.tab_layout,
+                crate::config::TabLayout::Horizontal
+            ) {
+                state.sidebar_clip_w_override = None;
+                return None;
+            }
             // JS streams the sliding sidebar's live edge so the clip column + content
             // cut track it (no dark gap). `w < 0` ends the animation → normal clip.
             state.sidebar_clip_w_override = if w < 0.0 { None } else { Some(w.max(0.0)) };
             Some(TabAction::SyncSidebarClip)
         }
         ChromeCommand::SidebarAutoClose => {
+            if matches!(
+                state.settings.appearance.tab_layout,
+                crate::config::TabLayout::Horizontal
+            ) {
+                return None;
+            }
             // Skip when pinned — pinned sidebar is solid and stays open
             if state.sidebar_auto_hide_open && !state.sidebar_pinned {
                 let _ = chrome.evaluate_script(
@@ -1420,6 +1449,9 @@ pub fn handle_chrome_command(
             let is_auto_hide = matches!(
                 state.settings.appearance.sidebar_mode,
                 crate::config::SidebarMode::AutoHide
+            ) && matches!(
+                state.settings.appearance.tab_layout,
+                crate::config::TabLayout::Vertical
             );
             if is_auto_hide && !state.sidebar_auto_hide_open {
                 let _ = chrome.evaluate_script(
@@ -3981,6 +4013,9 @@ fn apply_cloud_settings(state: &mut AppState, blob: &str) {
         state.settings.appearance.sidebar_mode,
         crate::config::SidebarMode::Compact
     );
+    state.sidebar_auto_hide_open = false;
+    state.sidebar_pinned = false;
+    state.sidebar_clip_w_override = None;
     let _ = settings_store::set(&state.conn, "app_settings", &state.settings);
 }
 
@@ -4290,6 +4325,17 @@ fn handle_save_settings(
                 state.sidebar_pinned = false;
                 state.sidebar_collapsed = m == "compact";
                 let _ = settings_store::set(&state.conn, "sidebar_mode", &m);
+            }
+        }
+        "tab_layout" => {
+            if let Some(v) = value.as_str() {
+                state.settings.appearance.tab_layout = match v {
+                    "horizontal" => crate::config::TabLayout::Horizontal,
+                    _ => crate::config::TabLayout::Vertical,
+                };
+                state.sidebar_auto_hide_open = false;
+                state.sidebar_pinned = false;
+                state.sidebar_clip_w_override = None;
             }
         }
         "startup_behavior" => {

@@ -31,6 +31,19 @@ impl Default for SidebarMode {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+pub enum TabLayout {
+    Vertical,
+    Horizontal,
+}
+
+impl Default for TabLayout {
+    fn default() -> Self {
+        TabLayout::Vertical
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum StartupBehavior {
     NewTab,
     LastSession,
@@ -84,6 +97,7 @@ pub fn clean_toolbar_buttons(values: &[String]) -> Vec<String> {
 pub struct AppearanceSettings {
     pub theme: Theme,
     pub accent_color: String,
+    pub tab_layout: TabLayout,
     pub sidebar_mode: SidebarMode,
     pub compact_toolbar: bool,
     pub show_home_button: bool,
@@ -106,6 +120,7 @@ impl Default for AppearanceSettings {
         Self {
             theme: Theme::default(),
             accent_color: "#8b5cf6".to_string(),
+            tab_layout: TabLayout::default(),
             sidebar_mode: SidebarMode::default(),
             compact_toolbar: false,
             show_home_button: true,
@@ -653,6 +668,10 @@ mod tests {
         assert!(!settings.privacy.fingerprint_protection);
         assert!(settings.privacy.strict_permissions);
         assert_eq!(settings.appearance.toolbar_buttons, vec!["ai".to_string()]);
+        assert!(matches!(
+            settings.appearance.tab_layout,
+            super::TabLayout::Vertical
+        ));
         assert!(!settings.privacy.secure_dns_enabled);
         assert_eq!(
             settings.privacy.secure_dns_provider,

@@ -434,6 +434,7 @@ fn main() {
     let layout_config = LayoutConfig {
         sidebar_expanded_w: settings.sidebar_width,
         sidebar_collapsed_w: 52,
+        horizontal_tabs_h: 40,
         toolbar_h: 44,
         ai_sidebar_w: 340,
         min_content_w: 320,
@@ -7633,6 +7634,7 @@ fn refresh_trends(
 struct LayoutConfig {
     sidebar_expanded_w: u32,
     sidebar_collapsed_w: u32,
+    horizontal_tabs_h: u32,
     toolbar_h: u32,
     ai_sidebar_w: u32,
     min_content_w: u32,
@@ -7693,16 +7695,24 @@ impl AppLayout {
             };
         }
 
-        let is_auto_hide = matches!(
-            state.settings.appearance.sidebar_mode,
-            crate::config::SidebarMode::AutoHide
+        let is_horizontal = matches!(
+            state.settings.appearance.tab_layout,
+            crate::config::TabLayout::Horizontal
         );
-        let is_compact = matches!(
-            state.settings.appearance.sidebar_mode,
-            crate::config::SidebarMode::Compact
-        );
+        let is_auto_hide = !is_horizontal
+            && matches!(
+                state.settings.appearance.sidebar_mode,
+                crate::config::SidebarMode::AutoHide
+            );
+        let is_compact = !is_horizontal
+            && matches!(
+                state.settings.appearance.sidebar_mode,
+                crate::config::SidebarMode::Compact
+            );
         let min_content_w = config.min_content_w as f64;
-        let sidebar_css_w = if is_auto_hide {
+        let sidebar_css_w = if is_horizontal {
+            0.0
+        } else if is_auto_hide {
             // Pinned auto-hide sidebar is solid and pushes content aside; unpinned it is
             // a zero-width overlay (the floating sidebar paints on top of full-width
             // content, so the content WebView stays full width and is visually clipped).
@@ -7732,14 +7742,22 @@ impl AppLayout {
         } else {
             0u32
         };
-        let toolbar_css_h = ((config.toolbar_h + bm_bar_extra) as f64).min(logical_h.max(1.0));
+        let tab_bar_extra = if is_horizontal {
+            config.horizontal_tabs_h
+        } else {
+            0
+        };
+        let toolbar_css_h =
+            ((config.toolbar_h + tab_bar_extra + bm_bar_extra) as f64).min(logical_h.max(1.0));
         let sidebar_w = logical_to_physical(sidebar_css_w, scale);
 
         const FRAME_LOGICAL: f64 = 5.0;
         let frame_side = logical_to_physical(FRAME_LOGICAL, scale);
         let frame_bottom = logical_to_physical(FRAME_LOGICAL, scale);
 
-        let clip_sidebar_w = if is_auto_hide && !state.sidebar_pinned {
+        let clip_sidebar_w = if is_horizontal {
+            frame_side
+        } else if is_auto_hide && !state.sidebar_pinned {
             let exp_w = logical_to_physical(config.sidebar_expanded_w as f64, scale);
             if let Some(ov) = state.sidebar_clip_w_override {
                 // JS streams the sidebar's live edge during the slide animation so the
@@ -7761,7 +7779,7 @@ impl AppLayout {
         let toolbar_h = logical_to_physical(toolbar_css_h, scale);
         let ai_w = logical_to_physical(ai_css_w, scale).min(size.width);
 
-        let content_offset = if is_auto_hide && !state.sidebar_pinned {
+        let content_offset = if is_horizontal || is_auto_hide && !state.sidebar_pinned {
             frame_side
         } else {
             sidebar_w + frame_side
@@ -8754,6 +8772,12 @@ fn sync_content_clip(
 #[cfg(windows)]
 fn content_cut_w(state: &AppState, layout: AppLayout) -> u32 {
     if state.content_fullscreen || !state.sidebar_auto_hide_open {
+        return 0;
+    }
+    if matches!(
+        state.settings.appearance.tab_layout,
+        crate::config::TabLayout::Horizontal
+    ) {
         return 0;
     }
     if !matches!(

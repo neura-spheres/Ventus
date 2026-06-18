@@ -13,6 +13,7 @@ pub fn chrome_html() -> String {
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
   --sidebar-w:240px;
+  --horizontal-tabs-h:40px;
   --toolbar-h:44px;
   --top-chrome-h:44px;
   --bookmarks-bar-h:30px;
@@ -284,6 +285,104 @@ button,input,select,textarea{font-family:var(--font)}
   min-width:0;
   overflow:visible;
   position:relative;
+}
+
+#horizontal-tabs{
+  display:none;align-items:center;gap:6px;
+  height:var(--horizontal-tabs-h);flex:0 0 var(--horizontal-tabs-h);
+  padding:4px 0 4px 8px;
+  background:var(--chrome-bg);border-bottom:1px solid var(--chrome-border);
+  min-width:0;position:relative;z-index:102;overflow:hidden;
+}
+#app.tabs-horizontal #horizontal-tabs{display:flex}
+#app.tabs-horizontal #sidebar{display:none}
+#app.tabs-horizontal #sidebar-toggle-btn,
+#app.tabs-horizontal #sidebar-toggle-sep{display:none}
+#app.tabs-horizontal #win-controls{display:none}
+.horizontal-win-controls{
+  display:flex;align-items:stretch;align-self:center;flex-shrink:0;
+  height:32px;background:var(--chrome-bg);
+}
+.horizontal-win-controls .win-btn{height:32px}
+.horizontal-workspace-btn{
+  height:30px;max-width:168px;min-width:42px;padding:0 9px;
+  display:flex;align-items:center;gap:7px;flex-shrink:0;
+  border:1px solid transparent;border-radius:9px;background:transparent;
+  color:var(--text);cursor:pointer;transition:background var(--transition),border-color var(--transition);
+}
+.horizontal-workspace-btn:hover{background:var(--soft-btn-bg);border-color:var(--chrome-border)}
+.horizontal-workspace-avatar{
+  width:22px;height:22px;border-radius:7px;display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;font-size:12px;line-height:1;color:#fff;font-weight:700;text-transform:uppercase;
+  background:var(--bg-hover);box-shadow:0 2px 8px var(--ai-shadow);
+}
+.horizontal-workspace-name{
+  min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-size:11.5px;font-weight:650;letter-spacing:-0.01em;
+}
+.horizontal-workspace-chevron{display:flex;color:var(--text-dim);flex-shrink:0}
+.horizontal-tab-divider{width:1px;height:20px;background:var(--chrome-border);flex-shrink:0}
+#horizontal-tab-scroll{
+  flex:1;min-width:0;height:32px;overflow-x:auto;overflow-y:hidden;
+  scrollbar-width:none;overscroll-behavior-x:contain;scroll-behavior:smooth;
+}
+#horizontal-tab-scroll::-webkit-scrollbar{display:none}
+#horizontal-tab-list{
+  width:max-content;min-width:0;height:32px;
+  display:flex;align-items:center;gap:3px;
+}
+#horizontal-tab-list .tab-item{
+  width:var(--horizontal-tab-width,154px);min-width:72px;max-width:154px;height:32px;min-height:32px;
+  flex:0 0 var(--horizontal-tab-width,154px);padding:0 9px;gap:7px;border-radius:9px;
+  border:1px solid transparent;background:transparent;
+  transition:width .2s cubic-bezier(.2,.75,.25,1),flex-basis .2s cubic-bezier(.2,.75,.25,1),background var(--transition),border-color var(--transition),box-shadow var(--transition);
+}
+#horizontal-tab-list .tab-item:hover{background:var(--soft-btn-bg)}
+#horizontal-tab-list .tab-item.active{
+  background:var(--bg-elevated);border-color:var(--chrome-border);
+  box-shadow:0 1px 4px var(--ai-shadow),inset 0 1px 0 var(--soft-btn-bg-hover);
+}
+#horizontal-tab-list .tab-info{display:flex;align-items:center;min-width:0}
+#horizontal-tab-list .tab-title{font-size:11.5px;line-height:1.2;color:var(--text-muted)}
+#horizontal-tab-list .tab-item.active .tab-title{color:var(--text)}
+#horizontal-tab-list .tab-url{display:none}
+#horizontal-tab-list .tab-close{opacity:0}
+#horizontal-tab-list .tab-item:hover .tab-close,
+#horizontal-tab-list .tab-item.active .tab-close{opacity:1}
+#horizontal-tab-list .tab-item.pinned{
+  width:34px;min-width:34px;max-width:34px;flex:0 0 34px;padding:0;justify-content:center;
+}
+#horizontal-tab-list .tab-item.pinned .tab-info,
+#horizontal-tab-list .tab-item.pinned .tab-close,
+#horizontal-tab-list .tab-item.pinned .tab-audio-btn{display:none}
+#horizontal-tab-list .tab-item.pinned::before{top:4px;right:4px}
+#horizontal-tab-list .tab-item.dz-line{box-shadow:inset 2px 0 0 0 var(--accent)}
+#horizontal-tab-list .tab-item.dz-line-end{box-shadow:inset -2px 0 0 0 var(--accent)}
+.horizontal-new-tab{
+  width:30px;height:30px;border:none;border-radius:9px;background:transparent;
+  color:var(--text-muted);display:flex;align-items:center;justify-content:center;
+  cursor:pointer;flex:0 0 30px;transition:background var(--transition),color var(--transition),transform .2s cubic-bezier(.2,.75,.25,1);
+}
+.horizontal-new-tab:hover{background:var(--soft-btn-bg-hover);color:var(--text)}
+#horizontal-tab-list .tab-item.tab-enter{animation:horizontal-tab-in .24s cubic-bezier(.2,.8,.25,1)}
+.horizontal-tab-ghost{
+  position:absolute;height:32px;min-height:32px;display:flex;align-items:center;gap:7px;
+  padding:0 9px;border:1px solid var(--chrome-border);border-radius:9px;
+  background:var(--bg-elevated);box-shadow:0 1px 4px var(--ai-shadow);
+  color:var(--text);overflow:hidden;pointer-events:none;z-index:5;
+  transform-origin:center;transition:opacity .18s ease,transform .22s cubic-bezier(.4,0,1,1),width .22s cubic-bezier(.4,0,1,1),padding .22s ease;
+}
+.horizontal-tab-ghost .tab-info{display:flex;align-items:center;min-width:0;flex:1}
+.horizontal-tab-ghost .tab-title{font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.horizontal-tab-ghost .tab-url,.horizontal-tab-ghost .tab-close{display:none}
+.horizontal-tab-ghost.leaving{width:0!important;padding-left:0;padding-right:0;opacity:0;transform:translateY(-2px) scale(.82)}
+@keyframes horizontal-tab-in{
+  from{opacity:0;transform:translateY(-3px) scale(.84)}
+  to{opacity:1;transform:translateY(0) scale(1)}
+}
+@media(max-width:760px){
+  .horizontal-workspace-name,.horizontal-workspace-chevron{display:none}
+  .horizontal-workspace-btn{padding:0 4px}
 }
 
 #toolbar{
@@ -1228,6 +1327,35 @@ button,input,select,textarea{font-family:var(--font)}
 .tab-close:hover{background:rgba(239,68,68,0.15);color:#f87171}
 .tab-item.loading{animation:tab-chip-pulse 1.8s ease-in-out infinite}
 .tab-item.active.loading{animation:tab-chip-pulse-active 1.8s ease-in-out infinite}
+
+.tab-layout-picker{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.tab-layout-option{
+  min-height:64px;padding:10px;border:1px solid var(--border);border-radius:11px;
+  background:var(--soft-btn-bg);color:var(--text-muted);cursor:pointer;
+  display:flex;align-items:center;gap:10px;text-align:left;
+  transition:background var(--transition),border-color var(--transition),color var(--transition),box-shadow var(--transition);
+}
+.tab-layout-option:hover{background:var(--soft-btn-bg-hover);color:var(--text)}
+.tab-layout-option.selected{
+  color:var(--text);border-color:var(--accent);
+  background:var(--accent-dim);box-shadow:0 0 0 2px var(--accent-dim);
+}
+.tab-layout-preview{
+  width:46px;height:34px;border:1px solid var(--border);border-radius:7px;
+  background:var(--bg);display:grid;overflow:hidden;flex-shrink:0;
+}
+.tab-layout-preview.vertical{grid-template-columns:12px 1fr;grid-template-rows:8px 1fr}
+.tab-layout-preview.horizontal{grid-template-columns:1fr;grid-template-rows:9px 8px 1fr}
+.tab-layout-preview span{display:block;background:var(--bg-elevated);border-color:var(--border-subtle)}
+.tab-layout-preview.vertical span:first-child{grid-row:1/3;border-right:1px solid var(--border-subtle)}
+.tab-layout-preview.vertical span:nth-child(2){border-bottom:1px solid var(--border-subtle)}
+.tab-layout-preview.horizontal span:first-child,
+.tab-layout-preview.horizontal span:nth-child(2){border-bottom:1px solid var(--border-subtle)}
+.tab-layout-copy{display:flex;flex-direction:column;gap:2px;min-width:0}
+.tab-layout-title{font-size:12px;font-weight:650;color:inherit}
+.tab-layout-desc{font-size:10.5px;color:var(--text-dim);line-height:1.25}
+.settings-group.sidebar-disabled{opacity:.46}
+.settings-group.sidebar-disabled select{pointer-events:none}
 
 #ai-header{
   display:flex;align-items:center;justify-content:space-between;gap:8px;
@@ -3336,6 +3464,8 @@ button,input,select,textarea{font-family:var(--font)}
   background:var(--bg);
   overflow:visible;
 }
+#app.tabs-horizontal #sidebar-float-trigger{left:0;pointer-events:none}
+#app.tabs-horizontal #sidebar-pill{display:none}
 #frame-right{
   display:block;position:fixed;
   top:var(--top-chrome-h);right:var(--ai-w);
@@ -3452,12 +3582,34 @@ svg{display:block;flex-shrink:0}
 <div id="app" class="sidebar-auto-hide">
 
 <div id="top-chrome">
+<div id="horizontal-tabs" onmousedown="handleToolbarDrag(event)" ondblclick="handleToolbarDblClick(event)">
+  <button class="horizontal-workspace-btn" id="horizontal-workspace-btn" onclick="openWsSwitcher()" oncontextmenu="wsContextMenu(event,state.active_workspace_id)" title="Workspaces">
+    <span class="horizontal-workspace-avatar" id="horizontal-workspace-avatar"></span>
+    <span class="horizontal-workspace-name" id="horizontal-workspace-name"></span>
+    <span class="horizontal-workspace-chevron">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 10 5 5 5-5"/></svg>
+    </span>
+  </button>
+  <div class="horizontal-tab-divider"></div>
+  <div id="horizontal-tab-scroll" onwheel="scrollHorizontalTabs(event)"><div id="horizontal-tab-list"></div></div>
+  <div class="horizontal-win-controls" onmousedown="event.stopPropagation()">
+    <button class="win-btn" onclick="send('WindowMinimize')" title="Minimize">
+      <svg width="11" height="11" viewBox="0 0 11 11" fill="currentColor"><path d="M11 4.399V5.5H0V4.399h11z"/></svg>
+    </button>
+    <button class="win-btn" id="horizontal-win-btn-max" onclick="send('WindowMaximize')" title="Maximize">
+      <svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" stroke-width="1"><rect x="0.5" y="0.5" width="10" height="10"/></svg>
+    </button>
+    <button class="win-btn win-btn-close" onclick="send('WindowClose')" title="Close">
+      <svg width="11" height="11" viewBox="0 0 11 11" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><line x1="0.5" y1="0.5" x2="10.5" y2="10.5"/><line x1="10.5" y1="0.5" x2="0.5" y2="10.5"/></svg>
+    </button>
+  </div>
+</div>
 <div id="toolbar" onmousedown="handleToolbarDrag(event)" ondblclick="handleToolbarDblClick(event)">
   <div id="toolbar-nav">
   <button class="tb-btn" id="sidebar-toggle-btn" title="Toggle sidebar" onclick="toggleSidebar()">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></svg>
   </button>
-  <div class="tb-sep"></div>
+  <div class="tb-sep" id="sidebar-toggle-sep"></div>
   <button class="tb-btn" id="btn-back" onclick="nav('Back')" disabled title="Back (Alt+Left)">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5m7-7-7 7 7 7"/></svg>
   </button>
@@ -4152,12 +4304,26 @@ svg{display:block;flex-shrink:0}
           </select>
         </div>
         <div class="settings-group">
+          <label>Tab layout</label>
+          <div class="tab-layout-picker">
+            <button type="button" class="tab-layout-option selected" id="tab-layout-vertical" onclick="setTabLayout('vertical')" aria-pressed="true">
+              <span class="tab-layout-preview vertical"><span></span><span></span><span></span></span>
+              <span class="tab-layout-copy"><span class="tab-layout-title">Vertical</span><span class="tab-layout-desc">Tabs in the sidebar</span></span>
+            </button>
+            <button type="button" class="tab-layout-option" id="tab-layout-horizontal" onclick="setTabLayout('horizontal')" aria-pressed="false">
+              <span class="tab-layout-preview horizontal"><span></span><span></span><span></span></span>
+              <span class="tab-layout-copy"><span class="tab-layout-title">Horizontal</span><span class="tab-layout-desc">Tabs above the toolbar</span></span>
+            </button>
+          </div>
+        </div>
+        <div class="settings-group" id="sidebar-behavior-settings">
           <label>Sidebar mode</label>
           <select class="settings-select" id="set-sidebar-mode" onchange="saveSetting('sidebar_mode',this.value)">
             <option value="expanded">Expanded</option>
             <option value="compact">Compact</option>
             <option value="auto_hide">Auto-hide (float on hover)</option>
           </select>
+          <div class="hint" id="sidebar-mode-hint">Controls how vertical tabs behave</div>
         </div>
         <div class="settings-group">
           <label>Top bar buttons</label>
@@ -5015,6 +5181,12 @@ let state = {
   ai_model: '',
   is_bookmarked: false,
 };
+const H_TAB_ADD = `<button class="horizontal-new-tab" onclick="openNewTabSpotlight()" title="New tab (Ctrl+T)">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14m-7-7h14"/></svg>
+</button>`;
+let hTabIds = [];
+let hTabWorkspace = '';
+let hTabsReady = false;
 let obStep = 0;
 const OB_STEPS = 6;
 let obTheme = 'dark';
@@ -5327,7 +5499,6 @@ window.__neura = {
     if (ctx) ctx.style.display = 'none';
     const toast = document.getElementById('update-toast');
     if (toast) toast.classList.remove('visible','hiding');
-    document.removeEventListener('click', _adblockOutside, true);
     if (spotlightOpen) {
       spotlightOpen = false;
       tspExitAiMode();
@@ -5543,7 +5714,6 @@ function openAdBlockModal() {
     modal.style.right = 'auto';
   }
   setChromeOverlay('adblock', {x:0, y:0, width:window.innerWidth, height:window.innerHeight});
-  setTimeout(() => document.addEventListener('click', _adblockOutside, {once: true, capture: true}), 0);
 }
 
 function closeAdBlockModal() {
@@ -5552,15 +5722,6 @@ function closeAdBlockModal() {
   if (backdrop) backdrop.classList.remove('open');
   if (modal) modal.classList.remove('open');
   clearChromeOverlay('adblock');
-  document.removeEventListener('click', _adblockOutside, true);
-}
-
-function _adblockOutside(e) {
-  const modal = document.getElementById('adblock-modal');
-  const btn = document.getElementById('btn-adblock');
-  if (modal && !modal.contains(e.target) && e.target !== btn && !btn.contains(e.target)) {
-    closeAdBlockModal();
-  }
 }
 
 function _syncAdBlockModal() {
@@ -5630,7 +5791,9 @@ function renderWorkspaces() {
   const activeId = state.active_workspace_id;
   const activeIdx = wsList.findIndex(w => w.id === activeId);
   const multi = wsList.length > 1;
-  setSidebarGlow(wsList.find(w => w.id === activeId));
+  const activeWs = wsList.find(w => w.id === activeId);
+  setSidebarGlow(activeWs);
+  renderHorizontalWorkspace(activeWs);
 
   // Workspace page dots — always shown, with hover popover
   const dotsEl = document.getElementById('sb-ws-dots');
@@ -5660,6 +5823,23 @@ function renderWorkspaces() {
   renderWsCompactBtn();
   const switcher = document.getElementById('ws-switcher-modal');
   if (switcher && switcher.classList.contains('open')) renderWsSwitcher();
+}
+
+function renderHorizontalWorkspace(ws) {
+  const btn = document.getElementById('horizontal-workspace-btn');
+  const avatar = document.getElementById('horizontal-workspace-avatar');
+  const name = document.getElementById('horizontal-workspace-name');
+  if (!btn || !avatar || !name) return;
+  if (!ws) {
+    avatar.textContent = '';
+    name.textContent = 'Workspaces';
+    btn.title = 'Workspaces';
+    return;
+  }
+  avatar.textContent = ws.icon || (ws.name || '').substring(0, 2);
+  avatar.style.background = ws.icon ? 'var(--bg-hover)' : (cleanHex(ws.accent_color) || '#8b5cf6');
+  name.textContent = ws.name || 'Workspace';
+  btn.title = 'Workspace: ' + (ws.name || 'Workspace');
 }
 
 function renderWsCompactBtn() {
@@ -5836,19 +6016,36 @@ function showWsPopDelete() {
 
 function renderTabs() {
   const list = document.getElementById('sb-page');
+  const horizontalList = document.getElementById('horizontal-tab-list');
+  const horizontalScroll = document.getElementById('horizontal-tab-scroll');
+  const horizontalLeft = horizontalScroll ? horizontalScroll.scrollLeft : 0;
   const tabs = (state.tabs || []).filter(t => t.workspace_id === state.active_workspace_id);
+  const nextIds = tabs.map(tab => tab.id);
+  const sameWorkspace = hTabsReady && hTabWorkspace === state.active_workspace_id;
+  const priorIds = new Set(hTabIds);
+  const nextIdSet = new Set(nextIds);
+  const enteringIds = sameWorkspace
+    ? new Set(nextIds.filter(id => !priorIds.has(id)))
+    : new Set();
+  if (sameWorkspace) animateClosedHorizontalTabs(nextIdSet);
+  hTabIds = nextIds;
+  hTabWorkspace = state.active_workspace_id || '';
+  hTabsReady = true;
   if (tabs.length === 0) {
     list.innerHTML = '<div style="text-align:center;padding:20px 8px;color:var(--text-dim);font-size:11px">No tabs open</div>';
+    if (horizontalList) horizontalList.innerHTML = H_TAB_ADD;
     __animateSbPageEntry(list);
+    requestAnimationFrame(sizeHorizontalTabs);
     return;
   }
-  list.innerHTML = tabs.map(tab => {
+  const html = tabs.map(tab => {
     const active = tab.id === state.active_tab_id ? 'active' : '';
     const loading = tab.status === 'loading' ? 'loading' : '';
     const pinned = tab.pinned ? 'pinned' : '';
     const audioPlaying = tab.is_audio_playing ? 'audio-playing' : '';
     const tabMuted = tab.is_muted ? 'tab-muted' : '';
     const sleeping = tab.discarded ? 'sleeping' : '';
+    const entering = enteringIds.has(tab.id) ? 'tab-enter' : '';
     const icon = tabIconUrl(tab);
     const fallback = tabFallbackIcon(loading, !!icon);
     const faviconEl = icon
@@ -5865,7 +6062,7 @@ function renderTabs() {
     const sleepIcon = tab.discarded
       ? `<svg class="tab-sleep-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" title="Tab is sleeping — click to wake"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`
       : '';
-    return `<div class="tab-item ${active} ${loading} ${pinned} ${audioPlaying} ${tabMuted} ${sleeping}" draggable="true" data-reorder-id="${escAttr(tab.id)}" data-nav-url="${escAttr(tab.url)}" onclick="switchTab('${tab.id}')" oncontextmenu="tabContextMenu(event,'${tab.id}')">
+    return `<div class="tab-item ${active} ${loading} ${pinned} ${audioPlaying} ${tabMuted} ${sleeping} ${entering}" draggable="true" data-reorder-id="${escAttr(tab.id)}" data-nav-url="${escAttr(tab.url)}" onclick="switchTab('${tab.id}')" oncontextmenu="tabContextMenu(event,'${tab.id}')">
       ${faviconEl}
       <div class="tab-info">
         <div class="tab-title">${escHtml(tab.title || 'New Tab')}</div>
@@ -5877,7 +6074,81 @@ function renderTabs() {
       </button>
     </div>`;
   }).join('');
+  list.innerHTML = html;
+  if (horizontalList) horizontalList.innerHTML = html + H_TAB_ADD;
+  if (horizontalScroll) horizontalScroll.scrollLeft = horizontalLeft;
   __animateSbPageEntry(list);
+  requestAnimationFrame(() => {
+    sizeHorizontalTabs();
+    scrollHorizontalActiveTab();
+  });
+}
+
+function sizeHorizontalTabs() {
+  if (!horizontalTabs()) return;
+  const list = document.getElementById('horizontal-tab-list');
+  const scroll = document.getElementById('horizontal-tab-scroll');
+  if (!list || !scroll || scroll.clientWidth <= 0) return;
+  const tabs = [...list.querySelectorAll('.tab-item')];
+  const pinned = tabs.filter(tab => tab.classList.contains('pinned')).length;
+  const normal = tabs.length - pinned;
+  const gaps = tabs.length * 3;
+  const available = scroll.clientWidth - pinned * 34 - 30 - gaps;
+  const width = normal > 0
+    ? Math.max(72, Math.min(154, Math.floor(available / normal)))
+    : 72;
+  list.style.setProperty('--horizontal-tab-width', width + 'px');
+}
+
+function animateClosedHorizontalTabs(nextIds) {
+  if (!horizontalTabs()) return;
+  const list = document.getElementById('horizontal-tab-list');
+  const scroll = document.getElementById('horizontal-tab-scroll');
+  const shell = document.getElementById('horizontal-tabs');
+  if (!list || !scroll || !shell) return;
+  const shellRect = shell.getBoundingClientRect();
+  const scrollRect = scroll.getBoundingClientRect();
+  list.querySelectorAll('.tab-item').forEach(tab => {
+    const id = tab.dataset.reorderId;
+    if (!id || nextIds.has(id)) return;
+    const rect = tab.getBoundingClientRect();
+    if (rect.right <= scrollRect.left || rect.left >= scrollRect.right) return;
+    const ghost = tab.cloneNode(true);
+    ghost.className = 'horizontal-tab-ghost';
+    ghost.removeAttribute('draggable');
+    ghost.removeAttribute('onclick');
+    ghost.removeAttribute('oncontextmenu');
+    ghost.style.left = (rect.left - shellRect.left) + 'px';
+    ghost.style.top = (rect.top - shellRect.top) + 'px';
+    ghost.style.width = rect.width + 'px';
+    shell.appendChild(ghost);
+    requestAnimationFrame(() => ghost.classList.add('leaving'));
+    setTimeout(() => ghost.remove(), 240);
+  });
+}
+
+function scrollHorizontalActiveTab() {
+  if (!horizontalTabs()) return;
+  const scroll = document.getElementById('horizontal-tab-scroll');
+  const active = document.querySelector('#horizontal-tab-list .tab-item.active');
+  if (!scroll || !active) return;
+  const scrollRect = scroll.getBoundingClientRect();
+  const tabRect = active.getBoundingClientRect();
+  const add = active.nextElementSibling && active.nextElementSibling.classList.contains('horizontal-new-tab')
+    ? active.nextElementSibling.getBoundingClientRect()
+    : tabRect;
+  if (tabRect.left < scrollRect.left) {
+    scroll.scrollLeft -= scrollRect.left - tabRect.left + 8;
+  } else if (add.right > scrollRect.right) {
+    scroll.scrollLeft += add.right - scrollRect.right + 8;
+  }
+}
+
+function scrollHorizontalTabs(e) {
+  const scroll = e.currentTarget;
+  if (!scroll || scroll.scrollWidth <= scroll.clientWidth) return;
+  e.preventDefault();
+  scroll.scrollLeft += e.deltaY || e.deltaX;
 }
 
 function tabIconUrl(tab) {
@@ -6190,23 +6461,58 @@ function setFontFamily(value) {
   send('SaveSettings', {key: 'font_family', value: key});
 }
 
+function tabLayoutKey(value) {
+  return value === 'horizontal' ? 'horizontal' : 'vertical';
+}
+
+function horizontalTabs() {
+  const app = (state.settings && state.settings.appearance) || {};
+  return tabLayoutKey(app.tab_layout) === 'horizontal';
+}
+
+function setTabLayout(value) {
+  saveSetting('tab_layout', tabLayoutKey(value));
+}
+
+function renderTabLayoutSettings() {
+  const current = horizontalTabs() ? 'horizontal' : 'vertical';
+  ['vertical', 'horizontal'].forEach(value => {
+    const el = document.getElementById('tab-layout-' + value);
+    if (!el) return;
+    const selected = value === current;
+    el.classList.toggle('selected', selected);
+    el.setAttribute('aria-pressed', selected ? 'true' : 'false');
+  });
+}
+
 function applySidebarMode() {
   const s = state.settings || {};
   const mode = (s.appearance && s.appearance.sidebar_mode) || 'expanded';
-  const isAutoHide = mode === 'auto_hide';
-  const isCompact = mode === 'compact' || state.sidebar_collapsed;
+  const horizontal = horizontalTabs();
+  const isAutoHide = !horizontal && mode === 'auto_hide';
+  const isCompact = !horizontal && (mode === 'compact' || state.sidebar_collapsed);
   const app = document.getElementById('app');
+  app.classList.toggle('tabs-horizontal', horizontal);
   app.classList.toggle('sidebar-auto-hide', isAutoHide);
   app.classList.toggle('sidebar-collapsed', isCompact && !isAutoHide);
   app.classList.toggle('hide-tab-url', !(s.appearance && s.appearance.show_tab_url !== false));
   app.classList.toggle('compact-tabs', !!(s.tabs && s.tabs.compact_tabs));
   app.classList.toggle('show-bookmarks-bar', !!(s.appearance && s.appearance.show_bookmarks_bar));
-  if (!isAutoHide && sidebarPeeking) {
+  if ((!isAutoHide || horizontal) && sidebarPeeking) {
     cancelSidebarHide();
     sidebarPeeking = false;
     sidebarPinned  = false;
     app.classList.remove('sidebar-floating-open');
   }
+  const sidebarGroup = document.getElementById('sidebar-behavior-settings');
+  const sidebarSelect = document.getElementById('set-sidebar-mode');
+  const sidebarHint = document.getElementById('sidebar-mode-hint');
+  if (sidebarGroup) sidebarGroup.classList.toggle('sidebar-disabled', horizontal);
+  if (sidebarSelect) sidebarSelect.disabled = horizontal;
+  if (sidebarHint) sidebarHint.textContent = horizontal
+    ? 'Switch to vertical tabs to change this'
+    : 'Controls how vertical tabs behave';
+  renderTabLayoutSettings();
   _syncSidebarBtnState();
   renderBookmarksBar();
 }
@@ -6453,6 +6759,7 @@ function deleteWorkspaceByActive(ev) {
 }
 function closeTab(ev, id) { ev.stopPropagation(); send('CloseTab', {id}); }
 function toggleSidebar() {
+  if (horizontalTabs()) return;
   const app = document.getElementById('app');
   const isAutoHide = app.classList.contains('sidebar-auto-hide');
   if (isAutoHide) {
@@ -6678,8 +6985,9 @@ function confirmWorkspaceDelete() {
 // ============================================================
 // WINDOW CONTROLS (frameless window)
 // ============================================================
-const DRAG_EXEMPT = 'button,input,select,textarea,a,.tb-btn,#address-bar,#win-controls';
+const DRAG_EXEMPT = 'button,input,select,textarea,a,.tb-btn,.tab-item,#address-bar,#win-controls';
 function handleToolbarDrag(e) {
+  if (horizontalTabs() && e.currentTarget && e.currentTarget.id === 'toolbar') return;
   if (e.button !== 0) return;
   if (e.detail > 1) return;
   if (e.target.closest(DRAG_EXEMPT)) return;
@@ -6687,16 +6995,20 @@ function handleToolbarDrag(e) {
   send('WindowDragStart');
 }
 function handleToolbarDblClick(e) {
+  if (horizontalTabs() && e.currentTarget && e.currentTarget.id === 'toolbar') return;
   if (e.target.closest(DRAG_EXEMPT)) return;
   send('WindowMaximize');
 }
 function setWindowMaximized(v) {
-  const btn = document.getElementById('win-btn-max');
-  if (!btn) return;
-  btn.title = v ? 'Restore' : 'Maximize';
-  btn.innerHTML = v
+  const html = v
     ? '<svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" stroke-width="1"><path d="M3.5 0.5h7v7h-3"/><rect x="0.5" y="3.5" width="7" height="7"/></svg>'
     : '<svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" stroke-width="1"><rect x="0.5" y="0.5" width="10" height="10"/></svg>';
+  ['win-btn-max', 'horizontal-win-btn-max'].forEach(id => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    btn.title = v ? 'Restore' : 'Maximize';
+    btn.innerHTML = html;
+  });
 }
 
 function _syncSidebarBtnState() {
@@ -6782,6 +7094,7 @@ function animSidebarClip() {
 // pin=true: opened via button click — stays open until explicitly closed
 // pin=false: hover — never activates the button, never pins
 function showFloatingSidebar(pin) {
+  if (horizontalTabs()) return;
   cancelSidebarHide();
   clearSidebarClipTimer();
   if (!sidebarPeeking) {
@@ -6855,6 +7168,19 @@ function saveSetting(key, value) {
     document.getElementById('app').classList.remove('sidebar-floating-open');
     applySidebarMode();
   }
+  if (key === 'tab_layout') {
+    if (!state.settings) state.settings = {};
+    if (!state.settings.appearance) state.settings.appearance = {};
+    state.settings.appearance.tab_layout = tabLayoutKey(value);
+    cancelSidebarHide();
+    clearSidebarClipTimer();
+    clearSidebarPinTimer();
+    sidebarPeeking = false;
+    sidebarPinned = false;
+    document.getElementById('app').classList.remove('sidebar-floating-open');
+    applySidebarMode();
+    renderTabs();
+  }
   updateGeneralSettingsReadout();
 }
 function rememberSetting(key, value) {
@@ -6921,6 +7247,7 @@ function populateSettingsPanel() {
   updateGeneralSettingsReadout();
   const modeMap = {expanded:'expanded', compact:'compact', auto_hide:'auto_hide'};
   setSelectValue('set-sidebar-mode', modeMap[app.sidebar_mode] || 'expanded');
+  renderTabLayoutSettings();
   const themeMap = {dark:'dark', light:'light', system:'system'};
   const themeKey = themeMap[(app.theme || '').toLowerCase()] || 'dark';
   document.querySelectorAll('.theme-card').forEach(c => c.classList.remove('selected'));
@@ -7806,24 +8133,12 @@ function openSiteInfo() {
   pop.classList.add('open');
   setChromeOverlay('site-info', {x:0, y:0, width:window.innerWidth, height:window.innerHeight});
   syncSiteInfoPopover();
-  setTimeout(() => document.addEventListener('click', siteInfoOutside, {once:true, capture:true}), 0);
 }
 function closeSiteInfo() {
   const pop = document.getElementById('site-info-popover');
   siteInfoOpen = false;
   if (pop) pop.classList.remove('open');
   clearChromeOverlay('site-info');
-  document.removeEventListener('click', siteInfoOutside, true);
-}
-function siteInfoOutside(e) {
-  const pop = document.getElementById('site-info-popover');
-  const btn = document.getElementById('site-info-btn');
-  if (pop && pop.contains(e.target)) {
-    setTimeout(() => document.addEventListener('click', siteInfoOutside, {once:true, capture:true}), 0);
-    return;
-  }
-  if (btn && btn.contains(e.target)) return;
-  closeSiteInfo();
 }
 function syncSiteInfoPopover() {
   const pop = document.getElementById('site-info-popover');
@@ -11908,23 +12223,48 @@ function isSelectableAiTarget(target) {
   return target && target.closest && target.closest('#ai-messages .ai-msg,#ai-messages .ai-thinking-summary,#tsp-ai-thread .tsp-ai-turn');
 }
 
-// Close context menu or more menu on click outside
-document.addEventListener('mousedown', e => {
+function closeChromePopovers(target) {
+  const inside = selector => target && target.closest && target.closest(selector);
   const ctx = document.getElementById('context-menu');
-  if (ctx.classList.contains('open') && !ctx.contains(e.target)) {
-    closeContextMenu();
-  }
+  if (ctx.classList.contains('open') && !inside('#context-menu')) closeContextMenu();
+
   const more = document.getElementById('more-menu');
   const moreBtn = document.getElementById('btn-more');
-  if (more && more.classList.contains('open') && !more.contains(e.target) && moreBtn && !moreBtn.contains(e.target)) {
-    closeMoreMenu();
-  }
+  const onMoreBtn = target && moreBtn && (target === moreBtn || moreBtn.contains(target));
+  if (more && more.classList.contains('open') && !inside('#more-menu') && !onMoreBtn) closeMoreMenu();
+
+  const downloads = document.getElementById('download-panel');
+  const downloadsBtn = toolbarAnchor('downloads') || moreBtn;
+  const onDownloadsBtn = target && downloadsBtn && (target === downloadsBtn || downloadsBtn.contains(target));
+  if (downloads && downloads.classList.contains('open') && !inside('#download-panel') && !onDownloadsBtn) closeDownloadPanel();
+
   const fm = document.getElementById('folder-modal');
   const ctxMenu = document.getElementById('ctx-menu');
   const bmEdit = document.getElementById('bm-edit-modal');
-  if (_activeFolderId && fm && fm.classList.contains('open') && !fm.contains(e.target) && !e.target.closest('[data-folder-id]') && !(ctxMenu && ctxMenu.contains(e.target)) && !(bmEdit && bmEdit.contains(e.target))) {
+  const inFolderMenu = target && ctxMenu && ctxMenu.contains(target);
+  const inBookmarkEdit = target && bmEdit && bmEdit.contains(target);
+  if (_activeFolderId && fm && fm.classList.contains('open') && !inside('#folder-modal') && !inside('[data-folder-id]') && !inFolderMenu && !inBookmarkEdit) {
     closeFolderModal();
   }
+
+  if (_bmOverflowOpen && !inside('#bm-bar-overflow-panel') && !inside('.bm-bar-overflow-btn')) closeBmOverflowPanel();
+
+  const adblock = document.getElementById('adblock-modal');
+  if (adblock && adblock.classList.contains('open') && !inside('#adblock-modal') && !inside('#btn-adblock')) closeAdBlockModal();
+
+  if (siteInfoOpen && !inside('#site-info-popover') && !inside('#site-info-btn')) closeSiteInfo();
+
+  if (_providerDdOpen && !inside('#ai-provider-dd')) {
+    _providerDdOpen = false;
+    document.getElementById('ai-provider-dd').classList.remove('open');
+  }
+
+  const pwdBar = document.getElementById('pwd-save-bar');
+  if (pwdBar && pwdBar.style.display !== 'none' && !inside('#pwd-save-bar')) dismissSavePassword();
+}
+
+document.addEventListener('mousedown', e => {
+  closeChromePopovers(e.target);
 }, true);
 
 // Suppress browser's own context menu on the chrome overlay
@@ -12039,12 +12379,7 @@ function flashDownloadStart() {
 // download panel — it's clipped to its own rect, so the page never received the chrome's
 // own document-level click handler that would otherwise dismiss it.
 function onContentPointerDown() {
-  const panel = document.getElementById('download-panel');
-  if (panel && panel.classList.contains('open')) closeDownloadPanel();
-  if (siteInfoOpen) closeSiteInfo();
-  if (_activeFolderId) closeFolderModal();
-  const pwdBar = document.getElementById('pwd-save-bar');
-  if (pwdBar && pwdBar.style.display !== 'none') dismissSavePassword();
+  closeChromePopovers(null);
 }
 
 function isPdfFile(name) {
@@ -12135,20 +12470,6 @@ document.getElementById('download-panel').addEventListener('click', e => {
   const delBtn = e.target.closest('[data-del-dl-id]');
   if (delBtn) { e.stopPropagation(); send('DeleteDownload', {id: delBtn.dataset.delDlId}); return; }
 });
-
-// Close download panel on click outside (also on Escape — handled in keydown)
-document.addEventListener('click', e => {
-  const panel = document.getElementById('download-panel');
-  const dlBtn = toolbarAnchor('downloads') || document.getElementById('btn-more');
-  if (panel.classList.contains('open') && !panel.contains(e.target) && !(dlBtn && dlBtn.contains(e.target))) {
-    closeDownloadPanel();
-  }
-  const menu = document.getElementById('more-menu');
-  const moreBtn = document.getElementById('btn-more');
-  if (menu && menu.classList.contains('open') && !menu.contains(e.target) && !(moreBtn && moreBtn.contains(e.target))) {
-    closeMoreMenu();
-  }
-}, true);
 
 // ============================================================
 // MORE MENU
@@ -12375,13 +12696,6 @@ function closeBmOverflowPanel() {
     clearChromeOverlay('bookmark-overflow');
   }
 }
-
-// Close overflow panel on outside click
-document.addEventListener('click', e => {
-  if (_bmOverflowOpen && !e.target.closest('#bm-bar-overflow-panel') && !e.target.closest('.bm-bar-overflow-btn')) {
-    closeBmOverflowPanel();
-  }
-});
 
 // ============================================================
 // ZOOM
@@ -13601,6 +13915,8 @@ window.addEventListener('resize', () => {
   syncFindOverlay();
   syncUpdateModalClip();
   syncSiteInfoPopover();
+  sizeHorizontalTabs();
+  scrollHorizontalActiveTab();
   if (_activeFolderId) {
     _activeFolderAnchor = folderAnchor(_activeFolderId, _activeFolderAnchor);
     placeFolderModal(_activeFolderAnchor);
@@ -13877,6 +14193,12 @@ function moveBookmarkToBar(id, before) {
 // ── Drop zones: sidebar tab list (reorder/new tab) + bookmark areas (reorder/save) ──
 setupDropZone(document.getElementById('sb-page'), {
   reorderKind: 'tab', item: '.tab-item', axis: 'y',
+  sameGroup: (it) => it.classList.contains('pinned') === dragPinned,
+  onReorder: (id, before) => send('MoveTab', {id, before}),
+  onExternal: (url) => send('OpenInNewTab', {url}),
+});
+setupDropZone(document.getElementById('horizontal-tab-list'), {
+  reorderKind: 'tab', item: '.tab-item', axis: 'x',
   sameGroup: (it) => it.classList.contains('pinned') === dragPinned,
   onReorder: (id, before) => send('MoveTab', {id, before}),
   onExternal: (url) => send('OpenInNewTab', {url}),
