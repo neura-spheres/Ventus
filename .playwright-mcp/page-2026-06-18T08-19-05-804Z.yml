@@ -1,0 +1,43 @@
+- generic [active] [ref=e1]:
+  - navigation [ref=e2]:
+    - generic [ref=e4]:
+      - link "X TMKOKOMI" [ref=e5] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e6]: X
+        - generic [ref=e7]: TMKOKOMI
+      - generic [ref=e9]:
+        - generic [ref=e10]:
+          - img
+          - textbox "Search comic..." [ref=e11]
+        - button "FILTER" [ref=e12] [cursor=pointer]
+      - generic [ref=e13]:
+        - button "Theme" [ref=e15] [cursor=pointer]:
+          - img [ref=e16]
+        - button "Notifications" [ref=e21] [cursor=pointer]:
+          - img [ref=e22]
+        - button "Account" [ref=e25] [cursor=pointer]: ...
+  - main [ref=e26]:
+    - generic [ref=e29]:
+      - main [ref=e30]:
+        - generic [ref=e31]:
+          - heading "Reading History" [level=2] [ref=e33]
+          - generic [ref=e34]: Belum ada riwayat baca.
+        - generic [ref=e35]:
+          - generic [ref=e36]:
+            - heading "Latest Updates" [level=2] [ref=e37]
+            - generic [ref=e38]:
+              - button "hot" [ref=e39] [cursor=pointer]
+              - button "new" [ref=e40] [cursor=pointer]
+          - generic [ref=e41]:
+            - button "Prev" [disabled] [ref=e42]
+            - button "1" [disabled] [ref=e43]
+            - button "2" [ref=e44] [cursor=pointer]
+            - generic [ref=e45]: ...
+            - button "Next" [ref=e46] [cursor=pointer]
+      - complementary [ref=e47]:
+        - heading "Recently Added / Complete Series" [level=2] [ref=e49]
+  - contentinfo [ref=e50]:
+    - generic [ref=e52]:
+      - generic [ref=e54]: TMKOKOMI
+      - paragraph [ref=e55]: © 2026 TMKOKOMI. TM dedicated manga reading app.
+  - alert [ref=e56]

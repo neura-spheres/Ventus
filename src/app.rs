@@ -1514,21 +1514,24 @@ pub fn handle_chrome_command(
             }
         }
         ChromeCommand::ZoomSet { level } => {
-            let clamped = level.clamp(0.25, 3.0);
-            if let Some(id) = state.tab_manager.active_tab_id.clone() {
-                set_tab_zoom(state, &id, clamped);
-            }
-            Some(TabAction::SetZoom(clamped))
+            let clamped = (level.clamp(0.25, 3.0) * 10.0).round() / 10.0;
+            state.settings.appearance.zoom_level = clamped;
+            state.zoom_levels.clear();
+            let _ = settings_store::set(&state.conn, "app_settings", &state.settings);
+            state.push_state_to_chrome(chrome);
+            Some(TabAction::SetZoomAll(clamped))
         }
         ChromeCommand::ZoomDelta { delta } => {
-            let Some(id) = state.tab_manager.active_tab_id.clone() else {
-                return None;
-            };
-            let cur = tab_zoom(state, &id);
+            let cur = state.settings.appearance.zoom_level;
             let next = ((cur + delta).clamp(0.25, 3.0) * 10.0).round() / 10.0;
-            set_tab_zoom(state, &id, next);
-            let _ = chrome.evaluate_script(&format!("showZoomToast({})", (next * 100.0).round()));
-            Some(TabAction::SetZoom(next))
+            state.settings.appearance.zoom_level = next;
+            state.zoom_levels.clear();
+            let _ = settings_store::set(&state.conn, "app_settings", &state.settings);
+            let _ = chrome.evaluate_script(&format!(
+                "window.__neura && window.__neura.setActiveZoom({})",
+                next
+            ));
+            Some(TabAction::SetZoomAll(next))
         }
         ChromeCommand::ZoomGlobal { level } => {
             let clamped = (level.clamp(0.5, 1.5) * 10.0).round() / 10.0;
@@ -1844,15 +1847,6 @@ fn show_error_page(
     let _ = chrome.evaluate_script("window.__neura && window.__neura.finishLoadProgress()");
     state.push_state_to_chrome(chrome);
     Some(TabAction::ShowErrorPage { tab_id })
-}
-
-fn set_tab_zoom(state: &mut AppState, id: &str, level: f64) {
-    let rounded = (level * 10.0).round() / 10.0;
-    if (rounded - state.settings.appearance.zoom_level).abs() < f64::EPSILON {
-        state.zoom_levels.remove(id);
-    } else {
-        state.zoom_levels.insert(id.to_string(), rounded);
-    }
 }
 
 pub fn tab_zoom(state: &AppState, id: &str) -> f64 {
@@ -3024,10 +3018,7 @@ pub fn handle_app_event_inner(
                     chrome.evaluate_script("window.__neura && window.__neura.finishLoadProgress()");
             }
             state.push_state_to_chrome(chrome);
-            Some(TabAction::SetZoomFor {
-                tab_id: tab_id.clone(),
-                level: tab_zoom(state, &tab_id),
-            })
+            None
         }
         AppEvent::ContentLoadProgress {
             tab_id,
@@ -3122,10 +3113,7 @@ pub fn handle_app_event_inner(
                         .evaluate_script("window.__neura && window.__neura.finishLoadProgress()");
                 }
                 state.push_state_to_chrome(chrome);
-                return Some(TabAction::SetZoomFor {
-                    tab_id: tab_id.clone(),
-                    level: tab_zoom(state, &tab_id),
-                });
+                return None;
             }
             None
         }

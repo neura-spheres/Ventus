@@ -1,0 +1,57 @@
+- generic [active] [ref=e1]:
+  - navigation [ref=e2]:
+    - generic [ref=e4]:
+      - link "X TMKOKOMI" [ref=e5] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e6]: X
+        - generic [ref=e7]: TMKOKOMI
+      - generic [ref=e9]:
+        - generic [ref=e10]:
+          - img
+          - textbox "Search comic..." [ref=e11]
+        - button "FILTER" [ref=e12] [cursor=pointer]
+      - generic [ref=e13]:
+        - button "Theme" [ref=e15] [cursor=pointer]:
+          - img [ref=e16]
+        - button "Notifications" [ref=e21] [cursor=pointer]:
+          - img [ref=e22]
+        - button "Account" [ref=e25] [cursor=pointer]: ...
+  - main [ref=e26]:
+    - generic [ref=e27]:
+      - generic [ref=e28]:
+        - button "Close onboarding notice" [ref=e29]
+        - dialog "Welcome" [ref=e30]:
+          - generic [ref=e31]:
+            - generic [ref=e32]:
+              - paragraph [ref=e33]: TMKOKOMI Beta
+              - heading "Welcome" [level=2] [ref=e34]
+            - button "Close" [ref=e35] [cursor=pointer]: x
+          - generic [ref=e36]:
+            - paragraph [ref=e37]: People can use Email or Username with Password to sign in to your account.
+            - paragraph [ref=e38]: This site is Beta, so it may have bugs. Please report anything you find.
+            - paragraph [ref=e39]: Help us share the site to more people if you like it.
+          - button "Start reading" [ref=e40] [cursor=pointer]
+      - generic [ref=e42]:
+        - main [ref=e43]:
+          - generic [ref=e44]:
+            - heading "Reading History" [level=2] [ref=e46]
+            - generic [ref=e47]: Belum ada riwayat baca.
+          - generic [ref=e48]:
+            - generic [ref=e49]:
+              - heading "Latest Updates" [level=2] [ref=e50]
+              - generic [ref=e51]:
+                - button "hot" [ref=e52] [cursor=pointer]
+                - button "new" [ref=e53] [cursor=pointer]
+            - generic [ref=e54]:
+              - button "Prev" [disabled] [ref=e55]
+              - button "1" [disabled] [ref=e56]
+              - button "2" [ref=e57] [cursor=pointer]
+              - generic [ref=e58]: ...
+              - button "Next" [ref=e59] [cursor=pointer]
+        - complementary [ref=e60]:
+          - heading "Recently Added / Complete Series" [level=2] [ref=e62]
+  - contentinfo [ref=e63]:
+    - generic [ref=e65]:
+      - generic [ref=e67]: TMKOKOMI
+      - paragraph [ref=e68]: © 2026 TMKOKOMI. TM dedicated manga reading app.
+  - alert [ref=e69]

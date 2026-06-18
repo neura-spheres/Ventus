@@ -815,6 +815,10 @@ pub enum AppEvent {
     /// A sized popup (OAuth, share, payment) was requested. The main loop drains the
     /// pending-popup queue and builds a Ventus-wrapped window for each.
     CreatePopupWindow,
+    /// A new window for blob:/data: content was requested. These can't be reopened by url
+    /// in a fresh tab, so the main loop drains the handoff queue and hands each one a real
+    /// content WebView (via SetNewWindow) that lives as a normal tab.
+    CreateTabFromHandoff,
     /// Close a wrapped popup window (its close button, or JS window.close()).
     PopupClose {
         id: u64,

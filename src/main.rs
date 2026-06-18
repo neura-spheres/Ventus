@@ -1395,6 +1395,93 @@ fn main() {
                 }
             }
 
+            Event::UserEvent(AppEvent::CreateTabFromHandoff) => {
+                #[cfg(windows)]
+                {
+                    use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2;
+                    let pendings: Vec<PendingTabHandoff> =
+                        PENDING_TAB_HANDOFFS.with(|q| q.borrow_mut().drain(..).collect());
+                    for pending in pendings {
+                        let tab_id = {
+                            let tab = state.tab_manager.new_tab(Some(&pending.url));
+                            tab.id.clone()
+                        };
+                        let is_incog = pending.incognito;
+                        let ctx = if is_incog {
+                            incognito_web_context.as_mut().unwrap()
+                        } else {
+                            content_web_context.as_mut().unwrap()
+                        };
+                        let ad_script = state.ad_block_engine.init_script().to_string();
+                        let built = build_content_webview(
+                            &window,
+                            &tab_id,
+                            &pending.url,
+                            AppLayout::calculate(
+                                layout_size(&window, &state),
+                                window.scale_factor(),
+                                &state,
+                                &layout_config,
+                            )
+                            .content,
+                            proxy_main.clone(),
+                            ctx,
+                            is_incog,
+                            std::sync::Arc::clone(&shared_dl_dir),
+                            tab_zoom(&state, &tab_id),
+                            &browser_args,
+                            ad_script,
+                            state.settings.privacy.fingerprint_protection,
+                            state.settings.privacy.strict_permissions,
+                            state.settings.privacy.site_permissions.clone(),
+                            state.settings.privacy.default_permissions.clone(),
+                            state.settings.privacy.https_only,
+                            false,
+                        );
+                        let wv = match built {
+                            Ok(wv) => wv,
+                            Err(e) => {
+                                unsafe {
+                                    let _ = pending.deferral.Complete();
+                                }
+                                state.tab_manager.close_tab(&tab_id);
+                                tracing::error!("handoff tab build: {}", e);
+                                continue;
+                            }
+                        };
+                        let ok = unsafe {
+                            match wv.controller().CoreWebView2() {
+                                Ok(core) => {
+                                    let core: ICoreWebView2 = core;
+                                    pending.args.SetNewWindow(&core).is_ok()
+                                }
+                                Err(_) => false,
+                            }
+                        };
+                        unsafe {
+                            let _ = pending.deferral.Complete();
+                        }
+                        if !ok {
+                            state.tab_manager.close_tab(&tab_id);
+                            tracing::warn!("handoff tab SetNewWindow failed");
+                            continue;
+                        }
+                        let hwnd = webview_hwnd(&wv);
+                        content_views.insert(tab_id.clone(), wv);
+                        track_content_hwnd(hwnd, &tab_id, &mut content_hwnds);
+                        state.push_state_to_chrome(&chrome);
+                        apply_layout(
+                            &chrome,
+                            chrome_hwnd,
+                            &content_views,
+                            &state,
+                            &layout_config,
+                            &window,
+                        );
+                    }
+                }
+            }
+
             Event::UserEvent(AppEvent::PopupClose { id }) => {
                 popups.remove(&id);
             }
@@ -4930,10 +5017,11 @@ fn attach_client_hints_handler(wv: &WebView) {
     };
 
     let (full, _, major) = chromium_versions();
-    let sec_ua =
-        format!("\"Ventus\";v=\"{major}\", \"Chromium\";v=\"{major}\", \"Not:A-Brand\";v=\"24\"");
+    let sec_ua = format!(
+        "\"Google Chrome\";v=\"{major}\", \"Chromium\";v=\"{major}\", \"Not:A-Brand\";v=\"24\""
+    );
     let sec_ua_full_list = format!(
-        "\"Ventus\";v=\"{full}\", \"Chromium\";v=\"{full}\", \"Not:A-Brand\";v=\"24.0.0.0\""
+        "\"Google Chrome\";v=\"{full}\", \"Chromium\";v=\"{full}\", \"Not:A-Brand\";v=\"24.0.0.0\""
     );
     let sec_ua_full = format!("\"{full}\"");
 
@@ -5033,6 +5121,24 @@ fn attach_new_window_handler(
                 return Ok(());
             }
 
+            // blob:/data:/filesystem: content is bound to the opener's renderer, so a fresh
+            // tab can't reopen it by url. Hand the new WebView over (SetNewWindow) into a real
+            // tab instead of letting WebView2 spawn its own bare popup window.
+            if needs_window_handoff(&url) {
+                if let Ok(deferral) = args.GetDeferral() {
+                    PENDING_TAB_HANDOFFS.with(|q| {
+                        q.borrow_mut().push(PendingTabHandoff {
+                            args: args.clone(),
+                            deferral,
+                            url: url.clone(),
+                            incognito,
+                        });
+                    });
+                    let _ = proxy.send_event(AppEvent::CreateTabFromHandoff);
+                }
+                return Ok(());
+            }
+
             // Blank/about:blank with no url → "open blank then set location" pattern: leave it
             // as a native popup so the opener keeps a real window reference.
             let real_url = url.starts_with("http://") || url.starts_with("https://");
@@ -5109,6 +5215,24 @@ struct PendingPopup {
 #[cfg(windows)]
 thread_local! {
     static PENDING_POPUPS: std::cell::RefCell<Vec<PendingPopup>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+fn needs_window_handoff(url: &str) -> bool {
+    url.starts_with("blob:") || url.starts_with("data:") || url.starts_with("filesystem:")
+}
+
+#[cfg(windows)]
+struct PendingTabHandoff {
+    args: webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2NewWindowRequestedEventArgs,
+    deferral: webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Deferral,
+    url: String,
+    incognito: bool,
+}
+
+#[cfg(windows)]
+thread_local! {
+    static PENDING_TAB_HANDOFFS: std::cell::RefCell<Vec<PendingTabHandoff>> =
         const { std::cell::RefCell::new(Vec::new()) };
 }
 

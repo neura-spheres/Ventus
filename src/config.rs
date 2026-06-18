@@ -447,7 +447,7 @@ pub struct PrivacySettings {
     pub block_third_party_cookies: bool,
     #[serde(default = "default_true")]
     pub storage_partitioning: bool,
-    #[serde(default = "default_true")]
+    #[serde(default)]
     pub fingerprint_protection: bool,
     #[serde(default = "default_true")]
     pub strict_permissions: bool,
@@ -475,7 +475,7 @@ impl Default for PrivacySettings {
             https_only: true,
             block_third_party_cookies: true,
             storage_partitioning: true,
-            fingerprint_protection: true,
+            fingerprint_protection: false,
             strict_permissions: true,
             ad_blocker_enabled: true,
             ad_blocker_exceptions: Vec::new(),
@@ -650,7 +650,7 @@ mod tests {
         assert!(settings.privacy.https_only);
         assert!(settings.privacy.block_third_party_cookies);
         assert!(settings.privacy.storage_partitioning);
-        assert!(settings.privacy.fingerprint_protection);
+        assert!(!settings.privacy.fingerprint_protection);
         assert!(settings.privacy.strict_permissions);
         assert_eq!(settings.appearance.toolbar_buttons, vec!["ai".to_string()]);
         assert!(!settings.privacy.secure_dns_enabled);

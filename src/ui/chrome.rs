@@ -1034,7 +1034,7 @@ button,input,select,textarea{font-family:var(--font)}
   font-size:10px;font-weight:700;color:#fff;flex-shrink:0;
   text-transform:uppercase;letter-spacing:0.02em;
 }
-#toolbar-incognito-badge{display:none;align-items:center;gap:5px;font-size:10.5px;font-weight:600;color:#fff;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.16);border-radius:6px;padding:2px 7px 2px 6px;flex-shrink:0;cursor:default;white-space:nowrap;letter-spacing:0.01em}
+#toolbar-incognito-badge{display:none;align-items:center;gap:5px;font-size:10.5px;font-weight:600;color:#e5e7eb;background:#3f3f46;border:1px solid rgba(255,255,255,0.14);border-radius:6px;padding:2px 7px 2px 6px;flex-shrink:0;cursor:default;white-space:nowrap;letter-spacing:0.01em}
 #toolbar-incognito-badge.visible{display:flex}
 #toolbar-incognito-badge svg{flex-shrink:0}
 
@@ -3005,13 +3005,21 @@ button,input,select,textarea{font-family:var(--font)}
 
 /* zoom toast */
 #zoom-toast{
-  position:fixed;bottom:40px;left:50%;transform:translateX(-50%);
-  background:var(--bg-elevated);border:1px solid var(--border);
-  border-radius:var(--radius);padding:6px 14px;font-size:12px;color:var(--text);
-  box-shadow:var(--shadow);z-index:500;opacity:0;pointer-events:none;
-  transition:opacity 0.15s;
+  position:fixed;bottom:48px;left:50%;
+  transform:translateX(-50%) translateY(8px) scale(.97);
+  display:flex;align-items:center;justify-content:center;
+  padding:8px 15px;
+  background:color-mix(in srgb,var(--bg-elevated) 78%,transparent);
+  -webkit-backdrop-filter:blur(24px) saturate(180%);
+  backdrop-filter:blur(24px) saturate(180%);
+  border:1px solid var(--border);border-radius:11px;
+  box-shadow:0 8px 28px -8px rgba(0,0,0,.45);
+  z-index:1200;opacity:0;pointer-events:none;
+  transition:opacity .16s ease,transform .18s cubic-bezier(.2,.8,.25,1);
 }
-#zoom-toast.visible{opacity:1}
+#zoom-toast.visible{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}
+.zoom-toast-val{font-size:14px;font-weight:600;line-height:1;color:var(--text);
+  letter-spacing:.2px;font-variant-numeric:tabular-nums}
 
 /* context menu */
 #ctx-menu{
@@ -3679,7 +3687,7 @@ svg{display:block;flex-shrink:0}
 </div>
 
 <!-- ZOOM TOAST -->
-<div id="zoom-toast"></div>
+<div id="zoom-toast"><span class="zoom-toast-val" id="zoom-toast-val">100%</span></div>
 
 <!-- CONTEXT MENU -->
 <div id="context-menu"></div>
@@ -4531,7 +4539,7 @@ svg{display:block;flex-shrink:0}
             <div class="toggle-title">Anti-fingerprinting</div>
             <div class="toggle-desc">Add tiny read-time noise to Canvas and WebGL fingerprints.</div>
           </div>
-          <div class="toggle-switch on" id="toggle-fingerprint-protection" onclick="toggleSetting('fingerprint_protection')"></div>
+          <div class="toggle-switch" id="toggle-fingerprint-protection" onclick="toggleSetting('fingerprint_protection')"></div>
         </div>
         <div class="settings-toggle">
           <div class="settings-toggle-info">
@@ -5111,10 +5119,16 @@ window.__neura = {
     const prevTab = state.active_tab_id;
     const prevUrl = state.active_url;
     state = {...state, ...s};
+    updateMoreMenuZoom();
     const tabChanged = Object.prototype.hasOwnProperty.call(s, 'active_tab_id') && s.active_tab_id !== prevTab;
     const urlChanged = Object.prototype.hasOwnProperty.call(s, 'active_url') && s.active_url !== prevUrl;
     if (findOpen && (tabChanged || urlChanged)) closeFindBar(true, prevTab || findLastTabId);
     render();
+  },
+  setActiveZoom(level) {
+    setLocalZoom(level);
+    updateMoreMenuZoom();
+    showZoomToast(Math.round(level * 100));
   },
   setNewtabWallpaperData(d) {
     newtabWallpaperData = d || '';
@@ -12170,10 +12184,8 @@ function closeMoreMenu() {
 }
 
 function updateMoreMenuZoom() {
-  const id = state.active_tab_id;
-  const level = currentTabZoom(id);
   const el = document.getElementById('more-zoom-pct');
-  if (el) el.textContent = Math.round(level * 100) + '%';
+  if (el) el.textContent = Math.round(globalZoomLevel() * 100) + '%';
 }
 
 function muteTab(e, tabId) {
@@ -12370,52 +12382,58 @@ document.addEventListener('click', e => {
 // ============================================================
 // ZOOM
 // ============================================================
-const tabZoomLevels = {};
 let zoomToastTimer = null;
+let zoomToastShown = false;
 
 function globalZoomLevel() {
   return (((state.settings || {}).appearance || {}).zoom_level) || 1.0;
 }
 
-function currentTabZoom(id) {
-  return tabZoomLevels[id] || globalZoomLevel();
+function setLocalZoom(level) {
+  if (state.settings && state.settings.appearance) state.settings.appearance.zoom_level = level;
 }
 
 function zoomIn() {
-  const id = state.active_tab_id;
-  if (!id) return;
-  const cur = currentTabZoom(id);
-  tabZoomLevels[id] = parseFloat(Math.min(cur + 0.1, 3.0).toFixed(1));
-  applyZoom(id);
+  applyZoom(parseFloat(Math.min(globalZoomLevel() + 0.1, 3.0).toFixed(2)));
 }
 
 function zoomOut() {
-  const id = state.active_tab_id;
-  if (!id) return;
-  const cur = currentTabZoom(id);
-  tabZoomLevels[id] = parseFloat(Math.max(cur - 0.1, 0.25).toFixed(1));
-  applyZoom(id);
+  applyZoom(parseFloat(Math.max(globalZoomLevel() - 0.1, 0.25).toFixed(2)));
 }
 
 function zoomReset() {
-  const id = state.active_tab_id;
-  if (!id) return;
-  delete tabZoomLevels[id];
-  applyZoom(id);
+  applyZoom(1.0);
 }
 
-function applyZoom(id) {
-  const level = currentTabZoom(id);
+function applyZoom(level) {
+  setLocalZoom(level);
   send('ZoomSet', {level});
+  updateMoreMenuZoom();
   showZoomToast(Math.round(level * 100));
 }
 
 function showZoomToast(pct) {
   const el = document.getElementById('zoom-toast');
-  el.textContent = 'Zoom: ' + pct + '%';
-  el.classList.add('visible');
+  if (!el) return;
+  const val = document.getElementById('zoom-toast-val');
+  if (val) val.textContent = pct + '%';
+  if (!zoomToastShown) {
+    el.classList.add('visible');
+    zoomToastShown = true;
+    const r = el.getBoundingClientRect();
+    const pad = 30;
+    setChromeOverlay('zoom-toast', {x: r.left - pad, y: r.top - pad, width: r.width + pad * 2, height: r.height + pad * 2});
+  }
   if (zoomToastTimer) clearTimeout(zoomToastTimer);
-  zoomToastTimer = setTimeout(() => { el.classList.remove('visible'); zoomToastTimer = null; }, 1500);
+  zoomToastTimer = setTimeout(hideZoomToast, 1400);
+}
+
+function hideZoomToast() {
+  const el = document.getElementById('zoom-toast');
+  if (el) el.classList.remove('visible');
+  clearChromeOverlay('zoom-toast');
+  zoomToastShown = false;
+  zoomToastTimer = null;
 }
 
 function navigateToUrl(url) {
