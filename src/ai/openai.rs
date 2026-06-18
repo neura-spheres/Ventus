@@ -118,6 +118,83 @@ impl OpenAiProvider {
         }
     }
 
+    fn is_openrouter(&self) -> bool {
+        self.base_url.to_ascii_lowercase().contains("openrouter.ai")
+    }
+
+    fn chat_content(&self, message: &ChatMessage) -> Value {
+        if message.attachments.is_empty() {
+            return json!(message.content);
+        }
+        let mut content = Vec::new();
+        for attachment in &message.attachments {
+            match attachment.kind {
+                AiAttachmentKind::Image => {
+                    if let Some(url) = attachment.data_url() {
+                        content.push(json!({
+                            "type": "image_url",
+                            "image_url": {"url": url}
+                        }));
+                    }
+                }
+                AiAttachmentKind::Pdf if self.is_openrouter() => {
+                    if let Some(url) = attachment.data_url() {
+                        content.push(json!({
+                            "type": "file",
+                            "file": {
+                                "filename": attachment.name,
+                                "file_data": url,
+                            }
+                        }));
+                    }
+                }
+                AiAttachmentKind::Pdf | AiAttachmentKind::Text => {
+                    if let Some(text) = attachment.text_block() {
+                        content.push(json!({"type": "text", "text": text}));
+                    }
+                }
+            }
+        }
+        if !message.content.trim().is_empty() {
+            content.push(json!({"type": "text", "text": message.content}));
+        }
+        Value::Array(content)
+    }
+
+    fn responses_content(message: &ChatMessage) -> Value {
+        if message.attachments.is_empty() {
+            return json!(message.content);
+        }
+        let mut content = Vec::new();
+        for attachment in &message.attachments {
+            match attachment.kind {
+                AiAttachmentKind::Image => {
+                    if let Some(url) = attachment.data_url() {
+                        content.push(json!({"type": "input_image", "image_url": url}));
+                    }
+                }
+                AiAttachmentKind::Pdf => {
+                    if let Some(url) = attachment.data_url() {
+                        content.push(json!({
+                            "type": "input_file",
+                            "filename": attachment.name,
+                            "file_data": url,
+                        }));
+                    }
+                }
+                AiAttachmentKind::Text => {
+                    if let Some(text) = attachment.text_block() {
+                        content.push(json!({"type": "input_text", "text": text}));
+                    }
+                }
+            }
+        }
+        if !message.content.trim().is_empty() {
+            content.push(json!({"type": "input_text", "text": message.content}));
+        }
+        Value::Array(content)
+    }
+
     fn build_body(&self, req: &ChatRequest) -> Value {
         let messages: Vec<Value> = req
             .messages
@@ -135,7 +212,7 @@ impl OpenAiProvider {
                 if m.role == ChatRole::Assistant && m.content.is_empty() && m.tool_calls.is_some() {
                     msg["content"] = Value::Null;
                 } else {
-                    msg["content"] = json!(m.content);
+                    msg["content"] = self.chat_content(m);
                 }
 
                 // Tool call request (assistant → model)
@@ -213,7 +290,7 @@ impl OpenAiProvider {
                     };
                     input.push(json!({
                         "role": role_str,
-                        "content": m.content,
+                        "content": Self::responses_content(m),
                     }));
                 }
                 ChatRole::Assistant => {
@@ -501,6 +578,40 @@ impl OpenAiProvider {
     }
 }
 
+#[cfg(test)]
+mod attachment_tests {
+    use super::*;
+
+    fn pdf() -> AiAttachment {
+        AiAttachment {
+            id: "pdf".into(),
+            name: "report.pdf".into(),
+            mime_type: "application/pdf".into(),
+            kind: AiAttachmentKind::Pdf,
+            size: 3,
+            data_base64: Some("YWJj".into()),
+            text: Some("fallback".into()),
+        }
+    }
+
+    #[test]
+    fn responses_use_input_file() {
+        let message = ChatMessage::user_with_attachments("Read", vec![pdf()]);
+        let content = OpenAiProvider::responses_content(&message);
+        assert_eq!(content[0]["type"], "input_file");
+        assert_eq!(content[0]["filename"], "report.pdf");
+    }
+
+    #[test]
+    fn openrouter_uses_file_content() {
+        let provider = OpenAiProvider::openrouter("key", "model");
+        let message = ChatMessage::user_with_attachments("Read", vec![pdf()]);
+        let content = provider.chat_content(&message);
+        assert_eq!(content[0]["type"], "file");
+        assert_eq!(content[0]["file"]["filename"], "report.pdf");
+    }
+}
+
 #[async_trait::async_trait]
 impl AiProvider for OpenAiProvider {
     fn provider_id(&self) -> &'static str {
@@ -511,6 +622,10 @@ impl AiProvider for OpenAiProvider {
     }
     fn supports_streaming(&self) -> bool {
         true
+    }
+
+    fn supports_native_pdf(&self) -> bool {
+        self.use_responses_api || self.is_openrouter()
     }
 
     async fn chat(&self, request: ChatRequest) -> Result<ChatResponse> {

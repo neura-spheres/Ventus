@@ -608,6 +608,8 @@ pub struct AppSettings {
     pub sidebar_width: u32,
     #[serde(default)]
     pub region: String,
+    #[serde(default)]
+    pub settings_rev: i64,
 }
 
 impl Default for AppSettings {
@@ -628,6 +630,7 @@ impl Default for AppSettings {
             window_y: None,
             sidebar_width: 240,
             region: String::new(),
+            settings_rev: 0,
         }
     }
 }

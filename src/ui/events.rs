@@ -82,6 +82,10 @@ pub enum ChromeCommand {
         id: String,
     },
     ToggleAiSidebar,
+    PickAiAttachments,
+    RemoveAiAttachment {
+        id: String,
+    },
     AiMessage {
         text: String,
     },
@@ -209,6 +213,7 @@ pub enum ChromeCommand {
     },
     CloseSplit,
     OpenDevtools,
+    RestartForWebSecurity,
     HistoryClear,
     ExportSettings,
     ImportSettings {
@@ -282,6 +287,7 @@ pub enum ChromeCommand {
         w: f64,
     },
     SuggestionOverlay {
+        owner: String,
         visible: bool,
         x: f64,
         y: f64,
@@ -440,6 +446,8 @@ impl ChromeCommand {
             ChromeCommand::DeleteWorkspace { .. } => Some("delete_workspace"),
             ChromeCommand::SwitchWorkspace { .. } => Some("switch_workspace"),
             ChromeCommand::ToggleAiSidebar => Some("toggle_ai_sidebar"),
+            ChromeCommand::PickAiAttachments => Some("pick_ai_attachments"),
+            ChromeCommand::RemoveAiAttachment { .. } => Some("remove_ai_attachment"),
             ChromeCommand::AiMessage { .. } => Some("ai_message"),
             ChromeCommand::AiProviderChange { .. } => Some("ai_provider_change"),
             ChromeCommand::AiModelChange { .. } => Some("ai_model_change"),
@@ -485,6 +493,7 @@ impl ChromeCommand {
             ChromeCommand::SplitView { .. } => Some("split_view"),
             ChromeCommand::CloseSplit => Some("close_split"),
             ChromeCommand::OpenDevtools => Some("open_devtools"),
+            ChromeCommand::RestartForWebSecurity => Some("restart_for_web_security"),
             ChromeCommand::HistoryClear => Some("history_clear"),
             ChromeCommand::ExportSettings => Some("export_settings"),
             ChromeCommand::ImportSettings { .. } => Some("import_settings"),
@@ -782,6 +791,7 @@ pub enum AppEvent {
     AiSaveMessages {
         user_text: String,
         assistant_text: String,
+        attachments: Vec<crate::ai::AiAttachment>,
     },
     /// Spotlight AI answer chunk (streamed back from the AI task)
     SpotlightAiChunk {

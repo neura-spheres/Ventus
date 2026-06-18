@@ -1,4 +1,5 @@
 pub mod anthropic;
+pub mod attachments;
 pub mod browser_tools;
 pub mod chat;
 pub mod gemini;
@@ -11,7 +12,7 @@ pub mod tools;
 use crate::config::AppSettings;
 use std::sync::Arc;
 
-pub use provider::{AiProvider, ChatMessage, ChatRequest};
+pub use provider::{AiAttachment, AiAttachmentKind, AiProvider, ChatMessage, ChatRequest};
 
 fn provider_id(id: &str) -> &str {
     match id {

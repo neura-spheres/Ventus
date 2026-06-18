@@ -46,9 +46,10 @@ pub fn save_message(conn: &Connection, session_id: &str, message: &ChatMessage) 
         super::provider::ChatRole::Tool => "tool",
     };
     let now = chrono::Utc::now().timestamp_millis();
+    let attachments = serde_json::to_string(&message.attachments).unwrap_or_else(|_| "[]".into());
     conn.execute(
-        "INSERT INTO ai_chat_messages(session_id, role, content, created_at) VALUES(?1,?2,?3,?4)",
-        params![session_id, role, message.content, now],
+        "INSERT INTO ai_chat_messages(session_id, role, content, attachments_json, created_at) VALUES(?1,?2,?3,?4,?5)",
+        params![session_id, role, message.content, attachments, now],
     )?;
     Ok(())
 }
@@ -73,21 +74,24 @@ pub fn list_sessions(conn: &Connection, limit: usize) -> Result<Vec<ChatSession>
 
 pub fn load_messages(conn: &Connection, session_id: &str) -> Result<Vec<ChatMessage>> {
     let mut stmt = conn.prepare(
-        "SELECT role, content FROM ai_chat_messages WHERE session_id=?1 ORDER BY id ASC",
+        "SELECT role, content, attachments_json FROM ai_chat_messages WHERE session_id=?1 ORDER BY id ASC",
     )?;
     let rows = stmt.query_map(params![session_id], |row| {
         let role: String = row.get(0)?;
         let content: String = row.get(1)?;
-        Ok((role, content))
+        let attachments: String = row.get(2)?;
+        Ok((role, content, attachments))
     })?;
     let mut out = Vec::new();
     for r in rows {
-        let (role, content) = r?;
-        out.push(match role.as_str() {
+        let (role, content, attachments) = r?;
+        let mut message = match role.as_str() {
             "assistant" => ChatMessage::assistant(content),
             "system" => ChatMessage::system(content),
             _ => ChatMessage::user(content),
-        });
+        };
+        message.attachments = serde_json::from_str(&attachments).unwrap_or_default();
+        out.push(message);
     }
     Ok(out)
 }
@@ -105,4 +109,32 @@ pub fn clear_history(conn: &Connection) -> Result<()> {
     conn.execute("DELETE FROM ai_chat_messages", [])?;
     conn.execute("DELETE FROM ai_chat_sessions", [])?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ai::{AiAttachment, AiAttachmentKind};
+
+    #[test]
+    fn attachments_round_trip_with_messages() {
+        let conn = Connection::open_in_memory().unwrap();
+        crate::storage::migrations::run(&conn).unwrap();
+        let session = ChatSession::new("gemini", "gemini-test");
+        save_session(&conn, &session).unwrap();
+        let attachment = AiAttachment {
+            id: "file".into(),
+            name: "notes.txt".into(),
+            mime_type: "text/plain".into(),
+            kind: AiAttachmentKind::Text,
+            size: 5,
+            data_base64: None,
+            text: Some("hello".into()),
+        };
+        let message = ChatMessage::user_with_attachments("Read this", vec![attachment.clone()]);
+        save_message(&conn, &session.id, &message).unwrap();
+        let loaded = load_messages(&conn, &session.id).unwrap();
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].attachments, vec![attachment]);
+    }
 }

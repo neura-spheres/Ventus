@@ -1070,7 +1070,18 @@ fn main() {
             }
 
             Event::UserEvent(AppEvent::Chrome(ChromeCommand::AiMessage { text })) => {
-                handle_ai_message(text, &state, &chrome, &proxy_main, &rt, &ai_generation);
+                let attachments = std::mem::take(&mut state.pending_ai_attachments);
+                if let Err(attachments) = handle_ai_message(
+                    text,
+                    attachments,
+                    &state,
+                    &chrome,
+                    &proxy_main,
+                    &rt,
+                    &ai_generation,
+                ) {
+                    state.pending_ai_attachments = attachments;
+                }
             }
 
             Event::UserEvent(AppEvent::Chrome(ChromeCommand::SpotlightAiQuery { text, history })) => {
@@ -4878,6 +4889,88 @@ fn attach_navigation_handler(
     }
 }
 
+#[cfg(windows)]
+unsafe fn rewrite_header(
+    headers: &webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2HttpRequestHeaders,
+    name: &str,
+    value: &str,
+    only_if_present: bool,
+) {
+    use wv2core::PCWSTR;
+    use wv2win::Win32::Foundation::BOOL;
+    let name_w: Vec<u16> = name.encode_utf16().chain(std::iter::once(0)).collect();
+    if only_if_present {
+        let mut present = BOOL(0);
+        if headers
+            .Contains(PCWSTR(name_w.as_ptr()), &mut present)
+            .is_err()
+            || !present.as_bool()
+        {
+            return;
+        }
+    }
+    let value_w: Vec<u16> = value.encode_utf16().chain(std::iter::once(0)).collect();
+    let _ = headers.SetHeader(PCWSTR(name_w.as_ptr()), PCWSTR(value_w.as_ptr()));
+}
+
+#[cfg(windows)]
+fn attach_client_hints_handler(wv: &WebView) {
+    use webview2_com::{
+        Microsoft::Web::WebView2::Win32::{ICoreWebView2, COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL},
+        WebResourceRequestedEventHandler,
+    };
+    use wv2core::PCWSTR;
+
+    let controller = wv.controller();
+    let webview: ICoreWebView2 = unsafe {
+        match controller.CoreWebView2() {
+            Ok(wv) => wv,
+            Err(_) => return,
+        }
+    };
+
+    let (full, _, major) = chromium_versions();
+    let sec_ua =
+        format!("\"Ventus\";v=\"{major}\", \"Chromium\";v=\"{major}\", \"Not:A-Brand\";v=\"24\"");
+    let sec_ua_full_list = format!(
+        "\"Ventus\";v=\"{full}\", \"Chromium\";v=\"{full}\", \"Not:A-Brand\";v=\"24.0.0.0\""
+    );
+    let sec_ua_full = format!("\"{full}\"");
+
+    let handler = WebResourceRequestedEventHandler::create(Box::new(move |_sender, args| {
+        let Some(args) = args else {
+            return Ok(());
+        };
+        unsafe {
+            let Ok(request) = args.Request() else {
+                return Ok(());
+            };
+            let Ok(headers) = request.Headers() else {
+                return Ok(());
+            };
+            rewrite_header(&headers, "Sec-CH-UA", &sec_ua, false);
+            rewrite_header(
+                &headers,
+                "Sec-CH-UA-Full-Version-List",
+                &sec_ua_full_list,
+                true,
+            );
+            rewrite_header(&headers, "Sec-CH-UA-Full-Version", &sec_ua_full, true);
+        }
+        Ok(())
+    }));
+
+    let mut token = Default::default();
+    unsafe {
+        let filter: Vec<u16> = "*".encode_utf16().chain(std::iter::once(0)).collect();
+        let _ = webview.AddWebResourceRequestedFilter(
+            PCWSTR(filter.as_ptr()),
+            COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL,
+        );
+        let _ = webview.add_WebResourceRequested(&handler, &mut token);
+    }
+}
+
 // A new-window request (target=_blank link, window.open, ctrl/middle click) should become a
 // normal tab — NOT a bare popup OS window like WRY's default handler does. The exception is a
 // real popup: OAuth sign-in, share sheets, and payment dialogs call window.open with an
@@ -5899,6 +5992,7 @@ fn build_content_webview_once(
             default_permissions.clone(),
         );
         attach_download_handler(&wv, proxy.clone(), std::sync::Arc::clone(&download_dir));
+        attach_client_hints_handler(&wv);
     }
 
     tracing::info!(target: "ventus::nav", tab = %tab_id, url = %url, load_now, incognito, "content WebView built");
@@ -7201,11 +7295,19 @@ fn privacy_initialization_script(
 (() => {
   if (window.__neuraPrivacyFp) return;
   window.__neuraPrivacyFp = true;
+  const fpSeed = (Math.random() * 0x7fffffff) >>> 0;
+  const fpDelta = i => {
+    let h = (fpSeed ^ Math.imul(i + 0x9e3779b9, 2654435761)) >>> 0;
+    h ^= h >>> 13;
+    h = Math.imul(h, 0x85ebca6b) >>> 0;
+    h ^= h >>> 16;
+    return (h % 3) - 1;
+  };
   const noise = data => {
     if (!data || !data.length) return;
     const step = Math.max(4, Math.floor(data.length / 64));
     for (let i = 0; i < data.length; i += step) {
-      const n = ((Math.random() * 3) | 0) - 1;
+      const n = fpDelta(i);
       data[i] = (data[i] + n + 256) & 255;
       if (i + 1 < data.length) data[i + 1] = (data[i + 1] - n + 256) & 255;
     }
@@ -7257,11 +7359,6 @@ fn privacy_initialization_script(
       const pixels = arguments[6];
       if (pixels && typeof pixels.length === 'number') noise(pixels);
       return result;
-    });
-    patch(proto, 'getParameter', orig => function(p) {
-      if (p === 37445) return 'Ventus GPU';
-      if (p === 37446) return 'Ventus Renderer';
-      return orig.apply(this, arguments);
     });
   };
   patchGl(window.WebGLRenderingContext && WebGLRenderingContext.prototype);
@@ -8416,6 +8513,11 @@ fn sync_chrome(chrome: &WebView, chrome_hwnd: Option<isize>, state: &AppState, l
 
     #[cfg(windows)]
     if let Some(hwnd) = chrome_hwnd {
+        let floating_rects = state
+            .suggestion_overlay_rects
+            .values()
+            .map(|rect| rect.to_physical(layout.scale_factor))
+            .collect::<Vec<_>>();
         move_child_window(hwnd, 0, 0, layout.window_w, layout.window_h);
         set_chrome_clip_region(
             hwnd,
@@ -8426,9 +8528,7 @@ fn sync_chrome(chrome: &WebView, chrome_hwnd: Option<isize>, state: &AppState, l
             layout.ai_w,
             state.ai_sidebar_open,
             chrome_owns_content(state),
-            state
-                .suggestion_overlay_rect
-                .map(|rect| rect.to_physical(layout.scale_factor)),
+            &floating_rects,
             layout.frame_side_w,
             layout.frame_bottom_h,
         );
@@ -8438,6 +8538,11 @@ fn sync_chrome(chrome: &WebView, chrome_hwnd: Option<isize>, state: &AppState, l
 fn sync_chrome_clip(chrome_hwnd: Option<isize>, state: &AppState, layout: AppLayout) {
     #[cfg(windows)]
     if let Some(hwnd) = chrome_hwnd {
+        let floating_rects = state
+            .suggestion_overlay_rects
+            .values()
+            .map(|rect| rect.to_physical(layout.scale_factor))
+            .collect::<Vec<_>>();
         set_chrome_clip_region(
             hwnd,
             layout.window_w,
@@ -8447,9 +8552,7 @@ fn sync_chrome_clip(chrome_hwnd: Option<isize>, state: &AppState, layout: AppLay
             layout.ai_w,
             state.ai_sidebar_open,
             chrome_owns_content(state),
-            state
-                .suggestion_overlay_rect
-                .map(|rect| rect.to_physical(layout.scale_factor)),
+            &floating_rects,
             layout.frame_side_w,
             layout.frame_bottom_h,
         );
@@ -8500,7 +8603,9 @@ fn chrome_owns_content(state: &AppState) -> bool {
 }
 
 fn chrome_needs_top(state: &AppState) -> bool {
-    chrome_owns_content(state) || state.suggestion_overlay_rect.is_some() || state.ai_sidebar_open
+    chrome_owns_content(state)
+        || !state.suggestion_overlay_rects.is_empty()
+        || state.ai_sidebar_open
 }
 
 #[cfg(windows)]
@@ -8626,7 +8731,7 @@ fn set_chrome_clip_region(
     ai_sidebar_w: u32,
     ai_open: bool,
     overlay_open: bool,
-    floating_rect: Option<PhysicalClipRect>,
+    floating_rects: &[PhysicalClipRect],
     frame_side_w: u32,
     frame_bottom_h: u32,
 ) {
@@ -8636,7 +8741,7 @@ fn set_chrome_clip_region(
     };
 
     #[derive(Clone, Copy)]
-    struct ClipSpec {
+    struct ClipSpec<'a> {
         window_w: u32,
         window_h: u32,
         sidebar_w: u32,
@@ -8644,12 +8749,12 @@ fn set_chrome_clip_region(
         ai_sidebar_w: u32,
         ai_open: bool,
         overlay_open: bool,
-        floating_rect: Option<PhysicalClipRect>,
+        floating_rects: &'a [PhysicalClipRect],
         frame_side_w: u32,
         frame_bottom_h: u32,
     }
 
-    unsafe fn create_region(spec: ClipSpec) -> windows::Win32::Graphics::Gdi::HRGN {
+    unsafe fn create_region(spec: ClipSpec<'_>) -> windows::Win32::Graphics::Gdi::HRGN {
         if spec.overlay_open {
             return CreateRectRgn(0, 0, spec.window_w as i32, spec.window_h as i32);
         }
@@ -8676,7 +8781,7 @@ fn set_chrome_clip_region(
             let _ = DeleteObject(ai);
         }
 
-        if let Some(rect) = spec.floating_rect {
+        for rect in spec.floating_rects {
             let left = rect.x.clamp(0, spec.window_w as i32);
             let top = rect.y.clamp(0, spec.window_h as i32);
             let right = (rect.x + rect.width).clamp(left, spec.window_w as i32);
@@ -8724,7 +8829,7 @@ fn set_chrome_clip_region(
             ai_sidebar_w,
             ai_open,
             overlay_open,
-            floating_rect,
+            floating_rects,
             frame_side_w,
             frame_bottom_h,
         };
@@ -9630,6 +9735,7 @@ fn handle_ai_quick_action(
                             let _ = proxy_task.send_event(AppEvent::AiSaveMessages {
                                 user_text: history_user_text.clone(),
                                 assistant_text,
+                                attachments: Vec::new(),
                             });
                             tracing::info!(
                                 target: "ventus::ai",
@@ -9668,6 +9774,7 @@ fn handle_ai_quick_action(
                 let _ = proxy_task.send_event(AppEvent::AiSaveMessages {
                     user_text: history_user_text.clone(),
                     assistant_text: accumulated,
+                    attachments: Vec::new(),
                 });
                 tracing::info!(
                     target: "ventus::ai",
@@ -9713,6 +9820,7 @@ fn handle_ai_quick_action(
                         let _ = proxy_task.send_event(AppEvent::AiSaveMessages {
                             user_text: history_user_text.clone(),
                             assistant_text,
+                            attachments: Vec::new(),
                         });
                         tracing::info!(
                             target: "ventus::ai",
@@ -10100,23 +10208,46 @@ fn account_change_password(
 
 fn handle_ai_message(
     text: String,
+    attachments: Vec<ai::AiAttachment>,
     state: &AppState,
     chrome: &WebView,
     proxy: &tao::event_loop::EventLoopProxy<AppEvent>,
     rt: &tokio::runtime::Runtime,
     ai_generation: &Arc<AtomicUsize>,
-) {
+) -> std::result::Result<(), Vec<ai::AiAttachment>> {
     let Some(prov) = ai::build_provider(&state.settings) else {
         let _ = chrome.evaluate_script(
             "window.__neura&&window.__neura.showError('No AI provider configured. Add an API key in Settings \u{2192} AI Providers.')"
         );
-        return;
+        return Err(attachments);
     };
+
+    if !prov.supports_native_pdf()
+        && attachments.iter().any(|item| {
+            item.kind == ai::AiAttachmentKind::Pdf
+                && item
+                    .text
+                    .as_deref()
+                    .map(str::trim)
+                    .unwrap_or_default()
+                    .is_empty()
+        })
+    {
+        let _ = chrome.evaluate_script(
+            "window.__neura&&window.__neura.showError('This PDF has no readable text. Use Gemini, Anthropic, OpenRouter, or OpenAI Responses to read scanned PDFs.')",
+        );
+        return Err(attachments);
+    }
 
     let snapshot = build_agent_snapshot(state);
     let pending = state.ai_pending_tools.clone();
     let proxy_agent = proxy.clone();
-    let user_text = text.clone();
+    let user_text = if text.trim().is_empty() {
+        "Analyze the attached files".to_string()
+    } else {
+        text.clone()
+    };
+    let saved_attachments = attachments.clone();
 
     // Build initial message list including conversation history
     let active = state.tab_manager.active_tab();
@@ -10127,7 +10258,10 @@ fn handle_ai_message(
 
     let mut msgs: Vec<ai::ChatMessage> = vec![ai::ChatMessage::system(system)];
     msgs.extend(state.ai_messages.clone());
-    msgs.push(ai::ChatMessage::user(text));
+    msgs.push(ai::ChatMessage::user_with_attachments(
+        user_text.clone(),
+        attachments,
+    ));
 
     let model = state.settings.ai.default_model.clone();
     let temperature = state.settings.ai.temperature;
@@ -10150,6 +10284,9 @@ fn handle_ai_message(
         active = %active_url,
         supports_streaming,
         "ai request started"
+    );
+    let _ = chrome.evaluate_script(
+        "window.__neura&&window.__neura.attachmentsSent&&window.__neura.attachmentsSent()",
     );
 
     rt.spawn(async move {
@@ -10259,8 +10396,9 @@ fn handle_ai_message(
                         done: true,
                     });
                     let _ = proxy_agent.send_event(AppEvent::AiSaveMessages {
-                        user_text,
+                        user_text: user_text.clone(),
                         assistant_text: accumulated,
+                        attachments: saved_attachments.clone(),
                     });
                     tracing::info!(
                         target: "ventus::ai",
@@ -10336,8 +10474,9 @@ fn handle_ai_message(
                     done: true,
                 });
                 let _ = proxy_agent.send_event(AppEvent::AiSaveMessages {
-                    user_text,
+                    user_text: user_text.clone(),
                     assistant_text: final_text,
+                    attachments: saved_attachments.clone(),
                 });
                 tracing::info!(
                     target: "ventus::ai",
@@ -10421,6 +10560,7 @@ fn handle_ai_message(
             message: "Agent reached maximum steps — please try a simpler request.".into(),
         });
     });
+    Ok(())
 }
 
 fn handle_spotlight_ai_query(

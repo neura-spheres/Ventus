@@ -69,7 +69,7 @@ impl GeminiProvider {
                 }
                 ChatRole::User => contents.push(json!({
                     "role": "user",
-                    "parts": [{"text": m.content}]
+                    "parts": Self::user_parts(m)
                 })),
                 ChatRole::Assistant => contents.push(json!({
                     "role": "model",
@@ -102,6 +102,35 @@ impl GeminiProvider {
         }
 
         body
+    }
+
+    fn user_parts(message: &ChatMessage) -> Vec<Value> {
+        let mut parts = Vec::new();
+        for attachment in &message.attachments {
+            match attachment.kind {
+                AiAttachmentKind::Image | AiAttachmentKind::Pdf => {
+                    let Some(data) = attachment.data_base64.as_ref() else {
+                        continue;
+                    };
+                    parts.push(json!({"text": format!("Attached file: {}", attachment.name)}));
+                    parts.push(json!({
+                        "inline_data": {
+                            "mime_type": attachment.mime_type,
+                            "data": data,
+                        }
+                    }));
+                }
+                AiAttachmentKind::Text => {
+                    if let Some(text) = attachment.text_block() {
+                        parts.push(json!({"text": text}));
+                    }
+                }
+            }
+        }
+        if !message.content.trim().is_empty() {
+            parts.push(json!({"text": message.content}));
+        }
+        parts
     }
 
     fn thinking_config(req: &ChatRequest) -> Option<Value> {
@@ -261,6 +290,10 @@ impl AiProvider for GeminiProvider {
         true
     }
 
+    fn supports_native_pdf(&self) -> bool {
+        true
+    }
+
     async fn spotlight_chat(&self, req: ChatRequest) -> Result<Option<String>> {
         let req = self.search_req(&req);
         let mut body = self.build_body(&req);
@@ -380,5 +413,46 @@ impl AiProvider for GeminiProvider {
         };
 
         Ok(Box::pin(stream))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn user_parts_include_inline_images_and_text_files() {
+        let message = ChatMessage::user_with_attachments(
+            "Compare these",
+            vec![
+                AiAttachment {
+                    id: "image".into(),
+                    name: "photo.png".into(),
+                    mime_type: "image/png".into(),
+                    kind: AiAttachmentKind::Image,
+                    size: 3,
+                    data_base64: Some("YWJj".into()),
+                    text: None,
+                },
+                AiAttachment {
+                    id: "text".into(),
+                    name: "notes.txt".into(),
+                    mime_type: "text/plain".into(),
+                    kind: AiAttachmentKind::Text,
+                    size: 5,
+                    data_base64: None,
+                    text: Some("hello".into()),
+                },
+            ],
+        );
+        let parts = GeminiProvider::user_parts(&message);
+        assert!(parts
+            .iter()
+            .any(|part| part["inline_data"]["mime_type"] == "image/png"));
+        assert!(parts.iter().any(|part| part["text"] == "Compare these"));
+        assert!(parts.iter().any(|part| part["text"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("notes.txt")));
     }
 }

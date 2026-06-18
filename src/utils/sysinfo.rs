@@ -44,7 +44,9 @@ pub fn summary_json() -> String {
 
 #[cfg(windows)]
 pub fn available_memory_mb() -> u64 {
-    mem_status().map(|m| m.ullAvailPhys / 1024 / 1024).unwrap_or(u64::MAX)
+    mem_status()
+        .map(|m| m.ullAvailPhys / 1024 / 1024)
+        .unwrap_or(u64::MAX)
 }
 
 #[cfg(not(windows))]
@@ -54,7 +56,9 @@ pub fn available_memory_mb() -> u64 {
 
 #[cfg(windows)]
 pub fn total_memory_mb() -> u64 {
-    mem_status().map(|m| m.ullTotalPhys / 1024 / 1024).unwrap_or(0)
+    mem_status()
+        .map(|m| m.ullTotalPhys / 1024 / 1024)
+        .unwrap_or(0)
 }
 
 #[cfg(not(windows))]
@@ -153,8 +157,8 @@ fn collect() -> SystemInfo {
 
 #[cfg(windows)]
 fn primary_gpu() -> String {
-    use windows::Win32::Graphics::Gdi::{EnumDisplayDevicesW, DISPLAY_DEVICEW};
     use windows::core::PCWSTR;
+    use windows::Win32::Graphics::Gdi::{EnumDisplayDevicesW, DISPLAY_DEVICEW};
     let mut dd = DISPLAY_DEVICEW {
         cb: std::mem::size_of::<DISPLAY_DEVICEW>() as u32,
         ..Default::default()

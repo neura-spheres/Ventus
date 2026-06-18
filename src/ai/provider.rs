@@ -12,6 +12,46 @@ pub enum ChatRole {
     Tool,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AiAttachmentKind {
+    Image,
+    Pdf,
+    Text,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AiAttachment {
+    pub id: String,
+    pub name: String,
+    pub mime_type: String,
+    pub kind: AiAttachmentKind,
+    pub size: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data_base64: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+}
+
+impl AiAttachment {
+    pub fn text_block(&self) -> Option<String> {
+        let text = self.text.as_deref()?.trim();
+        if text.is_empty() {
+            return None;
+        }
+        Some(format!(
+            "<attachment name={:?} type={:?}>\n{}\n</attachment>",
+            self.name, self.mime_type, text
+        ))
+    }
+
+    pub fn data_url(&self) -> Option<String> {
+        self.data_base64
+            .as_ref()
+            .map(|data| format!("data:{};base64,{}", self.mime_type, data))
+    }
+}
+
 // ── Tool schemas (sent to AI to describe what it can call) ────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -68,6 +108,8 @@ pub struct ToolCall {
 pub struct ChatMessage {
     pub role: ChatRole,
     pub content: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attachments: Vec<AiAttachment>,
     /// Set on assistant messages that contain tool call requests
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<Vec<ToolCall>>,
@@ -81,6 +123,7 @@ impl ChatMessage {
         Self {
             role: ChatRole::System,
             content: content.into(),
+            attachments: Vec::new(),
             tool_calls: None,
             tool_call_id: None,
         }
@@ -89,6 +132,19 @@ impl ChatMessage {
         Self {
             role: ChatRole::User,
             content: content.into(),
+            attachments: Vec::new(),
+            tool_calls: None,
+            tool_call_id: None,
+        }
+    }
+    pub fn user_with_attachments(
+        content: impl Into<String>,
+        attachments: Vec<AiAttachment>,
+    ) -> Self {
+        Self {
+            role: ChatRole::User,
+            content: content.into(),
+            attachments,
             tool_calls: None,
             tool_call_id: None,
         }
@@ -97,6 +153,7 @@ impl ChatMessage {
         Self {
             role: ChatRole::Assistant,
             content: content.into(),
+            attachments: Vec::new(),
             tool_calls: None,
             tool_call_id: None,
         }
@@ -106,6 +163,7 @@ impl ChatMessage {
         Self {
             role: ChatRole::Assistant,
             content: String::new(),
+            attachments: Vec::new(),
             tool_calls: Some(tool_calls),
             tool_call_id: None,
         }
@@ -115,6 +173,7 @@ impl ChatMessage {
         Self {
             role: ChatRole::Tool,
             content: content.into(),
+            attachments: Vec::new(),
             tool_calls: None,
             tool_call_id: Some(call_id.into()),
         }
@@ -156,6 +215,10 @@ pub trait AiProvider: Send + Sync {
     fn provider_id(&self) -> &'static str;
     fn provider_name(&self) -> &'static str;
     fn supports_streaming(&self) -> bool;
+
+    fn supports_native_pdf(&self) -> bool {
+        false
+    }
 
     async fn chat(&self, request: ChatRequest) -> Result<ChatResponse>;
     async fn stream_chat(&self, request: ChatRequest) -> Result<ChatStream>;

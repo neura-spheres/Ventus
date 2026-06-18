@@ -61,16 +61,11 @@ mod imp {
         }
     }
 
-    unsafe fn set_reg_sz(
-        hkey: windows::Win32::System::Registry::HKEY,
-        name: &str,
-        value: &str,
-    ) {
+    unsafe fn set_reg_sz(hkey: windows::Win32::System::Registry::HKEY, name: &str, value: &str) {
         use windows::Win32::System::Registry::{RegSetValueExW, REG_SZ};
         let name_w = wide(name);
         let value_w = wide(value);
-        let bytes =
-            std::slice::from_raw_parts(value_w.as_ptr() as *const u8, value_w.len() * 2);
+        let bytes = std::slice::from_raw_parts(value_w.as_ptr() as *const u8, value_w.len() * 2);
         let _ = RegSetValueExW(hkey, PCWSTR(name_w.as_ptr()), 0, REG_SZ, Some(bytes));
     }
 

@@ -52,7 +52,10 @@ impl AnthropicProvider {
                     i += 1;
                 }
                 ChatRole::User => {
-                    messages.push(json!({"role": "user", "content": m.content}));
+                    messages.push(json!({
+                        "role": "user",
+                        "content": Self::user_content(m)
+                    }));
                     i += 1;
                 }
                 ChatRole::Assistant => {
@@ -135,6 +138,53 @@ impl AnthropicProvider {
         }
 
         body
+    }
+
+    fn user_content(message: &ChatMessage) -> Value {
+        if message.attachments.is_empty() {
+            return json!(message.content);
+        }
+        let mut content = Vec::new();
+        for attachment in &message.attachments {
+            match attachment.kind {
+                AiAttachmentKind::Image => {
+                    let Some(data) = attachment.data_base64.as_ref() else {
+                        continue;
+                    };
+                    content.push(json!({
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": attachment.mime_type,
+                            "data": data,
+                        }
+                    }));
+                }
+                AiAttachmentKind::Pdf => {
+                    let Some(data) = attachment.data_base64.as_ref() else {
+                        continue;
+                    };
+                    content.push(json!({
+                        "type": "document",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "application/pdf",
+                            "data": data,
+                        },
+                        "title": attachment.name,
+                    }));
+                }
+                AiAttachmentKind::Text => {
+                    if let Some(text) = attachment.text_block() {
+                        content.push(json!({"type": "text", "text": text}));
+                    }
+                }
+            }
+        }
+        if !message.content.trim().is_empty() {
+            content.push(json!({"type": "text", "text": message.content}));
+        }
+        Value::Array(content)
     }
 
     fn api_effort(effort: &str) -> Option<&'static str> {
@@ -272,6 +322,10 @@ impl AiProvider for AnthropicProvider {
         "Anthropic"
     }
     fn supports_streaming(&self) -> bool {
+        true
+    }
+
+    fn supports_native_pdf(&self) -> bool {
         true
     }
 
@@ -425,5 +479,30 @@ impl AiProvider for AnthropicProvider {
         };
 
         Ok(Box::pin(stream))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pdfs_use_document_blocks() {
+        let message = ChatMessage::user_with_attachments(
+            "Summarize",
+            vec![AiAttachment {
+                id: "pdf".into(),
+                name: "report.pdf".into(),
+                mime_type: "application/pdf".into(),
+                kind: AiAttachmentKind::Pdf,
+                size: 3,
+                data_base64: Some("YWJj".into()),
+                text: None,
+            }],
+        );
+        let content = AnthropicProvider::user_content(&message);
+        assert_eq!(content[0]["type"], "document");
+        assert_eq!(content[0]["source"]["media_type"], "application/pdf");
+        assert_eq!(content[1]["text"], "Summarize");
     }
 }

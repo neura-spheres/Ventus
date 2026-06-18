@@ -1500,10 +1500,22 @@ button,input,select,textarea{font-family:var(--font)}
 .ai-composer{
   background:var(--ai-panel);border:1px solid var(--border);
   border-radius:var(--radius-lg);padding:8px;
-  display:flex;align-items:flex-end;gap:8px;
+  display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap;
   box-shadow:0 12px 28px var(--ai-shadow);
   transition:border-color var(--transition),box-shadow var(--transition);
 }
+#ai-attachments{display:none;width:100%;gap:6px;overflow-x:auto;padding:0 0 2px;scrollbar-width:thin}
+#ai-attachments.visible{display:flex}
+.ai-attachment-chip{
+  display:flex;align-items:center;gap:6px;min-width:0;max-width:220px;height:30px;padding:0 8px;
+  border:1px solid var(--border);border-radius:9px;background:var(--bg);color:var(--ai-text);flex-shrink:0;
+}
+.ai-attachment-kind{font-size:9px;font-weight:750;letter-spacing:.05em;color:var(--ai-muted);text-transform:uppercase}
+.ai-attachment-name{font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ai-attachment-remove{border:0;background:transparent;color:var(--ai-muted);cursor:pointer;padding:0;font-size:15px;line-height:1}
+.ai-attachment-remove:hover{color:var(--text)}
+.ai-msg-attachments{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:7px}
+.ai-msg-attachment{font-size:10.5px;padding:3px 7px;border:1px solid var(--border);border-radius:7px;color:var(--text-muted);background:var(--bg)}
 .ai-composer:focus-within{
   border-color:var(--accent);
   box-shadow:0 12px 28px var(--ai-shadow),0 0 0 3px var(--ai-ring);
@@ -3986,7 +3998,8 @@ svg{display:block;flex-shrink:0}
   </div>
   <div id="ai-input-area">
     <div class="ai-composer">
-      <button class="ai-circle-btn" onclick="toast('Media attachments are not available yet')" title="Add media">
+      <div id="ai-attachments"></div>
+      <button class="ai-circle-btn" id="ai-attach-btn" onclick="pickAiAttachments()" title="Add files">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
       </button>
       <textarea id="ai-input" placeholder="Ask about this page" rows="1" oninput="autoGrowAiInput()" onkeydown="handleAiKey(event)"></textarea>
@@ -4368,9 +4381,6 @@ svg{display:block;flex-shrink:0}
             <button class="history-icon-btn" id="history-copy-btn" onclick="copyHistoryLinks()" title="Copy visible links">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
             </button>
-            <button class="history-icon-btn" id="history-open-btn" onclick="openHistoryShown()" title="Open visible pages">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
-            </button>
             <button class="history-clear-btn" id="history-clear-btn" onclick="clearHistory()">Clear</button>
           </div>
         </div>
@@ -4452,6 +4462,10 @@ svg{display:block;flex-shrink:0}
       <div class="settings-section" id="section-privacy">
         <h2>Privacy</h2>
         <p class="subtitle">Control what data gets collected and stored</p>
+        <div id="privacy-restart-banner" style="display:none;align-items:center;gap:10px;margin:0 0 14px;padding:11px 13px;background:var(--accent-dim);border:1px solid var(--accent);border-radius:var(--radius-sm)">
+          <div style="flex:1;font-size:12px;color:var(--text);line-height:1.4">Some changes need a restart to take effect.</div>
+          <button onclick="showRestartModal()" style="padding:7px 13px;font-size:12px;font-weight:700;color:var(--primary-btn-text);background:var(--primary-btn-bg);border:1px solid var(--primary-btn-border);border-radius:8px;cursor:pointer;font-family:var(--font);white-space:nowrap">Apply changes</button>
+        </div>
         <div class="settings-toggle">
           <div class="settings-toggle-info">
             <div class="toggle-title">Ad &amp; Tracker Blocker</div>
@@ -5005,6 +5019,7 @@ let aiStreamStopped = false;
 let aiThinkingStartedAt = 0;
 let aiThinkingWorkedApplied = false;
 let aiStreamVisualTextLength = 0;
+let aiAttachments = [];
 let _thinkThrottleTimer = null;
 let _lastThinkingHtml = '';
 let loadProgress = 0;
@@ -5064,6 +5079,22 @@ const TOOLBAR_ACTIONS = [
 function send(cmd, data={}) {
   const sc = cmd.replace(/([A-Z])/g, (m, c, i) => (i > 0 ? '_' : '') + c.toLowerCase());
   window.ipc.postMessage(JSON.stringify({cmd: sc, ...data}));
+}
+
+function setChromeOverlay(owner, rect) {
+  const visible = !!rect && rect.width > 0 && rect.height > 0;
+  send('SuggestionOverlay', {
+    owner,
+    visible,
+    x: visible ? rect.x : 0,
+    y: visible ? rect.y : 0,
+    width: visible ? rect.width : 0,
+    height: visible ? rect.height : 0
+  });
+}
+
+function clearChromeOverlay(owner) {
+  setChromeOverlay(owner, null);
 }
 
 function nav(action) { send(action); }
@@ -5145,6 +5176,7 @@ window.__neura = {
   },
   showError(msg) { removeAiToolStatuses(); freezeAiThinkingSummary(); toast(msg, 'error'); finishAiBusy(); },
   showSuccess(msg) { toast(msg, 'success'); },
+  restartNeeded() { markRestartPending(); },
   showSavePassword(origin, username, isUpdate) { showSavePasswordBanner(origin, username, isUpdate); },
   hideSavePassword() { hideSavePasswordBanner(); },
   setPasswords(list) { renderPasswords(list || []); },
@@ -5369,6 +5401,8 @@ window.__neura = {
   applyClipboardPaste(text) { applyClipboardPaste(text); },
   setAiSessions(list) { setAiSessions(list); },
   showAiConversation(messages) { showAiConversation(messages); },
+  setAiAttachments(items) { setAiAttachments(items); },
+  attachmentsSent() { setAiAttachments([]); },
   spotlightAiChunk(text, done) {
     if (!tspAiMode || !tspAiTurns.length) return;
     const turn = tspAiTurns[tspAiTurns.length - 1];
@@ -5490,9 +5524,7 @@ function openAdBlockModal() {
     modal.style.top = (r.bottom + 6) + 'px';
     modal.style.right = 'auto';
   }
-  requestAnimationFrame(() => {
-    send('SuggestionOverlay', {visible:true, x:0, y:0, width:window.innerWidth, height:window.innerHeight});
-  });
+  setChromeOverlay('adblock', {x:0, y:0, width:window.innerWidth, height:window.innerHeight});
   setTimeout(() => document.addEventListener('click', _adblockOutside, {once: true, capture: true}), 0);
 }
 
@@ -5501,7 +5533,7 @@ function closeAdBlockModal() {
   const backdrop = document.getElementById('adblock-backdrop');
   if (backdrop) backdrop.classList.remove('open');
   if (modal) modal.classList.remove('open');
-  send('SuggestionOverlay', {visible:false, x:0, y:0, width:0, height:0});
+  clearChromeOverlay('adblock');
   document.removeEventListener('click', _adblockOutside, true);
 }
 
@@ -5634,13 +5666,13 @@ function openWsSwitcher() {
   if (!modal) return;
   renderWsSwitcher();
   modal.classList.add('open');
-  send('SuggestionOverlay', {visible:true, x:0, y:0, width:window.innerWidth, height:window.innerHeight});
+  setChromeOverlay('workspace-switcher', {x:0, y:0, width:window.innerWidth, height:window.innerHeight});
 }
 
 function closeWsSwitcher() {
   const modal = document.getElementById('ws-switcher-modal');
   if (modal) modal.classList.remove('open');
-  send('SuggestionOverlay', {visible:false, x:0, y:0, width:0, height:0});
+  clearChromeOverlay('workspace-switcher');
 }
 
 function handleWsSwitcherClick(e) {
@@ -5749,6 +5781,7 @@ function showWsPop(wsId, el) {
   pop.dataset.wsId = wsId;
   pop.style.display = 'flex';
   requestAnimationFrame(() => {
+    if (!pop.classList.contains('open')) return;
     const pr = pop.getBoundingClientRect();
     const er = el.getBoundingClientRect();
     const left = Math.max(4, er.left + er.width / 2 - pr.width / 2);
@@ -6499,7 +6532,7 @@ function openWorkspaceModal(wsId = null) {
   if (incognitoRow) incognitoRow.style.display = ws ? 'none' : 'flex';
   if (incognitoCheck) incognitoCheck.checked = false;
   modal.classList.add('open');
-  send('SuggestionOverlay', {visible:true, x:0, y:0, width:window.innerWidth, height:window.innerHeight});
+  setChromeOverlay('workspace', {x:0, y:0, width:window.innerWidth, height:window.innerHeight});
   setTimeout(() => {
     input.focus();
     input.select();
@@ -6509,7 +6542,7 @@ function closeWorkspaceModal() {
   const modal = document.getElementById('workspace-modal');
   if (modal) modal.classList.remove('open');
   editingWorkspaceId = null;
-  send('SuggestionOverlay', {visible:false, x:0, y:0, width:0, height:0});
+  clearChromeOverlay('workspace');
 }
 function handleWorkspaceModalClick(e) {
   if (e.target.id === 'workspace-modal') closeWorkspaceModal();
@@ -6605,14 +6638,14 @@ function openWorkspaceDeleteModal(id) {
   const confirmBtn = document.getElementById('workspace-delete-confirm');
   if (name) name.textContent = ws.name || 'this workspace';
   if (modal) modal.classList.add('open');
-  send('SuggestionOverlay', {visible:true, x:0, y:0, width:window.innerWidth, height:window.innerHeight});
+  setChromeOverlay('workspace-delete', {x:0, y:0, width:window.innerWidth, height:window.innerHeight});
   setTimeout(() => confirmBtn && confirmBtn.focus(), 40);
 }
 function closeWorkspaceDeleteModal() {
   const modal = document.getElementById('workspace-delete-modal');
   if (modal) modal.classList.remove('open');
   deletingWorkspaceId = null;
-  send('SuggestionOverlay', {visible:false, x:0, y:0, width:0, height:0});
+  clearChromeOverlay('workspace-delete');
 }
 function handleWorkspaceDeleteModalClick(e) {
   if (e.target.id === 'workspace-delete-modal') closeWorkspaceDeleteModal();
@@ -7061,17 +7094,18 @@ function showSavePasswordBanner(origin, username, isUpdate) {
   document.getElementById('pwd-save-text').textContent =
     (isUpdate ? 'Update password for ' : 'Save password for ') + host + (username ? '  ' + username : '');
   bar.style.display = 'flex';
+  setChromeOverlay('password-save', {x:0, y:0, width:window.innerWidth, height:window.innerHeight});
   requestAnimationFrame(() => {
     if (bar.style.display === 'none') return;
     const r = bar.getBoundingClientRect();
     const top = Math.max(0, r.top - 8);
-    send('SuggestionOverlay', {visible:true, x:0, y:top, width:window.innerWidth, height:window.innerHeight - top});
+    setChromeOverlay('password-save', {x:0, y:top, width:window.innerWidth, height:window.innerHeight - top});
   });
 }
 function hideSavePasswordBanner() {
   const bar = document.getElementById('pwd-save-bar');
   if (bar) bar.style.display = 'none';
-  send('SuggestionOverlay', {visible:false, x:0, y:0, width:0, height:0});
+  clearChromeOverlay('password-save');
 }
 function confirmSavePassword() { send('PwdSaveConfirm'); }
 function dismissSavePassword() { send('PwdSaveDismiss'); }
@@ -7132,6 +7166,7 @@ function showNextPerm() {
   document.getElementById('perm-prompt-what').textContent = PERM_LABELS[next.key] || ('wants ' + next.key + ' access');
   const pop = document.getElementById('perm-prompt');
   if (pop) pop.classList.add('open');
+  setChromeOverlay('permission', {x:0, y:0, width:window.innerWidth, height:window.innerHeight});
   positionPermPrompt();
 }
 function positionPermPrompt() {
@@ -7148,9 +7183,10 @@ function positionPermPrompt() {
   pop.style.left = left + 'px';
   pop.style.top = (anchor.bottom + 8) + 'px';
   requestAnimationFrame(() => {
+    if (!pop.classList.contains('open')) return;
     const pr = pop.getBoundingClientRect();
     const pad = 52;
-    send('SuggestionOverlay', {visible:true, x:pr.left - pad, y:pr.top - pad, width:pr.width + pad*2, height:pr.height + pad*2});
+    setChromeOverlay('permission', {x:pr.left - pad, y:pr.top - pad, width:pr.width + pad*2, height:pr.height + pad*2});
   });
 }
 function decidePermission(decision) {
@@ -7161,7 +7197,7 @@ function decidePermission(decision) {
   if (permQueue.length) { showNextPerm(); return; }
   const pop = document.getElementById('perm-prompt');
   if (pop) pop.classList.remove('open');
-  send('SuggestionOverlay', {visible:false, x:0, y:0, width:0, height:0});
+  clearChromeOverlay('permission');
 }
 function openPasswordManager() {
   const o = document.getElementById('pwd-manager-overlay');
@@ -7750,6 +7786,7 @@ function openSiteInfo() {
   siteInfoOpen = true;
   renderSiteInfoPopover();
   pop.classList.add('open');
+  setChromeOverlay('site-info', {x:0, y:0, width:window.innerWidth, height:window.innerHeight});
   syncSiteInfoPopover();
   setTimeout(() => document.addEventListener('click', siteInfoOutside, {once:true, capture:true}), 0);
 }
@@ -7757,7 +7794,7 @@ function closeSiteInfo() {
   const pop = document.getElementById('site-info-popover');
   siteInfoOpen = false;
   if (pop) pop.classList.remove('open');
-  send('SuggestionOverlay', {visible:false, x:0, y:0, width:0, height:0});
+  clearChromeOverlay('site-info');
   document.removeEventListener('click', siteInfoOutside, true);
 }
 function siteInfoOutside(e) {
@@ -7785,8 +7822,7 @@ function syncSiteInfoPopover() {
   requestAnimationFrame(() => {
     const pr = pop.getBoundingClientRect();
     const shadowPad = 52;
-    send('SuggestionOverlay', {
-      visible:true,
+    setChromeOverlay('site-info', {
       x:pr.left - shadowPad,
       y:pr.top - shadowPad,
       width:pr.width + shadowPad * 2,
@@ -8561,15 +8597,14 @@ function positionUrlSuggestions(panel) {
 
 function syncSuggestionOverlay(panel) {
   if (!panel || !panel.classList.contains('open')) {
-    send('SuggestionOverlay', {visible: false, x: 0, y: 0, width: 0, height: 0});
+    clearChromeOverlay('suggestions');
     return;
   }
   const rect = panel.getBoundingClientRect();
   // Pad the clip past the panel's soft shadow (var(--shadow) = 0 4px 24px) so the Win32
   // region doesn't hard-cut it; 28px covers the blur on every side.
   const pad = 28;
-  send('SuggestionOverlay', {
-    visible: true,
+  setChromeOverlay('suggestions', {
     x: rect.left - pad,
     y: rect.top - pad,
     width: rect.width + pad * 2,
@@ -8580,12 +8615,12 @@ function syncSuggestionOverlay(panel) {
 function refreshSuggestionOverlayBounds() {
   const workspaceModal = document.getElementById('workspace-modal');
   if (workspaceModal && workspaceModal.classList.contains('open')) {
-    send('SuggestionOverlay', {visible:true, x:0, y:0, width:window.innerWidth, height:window.innerHeight});
+    setChromeOverlay('workspace', {x:0, y:0, width:window.innerWidth, height:window.innerHeight});
     return;
   }
   const wsSwitcher = document.getElementById('ws-switcher-modal');
   if (wsSwitcher && wsSwitcher.classList.contains('open')) {
-    send('SuggestionOverlay', {visible:true, x:0, y:0, width:window.innerWidth, height:window.innerHeight});
+    setChromeOverlay('workspace-switcher', {x:0, y:0, width:window.innerWidth, height:window.innerHeight});
     return;
   }
   if (findOpen) {
@@ -9147,16 +9182,64 @@ function handleAiKey(e) {
 function sendAiMessage() {
   const input = document.getElementById('ai-input');
   const text = input.value.trim();
-  if (!text || aiStreaming) return;
+  if ((!text && !aiAttachments.length) || aiStreaming) return;
   startAiChat();
   resetAiStreamState();
-  addAiMessage('user', text);
+  addAiMessage('user', text || 'Analyze the attached files', aiAttachments);
   input.value = '';
   autoGrowAiInput();
   aiStreaming = true;
   setAiPrimaryButtonMode(true);
-  appendAiActivity('Reading Page', 'Reading the current page context before answering.');
+  appendAiActivity('Preparing context', aiAttachments.length ? 'Reading the attached files before answering.' : 'Reading the current page before answering.');
   send('AiMessage', {text});
+}
+
+function pickAiAttachments() {
+  if (aiStreaming) return;
+  send('PickAiAttachments');
+}
+
+function setAiAttachments(items) {
+  aiAttachments = Array.isArray(items) ? items : [];
+  renderAiAttachments();
+}
+
+function removeAiAttachment(id) {
+  aiAttachments = aiAttachments.filter(item => item.id !== id);
+  renderAiAttachments();
+  send('RemoveAiAttachment', {id});
+}
+
+function attachmentKindLabel(kind) {
+  if (kind === 'image') return 'IMG';
+  if (kind === 'pdf') return 'PDF';
+  return 'DOC';
+}
+
+function renderAiAttachments() {
+  const wrap = document.getElementById('ai-attachments');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  aiAttachments.forEach(item => {
+    const chip = document.createElement('div');
+    chip.className = 'ai-attachment-chip';
+    const kind = document.createElement('span');
+    kind.className = 'ai-attachment-kind';
+    kind.textContent = attachmentKindLabel(item.kind);
+    const name = document.createElement('span');
+    name.className = 'ai-attachment-name';
+    name.textContent = item.name || 'File';
+    name.title = item.name || 'File';
+    const remove = document.createElement('button');
+    remove.className = 'ai-attachment-remove';
+    remove.type = 'button';
+    remove.title = 'Remove';
+    remove.textContent = '×';
+    remove.onclick = () => removeAiAttachment(item.id);
+    chip.append(kind, name, remove);
+    wrap.appendChild(chip);
+  });
+  wrap.classList.toggle('visible', aiAttachments.length > 0);
 }
 function stopAiStream() {
   if (!aiStreaming) return;
@@ -9768,7 +9851,7 @@ function renderAiFinalAnswer(text) {
   currentStreamEl.innerHTML = renderAiMarkdown(content);
   updateAiStreamVisualLength(content);
 }
-function addAiMessage(role, text) {
+function addAiMessage(role, text, attachments=[]) {
   startAiChat();
   const msgs = document.getElementById('ai-messages');
   const el = document.createElement('div');
@@ -9776,7 +9859,20 @@ function addAiMessage(role, text) {
   if (role === 'assistant') {
     el.innerHTML = renderAiMarkdown(text);
   } else {
-    el.textContent = text;
+    if (Array.isArray(attachments) && attachments.length) {
+      const files = document.createElement('div');
+      files.className = 'ai-msg-attachments';
+      attachments.forEach(item => {
+        const file = document.createElement('span');
+        file.className = 'ai-msg-attachment';
+        file.textContent = `${attachmentKindLabel(item.kind)} · ${item.name || 'File'}`;
+        files.appendChild(file);
+      });
+      el.appendChild(files);
+    }
+    const body = document.createElement('div');
+    body.textContent = text;
+    el.appendChild(body);
   }
   msgs.appendChild(el);
   scrollAiToBottom();
@@ -9808,6 +9904,7 @@ function aiClear() {
   if (sidebar) sidebar.classList.remove('ai-chatting');
   resetAiStreamState();
   finishAiBusy();
+  setAiAttachments([]);
   send('AiClearChat');
 }
 
@@ -9900,7 +9997,7 @@ function showAiConversation(messages) {
   finishAiBusy();
   startAiChat();
   (Array.isArray(messages) ? messages : []).forEach(m => {
-    addAiMessage(m.role === 'assistant' ? 'assistant' : 'user', m.content || '');
+    addAiMessage(m.role === 'assistant' ? 'assistant' : 'user', m.content || '', m.attachments || []);
   });
   scrollAiToBottom();
 }
@@ -11298,13 +11395,14 @@ function showUpdateModal(data) {
   setUpdateModalActions(status);
   setUpdateModalProgress(status, data || {});
   modal.classList.add('open');
+  setChromeOverlay('update-modal', {x:0, y:0, width:window.innerWidth, height:window.innerHeight});
   syncUpdateModalClip();
 }
 function closeUpdateModal(dismiss) {
   const modal = document.getElementById('update-modal');
   if (!modal || !modal.classList.contains('open')) return;
   modal.classList.remove('open');
-  send('SuggestionOverlay', {visible:false, x:0, y:0, width:0, height:0});
+  clearChromeOverlay('update-modal');
   if (dismiss && __updateModalVersion) {
     send('DismissUpdate', {version: __updateModalVersion});
     __updateModalVersion = null;
@@ -11322,7 +11420,7 @@ function syncUpdateModalClip() {
     // full shadow falloff (less on top, more below from the offset), otherwise it
     // gets sliced at a hard rectangular edge.
     const padX = 100, padTop = 72, padBottom = 136;
-    send('SuggestionOverlay', {visible:true, x:rect.left - padX, y:rect.top - padTop, width:rect.width + padX * 2, height:rect.height + padTop + padBottom});
+    setChromeOverlay('update-modal', {x:rect.left - padX, y:rect.top - padTop, width:rect.width + padX * 2, height:rect.height + padTop + padBottom});
   });
 }
 function showUpdateToast(version, notes) {
@@ -11333,14 +11431,16 @@ function showUpdateToast(version, notes) {
   if (versionEl) versionEl.textContent = version ? 'v' + version + ' is ready to install' : 'A new version is ready';
   toast.classList.remove('hiding');
   toast.classList.add('visible');
+  setChromeOverlay('update-toast', {x:0, y:0, width:window.innerWidth, height:window.innerHeight});
   if (__updateToastTimer) clearTimeout(__updateToastTimer);
   __updateToastTimer = setTimeout(dismissUpdateToast, 15000);
   requestAnimationFrame(() => {
+    if (!toast.classList.contains('visible')) return;
     const finalW = toast.offsetWidth;
     const finalH = toast.offsetHeight;
     const finalLeft = window.innerWidth - finalW - 24;
     const finalTop = window.innerHeight - finalH - 24;
-    send('SuggestionOverlay', {visible:true, x:finalLeft - 4, y:finalTop - 4, width:finalW + 8, height:finalH + 8});
+    setChromeOverlay('update-toast', {x:finalLeft - 4, y:finalTop - 4, width:finalW + 8, height:finalH + 8});
   });
 }
 function dismissUpdateToast() {
@@ -11349,7 +11449,7 @@ function dismissUpdateToast() {
   if (!toast || !toast.classList.contains('visible')) return;
   toast.classList.remove('visible');
   toast.classList.add('hiding');
-  send('SuggestionOverlay', {visible:false, x:0, y:0, width:0, height:0});
+  clearChromeOverlay('update-toast');
   toast.addEventListener('animationend', () => toast.classList.remove('hiding'), {once: true});
   if (__pendingUpdateVersion !== null) {
     send('DismissUpdate', {version: __pendingUpdateVersion});
@@ -11521,9 +11621,7 @@ function syncHistoryTools(hist) {
   const clearSearch = document.getElementById('history-search-clear');
   if (clearSearch) clearSearch.classList.toggle('show', !!historyQuery);
   const copyBtn = document.getElementById('history-copy-btn');
-  const openBtn = document.getElementById('history-open-btn');
   if (copyBtn) copyBtn.disabled = count === 0;
-  if (openBtn) openBtn.disabled = count === 0;
   const clearBtn = document.getElementById('history-clear-btn');
   if (clearBtn) clearBtn.disabled = !historyQuery && !historyHasMore && !(historyItems || []).length;
   const summary = document.getElementById('history-summary');
@@ -11767,6 +11865,7 @@ function showBrowserContextMenu(data) {
   menu.classList.add('open');
 
   requestAnimationFrame(() => {
+    if (!menu.classList.contains('open')) return;
     const rect = menu.getBoundingClientRect();
     if (x + rect.width  > winW - 8) x = Math.max(0, winW - rect.width - 8);
     if (y + rect.height > winH - 8) y = Math.max(0, y - rect.height);
@@ -11775,8 +11874,8 @@ function showBrowserContextMenu(data) {
     menu.style.visibility = 'visible';
     // Expand chrome clip to full window so ANY click outside the menu is captured
     // by the chrome overlay's mousedown listener and dismisses the menu.
-    send('SuggestionOverlay', {visible:true, x:0, y:0, width:window.innerWidth, height:window.innerHeight});
   });
+  setChromeOverlay('page-context-menu', {x:0, y:0, width:window.innerWidth, height:window.innerHeight});
 }
 
 function closeContextMenu() {
@@ -11784,7 +11883,7 @@ function closeContextMenu() {
   if (!menu.classList.contains('open')) return;
   menu.classList.remove('open');
   __ctxData = null;
-  send('SuggestionOverlay', {visible:false, x:0, y:0, width:0, height:0});
+  clearChromeOverlay('page-context-menu');
 }
 
 function isSelectableAiTarget(target) {
@@ -11826,15 +11925,14 @@ let _dlPeekTimer = null;
 function _syncDownloadOverlay() {
   const panel = document.getElementById('download-panel');
   if (!panel || !panel.classList.contains('open')) {
-    send('SuggestionOverlay', {visible:false, x:0, y:0, width:0, height:0});
+    clearChromeOverlay('downloads');
     return;
   }
   const r = panel.getBoundingClientRect();
   // Halo must contain the panel's soft shadow (var(--modal-shadow) = 0 32px 80px) or the
   // Win32 clip hard-cuts it. Blur 80 spreads ~80px left/right, ~48px up (blur - y-offset)
   // and ~112px down (blur + y-offset); pad past that on every side with a small margin.
-  send('SuggestionOverlay', {
-    visible:true,
+  setChromeOverlay('downloads', {
     x: r.left - 88,
     y: r.top - 56,
     width: r.width + 176,
@@ -11863,6 +11961,7 @@ function openDownloadPanel(peek) {
   panel.style.right = (window.innerWidth - rect.right) + 'px';
   renderDownloadPanel();
   panel.classList.add('open');
+  setChromeOverlay('downloads', {x:0, y:0, width:window.innerWidth, height:window.innerHeight});
   clearTimeout(_dlPeekTimer);
   if (peek) {
     panel.classList.add('dl-peek');
@@ -11894,7 +11993,7 @@ function closeDownloadPanel() {
   const panel = document.getElementById('download-panel');
   panel.classList.remove('open', 'dl-peek');
   panel.dataset.peek = '0';
-  send('SuggestionOverlay', {visible:false, x:0, y:0, width:0, height:0});
+  clearChromeOverlay('downloads');
 }
 
 // Visual feedback when any download starts: pulse the downloads button and briefly
@@ -12058,9 +12157,7 @@ function openMoreMenu() {
   refreshMoreAttention();
   menu.classList.add('open');
   btn.classList.add('active');
-  requestAnimationFrame(() => {
-    send('SuggestionOverlay', {visible:true, x:0, y:0, width:window.innerWidth, height:window.innerHeight});
-  });
+  setChromeOverlay('more-menu', {x:0, y:0, width:window.innerWidth, height:window.innerHeight});
 }
 
 function closeMoreMenu() {
@@ -12069,7 +12166,7 @@ function closeMoreMenu() {
   menu.classList.remove('open');
   const btn = document.getElementById('btn-more');
   if (btn) btn.classList.remove('active');
-  send('SuggestionOverlay', {visible:false, x:0, y:0, width:0, height:0});
+  clearChromeOverlay('more-menu');
 }
 
 function updateMoreMenuZoom() {
@@ -12249,7 +12346,7 @@ function openBmOverflowPanel(btn) {
   _bmOverflowOpen = true;
 
   // Expand clip region to cover the panel
-  send('SuggestionOverlay', {visible:true, x: r.right - panel.offsetWidth - 4, y: r.bottom + 4, width: Math.max(panel.offsetWidth, 200) + 8, height: 340});
+  setChromeOverlay('bookmark-overflow', {x:r.right - panel.offsetWidth - 4, y:r.bottom + 4, width:Math.max(panel.offsetWidth, 200) + 8, height:340});
 }
 
 function closeBmOverflowPanel() {
@@ -12259,7 +12356,7 @@ function closeBmOverflowPanel() {
   if (btn) btn.classList.remove('active');
   if (_bmOverflowOpen) {
     _bmOverflowOpen = false;
-    send('SuggestionOverlay', {visible:false, x:0, y:0, width:0, height:0});
+    clearChromeOverlay('bookmark-overflow');
   }
 }
 
@@ -12406,7 +12503,7 @@ function openBmEdit(bmId) {
   inp.value = bm.title || bm.url;
   document.getElementById('bm-edit-backdrop').classList.add('open');
   document.getElementById('bm-edit-modal').classList.add('open');
-  send('SuggestionOverlay', {visible:true, x:0, y:0, width:window.innerWidth, height:window.innerHeight});
+  setChromeOverlay('bookmark-edit', {x:0, y:0, width:window.innerWidth, height:window.innerHeight});
   setTimeout(() => { inp.focus(); inp.select(); }, 80);
 }
 
@@ -12420,7 +12517,7 @@ function openFolderEdit(folderId) {
   inp.value = folder.name || '';
   document.getElementById('bm-edit-backdrop').classList.add('open');
   document.getElementById('bm-edit-modal').classList.add('open');
-  send('SuggestionOverlay', {visible:true, x:0, y:0, width:window.innerWidth, height:window.innerHeight});
+  setChromeOverlay('bookmark-edit', {x:0, y:0, width:window.innerWidth, height:window.innerHeight});
   setTimeout(() => { inp.focus(); inp.select(); }, 80);
 }
 
@@ -12430,7 +12527,7 @@ function closeBmEdit() {
   document.getElementById('bm-edit-backdrop').classList.remove('open');
   document.getElementById('bm-edit-modal').classList.remove('open');
   if (_activeFolderId) syncFolderModalClip();
-  else send('SuggestionOverlay', {visible:false, x:0, y:0, width:0, height:0});
+  clearChromeOverlay('bookmark-edit');
 }
 
 function saveBmEdit() {
@@ -12464,7 +12561,7 @@ function syncFolderModalClip() {
   const r = modal.getBoundingClientRect();
   // Halo must contain the modal's soft shadow (0 14px 36px) or the Win32 clip hard-cuts
   // it. Shadow spreads ~36px sideways/up and ~50px down (blur + downward offset).
-  send('SuggestionOverlay', {visible:true, x:r.left - 40, y:r.top - 30, width:r.width + 80, height:r.height + 84});
+  setChromeOverlay('bookmark-folder', {x:r.left - 40, y:r.top - 30, width:r.width + 80, height:r.height + 84});
 }
 
 function placeFolderModal(anchor) {
@@ -12496,6 +12593,7 @@ function openFolderModal(folderId, anchor, rename) {
   _fmOrigName = folder.name;
   renderFolderModalBody(folderId);
   document.getElementById('folder-modal').classList.add('open');
+  setChromeOverlay('bookmark-folder', {x:0, y:0, width:window.innerWidth, height:window.innerHeight});
   requestAnimationFrame(() => placeFolderModal(_activeFolderAnchor));
   if (rename) setTimeout(() => openFolderEdit(folderId), 40);
 }
@@ -12512,7 +12610,7 @@ function closeFolderModal() {
   _activeFolderId = null;
   _activeFolderAnchor = null;
   document.getElementById('folder-modal').classList.remove('open');
-  send('SuggestionOverlay', {visible:false, x:0, y:0, width:0, height:0});
+  clearChromeOverlay('bookmark-folder');
 }
 
 function renderFolderModalBody(folderId) {
@@ -12716,17 +12814,6 @@ function copyHistoryLinks() {
   }
   copyToClipboard(urls.join('\n'));
   toast(`Copied ${urls.length} link${urls.length === 1 ? '' : 's'}`);
-}
-
-function openHistoryShown() {
-  const urls = historyVisibleUrls();
-  if (!urls.length) {
-    toast('No visible pages to open');
-    return;
-  }
-  const batch = urls.slice(0, 10);
-  batch.forEach(url => send('OpenInNewTab', {url}));
-  toast(urls.length > batch.length ? `Opened first ${batch.length} pages` : `Opened ${batch.length} page${batch.length === 1 ? '' : 's'}`);
 }
 
 function formatRelativeTime(ms) {
@@ -13215,11 +13302,12 @@ function _hideCtxMenu() {
   document.getElementById('ctx-menu').style.display = 'none';
   if (!_ctxOverlayActive) return;
   _ctxOverlayActive = false;
+  clearChromeOverlay('context-menu');
   // Restore whatever popover the menu was floating over, instead of blindly clearing the
   // clip — otherwise dismissing the menu over a suggestions dropdown cuts off the dropdown.
   const wsSwitcher = document.getElementById('ws-switcher-modal');
   if (wsSwitcher && wsSwitcher.classList.contains('open')) {
-    send('SuggestionOverlay', {visible:true, x:0, y:0, width:window.innerWidth, height:window.innerHeight});
+    setChromeOverlay('workspace-switcher', {x:0, y:0, width:window.innerWidth, height:window.innerHeight});
     return;
   }
   if (_activeFolderId) { syncFolderModalClip(); return; }
@@ -13228,7 +13316,6 @@ function _hideCtxMenu() {
     : null;
   if (!spotlightOpen && panel && panel.classList.contains('open')) { syncSuggestionOverlay(panel); return; }
   // Spotlight keeps its own full-window clip (Rust spotlight_open); clearing here is safe.
-  send('SuggestionOverlay', {visible:false, x:0, y:0, width:0, height:0});
 }
 function showContextMenu(x, y, items) {
   // Cancel any in-flight auto-hide so a timer armed just before the right-click
@@ -13256,7 +13343,7 @@ function showContextMenu(x, y, items) {
   // Flip up if menu would overflow the window's bottom edge
   if (rect.bottom > window.innerHeight) menu.style.top = Math.max(0, y - rect.height) + 'px';
   _ctxOverlayActive = true;
-  send('SuggestionOverlay', {visible:true, x:0, y:0, width:window.innerWidth, height:window.innerHeight});
+  setChromeOverlay('context-menu', {x:0, y:0, width:window.innerWidth, height:window.innerHeight});
 }
 document.addEventListener('click', () => { _hideCtxMenu(); });
 document.addEventListener('contextmenu', e => {
@@ -13275,6 +13362,37 @@ function toast(msg, type='info') {
   setTimeout(() => el.remove(), 3500);
 }
 
+let restartPending = false;
+let restartPromptDismissed = false;
+
+function markRestartPending() {
+  restartPending = true;
+  const banner = document.getElementById('privacy-restart-banner');
+  if (banner) banner.style.display = 'flex';
+  if (!restartPromptDismissed) showRestartModal();
+}
+
+function showRestartModal() {
+  if (document.getElementById('restart-modal-overlay')) return;
+  const ov = document.createElement('div');
+  ov.id = 'restart-modal-overlay';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45)';
+  ov.innerHTML = `<div style="width:360px;max-width:90vw;background:var(--modal-bg);border:1px solid var(--modal-border);border-radius:14px;padding:22px;box-shadow:0 24px 70px rgba(0,0,0,.45)">
+    <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:7px">Restart to apply changes</div>
+    <div style="font-size:13px;color:var(--text-muted);line-height:1.5;margin-bottom:20px">Your privacy changes are saved, but Ventus needs a quick restart to apply them. Restart now, or keep browsing and apply later.</div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button id="restart-later-btn" style="padding:9px 15px;font-size:13px;font-weight:600;color:var(--text);background:var(--soft-btn-bg);border:1px solid var(--modal-border);border-radius:9px;cursor:pointer;font-family:var(--font)">Later</button>
+      <button id="restart-now-btn" style="padding:9px 15px;font-size:13px;font-weight:700;color:var(--primary-btn-text);background:var(--primary-btn-bg);border:1px solid var(--primary-btn-border);border-radius:9px;cursor:pointer;font-family:var(--font)">Restart now</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+  setChromeOverlay('restart', {x:0, y:0, width:window.innerWidth, height:window.innerHeight});
+  const dismiss = () => { restartPromptDismissed = true; ov.remove(); clearChromeOverlay('restart'); };
+  ov.querySelector('#restart-now-btn').onclick = () => send('RestartForWebSecurity');
+  ov.querySelector('#restart-later-btn').onclick = dismiss;
+  ov.onclick = (e) => { if (e.target === ov) dismiss(); };
+}
+
 function openFindBar() {
   const bar = document.getElementById('find-bar');
   const input = document.getElementById('find-input');
@@ -13286,6 +13404,7 @@ function openFindBar() {
   findLastTabId = state.active_tab_id;
   findLastUrl = state.active_url || '';
   bar.classList.add('open');
+  setChromeOverlay('find', {x:0, y:0, width:window.innerWidth, height:window.innerHeight});
   renderFindBar();
   requestAnimationFrame(syncFindOverlay);
   input.focus();
@@ -13308,7 +13427,7 @@ function closeFindBar(clear=true, tabId=null) {
   if (input) input.value = '';
   if (bar) bar.classList.remove('open','no-results');
   renderFindBar();
-  send('SuggestionOverlay', {visible:false, x:0, y:0, width:0, height:0});
+  clearChromeOverlay('find');
   if (clear && id) send('FindInPage', {tab_id: id, query: '', forward: true});
 }
 
@@ -13387,12 +13506,11 @@ function renderFindBar() {
 function syncFindOverlay() {
   const bar = document.getElementById('find-bar');
   if (!findOpen || !bar || !bar.classList.contains('open')) {
-    send('SuggestionOverlay', {visible:false, x:0, y:0, width:0, height:0});
+    clearChromeOverlay('find');
     return;
   }
   const rect = bar.getBoundingClientRect();
-  send('SuggestionOverlay', {
-    visible:true,
+  setChromeOverlay('find', {
     x:rect.left - 4,
     y:rect.top - 4,
     width:rect.width + 8,
@@ -13959,5 +14077,14 @@ mod tests {
         let html = chrome_html();
         assert!(html.contains("Ventus stays open; active web pages refresh to use DNS changes."));
         assert!(!html.contains("Ventus restarts after DNS changes"));
+    }
+
+    #[test]
+    fn ai_attachment_picker_is_wired() {
+        let html = chrome_html();
+        assert!(html.contains("onclick=\"pickAiAttachments()\""));
+        assert!(html.contains("send('PickAiAttachments')"));
+        assert!(html.contains("send('RemoveAiAttachment', {id})"));
+        assert!(!html.contains("Media attachments are not available yet"));
     }
 }

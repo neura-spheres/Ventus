@@ -53,6 +53,7 @@ pub struct AppState {
     pub settings: AppSettings,
     pub conn: Connection,
     pub ai_messages: Vec<crate::ai::ChatMessage>,
+    pub pending_ai_attachments: Vec<crate::ai::AiAttachment>,
     pub current_ai_session_id: Option<String>,
     pub current_ai_provider: String,
     pub sidebar_collapsed: bool,
@@ -64,7 +65,7 @@ pub struct AppState {
     /// slides. When `Some`, the layout uses it for the chrome clip + content cut so
     /// they follow the sidebar's animated edge. `None` = no animation in progress.
     pub sidebar_clip_w_override: Option<f64>,
-    pub suggestion_overlay_rect: Option<ChromeClipRect>,
+    pub suggestion_overlay_rects: HashMap<String, ChromeClipRect>,
     pub content_cover_open: bool,
     pub pending_update_url: Option<String>,
     pub pending_update_version: Option<String>,
@@ -157,6 +158,7 @@ impl AppState {
             settings,
             conn,
             ai_messages: Vec::new(),
+            pending_ai_attachments: Vec::new(),
             current_ai_session_id: None,
             current_ai_provider: ai_provider,
             sidebar_collapsed,
@@ -165,7 +167,7 @@ impl AppState {
             sidebar_auto_hide_open: false,
             sidebar_pinned: false,
             sidebar_clip_w_override: None,
-            suggestion_overlay_rect: None,
+            suggestion_overlay_rects: HashMap::new(),
             content_cover_open: false,
             pending_update_url: None,
             pending_update_version: None,
@@ -489,7 +491,7 @@ pub fn handle_chrome_command(
         }
         ChromeCommand::NavigateFromOverlay { url } => {
             state.chrome_overlay_open = false;
-            state.suggestion_overlay_rect = None;
+            state.suggestion_overlay_rects.clear();
             navigate_current_tab(url, state, chrome).or(Some(TabAction::SyncViews))
         }
         ChromeCommand::Back => {
@@ -646,6 +648,42 @@ pub fn handle_chrome_command(
             state.push_state_to_chrome(chrome);
             Some(TabAction::SyncViews)
         }
+        ChromeCommand::PickAiAttachments => {
+            let used_count = state
+                .ai_messages
+                .iter()
+                .map(|message| message.attachments.len())
+                .sum();
+            let used_bytes = state
+                .ai_messages
+                .iter()
+                .flat_map(|message| &message.attachments)
+                .map(|item| item.size)
+                .sum();
+            match crate::ai::attachments::pick(
+                &state.pending_ai_attachments,
+                used_count,
+                used_bytes,
+            ) {
+                Ok(Some(attachments)) => {
+                    state.pending_ai_attachments = attachments;
+                    push_ai_attachments(chrome, &state.pending_ai_attachments);
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    let message = serde_json::to_string(&e.to_string()).unwrap_or_default();
+                    let _ = chrome.evaluate_script(&format!(
+                        "window.__neura&&window.__neura.showError({message})"
+                    ));
+                }
+            }
+            None
+        }
+        ChromeCommand::RemoveAiAttachment { id } => {
+            crate::ai::attachments::remove(&mut state.pending_ai_attachments, &id);
+            push_ai_attachments(chrome, &state.pending_ai_attachments);
+            None
+        }
         ChromeCommand::AiProviderChange { provider } => {
             let provider = normalize_ai_provider(&provider).to_string();
             state.current_ai_provider = provider.clone();
@@ -673,7 +711,9 @@ pub fn handle_chrome_command(
         }
         ChromeCommand::AiClearChat => {
             state.ai_messages.clear();
+            state.pending_ai_attachments.clear();
             state.current_ai_session_id = None;
+            push_ai_attachments(chrome, &state.pending_ai_attachments);
             None
         }
         ChromeCommand::GetAiSessions => {
@@ -689,12 +729,14 @@ pub fn handle_chrome_command(
                 Ok(messages) if !messages.is_empty() => {
                     let payload = ai_messages_json(&messages);
                     state.ai_messages = messages;
+                    state.pending_ai_attachments.clear();
                     state.current_ai_session_id = Some(id);
                     state.ai_sidebar_open = true;
                     let _ = chrome.evaluate_script(&format!(
                         "window.__neura && window.__neura.showAiConversation({})",
                         payload
                     ));
+                    push_ai_attachments(chrome, &state.pending_ai_attachments);
                     state.push_state_to_chrome(chrome);
                     Some(TabAction::SyncViews)
                 }
@@ -725,7 +767,7 @@ pub fn handle_chrome_command(
             query,
             answer,
         } => {
-            persist_ai_exchange(state, &session_id, &title, &query, &answer);
+            persist_ai_exchange(state, &session_id, &title, &query, &answer, Vec::new());
             None
         }
         ChromeCommand::AiStop => None,
@@ -1001,9 +1043,8 @@ pub fn handle_chrome_command(
                     .map_or(true, |before| before != &security_after)
                 {
                     let _ = chrome.evaluate_script(
-                        "window.__neura && window.__neura.showSuccess('Applying privacy changes...')",
+                        "window.__neura && window.__neura.restartNeeded && window.__neura.restartNeeded()",
                     );
-                    return Some(TabAction::ApplyWebSecurity);
                 }
             }
             if ad_blocker_toggled {
@@ -1186,6 +1227,7 @@ pub fn handle_chrome_command(
         // OpenDevtools is handled directly in main.rs (calls wv.open_devtools() on
         // the active content WebView). Nothing to do here at the app-state level.
         ChromeCommand::OpenDevtools => None,
+        ChromeCommand::RestartForWebSecurity => Some(TabAction::ApplyWebSecurity),
         ChromeCommand::PwdSaveConfirm => {
             if let Some((origin, username, password)) = state.pending_pwd_save.take() {
                 let _ = passwords::save(&state.conn, &state.pwd_key, &origin, &username, &password);
@@ -1387,22 +1429,26 @@ pub fn handle_chrome_command(
             None
         }
         ChromeCommand::SuggestionOverlay {
+            owner,
             visible,
             x,
             y,
             width,
             height,
         } => {
-            state.suggestion_overlay_rect = if visible && width > 0.0 && height > 0.0 {
-                Some(ChromeClipRect {
-                    x,
-                    y,
-                    width,
-                    height,
-                })
+            if visible && width > 0.0 && height > 0.0 {
+                state.suggestion_overlay_rects.insert(
+                    owner,
+                    ChromeClipRect {
+                        x,
+                        y,
+                        width,
+                        height,
+                    },
+                );
             } else {
-                None
-            };
+                state.suggestion_overlay_rects.remove(&owner);
+            }
             Some(TabAction::SyncClipOnly)
         }
         ChromeCommand::CheckForUpdate => {
@@ -1600,7 +1646,7 @@ pub fn handle_chrome_command(
 fn clear_transient_chrome(state: &mut AppState, chrome: &WebView) {
     state.chrome_overlay_open = false;
     state.spotlight_open = false;
-    state.suggestion_overlay_rect = None;
+    state.suggestion_overlay_rects.clear();
     state.sidebar_auto_hide_open = false;
     state.sidebar_pinned = false;
     state.sidebar_clip_w_override = None;
@@ -2541,7 +2587,11 @@ fn ai_messages_json(messages: &[crate::ai::ChatMessage]) -> String {
             } else {
                 "user"
             };
-            serde_json::json!({ "role": role, "content": m.content })
+            serde_json::json!({
+                "role": role,
+                "content": m.content,
+                "attachments": crate::ai::attachments::metadata_json(&m.attachments),
+            })
         })
         .collect();
     serde_json::to_string(&arr).unwrap_or_else(|_| "[]".to_string())
@@ -2553,6 +2603,7 @@ fn persist_ai_exchange(
     title: &str,
     user_text: &str,
     assistant_text: &str,
+    attachments: Vec<crate::ai::AiAttachment>,
 ) {
     let conn = &state.conn;
     let now = chrono::Utc::now().timestamp_millis();
@@ -2579,13 +2630,20 @@ fn persist_ai_exchange(
     let _ = crate::ai::chat::save_message(
         conn,
         session_id,
-        &crate::ai::ChatMessage::user(user_text.to_string()),
+        &crate::ai::ChatMessage::user_with_attachments(user_text.to_string(), attachments),
     );
     let _ = crate::ai::chat::save_message(
         conn,
         session_id,
         &crate::ai::ChatMessage::assistant(assistant_text.to_string()),
     );
+}
+
+fn push_ai_attachments(chrome: &WebView, attachments: &[crate::ai::AiAttachment]) {
+    let payload = crate::ai::attachments::metadata_json(attachments);
+    let _ = chrome.evaluate_script(&format!(
+        "window.__neura&&window.__neura.setAiAttachments({payload})"
+    ));
 }
 
 fn trim_report_text(text: &str, max: usize) -> String {
@@ -3370,6 +3428,7 @@ pub fn handle_app_event_inner(
         AppEvent::AiSaveMessages {
             user_text,
             assistant_text,
+            attachments,
         } => {
             tracing::info!(
                 target: "ventus::ai",
@@ -3387,11 +3446,15 @@ pub fn handle_app_event_inner(
                 &ai_session_title(&user_text),
                 &user_text,
                 &assistant_text,
+                attachments.clone(),
             );
             state.current_ai_session_id = Some(session_id);
             state
                 .ai_messages
-                .push(crate::ai::ChatMessage::user(user_text));
+                .push(crate::ai::ChatMessage::user_with_attachments(
+                    user_text,
+                    attachments,
+                ));
             state
                 .ai_messages
                 .push(crate::ai::ChatMessage::assistant(assistant_text));
@@ -3922,6 +3985,9 @@ fn apply_cloud_settings(state: &mut AppState, blob: &str) {
     let Ok(settings) = serde_json::from_str::<AppSettings>(blob) else {
         return;
     };
+    if state.settings.settings_rev > 0 && settings.settings_rev <= state.settings.settings_rev {
+        return;
+    }
     state.settings = settings;
     state.sidebar_collapsed = matches!(
         state.settings.appearance.sidebar_mode,
@@ -4376,6 +4442,7 @@ fn handle_save_settings(
             let _ = settings_store::set(&state.conn, &key, &value);
         }
     }
+    state.settings.settings_rev = chrono::Utc::now().timestamp_millis();
     let _ = settings_store::set(&state.conn, "app_settings", &state.settings);
     state.push_state_to_chrome(chrome);
     if sync_wallpaper_data {

@@ -10,6 +10,9 @@ pub fn run(conn: &Connection) -> Result<()> {
     let _ = conn
         .execute_batch("ALTER TABLE bookmarks ADD COLUMN icon_only INTEGER NOT NULL DEFAULT 0;");
     let _ = conn.execute_batch("ALTER TABLE bookmarks ADD COLUMN favicon TEXT;");
+    let _ = conn.execute_batch(
+        "ALTER TABLE ai_chat_messages ADD COLUMN attachments_json TEXT NOT NULL DEFAULT '[]';",
+    );
     Ok(())
 }
 
@@ -117,6 +120,7 @@ CREATE TABLE IF NOT EXISTS ai_chat_messages (
     session_id TEXT NOT NULL,
     role TEXT NOT NULL,
     content TEXT NOT NULL,
+    attachments_json TEXT NOT NULL DEFAULT '[]',
     created_at INTEGER NOT NULL,
     FOREIGN KEY (session_id) REFERENCES ai_chat_sessions(id) ON DELETE CASCADE
 );
