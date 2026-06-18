@@ -3245,6 +3245,10 @@ button,input,select,textarea{font-family:var(--font)}
 .about-update-card[data-state="error"] .auc-badge{display:flex;background:var(--danger)}
 .about-update-card[data-state="error"] .auc-status{color:var(--danger)}
 #update-status-area:not(:empty){padding:13px 16px;border-top:1px solid var(--modal-border)}
+.auc-notes{max-height:170px;font-size:12px;line-height:1.55}
+.auc-notes .rn-h1{font-size:14px}
+.auc-notes .rn-h{margin:12px 0 6px}
+.auc-notes>*:first-child{margin-top:0}
 
 .about-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
 .about-act-btn{
@@ -5384,7 +5388,7 @@ window.__neura = {
       if (btn) { btn.disabled = false; btn.classList.add('accent'); btn.onclick = installUpdate; btn.textContent = 'Update now'; }
       updateAvailable = true;
       setState('available', `Version ${escHtml(version)} is available`);
-      if (area && notes) area.innerHTML = `<div style="font-size:11.5px;color:var(--text-muted);max-height:120px;overflow-y:auto;white-space:pre-wrap;line-height:1.55">${escHtml(notes.slice(0,500))}${notes.length>500?'…':''}</div>`;
+      if (area && notes) area.innerHTML = `<div class="rn-body auc-notes">${renderReleaseNotes(notes.trim())}</div>`;
       if (__manualUpdateCheck || isUpdateModalOpen()) {
         showUpdateModal({status, version, notes});
       } else if (!isSettingsOpen()) {
