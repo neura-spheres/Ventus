@@ -442,6 +442,8 @@ fn main() {
     };
 
     let mut state = AppState::new(conn, settings, &data_dir, device_id, session_id);
+    #[cfg(windows)]
+    set_permission_policy(&state.settings);
     state.chrome_overlay_open = !onboarding_done;
     let mut restored_tabs: HashSet<String> = HashSet::new();
 
@@ -2008,8 +2010,25 @@ state.settings.privacy.default_permissions.clone(),
                     AppEvent::AuthApplied { .. } | AppEvent::AuthError { .. }
                 );
                 let sync_kinds = cloud_sync_kinds(&app_event);
+                #[cfg(windows)]
+                let permission_settings_changed = matches!(
+                    &app_event,
+                    AppEvent::Chrome(
+                        ChromeCommand::SetSitePermission { .. }
+                            | ChromeCommand::SetDefaultPermission { .. }
+                            | ChromeCommand::PermissionDecision { .. }
+                    ) | AppEvent::SyncPulled { .. }
+                ) || matches!(
+                    &app_event,
+                    AppEvent::Chrome(ChromeCommand::SaveSettings { key, .. })
+                        if key == "strict_permissions"
+                );
                 let cover_before = state.content_cover_open;
                 let action_opt = handle_app_event_inner(app_event, &mut state, &chrome);
+                #[cfg(windows)]
+                if permission_settings_changed {
+                    set_permission_policy(&state.settings);
+                }
                 #[cfg(windows)]
                 if auth_terminal {
                     auth_window = None;
@@ -4321,6 +4340,43 @@ fn permission_action<'a>(
 }
 
 #[cfg(windows)]
+struct PermissionPolicy {
+    strict: bool,
+    sites: config::SitePermissionMap,
+    defaults: config::SitePermissions,
+}
+
+#[cfg(windows)]
+impl Default for PermissionPolicy {
+    fn default() -> Self {
+        Self {
+            strict: true,
+            sites: config::SitePermissionMap::new(),
+            defaults: config::SitePermissions::default(),
+        }
+    }
+}
+
+#[cfg(windows)]
+fn set_permission_policy(settings: &config::AppSettings) {
+    PERMISSION_POLICY.with(|policy| {
+        *policy.borrow_mut() = PermissionPolicy {
+            strict: settings.privacy.strict_permissions,
+            sites: settings.privacy.site_permissions.clone(),
+            defaults: settings.privacy.default_permissions.clone(),
+        };
+    });
+}
+
+#[cfg(windows)]
+fn current_permission_action(origin: &str, key: &str) -> String {
+    PERMISSION_POLICY.with(|policy| {
+        let policy = policy.borrow();
+        permission_action(policy.strict, &policy.sites, &policy.defaults, origin, key).to_string()
+    })
+}
+
+#[cfg(windows)]
 fn normalize_webview_origin(raw: &str) -> Option<String> {
     let url = url::Url::parse(raw).ok()?;
     if url.scheme() != "https" && url.scheme() != "http" {
@@ -4392,9 +4448,7 @@ fn apply_profile_site_permissions(
 fn attach_permission_handler(
     wv: &WebView,
     proxy: tao::event_loop::EventLoopProxy<AppEvent>,
-    strict: bool,
     site_permissions: config::SitePermissionMap,
-    default_permissions: config::SitePermissions,
 ) {
     use webview2_com::{
         Microsoft::Web::WebView2::Win32::{
@@ -4436,39 +4490,39 @@ fn attach_permission_handler(
                     key: key.to_string(),
                 });
             }
-            let action = permission_action(
-                strict,
-                &site_permissions,
-                &default_permissions,
-                &origin,
-                key,
-            );
+            let action = current_permission_action(&origin, key);
             if action == "allow" {
                 args.SetState(COREWEBVIEW2_PERMISSION_STATE_ALLOW)?;
             } else if action == "block" {
                 args.SetState(COREWEBVIEW2_PERMISSION_STATE_DENY)?;
-            } else if !origin.is_empty() {
-                if let Ok(deferral) = args.GetDeferral() {
-                    let id = uuid::Uuid::new_v4().to_string();
-                    let dup = PERMISSION_DEFERRALS.with(|m| {
-                        m.borrow()
-                            .values()
-                            .any(|(_, _, o, k)| o == &origin && k == key)
-                    });
-                    PERMISSION_DEFERRALS.with(|m| {
-                        m.borrow_mut().insert(
-                            id.clone(),
-                            (deferral, args.clone(), origin.clone(), key.to_string()),
-                        )
-                    });
-                    if !dup {
-                        let _ = proxy.send_event(AppEvent::PermissionPrompt {
+            } else if origin.is_empty() {
+                args.SetState(COREWEBVIEW2_PERMISSION_STATE_DENY)?;
+            } else if let Ok(deferral) = args.GetDeferral() {
+                let id = uuid::Uuid::new_v4().to_string();
+                let dup = PERMISSION_DEFERRALS.with(|m| {
+                    m.borrow()
+                        .values()
+                        .any(|(_, _, o, k)| o == &origin && k == key)
+                });
+                PERMISSION_DEFERRALS.with(|m| {
+                    m.borrow_mut().insert(
+                        id.clone(),
+                        (deferral, args.clone(), origin.clone(), key.to_string()),
+                    )
+                });
+                if !dup
+                    && proxy
+                        .send_event(AppEvent::PermissionPrompt {
                             id,
-                            origin,
+                            origin: origin.clone(),
                             key: key.to_string(),
-                        });
-                    }
+                        })
+                        .is_err()
+                {
+                    resolve_permission(&origin, key, false);
                 }
+            } else {
+                args.SetState(COREWEBVIEW2_PERMISSION_STATE_DENY)?;
             }
         }
         Ok(())
@@ -4512,6 +4566,9 @@ thread_local! {
             ),
         >,
     > = std::cell::RefCell::new(HashMap::new());
+
+    static PERMISSION_POLICY: std::cell::RefCell<PermissionPolicy> =
+        std::cell::RefCell::new(PermissionPolicy::default());
 }
 
 #[cfg(windows)]
@@ -6109,13 +6166,7 @@ fn build_content_webview_once(
         attach_process_failed_handler(&wv, proxy.clone(), tab_id.to_string());
         attach_navigation_handler(&wv, proxy.clone(), tab_id.to_string());
         attach_new_window_handler(&wv, proxy.clone(), incognito);
-        attach_permission_handler(
-            &wv,
-            proxy.clone(),
-            strict,
-            site_permissions.clone(),
-            default_permissions.clone(),
-        );
+        attach_permission_handler(&wv, proxy.clone(), site_permissions.clone());
         attach_download_handler(&wv, proxy.clone(), std::sync::Arc::clone(&download_dir));
         attach_client_hints_handler(&wv);
     }
@@ -11306,6 +11357,29 @@ mod webview_arg_tests {
         assert!(defaults.set("camera", "allow"));
         assert_eq!(
             permission_action(true, &sites, &defaults, "https://meet.google.com", "camera"),
+            "allow"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn live_permission_policy_updates_without_rebuilding_tabs() {
+        let mut settings = config::AppSettings::default();
+        set_permission_policy(&settings);
+        assert_eq!(
+            current_permission_action("https://claude.ai", "microphone"),
+            "ask"
+        );
+
+        let mut perms = config::SitePermissions::default();
+        assert!(perms.set("microphone", "allow"));
+        settings
+            .privacy
+            .site_permissions
+            .insert("https://claude.ai".to_string(), perms);
+        set_permission_policy(&settings);
+        assert_eq!(
+            current_permission_action("https://claude.ai", "microphone"),
             "allow"
         );
     }

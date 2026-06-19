@@ -5989,13 +5989,14 @@ function showWsPop(wsId, el) {
   pop.dataset.wsId = wsId;
   pop.style.display = 'flex';
   requestAnimationFrame(() => {
-    if (!pop.classList.contains('open')) return;
     const pr = pop.getBoundingClientRect();
     const er = el.getBoundingClientRect();
     const left = Math.max(4, er.left + er.width / 2 - pr.width / 2);
     pop.style.left = left + 'px';
     pop.style.top = (er.top - pr.height - 8) + 'px';
     pop.classList.add('visible');
+    const rect = pop.getBoundingClientRect();
+    setChromeOverlay('workspace-popover', {x:rect.left - 36, y:rect.top - 36, width:rect.width + 72, height:rect.height + 72});
   });
 }
 
@@ -6003,6 +6004,7 @@ function hideWsPop() {
   __wsPopTimer = setTimeout(() => {
     const pop = document.getElementById('sb-ws-popover');
     if (pop) { pop.classList.remove('visible'); pop.style.display = 'none'; }
+    clearChromeOverlay('workspace-popover');
   }, 120);
 }
 
