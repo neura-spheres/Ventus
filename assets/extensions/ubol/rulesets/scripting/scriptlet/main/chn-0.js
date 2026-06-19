@@ -850,6 +850,20 @@ function objectPruneFn(
     if ( outcome === 'match' ) { return obj; }
 }
 
+function offIdleFn(id) {
+    if ( self.requestIdleCallback ) {
+        return self.cancelIdleCallback(id);
+    }
+    return self.cancelAnimationFrame(id);
+}
+
+function onIdleFn(fn, options) {
+    if ( self.requestIdleCallback ) {
+        return self.requestIdleCallback(fn, options);
+    }
+    return self.requestAnimationFrame(fn);
+}
+
 function parsePropertiesToMatchFn(propsToMatch, implicit = '') {
     const safe = safeSelf();
     const needles = new Map();
@@ -1397,14 +1411,14 @@ function removeAttr(
     let timerId;
     const rmattrAsync = ( ) => {
         if ( timerId !== undefined ) { return; }
-        timerId = safe.onIdle(( ) => {
+        timerId = onIdleFn(( ) => {
             timerId = undefined;
             rmattr();
         }, { timeout: 17 });
     };
     const rmattr = ( ) => {
         if ( timerId !== undefined ) {
-            safe.offIdle(timerId);
+            offIdleFn(timerId);
             timerId = undefined;
         }
         try {
@@ -1610,18 +1624,6 @@ function safeSelf() {
             }, []);
             return this.Object_fromEntries(entries);
         },
-        onIdle(fn, options) {
-            if ( self.requestIdleCallback ) {
-                return self.requestIdleCallback(fn, options);
-            }
-            return self.requestAnimationFrame(fn);
-        },
-        offIdle(id) {
-            if ( self.requestIdleCallback ) {
-                return self.cancelIdleCallback(id);
-            }
-            return self.cancelAnimationFrame(id);
-        }
     };
     scriptletGlobals.safeSelf = safe;
     if ( scriptletGlobals.bcSecret === undefined ) { return safe; }
@@ -2017,15 +2019,15 @@ function validateConstantFn(trusted, raw, extraArgs = {}) {
 const scriptletGlobals = {}; // eslint-disable-line
 
 const $scriptletFunctions$ = /* 19 */
-[abortOnPropertyRead,setConstant,preventSetTimeout,preventAddEventListener,preventFetch,spoofCSS,abortCurrentScript,abortOnStackTrace,abortOnPropertyWrite,preventXhr,preventSetInterval,noEvalIf,noWindowOpenIf,adjustSetTimeout,adjustSetInterval,jsonPrune,preventInnerHTML,removeAttr,evaldataPrune];
+[preventAddEventListener,abortOnPropertyRead,setConstant,preventSetTimeout,preventFetch,spoofCSS,abortCurrentScript,abortOnStackTrace,abortOnPropertyWrite,preventXhr,preventSetInterval,noEvalIf,noWindowOpenIf,adjustSetTimeout,adjustSetInterval,jsonPrune,preventInnerHTML,removeAttr,evaldataPrune];
 
-const $scriptletArgs$ = /* 229 */ ["SPM_CONFIG.adblockOnly","checkAdScript","noopFunc","](getComputedStyle,","bait.offsetHeight===0","DOMContentLoaded","showModal","offsetHeight === 0","adsbygoogle.js",".adsbygoogle","display","block","pagead2.googlesyndication.com","EventTarget.prototype.addEventListener","window.getComputedStyle","document.getElementById","adBlockDetected","alert",".onerror","ad_id_for_555","","all520dddaaa2022ccc","true",".offsetHeight == 0","checkAdblock","/DOMContentLoaded|load|complete/","/check|detected/","ads",".offsetHeight","_AdBlockInit","/googlesyndication\\.com|doubleclick\\.net/","checkAndHandleAdBlock","undefined","document.createElement","/api/ads","alertadmodal","adsbygoogle","{}","adsbygoogle.loaded","float_right > div","document.dispatchEvent","/getexoloader/","decodeURIComponent","pagead","www3.doubleclick.net","document.querySelector","adblock_tip","AD_SURVEY_Add_AdPos","AD_SURVEY_Add_AdPos_Simple","killads","/\\.height\\(\\) == 0|adsbygoogle/","myModal","loadErrorTip","ins.adsbygoogle","isAdsDisplayed","error","event.target.tagName","_0x","fuzqingAdPlus","Ad Block","all520dddaaa2022aaa","canRunAds","adBlock","adblock","0","can_run_ads","typeof(ad)","jQuery","\\u","document.writeln","发现严重BUG","make_rand_div","checker","google_tag_manager","/pagead2\\.googlesyndication\\.com|\\/fbevents\\.js/","google.ima.AdError","/#myModal'\\)\\.modal/","ga","google_empty_script_included","setTimeout","COOKIE_NAME","html","ADS_BLOCKED","$","adskilltest","/home/?adblock=","/!document\\.getElementById\\([\\s\\S]*?\\.style\\.display=/","showRemoveAdBlocker","Object.prototype.cnobpreroll_","Object.prototype.canobpreroll_","ad_num_show","!document.getElementById(btoa","daau_app","NativeAd","__jsadsuccess","checkSiteNormalLoad","__DOMAIN","onload","null","adbk","false","/ad block stop|warm_msg/","config.group","encodeURIComponent","preBid","preBid.displayAd","preBid.getPrerollVASTUrl","adStart","eval","document.write","player.VastADPlugin","ADSOBJET","Object.prototype.pgmp","invokeInterstitial","Object.prototype.ShouldLoadAds","delCookie","injectPops","myPlayer.adDisplay","NEWS_FEED","infoid","document.write(ad);","conone_lmg","location.href","3000","adCountDown","0.02",".s--","Object.prototype.ad_switch","dy_card_dyrun","/bit\\.ly|kbtv/","video-ad-timeout","*","tips","poped","*.*","adFeedbackData adType adServedUrls","list.*.link.ad list.*.link.kicker","configs.*.properties.slideshowWCSettings.interstitialNativeAds configs.*.properties.fullScreenSlideshowSettings.interstitialNativeAds properties.componentConfigs.slideshowConfigs.interstitialNativeAds properties.componentConfigs.slideshowConfigs.slideshowSettings.interstitialNativeAds","popunder","Object.prototype.adData","Object.prototype._adData","qciss.net","akumtagcc","myclick","/getCookie[\\s\\S]*?\\(\"\\\\x/","MM_openBrWindow","/\\.(gif|php)/","window.leave","CloseAd","lists","timerAdCountdown","88p2p.com","is_show","Function",".map(function","/<script src=.*Math\\.floor\\(Date\\.now\\(\\)/","click","window.open","adbyunion","Math.floor","data.*.list.[-].resourceData.adData","visitUrl","adRender","addImageAd","Uint8Array","loadAd","createFixedBottomBannerWithClose","/deposit-bonus?platform=26&utm_source=","mmPopup() {","div","_mtj","document.getElementsByTagName","try{e()}catch(e){if(t[e.message])return;",".current=setTimeout","5000","0.001","localStorage","position:","window.location.href","allData.safeLevel","1","ecjkox.com","ads_codes","touchend","!/external","adUI","1000","appData","[]","topData","midData","btmData","coupletData","data-ads_url","[data-ads_url]","navigator","Math.random","parentNode.insertBefore","return a.split","WebSocket","adModal","adInfo","isAdLoaded","Object.prototype.noAD","__ad_unblock_id_obfuscation","/getCookie|checkCK|checkCookie|checkC00kie|checkCoookie|checkCookiiiie|document\\.cookie|buttonClose|exptime/","infoList","data.CardList.[].children_list.ad_list data.CardList.[-].params.advertiser_name","addEventListener(\"touchstart\"","adObj","clientheight","/(?=^(?![\\s\\S]*(static|jquery)))/","data.[-].ad.adScene items.*.video.*.data.[-].ad.adScene data.template.tabs.*.blocks.*.data.data.*.videos.feature_ad data.template.tabs.*.blocks.*.data.data.videos.*.ad","style","#banner[style*=\"background-image:url\"]","CreativePlayerwebPlugin.AD_EVENT.AD_DESTROY","CreativePlayerwebPlugin.AD_EVENT.AD_LOAD_START","ad","ConFig.ad_duration_ms","data.cm_info.ads","pageData.__banners.0.commercial.mediaUrl","pageData.__banners.0.commercial.jumpUrl","pageData.__banners.0.commercial.title","pageData.__banners.1.commercial.mediaUrl","pageData.__banners.1.commercial.jumpUrl","pageData.__banners.1.commercial.title","detailParams.is_ad_play","entity.commercial","new Function(document["];
+const $scriptletArgs$ = /* 232 */ ["DOMContentLoaded","detectAdBlocker","SPM_CONFIG.adblockOnly","checkAdScript","noopFunc","](getComputedStyle,","bait.offsetHeight===0","showModal","offsetHeight === 0","adsbygoogle.js",".adsbygoogle","display","block","pagead2.googlesyndication.com","EventTarget.prototype.addEventListener","window.getComputedStyle","document.getElementById","adBlockDetected","alert",".onerror","ad_id_for_555","","all520dddaaa2022ccc","true",".offsetHeight == 0","checkAdblock","/DOMContentLoaded|load|complete/","/check|detected/","ads",".offsetHeight","_AdBlockInit","/googlesyndication\\.com|doubleclick\\.net/","offsetHeig\\'+\\'ht\\']","/api/ads","alertadmodal","adsbygoogle","{}","adsbygoogle.loaded","float_right > div","document.dispatchEvent","/getexoloader/","decodeURIComponent","pagead","www3.doubleclick.net","document.querySelector","adblock_tip","AD_SURVEY_Add_AdPos","AD_SURVEY_Add_AdPos_Simple","killads","/\\.height\\(\\) == 0|adsbygoogle/","myModal","loadErrorTip","ins.adsbygoogle","isAdsDisplayed","error","event.target.tagName","_0x","fuzqingAdPlus","Ad Block","all520dddaaa2022aaa","undefined","canRunAds","adBlock","adblock","0","can_run_ads","typeof(ad)","jQuery","\\u","document.writeln","发现严重BUG","document.createElement","make_rand_div","checker","google_tag_manager","/pagead2\\.googlesyndication\\.com|\\/fbevents\\.js/","google.ima.AdError","/#myModal'\\)\\.modal/","ga","google_empty_script_included","setTimeout","COOKIE_NAME","html","ADS_BLOCKED","$","adskilltest","/home/?adblock=","/!document\\.getElementById\\([\\s\\S]*?\\.style\\.display=/","showRemoveAdBlocker","Object.prototype.cnobpreroll_","Object.prototype.canobpreroll_","ad_num_show","!document.getElementById(btoa","daau_app","NativeAd","__jsadsuccess","checkSiteNormalLoad","__DOMAIN","onload","null","adbk","false","/ad block stop|warm_msg/","config.group","encodeURIComponent","preBid","preBid.displayAd","preBid.getPrerollVASTUrl","adStart","eval","document.write","player.VastADPlugin","ADSOBJET","Object.prototype.pgmp","invokeInterstitial","Object.prototype.ShouldLoadAds","delCookie","injectPops","myPlayer.adDisplay","NEWS_FEED","infoid","document.write(ad);","conone_lmg","location.href","3000","adCountDown","0.02",".s--","Object.prototype.ad_switch","dy_card_dyrun","/bit\\.ly|kbtv/","video-ad-timeout","*","tips","poped","*.*","adFeedbackData adType adServedUrls","list.*.link.ad list.*.link.kicker","configs.*.properties.slideshowWCSettings.interstitialNativeAds configs.*.properties.fullScreenSlideshowSettings.interstitialNativeAds properties.componentConfigs.slideshowConfigs.interstitialNativeAds properties.componentConfigs.slideshowConfigs.slideshowSettings.interstitialNativeAds","popunder","Object.prototype.adData","Object.prototype._adData","qciss.net","akumtagcc","myclick","/getCookie[\\s\\S]*?\\(\"\\\\x/","MM_openBrWindow","/\\.(gif|php)/","window.leave","CloseAd","lists","timerAdCountdown","88p2p.com","is_show","Function",".map(function","/<script src=.*Math\\.floor\\(Date\\.now\\(\\)/","click","window.open","adbyunion","Math.floor","data.*.list.[-].resourceData.adData","visitUrl","adRender","addImageAd","Uint8Array","loadAd","createFixedBottomBannerWithClose","/deposit-bonus?platform=26&utm_source=","mmPopup() {","div","_mtj","document.getElementsByTagName","try{e()}catch(e){if(t[e.message])return;",".current=setTimeout","5000","0.001","localStorage","position:","window.location.href","allData.safeLevel","1","ecjkox.com","ads_codes","touchend","!/external","adUI","1000","appData","[]","topData","midData","btmData","coupletData","data-ads_url","[data-ads_url]","parentNode.insertBefore","1500","navigator","Math.random","return a.split","WebSocket","adModal","adInfo","isAdLoaded","Object.prototype.noAD","__PROXY_META","__ad_unblock_id_obfuscation","/getCookie|checkCK|checkCookie|checkC00kie|checkCoookie|checkCookiiiie|document\\.cookie|buttonClose|exptime/","infoList","data.CardList.[].children_list.ad_list data.CardList.[-].params.advertiser_name","addEventListener(\"touchstart\"","adObj","clientheight","/(?=^(?![\\s\\S]*(static|jquery)))/","data.[-].ad.adScene items.*.video.*.data.[-].ad.adScene data.template.tabs.*.blocks.*.data.data.*.videos.feature_ad data.template.tabs.*.blocks.*.data.data.videos.*.ad","style","#banner[style*=\"background-image:url\"]","CreativePlayerwebPlugin.AD_EVENT.AD_DESTROY","CreativePlayerwebPlugin.AD_EVENT.AD_LOAD_START","ad","ConFig.ad_duration_ms","data.cm_info.ads","pageData.__banners.0.commercial.mediaUrl","pageData.__banners.0.commercial.jumpUrl","pageData.__banners.0.commercial.title","pageData.__banners.1.commercial.mediaUrl","pageData.__banners.1.commercial.jumpUrl","pageData.__banners.1.commercial.title","detailParams.is_ad_play","entity.commercial","new Function(document["];
 
-const $scriptletArglists$ = /* 206 */ "0,0;1,1,2;2,3;2,4;3,5,6;2,7;4,8;5,9,10,11;4,12;6,13,14;6,15,16;7,17,18;1,19,20;1,21,22;2,23;8,24;3,25,26;0,27;2,28;1,29,2;4,30;1,31,32;6,33,12;9,34;0,35;1,36,37;1,38,22;2,39;6,40,41;6,42,43;4,44;9,36;6,45,14;2,46;1,47,2;1,48,2;1,49,22;2,50;2,51;2,52;2,53;1,54,22;3,55,56;2,57;1,58,37;10,59;0,16;1,60,32;1,61,22;3,5,62;1,63,64;1,65,22;2,63;6,17,66;6,67,68;6,69,68;2,70;7,33,71;2,72;1,73,37;9,12;4,74;1,75,2;6,15,76;1,77,2;1,78,22;6,79,80;2,81;11,82;1,36,2;6,83,84;2,85;10,85;6,15,86;3,20,87;1,88,22;1,89,22;2,90;2,36;1,27,20;6,83,91;0,92;1,93,2;1,94,22;2,95;8,96;1,97,98;1,99,100;2,101;1,102,20;11,103;1,104,37;1,105,2;1,106,2;8,107;6,108,57;6,109,57;1,110,2;1,111,37;12;7,112,113;0,114;8,115;6,67,116;1,117,32;1,118,2;6,83,119;6,109,120;1,121,2;3,5,33;2,122,123;13,124,20,125;14,126,20,125;1,127,64;1,128,32;12,129;13,130,131,125;6,109,132;1,133,22;15,134,135;15,131,136;15,137;0,138;1,139,37;13,20,20,125;1,140,37;12,64,141;0,142;0,143;6,109,144;1,145,2;6,109,146;6,147;13,148,20,125;1,149,32;6,83,138;14,150,20,125;12,151;1,152,100;6,153,154;6,109,155;3,156,157;0,158;6,159,132;15,160;6,33,161;1,162,2;0,163;7,164,165;0,166;6,83,167;6,83,168;16,169,170;6,171,170;2,172;6,69;13,173,174,175;6,109;3,5,176;6,109,177;2,178;1,179,180;2,181;6,109,182;3,183,178;12,184;14,185,186,125;1,187,188;1,189,188;1,190,188;1,191,188;1,192,188;17,193,194;6,195,122;6,196,197;6,33,198;11,199;6,83,200;1,201,37;1,202,22;1,203,22;8,204;2,205;1,206,188;15,207;2,208;1,209,2;3,183,210;7,33,211;15,212;17,213,214;1,215,20;1,216,20;15,27;15,217;1,218,64;15,219;1,220,20;1,221,20;1,222,20;1,223,20;1,224,20;1,225,20;1,226,100;18,227;6,153,228";
+const $scriptletArglists$ = /* 209 */ "0,0,1;1,2;2,3,4;3,5;3,6;0,0,7;3,8;4,9;5,10,11,12;4,13;6,14,15;6,16,17;7,18,19;2,20,21;2,22,23;3,24;8,25;0,26,27;1,28;3,29;2,30,4;4,31;3,32;9,33;1,34;2,35,36;2,37,23;3,38;6,39,40;6,41,42;4,43;9,35;6,44,15;3,45;2,46,4;2,47,4;2,48,23;3,49;3,50;3,51;3,52;2,53,23;0,54,55;3,56;2,57,36;10,58;1,17;2,59,60;2,61,23;0,0,62;2,63,64;2,65,23;3,63;6,18,66;6,67,68;6,69,68;3,70;7,71,72;3,73;2,74,36;9,13;4,75;2,76,4;6,16,77;2,78,4;2,79,23;6,80,81;3,82;11,83;2,35,4;6,84,85;3,86;10,86;6,16,87;0,21,88;2,89,23;2,90,23;3,91;3,35;2,28,21;6,84,92;1,93;2,94,4;2,95,23;3,96;8,97;2,98,99;2,100,101;3,102;2,103,21;11,104;2,105,36;2,106,4;2,107,4;8,108;6,109,56;6,110,56;2,111,4;2,112,36;12;7,113,114;1,115;8,116;6,67,117;2,118,60;2,119,4;6,84,120;6,110,121;2,122,4;0,0,71;3,123,124;13,125,21,126;14,127,21,126;2,128,64;2,129,60;12,130;13,131,132,126;6,110,133;2,134,23;15,135,136;15,132,137;15,138;1,139;2,140,36;13,21,21,126;2,141,36;12,64,142;1,143;1,144;6,110,145;2,146,4;6,110,147;6,148;13,149,21,126;2,150,60;6,84,139;14,151,21,126;12,152;2,153,101;6,154,155;6,110,156;0,157,158;1,159;6,160,133;15,161;6,71,162;2,163,4;1,164;7,165,166;1,167;6,84,168;6,84,169;16,170,171;6,172,171;3,173;6,69;13,174,175,176;6,110;0,0,177;6,110,178;3,179;2,180,181;3,182;6,110,183;0,184,179;12,185;14,186,187,126;2,188,189;2,190,189;2,191,189;2,192,189;2,193,189;17,194,195;3,196,187;3,196,197;6,198,123;6,199,196;6,71,200;11,201;6,84,202;2,203,36;2,204,23;2,205,23;8,206;8,207;3,208;2,209,189;15,210;3,211;2,212,4;0,184,213;7,71,214;15,215;17,216,217;2,218,21;2,219,21;15,28;15,220;2,221,64;15,222;2,223,21;2,224,21;2,225,21;2,226,21;2,227,21;2,228,21;2,229,101;18,230;6,154,231";
 
-const $scriptletArglistRefs$ = /* 222 */ "16,177;75,76;64,65;100,101;179,180;119,120,121;194;8;88,137;164;89;145;75,76;40;91,92,93;53;131;100,101;17;13,38,110;138;163;128;136;48;178,190;33;36,54,55;44;205;23;117;63;144;67;5;184,191,192,193;16,177;108;56;111;95;90;128;159;8;135;86,87,88;166,189;59,60,61,62;43;8;197,198,199,200,201,202,203;19,25,26,146;10;126;42;79;138;131;98;118;124;99;99;14,167,168,169,170,171;13,47;109;100,101;24;154;156;9;186;3,4,195;4,195;4,195;185;158;36;68;191,192;127;95,96;11;193;197,198,199,200,201,202,203;197,198,199,200,201,202,203;197,198,199,200,201,202,203;153;57;132;135;12,13;138;48,51,52;71,72;165;20;143;193;46;27,28;27,28;94;164;99;172;36;66;153;2,140;40,41;160;2,140;34,35;3,4,99,195;2,140;105;172;187;102;204;204;204;204;204;204;125;172;193;106;46;2,140;99,155;161;125;29;139;81;162;32;19;196;133;19;0;73;122;204;204;82,83,84,85;31;103;99,141,152;1;37;74;182,183;182,183;21,22;164;164;39,82,83,84;39;99;99;18;78;131;49,50;188;150,151;82,83,84;80;45;48;8;191,192,193,-195;142;133;15;182,183;182,183;182,183;114;147,148,149;147,148,149;115,116;129;173,174,175;58;112,113;123;69;107;27,28;70;182,183;181;157;77;134;97;153;153;153;153;153;153;153;153;153;164;185;176,187;-195;104;6,7;130;182,183;30";
+const $scriptletArglistRefs$ = /* 230 */ "17,179;75,76;64,65;100,101;181,182;119,120,121;197;9;88,137;164;89;145;75,76;40;91,92,93;53;131;100,101;18;14,38,110;138;163;128;136;48;180,193;33;36,54,55;44;208;183,184;23;117;63;144;67;6;187,194,195,196;17,179;108;99;56;111;95;90;128;183,184;159;9;135;86,87,88;5,198;166,192;59,60,61,62;43;9;200,201,202,203,204,205,206;20,25,26,146;11;126;42;79;138;131;98;118;124;99;15,167,168,169,170,171;14,47;109;100,101;24;154;156;10;189;4,5,198;5,198;5,198;188;158;36;68;0;194,195;127;95,96;12;196;200,201,202,203,204,205,206;200,201,202,203,204,205,206;200,201,202,203,204,205,206;153;57;132;135;13,14;138;48,51,52;71,72;165;21;143;196;46;27,28;27,28;94;164;99;172;36;66;153;3,140;40,41;160;183,184;3,140;34,35;4,5,99,198;3,140;105;172;190;102;207;207;207;207;207;207;125;172;196;106;46;3,140;99,155;161;125;29;139;81;162;32;20;199;133;183,184;20;1;73;122;207;207;82,83,84,85;31;103;99,141,152;2;37;74;185,186;185,186;22;164;164;39,82,83,84;39;99;99;19;78;131;49,50;191;150,151;82,83,84;80;45;48;9;194,195,196,-198;183,184;142;133;16;185,186;185,186;185,186;114;147,148,149;147,148,149;115,116;129;173,174,175,176,177;58;112,113;123;69;107;27,28;183,184;70;185,186;183,184;157;77;134;97;153;153;153;153;153;153;153;153;153;164;188;178,190;-198;104;7,8;130;185,186;30";
 
-const $scriptletHostnames$ = /* 222 */ ["8se.me","ddys.*","ebb.io","iyf.tv","le.com","msn.cn","qq.com","4gtv.tv","5278.cc","beqg.cc","cnys.tv","crxs.me","ddrk.me","logi.im","now.com","slit.cn","wnacg.*","yfsp.tv","2urs.com","520cc.cc","69xx.one","av6k.com","avcao.cc","bde4.com","bde4.icu","huya.com","itdog.cn","jkpan.cc","koyi.pub","mxdm.xyz","noy1.top","o8tv.com","poedb.tw","sohu.com","t66y.com","tstrs.me","v.qq.com","xchina.*","xkyn.com","233tw.com","51zxw.net","akkxs.net","applnn.cc","axjbt.com","efuxs.com","fsbot.xyz","ggjav.com","hboav.com","iqiyi.com","linetv.tw","moeci.com","mpyit.com","nivod2.tv","nodejs.cn","playav.cc","qciss.net","rjno1.com","sssam.com","theav.xyz","wnacg1.cc","x99av.com","xvideo.cc","youku.com","123865.com","123pan.com","445nan.com","520call.me","85tube.com","aiyifan.tv","caq98i.top","cidetxt.cc","douyin.com","dqzboy.com","enhuku.com","huavod.com","huavod.net","huavod.top","huoqwk.com","iplark.com","itbaoku.cn","jav777.xyz","lpl.qq.com","m.86kl.com","m.lwxs.com","mcappx.com","new.qq.com","nivod2.com","nivod4.com","nivod5.com","nunuju.net","pcbeta.com","pixnet.net","porn87.com","surirt.com","theporn.cc","tingfm.com","tsubasa.im","vikacg.com","wandhi.com","wnacg05.cc","www.qq.com","1090ys8.com","18comic.org","18comic.vip","3dmgame.com","69shumi.com","88files.net","91porna.com","bigpixel.cn","bingfeng.tw","bz88888.net","clp126.shop","ekamus.info","erciyan.com","hsq233.shop","huanqiu.com","huaren.live","jav224.shop","jianshu.com","jkptgbf.xyz","m.13xsw.com","m.91zww.com","m.nivod2.tv","m.nivod4.tv","m.nivod5.tv","m.nivod7.tv","m.nivod8.tv","m.nivod9.tv","m.youku.com","mfulbvu.xyz","news.qq.com","nunuyy3.org","papalah.com","ttp229.shop","umbooks.com","v.ifeng.com","v.youku.com","vxetable.cn","xl02.com.de","youneed.win","youziks.com","1keydata.com","baomidou.com","bilibili.com","bukaivip.com","docsmall.com","freedidi.com","getitfree.cn","goodav17.com","m.nivod2.com","m.nivod4.com","ohmanhua.com","pansearch.me","pornbest.org","wikisport.cc","wxredian.com","xbeibeix.com","xiebruce.top","axu.pages.dev","axutongxue.cn","bilinovel.com","biquge321.com","biquge543.com","cocomanga.com","colamanga.com","embedrise.com","freejavbt.com","ftchinese.com","haoweichi.com","hentaicomic.*","linovelib.com","m.1024txt.com","macromicro.me","onemanhua.com","pg-wuming.com","pincong.rocks","slashlook.com","slashview.com","sports.qq.com","yeshuyuan.com","zhenbuka3.com","174.127.195.98","axutongxue.com","axutongxue.net","axutongxue.vip","dianyingim.com","hanime1-me.icu","hanime1-me.top","iwatchme2u.com","javlibrary.com","m.shuhaige.net","ruanyifeng.com","tangdoucdn.com","v-wb.youku.com","wenxuecity.com","dogfight360.com","jmcomic-zzz.org","youranshare.com","axutongxue.space","foodieteller.com","haiwaishubao.com","league-funny.com","m.biqiugege8.com","player.hboav.com","banzhu1111111.com","banzhu2222222.com","banzhu3333333.com","banzhu4444444.com","banzhu5555555.com","banzhu6666666.com","banzhu7777777.com","banzhu8888888.com","banzhu9999999.com","m.biquge12345.com","wap.biqugewx.info","wap.yushuwu.cloud","work.weixin.qq.com","hamivideo.hinet.net","helper-employer.com","edc1014070.pixnet.net","axutongxue.onrender.com","taiwanlibrarysearch.herokuapp.com"];
+const $scriptletHostnames$ = /* 230 */ ["8se.me","ddys.*","ebb.io","iyf.tv","le.com","msn.cn","qq.com","4gtv.tv","5278.cc","beqg.cc","cnys.tv","crxs.me","ddrk.me","logi.im","now.com","slit.cn","wnacg.*","yfsp.tv","2urs.com","520cc.cc","69xx.one","av6k.com","avcao.cc","bde4.com","bde4.icu","huya.com","itdog.cn","jkpan.cc","koyi.pub","mxdm.xyz","nanai.tw","noy1.top","o8tv.com","poedb.tw","sohu.com","t66y.com","tstrs.me","v.qq.com","xchina.*","xkyn.com","123pan.cn","233tw.com","51zxw.net","akkxs.net","applnn.cc","axjbt.com","daybuy.tw","efuxs.com","fsbot.xyz","ggjav.com","hboav.com","huavod.cc","iqiyi.com","linetv.tw","moeci.com","mpyit.com","nivod2.tv","nodejs.cn","playav.cc","qciss.net","rjno1.com","sssam.com","theav.xyz","wnacg1.cc","x99av.com","xvideo.cc","youku.com","123865.com","445nan.com","520call.me","85tube.com","aiyifan.tv","caq98i.top","cidetxt.cc","douyin.com","dqzboy.com","enhuku.com","huavod.com","huavod.net","huavod.top","huoqwk.com","iplark.com","itbaoku.cn","jav777.xyz","laosu.tech","lpl.qq.com","m.86kl.com","m.lwxs.com","mcappx.com","new.qq.com","nivod2.com","nivod4.com","nivod5.com","nunuju.net","pcbeta.com","pixnet.net","porn87.com","surirt.com","theporn.cc","tingfm.com","tsubasa.im","vikacg.com","wandhi.com","wnacg05.cc","www.qq.com","1090ys8.com","18comic.org","18comic.vip","3dmgame.com","69shumi.com","88files.net","91porna.com","bigpixel.cn","bingfeng.tw","bz88888.net","clp126.shop","ekamus.info","erciyan.com","free.com.tw","hsq233.shop","huanqiu.com","huaren.live","jav224.shop","jianshu.com","jkptgbf.xyz","m.13xsw.com","m.91zww.com","m.nivod2.tv","m.nivod4.tv","m.nivod5.tv","m.nivod7.tv","m.nivod8.tv","m.nivod9.tv","m.youku.com","mfulbvu.xyz","news.qq.com","nunuyy3.org","papalah.com","ttp229.shop","umbooks.com","v.ifeng.com","v.youku.com","vxetable.cn","xl02.com.de","youneed.win","youziks.com","1keydata.com","baomidou.com","bilibili.com","bukaivip.com","candylife.tw","docsmall.com","freedidi.com","getitfree.cn","goodav17.com","m.nivod2.com","m.nivod4.com","ohmanhua.com","pansearch.me","pornbest.org","wikisport.cc","wxredian.com","xbeibeix.com","xiebruce.top","axu.pages.dev","axutongxue.cn","bilinovel.com","biquge321.com","biquge543.com","cocomanga.com","colamanga.com","embedrise.com","freejavbt.com","ftchinese.com","haoweichi.com","hentaicomic.*","linovelib.com","m.1024txt.com","macromicro.me","onemanhua.com","pg-wuming.com","pincong.rocks","slashlook.com","slashview.com","sports.qq.com","uptogo.com.tw","yeshuyuan.com","zhenbuka3.com","174.127.195.98","axutongxue.com","axutongxue.net","axutongxue.vip","dianyingim.com","hanime1-me.icu","hanime1-me.top","iwatchme2u.com","javlibrary.com","m.shuhaige.net","ruanyifeng.com","tangdoucdn.com","v-wb.youku.com","wenxuecity.com","dogfight360.com","jmcomic-zzz.org","pokemonhubs.com","youranshare.com","axutongxue.space","foodieteller.com","haiwaishubao.com","league-funny.com","m.biqiugege8.com","player.hboav.com","banzhu1111111.com","banzhu2222222.com","banzhu3333333.com","banzhu4444444.com","banzhu5555555.com","banzhu6666666.com","banzhu7777777.com","banzhu8888888.com","banzhu9999999.com","m.biquge12345.com","wap.biqugewx.info","wap.yushuwu.cloud","work.weixin.qq.com","hamivideo.hinet.net","helper-employer.com","edc1014070.pixnet.net","axutongxue.onrender.com","taiwanlibrarysearch.herokuapp.com"];
 
 const $scriptletFromRegexes$ = /* 0 */ [];
 
@@ -2072,51 +2074,51 @@ const entries = (( ) => {
 })();
 if ( entries.length === 0 ) { return; }
 
-const collectArglistRefIndices = (out, hn, r) => {
-    let l = 0, i = 0, d = 0;
-    let candidate = '';
-    while ( l < r ) {
-        i = l + r >>> 1;
-        candidate = $scriptletHostnames$[i];
-        d = hn.length - candidate.length;
-        if ( d === 0 ) {
-            if ( hn === candidate ) {
-                out.add(i); break;
-            }
-            d = hn < candidate ? -1 : 1;
-        }
-        if ( d < 0 ) {
-            r = i;
-        } else {
-            l = i + 1;
-        }
-    }
-    return i;
-};
-
-const indicesFromHostname = (out, hnDetails, suffix = '') => {
-    if ( hnDetails.hns.length === 0 ) { return; }
-    let r = $scriptletHostnames$.length;
-    for ( const hn of hnDetails.hns ) {
-        r = collectArglistRefIndices(out, `${hn}${suffix}`, r);
-    }
-    if ( $hasEntities$ ) {
-        let r = $scriptletHostnames$.length;
-        for ( const en of hnDetails.ens ) {
-            r = collectArglistRefIndices(out, `${en}${suffix}`, r);
-        }
-    }
-};
-
 const todoIndices = new Set();
-indicesFromHostname(todoIndices, entries[0]);
-if ( $hasAncestors$ ) {
-    for ( const entry of entries ) {
-        if ( entry.i === 0 ) { continue; }
-        indicesFromHostname(todoIndices, entry, '>>');
+if ( $scriptletHostnames$.length ) {
+    const collectArglistRefIndices = (out, hn, r) => {
+        let l = 0, i = 0, d = 0;
+        let candidate = '';
+        while ( l < r ) {
+            i = l + r >>> 1;
+            candidate = $scriptletHostnames$[i];
+            d = hn.length - candidate.length;
+            if ( d === 0 ) {
+                if ( hn === candidate ) {
+                    out.add(i); break;
+                }
+                d = hn < candidate ? -1 : 1;
+            }
+            if ( d < 0 ) {
+                r = i;
+            } else {
+                l = i + 1;
+            }
+        }
+        return i + 1;
+    };
+    const indicesFromHostname = (out, hnDetails, suffix = '') => {
+        if ( hnDetails.hns.length === 0 ) { return; }
+        let r = $scriptletHostnames$.length;
+        for ( const hn of hnDetails.hns ) {
+            r = collectArglistRefIndices(out, `${hn}${suffix}`, r);
+        }
+        if ( $hasEntities$ ) {
+            let r = $scriptletHostnames$.length;
+            for ( const en of hnDetails.ens ) {
+                r = collectArglistRefIndices(out, `${en}${suffix}`, r);
+            }
+        }
+    };
+    indicesFromHostname(todoIndices, entries[0]);
+    if ( $hasAncestors$ ) {
+        for ( const entry of entries ) {
+            if ( entry.i === 0 ) { continue; }
+            indicesFromHostname(todoIndices, entry, '>>');
+        }
     }
+    $scriptletHostnames$.length = 0;
 }
-$scriptletHostnames$.length = 0;
 
 // Collect arglist references
 const todo = new Set();

@@ -7,7 +7,7 @@ pub async fn fetch(region: &str) -> Result<Vec<Trend>> {
     let region = clean_region(region);
     let url = format!("https://trends.google.com/trending/rss?geo={region}");
     let text = reqwest::Client::builder()
-        .user_agent(crate::version::USER_AGENT)
+        .user_agent(crate::version::browser_like_user_agent())
         .timeout(std::time::Duration::from_secs(8))
         .build()?
         .get(url)

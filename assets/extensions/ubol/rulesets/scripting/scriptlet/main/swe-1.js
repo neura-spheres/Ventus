@@ -1236,18 +1236,6 @@ function safeSelf() {
             }, []);
             return this.Object_fromEntries(entries);
         },
-        onIdle(fn, options) {
-            if ( self.requestIdleCallback ) {
-                return self.requestIdleCallback(fn, options);
-            }
-            return self.requestAnimationFrame(fn);
-        },
-        offIdle(id) {
-            if ( self.requestIdleCallback ) {
-                return self.cancelIdleCallback(id);
-            }
-            return self.cancelAnimationFrame(id);
-        }
     };
     scriptletGlobals.safeSelf = safe;
     if ( scriptletGlobals.bcSecret === undefined ) { return safe; }
@@ -1664,15 +1652,15 @@ function xmlPrune(
 const scriptletGlobals = {}; // eslint-disable-line
 
 const $scriptletFunctions$ = /* 12 */
-[preventAddEventListener,setConstant,abortCurrentScript,preventSetTimeout,jsonPrune,preventSetInterval,abortOnPropertyRead,noEvalIf,preventXhr,jsonPruneFetchResponse,alertBuster,xmlPrune];
+[preventAddEventListener,setConstant,abortOnPropertyRead,abortCurrentScript,preventSetTimeout,jsonPrune,preventSetInterval,noEvalIf,preventXhr,jsonPruneFetchResponse,alertBuster,xmlPrune];
 
-const $scriptletArgs$ = /* 69 */ ["blur","i.focusPlayerElement","scroll","t.view.updateBounds","/adblockDetector|adsInserted|partnerExternalLinkClick/","ai_set_cookie","noopFunc","square_array1","null","square_arraytop","disableEnterKey","document.ondragstart","ad","click","e.preventDefault","elements","a.js-ct","contextmenu",".disabled","autoplay","checkGDPRInt","dovideostuffAD","testPrebid","","showCopyrightBox","adblock","false","adblockEnabled","falseFunc","advertoryFluepapir","true","Object.prototype.adUnits","advads_passive_placements","eazy_ad_unblocker","showAds","trap","adbEnableForPage","adsbygoogle","/^(?:adBlocker|contextmenu)$/","propsToMatch","url:ljsp.lwcdn.com","payload.ads campaigns.*","helpers.scroll(id)","ai_run_scripts","popup","ab_disp","wheel","/contextmenu|cut|copy|paste/","document.oncontextmenu","checkAdsBlocked","canShowAds",".showModal","playbackItem.isStitched","url:a2d.tv/play","Ad","/fwmrm.net\\/ad\\/g/","em_track_user","exactmetrics_frontend","undefined","window.WURFL","1","uesUrlFallback","manualAutoplay_","TAKEOVER","monsterinsights_frontend","mi_track_user","advads","advanced_ads","e.defaultPrevented"];
+const $scriptletArgs$ = /* 75 */ ["blur","i.focusPlayerElement","scroll","t.view.updateBounds","/adblockDetector|adsInserted|partnerExternalLinkClick/","ai_set_cookie","noopFunc","_sp_","square_array1","null","square_arraytop","disableEnterKey","document.ondragstart","ad","click","e.preventDefault","elements","a.js-ct","contextmenu",".disabled","autoplay","addtonativesFrontPageOne","checkGDPRInt","dovideostuffAD","testPrebid","","showCopyrightBox","adblock","false","adblockEnabled","falseFunc","Object.prototype.adUnits","advads_passive_placements","eazy_ad_unblocker","showAds","trap","adbEnableForPage","advertoryFluepapir","true","adsbygoogle","/^(?:adBlocker|contextmenu)$/","propsToMatch","url:ljsp.lwcdn.com","dataLayer.push","fireGtm","document.createElement","admiral","payload.ads campaigns.*","helpers.scroll(id)","ai_run_scripts","popup","ab_disp","wheel","/contextmenu|cut|copy|paste/","document.oncontextmenu","checkAdsBlocked","canShowAds",".showModal","playbackItem.isStitched","url:a2d.tv/play","Ad","/fwmrm.net\\/ad\\/g/","em_track_user","exactmetrics_frontend","undefined","window.WURFL","1","uesUrlFallback","manualAutoplay_","TAKEOVER","monsterinsights_frontend","mi_track_user","advads","advanced_ads","e.defaultPrevented"];
 
-const $scriptletArglists$ = /* 55 */ "0,0,1;0,2,3;0,4;1,5,6;1,7,8;1,9,8;2,10;2,11;3,12;0,13,14,15,16;0,17,18;4,19;5,20;1,21,6;1,22,6;0,17,23,24;1,25,26;1,27,28;1,29,30;6,31;2,32;1,33,8;1,34,26;1,35,6;7,36;8,37;0,38;9,19,23,39,40;4,41;0,2,42;1,43,6;3,44;1,45,6;0,46;0,47;2,48;10;0,17;1,49,6;1,50,30;3,51;9,52,23,39,53;11,54,23,55;1,56,26;1,57,58;1,59,60;4,61;1,62,6;3,63;2,64;1,65,26;2,66;2,67;0,46,2;0,46,68";
+const $scriptletArglists$ = /* 59 */ "0,0,1;0,2,3;0,4;1,5,6;2,7;1,8,9;1,10,9;3,11;3,12;4,13;0,14,15,16,17;0,18,19;5,20;3,21;6,22;1,23,6;1,24,6;0,18,25,26;1,27,28;1,29,30;2,31;3,32;1,33,9;1,34,28;1,35,6;7,36;1,37,38;8,39;0,40;9,20,25,41,42;3,43,44;3,45,46;5,47;0,2,48;1,49,6;4,50;1,51,6;0,52;0,53;3,54;10;0,18;1,55,6;1,56,38;4,57;9,58,25,41,59;11,60,25,61;1,62,28;1,63,64;1,65,66;5,67;1,68,6;4,69;3,70;1,71,28;3,72;3,73;0,52,2;0,52,74";
 
-const $scriptletArglistRefs$ = /* 183 */ "11;10,11;16;27;27;11;11;11;11;11;11;46,47;11;11;11;11;11;11;11;11;11;11;11;11;11;41,42;11;11;0,1;0,1;37;33;0,1;11;12,13;18;41,42;11,29;12,13;27;4,5;11;0,1;14;18;51,52;11;37;33;26,27;0,1;11;11;33,49,50;11;11;22,23;11;11;28;11;36;39;16;41,42;2;11;11;16;11;25;53;38;11;11;11;9,10,11;15;20;33;49,50;11;32;51,52;34;37;0,1;11;11;11;3;11;11,46,47;11;11;11;27;33,43,44;0,1;31;35,37;11;49,50,51,52;49,50;51,52;8;17;11;11;46,47;11;27;43,44;11;33;33;51,52;51,52;19;35;21;24;11;46,47;11;43,44,51,52;11;43,44;11;27;11;51,52;27;43,44;51,52;51,52;49,50;11;42;27;6,35;27;49,50;46,47;30;27;51,52;40;49,50;27;41,42;11;51,52;27;11;11;11;11;45;48;11;11;11;27;27;11;11;11;37;46,47;54;49,50;11;51,52;0,1;27;51,52;11,29;11;11;11;6,7;43,44";
+const $scriptletArglistRefs$ = /* 184 */ "12;11,12;18;29;29;30,31;12;12;12;12;12;50,51;12;12;12;12;12;12;12;12;12;12;12;12;12;45,46;12;12;0,1;0,1;41;37;0,1;12;13,14,15;26;45,46;12,33;13,14,15;29;5,6;12;0,1;16;55,56;12;41;37;28,29;0,1;12;12;37,53,54;12;12;23,24;12;12;32;12;40;43;18;45,46;2;12;12;18;12;27;30,31;57;42;12;12;12;10,11,12;17;21;37;53,54;12;36;30,31;55,56;38;41;0,1;12;12;12;3;12;12,50,51;12;12;29;37,47,48;0,1;35;39,41;12;53,54,55,56;53,54;55,56;9;19;12;12;50,51;12;29;47,48;12;37;37;55,56;55,56;20;39;22;25;12;50,51;12;47,48,55,56;12;47,48;12;29;12;55,56;29;47,48;55,56;55,56;53,54;12;4,30,31;46;29;7,39;29;53,54;50,51;34;29;55,56;44;53,54;29;45,46;12;55,56;29;12;12;12;12;49;52;12;12;12;29;29;12;12;12;41;50,51;58;53,54;12;55,56;0,1;29;55,56;12,33;12;12;12;7,8;47,48";
 
-const $scriptletHostnames$ = /* 183 */ ["bt.se","di.se","fz.se","gp.se","hn.se","kt.se","nt.se","pt.se","sn.se","ut.se","vf.se","vk.se","vt.se","blt.se","klt.nu","mvt.se","nkp.se","nlt.se","nsd.se","nsk.se","nvp.se","nwt.se","skd.se","sla.se","smp.se","tv4.se","unt.se","cafe.se","elle.se","hant.se","nyan.ax","qasa.se","allas.se","byrum.se","feber.se","klart.se","koket.se","mitti.se","tjock.se","ttela.se","conpot.se","corren.se","femina.se","findit.se","godare.se","guiden.se","ibnytt.se","illvet.se","kurera.se","lwcdn.com","mabra.com","norran.se","recept.se","boktugg.se","eposten.se","golfing.se","kamrat.com","kuriren.nu","lokalti.se","matspar.se","realtid.se","stallet.se","thatsup.se","tinyurl.se","tv4play.se","byggahus.se","ekuriren.se","fragbite.se","fssweden.se","kkuriren.se","kritiker.se","stadshem.se","swedroid.se","thelocal.se","viivilla.se","babyhjalp.se","expressen.se","fotosidan.se","hejaolika.se","lundagard.se","matsafari.nu","nyheter24.se","ordbokpro.se","rocknytt.net","sexpacket.se","streamio.com","svenskdam.se","sydostran.se","alekuriren.se","barometern.se","byggipedia.se","familjeliv.se","folkbladet.nu","folkbladet.se","hjotidning.se","kt-kuriren.se","markposten.se","morotsliv.com","motherhood.se","naringsliv.ax","spelhubben.se","svenskgolf.se","villalivet.se","aktieskolan.se","enkelteknik.se","etunawebben.se","gamereactor.se","helagotland.se","lchfarkivet.se","nordsverige.se","nuosteraker.se","sttidningen.se","trafikskola.se","vaxjobladet.se","affarsstaden.se","allagodating.se","classicmotor.se","datormagazin.se","happypancake.se","husbilsplats.se","jobsinsweden.se","kattannonser.se","kingmagazine.se","mellanbygden.nu","norrahalland.se","nyadagbladet.se","olandsbladet.se","utslappsratt.se","arvikanyheter.se","bohuslaningen.se","dalslanningen.se","densistavilan.se","harrydaposten.se","heleneholmsif.se","passioneffect.se","upphandling24.se","zeinaskitchen.se","automotorsport.se","embed.viaplay.com","hallandsposten.se","kandisvarlden.com","kungalvsposten.se","lakartidningen.se","lokaltidningen.nu","mobilanyheter.net","molndalsposten.se","polistidningen.se","tidningencurie.se","trafiksakerhet.se","alingsastidning.se","fotbollskanalen.se","fryksdalsbygden.se","modernpsykologi.se","partilletidning.se","saffletidningen.se","sverigespringer.se","vasterastidning.se","vimmerbytidning.se","vinochmatguiden.se","www.aftonbladet.se","ystadsallehanda.se","alltforforaldrar.se","idrottensaffarer.se","kungsbackaposten.se","mellerudsnyheter.se","provinstidningen.se","skaraborgsbygden.se","strengnastidning.se","varldenshistoria.se","vasterbottningen.se","dagensarbetsmiljo.se","fastighetsvarlden.se","filipstadstidning.se","livsmedelsnyheter.se","residencemagazine.se","stromstadstidning.se","vadhanderisverige.se","praktisktbatagande.se","kristianstadsbladet.se","mariestadstidningen.se","trelleborgsallehanda.se","discoveringtheplanet.com","melodifestivalklubben.se"];
+const $scriptletHostnames$ = /* 184 */ ["bt.se","di.se","fz.se","gp.se","hn.se","m3.se","nt.se","pt.se","sn.se","ut.se","vf.se","vk.se","vt.se","blt.se","klt.nu","mvt.se","nkp.se","nlt.se","nsd.se","nsk.se","nvp.se","nwt.se","skd.se","sla.se","smp.se","tv4.se","unt.se","cafe.se","elle.se","hant.se","nyan.ax","qasa.se","allas.se","byrum.se","feber.se","klart.se","koket.se","mitti.se","tjock.se","ttela.se","conpot.se","corren.se","femina.se","findit.se","guiden.se","ibnytt.se","illvet.se","kurera.se","lwcdn.com","mabra.com","norran.se","recept.se","boktugg.se","eposten.se","golfing.se","kamrat.com","kuriren.nu","lokalti.se","matspar.se","realtid.se","stallet.se","thatsup.se","tinyurl.se","tv4play.se","byggahus.se","ekuriren.se","fragbite.se","fssweden.se","kkuriren.se","kritiker.se","macworld.se","stadshem.se","swedroid.se","thelocal.se","viivilla.se","babyhjalp.se","expressen.se","fotosidan.se","hejaolika.se","lundagard.se","matsafari.nu","nyheter24.se","ordbokpro.se","pcforalla.se","rocknytt.net","sexpacket.se","streamio.com","svenskdam.se","sydostran.se","alekuriren.se","barometern.se","byggipedia.se","familjeliv.se","folkbladet.nu","folkbladet.se","kt-kuriren.se","markposten.se","morotsliv.com","motherhood.se","naringsliv.ax","spelhubben.se","svenskgolf.se","villalivet.se","aktieskolan.se","enkelteknik.se","etunawebben.se","gamereactor.se","helagotland.se","lchfarkivet.se","nordsverige.se","nuosteraker.se","sttidningen.se","trafikskola.se","vaxjobladet.se","affarsstaden.se","allagodating.se","classicmotor.se","datormagazin.se","happypancake.se","husbilsplats.se","jobsinsweden.se","kattannonser.se","kingmagazine.se","mellanbygden.nu","norrahalland.se","nyadagbladet.se","olandsbladet.se","utslappsratt.se","arvikanyheter.se","bohuslaningen.se","dalslanningen.se","densistavilan.se","harrydaposten.se","heleneholmsif.se","passioneffect.se","upphandling24.se","zeinaskitchen.se","automotorsport.se","computersweden.se","embed.viaplay.com","hallandsposten.se","kandisvarlden.com","kungalvsposten.se","lakartidningen.se","lokaltidningen.nu","mobilanyheter.net","molndalsposten.se","polistidningen.se","tidningencurie.se","trafiksakerhet.se","alingsastidning.se","fotbollskanalen.se","fryksdalsbygden.se","modernpsykologi.se","partilletidning.se","saffletidningen.se","sverigespringer.se","vasterastidning.se","vimmerbytidning.se","vinochmatguiden.se","www.aftonbladet.se","ystadsallehanda.se","alltforforaldrar.se","idrottensaffarer.se","kungsbackaposten.se","mellerudsnyheter.se","provinstidningen.se","skaraborgsbygden.se","strengnastidning.se","varldenshistoria.se","vasterbottningen.se","dagensarbetsmiljo.se","fastighetsvarlden.se","filipstadstidning.se","livsmedelsnyheter.se","residencemagazine.se","stromstadstidning.se","vadhanderisverige.se","praktisktbatagande.se","kristianstadsbladet.se","mariestadstidningen.se","trelleborgsallehanda.se","discoveringtheplanet.com","melodifestivalklubben.se"];
 
 const $scriptletFromRegexes$ = /* 0 */ [];
 
@@ -1719,51 +1707,51 @@ const entries = (( ) => {
 })();
 if ( entries.length === 0 ) { return; }
 
-const collectArglistRefIndices = (out, hn, r) => {
-    let l = 0, i = 0, d = 0;
-    let candidate = '';
-    while ( l < r ) {
-        i = l + r >>> 1;
-        candidate = $scriptletHostnames$[i];
-        d = hn.length - candidate.length;
-        if ( d === 0 ) {
-            if ( hn === candidate ) {
-                out.add(i); break;
-            }
-            d = hn < candidate ? -1 : 1;
-        }
-        if ( d < 0 ) {
-            r = i;
-        } else {
-            l = i + 1;
-        }
-    }
-    return i;
-};
-
-const indicesFromHostname = (out, hnDetails, suffix = '') => {
-    if ( hnDetails.hns.length === 0 ) { return; }
-    let r = $scriptletHostnames$.length;
-    for ( const hn of hnDetails.hns ) {
-        r = collectArglistRefIndices(out, `${hn}${suffix}`, r);
-    }
-    if ( $hasEntities$ ) {
-        let r = $scriptletHostnames$.length;
-        for ( const en of hnDetails.ens ) {
-            r = collectArglistRefIndices(out, `${en}${suffix}`, r);
-        }
-    }
-};
-
 const todoIndices = new Set();
-indicesFromHostname(todoIndices, entries[0]);
-if ( $hasAncestors$ ) {
-    for ( const entry of entries ) {
-        if ( entry.i === 0 ) { continue; }
-        indicesFromHostname(todoIndices, entry, '>>');
+if ( $scriptletHostnames$.length ) {
+    const collectArglistRefIndices = (out, hn, r) => {
+        let l = 0, i = 0, d = 0;
+        let candidate = '';
+        while ( l < r ) {
+            i = l + r >>> 1;
+            candidate = $scriptletHostnames$[i];
+            d = hn.length - candidate.length;
+            if ( d === 0 ) {
+                if ( hn === candidate ) {
+                    out.add(i); break;
+                }
+                d = hn < candidate ? -1 : 1;
+            }
+            if ( d < 0 ) {
+                r = i;
+            } else {
+                l = i + 1;
+            }
+        }
+        return i + 1;
+    };
+    const indicesFromHostname = (out, hnDetails, suffix = '') => {
+        if ( hnDetails.hns.length === 0 ) { return; }
+        let r = $scriptletHostnames$.length;
+        for ( const hn of hnDetails.hns ) {
+            r = collectArglistRefIndices(out, `${hn}${suffix}`, r);
+        }
+        if ( $hasEntities$ ) {
+            let r = $scriptletHostnames$.length;
+            for ( const en of hnDetails.ens ) {
+                r = collectArglistRefIndices(out, `${en}${suffix}`, r);
+            }
+        }
+    };
+    indicesFromHostname(todoIndices, entries[0]);
+    if ( $hasAncestors$ ) {
+        for ( const entry of entries ) {
+            if ( entry.i === 0 ) { continue; }
+            indicesFromHostname(todoIndices, entry, '>>');
+        }
     }
+    $scriptletHostnames$.length = 0;
 }
-$scriptletHostnames$.length = 0;
 
 // Collect arglist references
 const todo = new Set();

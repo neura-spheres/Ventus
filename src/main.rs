@@ -802,6 +802,7 @@ fn main() {
             webview_theme(&state.settings.appearance.theme),
             first_ad_script,
             state.settings.privacy.fingerprint_protection,
+            state.settings.privacy.fingerprint_seed.clone(),
             state.settings.privacy.strict_permissions,
             state.settings.privacy.site_permissions.clone(),
             state.settings.privacy.default_permissions.clone(),
@@ -927,7 +928,7 @@ fn main() {
     // Periodic proactive cookie snapshot (backs up cookies even between navigations).
     let mut cookie_save_at = Instant::now() + COOKIE_SAVE_EVERY;
     let search_suggestion_client = reqwest::Client::builder()
-        .user_agent(crate::version::USER_AGENT)
+        .user_agent(browser_user_agent())
         .timeout(Duration::from_secs(4))
         .build()
         .ok();
@@ -1059,7 +1060,7 @@ fn main() {
                 let proxy_cur = proxy_main.clone();
                 rt.spawn(async move {
                     let client = reqwest::Client::builder()
-                        .user_agent(crate::version::USER_AGENT)
+                        .user_agent(browser_user_agent())
                         .timeout(std::time::Duration::from_secs(10))
                         .build();
                     let res = match client {
@@ -1452,6 +1453,7 @@ fn main() {
                             webview_theme(&state.settings.appearance.theme),
                             ad_script,
                             state.settings.privacy.fingerprint_protection,
+                            state.settings.privacy.fingerprint_seed.clone(),
                             state.settings.privacy.strict_permissions,
                             state.settings.privacy.site_permissions.clone(),
                             state.settings.privacy.default_permissions.clone(),
@@ -1662,9 +1664,10 @@ fn main() {
                     webview_theme(&state.settings.appearance.theme),
                     ad_script,
                     state.settings.privacy.fingerprint_protection,
+                    state.settings.privacy.fingerprint_seed.clone(),
                     state.settings.privacy.strict_permissions,
                     state.settings.privacy.site_permissions.clone(),
-state.settings.privacy.default_permissions.clone(),
+                    state.settings.privacy.default_permissions.clone(),
                     state.settings.privacy.https_only,
                     false,
                 ) {
@@ -2243,9 +2246,10 @@ state.settings.privacy.default_permissions.clone(),
                                     webview_theme(&state.settings.appearance.theme),
                                     ad_script,
                                     state.settings.privacy.fingerprint_protection,
+                                    state.settings.privacy.fingerprint_seed.clone(),
                                     state.settings.privacy.strict_permissions,
                                     state.settings.privacy.site_permissions.clone(),
-state.settings.privacy.default_permissions.clone(),
+                                    state.settings.privacy.default_permissions.clone(),
                                     state.settings.privacy.https_only,
                                     false,
                                 ) {
@@ -2364,9 +2368,10 @@ state.settings.privacy.default_permissions.clone(),
                                                 webview_theme(&state.settings.appearance.theme),
                                                 ad_script,
                                                 state.settings.privacy.fingerprint_protection,
+                                                state.settings.privacy.fingerprint_seed.clone(),
                                                 state.settings.privacy.strict_permissions,
                                                 state.settings.privacy.site_permissions.clone(),
-state.settings.privacy.default_permissions.clone(),
+                                                state.settings.privacy.default_permissions.clone(),
                                                 state.settings.privacy.https_only,
                                                 false,
                                             ) {
@@ -2581,9 +2586,10 @@ state.settings.privacy.default_permissions.clone(),
                                         webview_theme(&state.settings.appearance.theme),
                                         ad_script,
                                         state.settings.privacy.fingerprint_protection,
+                                        state.settings.privacy.fingerprint_seed.clone(),
                                         state.settings.privacy.strict_permissions,
                                         state.settings.privacy.site_permissions.clone(),
-state.settings.privacy.default_permissions.clone(),
+                                        state.settings.privacy.default_permissions.clone(),
                                         state.settings.privacy.https_only,
                                         false,
                                     ) {
@@ -2716,9 +2722,10 @@ state.settings.privacy.default_permissions.clone(),
                                     webview_theme(&state.settings.appearance.theme),
                                     ad_script,
                                     state.settings.privacy.fingerprint_protection,
+                                    state.settings.privacy.fingerprint_seed.clone(),
                                     state.settings.privacy.strict_permissions,
                                     state.settings.privacy.site_permissions.clone(),
-state.settings.privacy.default_permissions.clone(),
+                                    state.settings.privacy.default_permissions.clone(),
                                     state.settings.privacy.https_only,
                                     false,
                                 ) {
@@ -2860,9 +2867,10 @@ state.settings.privacy.default_permissions.clone(),
                                 webview_theme(&state.settings.appearance.theme),
                                 ad_script,
                                 state.settings.privacy.fingerprint_protection,
+                                state.settings.privacy.fingerprint_seed.clone(),
                                 state.settings.privacy.strict_permissions,
                                 state.settings.privacy.site_permissions.clone(),
-state.settings.privacy.default_permissions.clone(),
+                                state.settings.privacy.default_permissions.clone(),
                                 state.settings.privacy.https_only,
                                 false,
                             ) {
@@ -5105,89 +5113,6 @@ fn attach_navigation_handler(
     }
 }
 
-#[cfg(windows)]
-unsafe fn rewrite_header(
-    headers: &webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2HttpRequestHeaders,
-    name: &str,
-    value: &str,
-    only_if_present: bool,
-) {
-    use wv2core::PCWSTR;
-    use wv2win::Win32::Foundation::BOOL;
-    let name_w: Vec<u16> = name.encode_utf16().chain(std::iter::once(0)).collect();
-    if only_if_present {
-        let mut present = BOOL(0);
-        if headers
-            .Contains(PCWSTR(name_w.as_ptr()), &mut present)
-            .is_err()
-            || !present.as_bool()
-        {
-            return;
-        }
-    }
-    let value_w: Vec<u16> = value.encode_utf16().chain(std::iter::once(0)).collect();
-    let _ = headers.SetHeader(PCWSTR(name_w.as_ptr()), PCWSTR(value_w.as_ptr()));
-}
-
-#[cfg(windows)]
-fn attach_client_hints_handler(wv: &WebView) {
-    use webview2_com::{
-        Microsoft::Web::WebView2::Win32::{ICoreWebView2, COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL},
-        WebResourceRequestedEventHandler,
-    };
-    use wv2core::PCWSTR;
-
-    let controller = wv.controller();
-    let webview: ICoreWebView2 = unsafe {
-        match controller.CoreWebView2() {
-            Ok(wv) => wv,
-            Err(_) => return,
-        }
-    };
-
-    let (full, _, major) = chromium_versions();
-    let sec_ua = format!(
-        "\"Google Chrome\";v=\"{major}\", \"Chromium\";v=\"{major}\", \"Not:A-Brand\";v=\"24\""
-    );
-    let sec_ua_full_list = format!(
-        "\"Google Chrome\";v=\"{full}\", \"Chromium\";v=\"{full}\", \"Not:A-Brand\";v=\"24.0.0.0\""
-    );
-    let sec_ua_full = format!("\"{full}\"");
-
-    let handler = WebResourceRequestedEventHandler::create(Box::new(move |_sender, args| {
-        let Some(args) = args else {
-            return Ok(());
-        };
-        unsafe {
-            let Ok(request) = args.Request() else {
-                return Ok(());
-            };
-            let Ok(headers) = request.Headers() else {
-                return Ok(());
-            };
-            rewrite_header(&headers, "Sec-CH-UA", &sec_ua, false);
-            rewrite_header(
-                &headers,
-                "Sec-CH-UA-Full-Version-List",
-                &sec_ua_full_list,
-                true,
-            );
-            rewrite_header(&headers, "Sec-CH-UA-Full-Version", &sec_ua_full, true);
-        }
-        Ok(())
-    }));
-
-    let mut token = Default::default();
-    unsafe {
-        let filter: Vec<u16> = "*".encode_utf16().chain(std::iter::once(0)).collect();
-        let _ = webview.AddWebResourceRequestedFilter(
-            PCWSTR(filter.as_ptr()),
-            COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL,
-        );
-        let _ = webview.add_WebResourceRequested(&handler, &mut token);
-    }
-}
-
 // A new-window request (target=_blank link, window.open, ctrl/middle click) should become a
 // normal tab — NOT a bare popup OS window like WRY's default handler does. The exception is a
 // real popup: OAuth sign-in, share sheets, and payment dialogs call window.open with an
@@ -5471,7 +5396,6 @@ fn build_popup_content_webview(
         .with_bounds(rect)
         .with_background_color(CONTENT_BG)
         .with_incognito(incognito)
-        .with_user_agent(&browser_user_agent())
         .with_browser_accelerator_keys(false)
         .with_theme(theme)
         .with_additional_browser_args(browser_args.to_string());
@@ -5743,6 +5667,7 @@ fn build_content_webview(
     theme: WebViewTheme,
     ad_block_script: String,
     fingerprint: bool,
+    fingerprint_seed: String,
     strict: bool,
     site_permissions: config::SitePermissionMap,
     default_permissions: config::SitePermissions,
@@ -5767,6 +5692,7 @@ fn build_content_webview(
             theme,
             ad_block_script.clone(),
             fingerprint,
+            fingerprint_seed.clone(),
             strict,
             site_permissions.clone(),
             default_permissions.clone(),
@@ -5814,6 +5740,7 @@ fn build_content_webview_once(
     theme: WebViewTheme,
     ad_block_script: String,
     fingerprint: bool,
+    fingerprint_seed: String,
     strict: bool,
     site_permissions: config::SitePermissionMap,
     default_permissions: config::SitePermissions,
@@ -5834,11 +5761,11 @@ fn build_content_webview_once(
         .with_bounds(rect)
         .with_background_color(CONTENT_BG)
         .with_incognito(incognito)
-        .with_user_agent(&browser_user_agent())
         .with_initialization_script(&content_initialization_script(
             global_zoom,
             &ad_block_script,
             fingerprint,
+            &fingerprint_seed,
             strict,
             &site_permissions,
             &default_permissions,
@@ -6119,6 +6046,20 @@ fn build_content_webview_once(
                     }));
                     return;
                 }
+                if value.get("cmd").and_then(|v| v.as_str()) == Some("x_login_limit_detected") {
+                    let url = value
+                        .get("url")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default()
+                        .to_string();
+                    let _ = proxy_ipc.send_event(AppEvent::Chrome(
+                        ChromeCommand::XLoginLimitDetected {
+                            tab_id: tab_id_ipc.clone(),
+                            url,
+                        },
+                    ));
+                    return;
+                }
             }
             // SECURITY: content WebViews host untrusted web pages, and every page has
             // window.ipc.postMessage. This fallthrough must NOT forward commands blindly —
@@ -6249,7 +6190,6 @@ fn build_content_webview_once(
         attach_new_window_handler(&wv, proxy.clone(), incognito);
         attach_permission_handler(&wv, proxy.clone(), site_permissions.clone());
         attach_download_handler(&wv, proxy.clone(), std::sync::Arc::clone(&download_dir));
-        attach_client_hints_handler(&wv);
     }
 
     tracing::info!(target: "ventus::nav", tab = %tab_id, url = %url, load_now, incognito, "content WebView built");
@@ -6400,6 +6340,7 @@ fn build_woken_content_tab(
         webview_theme(&state.settings.appearance.theme),
         ad_script,
         state.settings.privacy.fingerprint_protection,
+        state.settings.privacy.fingerprint_seed.clone(),
         state.settings.privacy.strict_permissions,
         state.settings.privacy.site_permissions.clone(),
         state.settings.privacy.default_permissions.clone(),
@@ -6509,10 +6450,7 @@ fn webview_args(settings: &config::AppSettings) -> String {
 }
 
 fn browser_user_agent() -> String {
-    let (_, reduced, _) = chromium_versions();
-    format!(
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{reduced} Safari/537.36 Ventus/{reduced}"
-    )
+    crate::version::browser_like_user_agent()
 }
 
 fn chromium_versions() -> (String, String, String) {
@@ -6702,6 +6640,9 @@ fn load_settings(conn: &rusqlite::Connection) -> config::AppSettings {
         }
         let _ = settings_store::set(conn, "new_tab_background_default_migrated", &true);
     }
+    if settings.privacy.fingerprint_seed.trim().is_empty() {
+        settings.privacy.fingerprint_seed = uuid::Uuid::new_v4().to_string();
+    }
     settings.homepage = app::normalize_homepage(&settings.homepage);
     let _ = settings_store::set(conn, "app_settings", &settings);
     settings
@@ -6761,6 +6702,7 @@ fn content_initialization_script(
     _global_zoom: f64,
     ad_block_script: &str,
     fingerprint: bool,
+    fingerprint_seed: &str,
     strict: bool,
     site_permissions: &config::SitePermissionMap,
     default_permissions: &config::SitePermissions,
@@ -6770,9 +6712,13 @@ fn content_initialization_script(
     } else {
         format!("{}\n", ad_block_script)
     };
-    let identity_prefix = browser_identity_script();
-    let privacy_prefix =
-        privacy_initialization_script(fingerprint, strict, site_permissions, default_permissions);
+    let privacy_prefix = privacy_initialization_script(
+        fingerprint,
+        fingerprint_seed,
+        strict,
+        site_permissions,
+        default_permissions,
+    );
     let script = r#"
 (() => {
   let isTop = false;
@@ -6786,6 +6732,47 @@ fn content_initialization_script(
       }
     } catch (_) {}
   };
+  const installXLoginLimitDetector = () => {
+    if (!isTop || window.__neuraXLoginLimitDetector) return;
+    const host = String(location.hostname || '').toLowerCase();
+    const isXHost = host === 'x.com' || host.endsWith('.x.com') || host === 'twitter.com' || host.endsWith('.twitter.com');
+    if (!isXHost) return;
+    window.__neuraXLoginLimitDetector = true;
+    let done = false;
+    let checks = 0;
+    let timer = 0;
+    let observer = null;
+    const detect = () => {
+      if (done) return;
+      checks += 1;
+      const text = ((document.body && (document.body.innerText || document.body.textContent)) || '').toLowerCase();
+      if (text.includes('temporarily limited your login') || text.includes('temporarily limited') && text.includes('try again later')) {
+        done = true;
+        try { if (observer) observer.disconnect(); } catch (_) {}
+        post({cmd:'x_login_limit_detected', url: location.href});
+        return;
+      }
+      if (checks > 30) {
+        done = true;
+        try { if (observer) observer.disconnect(); } catch (_) {}
+      }
+    };
+    const schedule = () => {
+      if (done) return;
+      clearTimeout(timer);
+      timer = setTimeout(detect, 250);
+    };
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', schedule, {once:true});
+    } else {
+      schedule();
+    }
+    try {
+      observer = new MutationObserver(schedule);
+      observer.observe(document.documentElement || document, {childList:true, subtree:true, characterData:true});
+    } catch (_) {}
+  };
+  installXLoginLimitDetector();
   if (!isTop) return;
   (() => {
     const Native = window.Notification;
@@ -7490,70 +7477,40 @@ fn content_initialization_script(
   const iv = setInterval(() => { n++; ask(); if (n > 25) clearInterval(iv); }, 600);
 })();
 "#;
-    format!("{identity_prefix}{ad_prefix}{privacy_prefix}{script}")
-}
-
-fn browser_identity_script() -> String {
-    let (full, _, major) = chromium_versions();
-    let full = serde_json::to_string(&full).unwrap_or_else(|_| "\"0.0.0.0\"".to_string());
-    let major = serde_json::to_string(&major).unwrap_or_else(|_| "\"0\"".to_string());
-    format!(
-        r#"
-(() => {{
-  if (window.__ventusIdentity) return;
-  window.__ventusIdentity = true;
-  const major = {major};
-  const fullVersion = {full};
-  const low = () => [
-    {{brand:'Ventus', version:major}},
-    {{brand:'Chromium', version:major}},
-    {{brand:'Not:A-Brand', version:'24'}}
-  ];
-  const high = () => [
-    {{brand:'Ventus', version:fullVersion}},
-    {{brand:'Chromium', version:fullVersion}},
-    {{brand:'Not:A-Brand', version:'24.0.0.0'}}
-  ];
-  const data = {{}};
-  try {{
-    Object.defineProperties(data, {{
-      brands: {{get: low}},
-      mobile: {{get: () => false}},
-      platform: {{get: () => 'Windows'}},
-      getHighEntropyValues: {{value: async hints => {{
-        const out = {{brands: low(), mobile: false, platform: 'Windows'}};
-        for (const hint of hints || []) {{
-          if (hint === 'architecture') out.architecture = 'x86';
-          if (hint === 'bitness') out.bitness = '64';
-          if (hint === 'fullVersionList') out.fullVersionList = high();
-          if (hint === 'model') out.model = '';
-          if (hint === 'platformVersion') out.platformVersion = '10.0.0';
-          if (hint === 'uaFullVersion') out.uaFullVersion = fullVersion;
-          if (hint === 'wow64') out.wow64 = false;
-        }}
-        return out;
-      }}}},
-      toJSON: {{value: () => ({{brands: low(), mobile: false, platform: 'Windows'}})}}
-    }});
-    Object.defineProperty(Navigator.prototype, 'userAgentData', {{get: () => data, configurable: true}});
-  }} catch (_) {{}}
-}})();
-"#
-    )
+    format!("{ad_prefix}{privacy_prefix}{script}")
 }
 
 fn privacy_initialization_script(
     fingerprint: bool,
+    fingerprint_seed: &str,
     strict: bool,
     site_permissions: &config::SitePermissionMap,
     default_permissions: &config::SitePermissions,
 ) -> String {
     let fingerprint_script = if fingerprint {
+        let seed_json =
+            serde_json::to_string(fingerprint_seed).unwrap_or_else(|_| "\"\"".to_string());
         r#"
 (() => {
   if (window.__neuraPrivacyFp) return;
   window.__neuraPrivacyFp = true;
-  const fpSeed = (Math.random() * 0x7fffffff) >>> 0;
+  const fpHost = String(location.hostname || '').toLowerCase();
+  const fpAuthHost = fpHost === 'x.com' || fpHost.endsWith('.x.com') || fpHost === 'twitter.com' || fpHost.endsWith('.twitter.com');
+  if (fpAuthHost && (location.protocol === 'https:' || location.protocol === 'http:')) {
+    window.__neuraPrivacyFpBypassed = true;
+    return;
+  }
+  const fpProfileSeed = __FINGERPRINT_SEED__;
+  const fpHash = value => {
+    let h = 2166136261 >>> 0;
+    const s = String(value || '');
+    for (let i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 16777619) >>> 0;
+    }
+    return h >>> 0;
+  };
+  const fpSeed = fpHash(fpProfileSeed + '|' + location.origin);
   const fpDelta = i => {
     let h = (fpSeed ^ Math.imul(i + 0x9e3779b9, 2654435761)) >>> 0;
     h ^= h >>> 13;
@@ -7623,8 +7580,9 @@ fn privacy_initialization_script(
   patchGl(window.WebGL2RenderingContext && WebGL2RenderingContext.prototype);
 })();
 "#
+        .replace("__FINGERPRINT_SEED__", &seed_json)
     } else {
-        ""
+        String::new()
     };
     let site_permissions_json =
         serde_json::to_string(site_permissions).unwrap_or_else(|_| "{}".to_string());
@@ -10333,7 +10291,6 @@ fn spawn_auth_window(
         .with_bounds(rect)
         .with_background_color((13, 15, 19, 255))
         .with_url(&format!("http://localhost:{}/", port))
-        .with_user_agent(&browser_user_agent())
         .with_browser_accelerator_keys(false)
         .with_additional_browser_args(browser_args.to_string())
         .with_web_context(web_context)
@@ -11209,7 +11166,7 @@ fn currency_code(token: &str) -> Option<&'static str> {
 async fn fetch_currency_rate(query: &CurrencyQuery) -> Option<String> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(6))
-        .user_agent(crate::version::USER_AGENT)
+        .user_agent(browser_user_agent())
         .build()
         .ok()?;
 
@@ -11368,7 +11325,7 @@ mod webview_arg_tests {
     fn strict_permissions_keep_clipboard_copy_available() {
         let sites = config::SitePermissionMap::new();
         let defaults = config::SitePermissions::default();
-        let script = privacy_initialization_script(false, true, &sites, &defaults);
+        let script = privacy_initialization_script(false, "test-seed", true, &sites, &defaults);
         assert!(script.contains("navigator.clipboard.read = blk('read');"));
         assert!(script.contains("navigator.clipboard.readText = blk('readText');"));
         assert!(!script.contains("navigator.clipboard.write = blocked;"));
@@ -11379,9 +11336,31 @@ mod webview_arg_tests {
     fn strict_permissions_keep_media_devices_available() {
         let sites = config::SitePermissionMap::new();
         let defaults = config::SitePermissions::default();
-        let script = privacy_initialization_script(false, true, &sites, &defaults);
+        let script = privacy_initialization_script(false, "test-seed", true, &sites, &defaults);
         assert!(!script.contains("getUserMedia = function"));
         assert!(!script.contains("enumerateDevices = () => Promise.resolve([])"));
+    }
+
+    #[test]
+    fn content_identity_uses_default_webview_surface() {
+        let sites = config::SitePermissionMap::new();
+        let defaults = config::SitePermissions::default();
+        let script =
+            content_initialization_script(1.0, "", false, "test-seed", false, &sites, &defaults);
+        assert!(!script.contains("__ventusIdentity"));
+        assert!(!script.contains("userAgentData"));
+        assert!(!script.contains("Ventus/"));
+    }
+
+    #[test]
+    fn fingerprint_script_uses_stable_profile_site_seed() {
+        let sites = config::SitePermissionMap::new();
+        let defaults = config::SitePermissions::default();
+        let script = privacy_initialization_script(true, "stable-seed", false, &sites, &defaults);
+        assert!(script.contains("stable-seed"));
+        assert!(script.contains("fpHash(fpProfileSeed + '|' + location.origin)"));
+        assert!(script.contains("window.__neuraPrivacyFpBypassed = true"));
+        assert!(!script.contains("Math.random"));
     }
 
     #[cfg(windows)]
@@ -11763,7 +11742,7 @@ fn detect_market_query(q: &str) -> Option<(String, String)> {
 async fn fetch_market_quote(symbol: &str, name: &str) -> Option<String> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(8))
-        .user_agent(crate::version::USER_AGENT)
+        .user_agent(browser_user_agent())
         .build()
         .ok()?;
     let url = format!(
@@ -11808,7 +11787,7 @@ async fn fetch_market_quote(symbol: &str, name: &str) -> Option<String> {
 async fn fetch_wikipedia_search(query: &str) -> Vec<String> {
     let client = match reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(6))
-        .user_agent(crate::version::USER_AGENT)
+        .user_agent(browser_user_agent())
         .build()
     {
         Ok(c) => c,
@@ -11908,7 +11887,7 @@ fn decode_html_text(s: &str) -> String {
 async fn fetch_duckduckgo_instant(query: &str) -> Option<String> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
-        .user_agent(crate::version::USER_AGENT)
+        .user_agent(browser_user_agent())
         .build()
         .ok()?;
 
@@ -12115,7 +12094,7 @@ fn percent_decode(s: &str) -> Vec<u8> {
 /// the caller can mark the download Failed instead of writing an HTML error page to disk.
 async fn fetch_image_bytes(url: &str, referer: &str) -> anyhow::Result<Vec<u8>> {
     let client = reqwest::Client::builder()
-        .user_agent(crate::version::USER_AGENT)
+        .user_agent(browser_user_agent())
         .timeout(std::time::Duration::from_secs(30))
         .build()?;
     let mut req = client.get(url);

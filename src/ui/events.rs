@@ -373,6 +373,15 @@ pub enum ChromeCommand {
     /// Toggle the ad blocker exception for the currently active tab's site.
     /// Rust adds/removes the host from exceptions and reloads the tab.
     AdBlockToggleSite,
+    /// Add the narrow X/Twitter login compatibility adblock exceptions and rebuild the tab.
+    XLoginCompatibilityFix,
+    /// Content script found X's temporary login-limit interstitial on an X/Twitter tab.
+    XLoginLimitDetected {
+        tab_id: String,
+        url: String,
+    },
+    /// Copy/show a lightweight privacy compatibility report for the current tab.
+    PrivacyDebugReport,
     /// Reported by the content WebView init script: how many DOM elements were hidden/removed.
     AdBlockStats {
         killed: u32,
@@ -430,7 +439,8 @@ impl ChromeCommand {
             | ChromeCommand::SidebarAutoClose
             | ChromeCommand::SidebarClipWidth { .. }
             | ChromeCommand::SuggestionOverlay { .. }
-            | ChromeCommand::ContentPointerDown => None,
+            | ChromeCommand::ContentPointerDown
+            | ChromeCommand::XLoginLimitDetected { .. } => None,
             ChromeCommand::Navigate { .. } => Some("navigate"),
             ChromeCommand::NavigateFromOverlay { .. } => Some("navigate_overlay"),
             ChromeCommand::ContinueHttp { .. } => Some("continue_http"),
@@ -544,6 +554,8 @@ impl ChromeCommand {
             ChromeCommand::MuteTab { .. } => Some("mute_tab"),
             ChromeCommand::BeginResize { .. } => Some("begin_resize"),
             ChromeCommand::AdBlockToggleSite => Some("adblock_toggle_site"),
+            ChromeCommand::XLoginCompatibilityFix => Some("x_login_compatibility_fix"),
+            ChromeCommand::PrivacyDebugReport => Some("privacy_debug_report"),
             ChromeCommand::AdBlockStats { .. } => Some("adblock_stats"),
             ChromeCommand::FetchCurrencyRates => Some("fetch_currency_rates"),
             ChromeCommand::OpenIncognito => Some("open_incognito"),

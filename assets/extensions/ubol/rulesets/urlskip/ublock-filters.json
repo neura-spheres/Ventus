@@ -207,6 +207,22 @@
   ]
  },
  {
+  "re": "^[^:]+://(?:[^/]+\\.)?tracking\\.cds\\.dmm\\.co\\.jp/v1/tracking/click\\?ic_key=",
+  "steps": [
+   "/\\?ic_key=ey[^.]+\\.(ey[^.]+)\\./",
+   "-base64",
+   "/\"link_url\":\"([^\"]+)\"/"
+  ]
+ },
+ {
+  "re": "^[^:]+://(?:[^/]+\\.)?tracking\\.cds\\.dmm\\.com/v1/tracking/click\\?ic_key=",
+  "steps": [
+   "/\\?ic_key=ey[^.]+\\.(ey[^.]+)\\./",
+   "-base64",
+   "/\"link_url\":\"([^\"]+)\"/"
+  ]
+ },
+ {
   "re": "^[^:]+://(?:[^/]+\\.)?anylinks\\.in/full.*?(?:[^%.0-9a-z_-]|$)url=ahr0c",
   "steps": [
    "?url",
@@ -324,6 +340,12 @@
  },
  {
   "re": "^[^:]+://(?:[^/]+\\.)?ay\\.live/st/.*?(?:[^%.0-9a-z_-]|$)url=http",
+  "steps": [
+   "?url"
+  ]
+ },
+ {
+  "re": "^[^:]+://(?:[^/]+\\.)?cekpaste\\.id/url\\.php.*?(?:[^%.0-9a-z_-]|$)url=http",
   "steps": [
    "?url"
   ]
@@ -1310,6 +1332,19 @@
   "re": "^[^:]+://(?:[^/]+\\.)?donanimhaber\\.com/externallinkredirect\\?.*?(?:[^%.0-9a-z_-]|$)url=http",
   "steps": [
    "?url"
+  ]
+ },
+ {
+  "re": "^[^:]+://(?:[^/]+\\.)?api2\\.zoomit\\.ir/catalog/store-links/.*?/click\\?url=",
+  "steps": [
+   "?url"
+  ]
+ },
+ {
+  "re": "^[^:]+://(?:[^/]+\\.)?offerdaily\\.ir/external(?:[^%.0-9a-z_-]|$)",
+  "steps": [
+   "/\\/external\\/(.*)/",
+   "-base64"
   ]
  },
  {

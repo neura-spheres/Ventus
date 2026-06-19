@@ -464,6 +464,8 @@ pub struct PrivacySettings {
     pub storage_partitioning: bool,
     #[serde(default)]
     pub fingerprint_protection: bool,
+    #[serde(default)]
+    pub fingerprint_seed: String,
     #[serde(default = "default_true")]
     pub strict_permissions: bool,
     #[serde(default = "default_true")]
@@ -491,6 +493,7 @@ impl Default for PrivacySettings {
             block_third_party_cookies: true,
             storage_partitioning: true,
             fingerprint_protection: false,
+            fingerprint_seed: String::new(),
             strict_permissions: true,
             ad_blocker_enabled: true,
             ad_blocker_exceptions: Vec::new(),

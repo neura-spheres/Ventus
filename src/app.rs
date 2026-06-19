@@ -6,7 +6,7 @@ use std::{
 use tokio::sync::oneshot;
 use wry::WebView;
 
-use crate::adblock::AdBlockEngine;
+use crate::adblock::{is_x_compat_url, AdBlockEngine};
 use crate::browser::downloads::DownloadManager;
 use crate::browser::tab_manager::TabManager;
 use crate::config::{
@@ -1134,6 +1134,107 @@ pub fn handle_chrome_command(
             let _ = settings_store::set(&state.conn, "app_settings", &state.settings);
             state.push_state_to_chrome(chrome);
             Some(TabAction::RebuildContent { tab_id, url })
+        }
+        ChromeCommand::XLoginCompatibilityFix => {
+            let (tab_id, url) = match state.tab_manager.active_tab() {
+                Some(tab) => (tab.id.clone(), tab.url.clone()),
+                None => {
+                    let _ = chrome.evaluate_script(
+                        "window.__neura && window.__neura.showError('Open X first')",
+                    );
+                    return None;
+                }
+            };
+            if !is_x_compat_url(&url) {
+                let _ = chrome.evaluate_script(
+                    "window.__neura && window.__neura.showError('Open x.com or twitter.com first')",
+                );
+                return None;
+            }
+
+            let mut changed = state.ad_block_engine.ensure_exception("x.com");
+            changed |= state.ad_block_engine.ensure_exception("twitter.com");
+            if changed {
+                state.settings.privacy.ad_blocker_exceptions =
+                    state.ad_block_engine.exceptions().to_vec();
+                let _ = settings_store::set(&state.conn, "app_settings", &state.settings);
+            }
+            state.push_state_to_chrome(chrome);
+            let _ = chrome.evaluate_script(
+                "window.__neura && window.__neura.showSuccess('X login compatibility enabled')",
+            );
+            Some(TabAction::RebuildContent { tab_id, url })
+        }
+        ChromeCommand::XLoginLimitDetected {
+            tab_id,
+            url: reported_url,
+        } => {
+            let actual_url = state
+                .tab_manager
+                .tabs
+                .iter()
+                .find(|tab| tab.id == tab_id)
+                .map(|tab| tab.url.clone())
+                .unwrap_or_default();
+            if !is_x_compat_url(&actual_url) || !is_x_compat_url(&reported_url) {
+                return None;
+            }
+            if state.ad_block_engine.is_site_excepted(&actual_url) {
+                return None;
+            }
+
+            let mut changed = state.ad_block_engine.ensure_exception("x.com");
+            changed |= state.ad_block_engine.ensure_exception("twitter.com");
+            if !changed {
+                return None;
+            }
+            state.settings.privacy.ad_blocker_exceptions =
+                state.ad_block_engine.exceptions().to_vec();
+            let _ = settings_store::set(&state.conn, "app_settings", &state.settings);
+            state.push_state_to_chrome(chrome);
+            let _ = chrome.evaluate_script(
+                "window.__neura && window.__neura.showSuccess('X login compatibility enabled')",
+            );
+            Some(TabAction::RebuildContent {
+                tab_id,
+                url: actual_url,
+            })
+        }
+        ChromeCommand::PrivacyDebugReport => {
+            let url = state
+                .tab_manager
+                .active_tab()
+                .map(|t| t.url.clone())
+                .unwrap_or_default();
+            let host = url::Url::parse(&url)
+                .ok()
+                .and_then(|u| u.host_str().map(|h| h.to_string()))
+                .unwrap_or_default();
+            let site_excepted = !url.is_empty() && state.ad_block_engine.is_site_excepted(&url);
+            let adblock_enabled = state.settings.privacy.ad_blocker_enabled;
+            let x_origin = is_x_compat_url(&url);
+            let report = serde_json::json!({
+                "active_url": url,
+                "host": host,
+                "ua_mode": "default WebView2 for web content",
+                "ventus_page_identity_spoofing": false,
+                "fingerprint_protection_enabled": state.settings.privacy.fingerprint_protection,
+                "fingerprint_bypassed_for_site": state.settings.privacy.fingerprint_protection && x_origin,
+                "fingerprint_seed_scope": if state.settings.privacy.fingerprint_protection { "stable per profile and origin" } else { "disabled" },
+                "x_login_compatibility_origin": x_origin,
+                "ubol_global_enabled": adblock_enabled,
+                "ubol_site_excepted": site_excepted,
+                "ubol_effective_for_site": adblock_enabled && !site_excepted,
+                "ubol_exceptions": &state.settings.privacy.ad_blocker_exceptions,
+                "block_third_party_cookies": state.settings.privacy.block_third_party_cookies,
+                "storage_partitioning": state.settings.privacy.storage_partitioning,
+                "strict_permissions": state.settings.privacy.strict_permissions,
+            });
+            let payload = serde_json::to_string(&report).unwrap_or_else(|_| "{}".to_string());
+            let _ = chrome.evaluate_script(&format!(
+                "window.__neura && window.__neura.privacyDebugReport && window.__neura.privacyDebugReport({payload})"
+            ));
+            None
         }
         ChromeCommand::AdBlockStats { killed } => {
             state.adblock_page_kills = killed;

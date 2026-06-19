@@ -2892,6 +2892,22 @@ button,input,select,textarea{font-family:var(--font)}
 }
 .abm-action-btn.off{color:var(--text-dim);cursor:not-allowed;opacity:.6}
 .abm-btn-right,.abm-settings-btn-right{display:flex;align-items:center;color:var(--text-dim)}
+.abm-compat-box{
+  display:none;margin:4px 3px 5px;padding:9px 8px;border-radius:10px;
+  background:var(--accent-dim);border:1px solid color-mix(in srgb,var(--accent) 28%,var(--border));
+}
+.abm-compat-title{font-size:12px;font-weight:700;color:var(--text);margin-bottom:3px}
+.abm-compat-desc{font-size:11px;color:var(--text-muted);line-height:1.4;margin-bottom:8px}
+.abm-compat-actions{display:flex;gap:6px}
+.abm-mini-btn{
+  flex:1;padding:6px 7px;border-radius:7px;border:1px solid var(--border);
+  background:var(--bg);color:var(--text);font-size:11px;font-weight:650;
+  cursor:pointer;font-family:var(--font);
+}
+.abm-mini-btn:hover{background:var(--bg-hover)}
+.abm-mini-btn.primary{
+  color:var(--primary-btn-text);background:var(--primary-btn-bg);border-color:var(--primary-btn-border);
+}
 .dl-spin{
   width:12px;height:12px;border:2px solid var(--border);
   border-top-color:var(--accent);border-radius:50%;
@@ -3869,6 +3885,19 @@ svg{display:block;flex-shrink:0}
   <div class="abm-body">
     <button class="abm-action-btn" id="abm-site-toggle" onclick="send('AdBlockToggleSite')">
       <span id="abm-site-toggle-text">Pause for this site</span>
+    </button>
+    <div class="abm-compat-box" id="abm-x-compat-box">
+      <div class="abm-compat-title">X login compatibility</div>
+      <div class="abm-compat-desc">If X limits login here, pause uBOL only for X/Twitter and reload this tab.</div>
+      <div class="abm-compat-actions">
+        <button class="abm-mini-btn primary" onclick="send('XLoginCompatibilityFix')">Fix login</button>
+      </div>
+    </div>
+    <button class="abm-settings-btn" onclick="send('PrivacyDebugReport')">
+      <span>Copy debug report</span>
+      <span class="abm-settings-btn-right">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+      </span>
     </button>
     <button class="abm-settings-btn" onclick="closeAdBlockModal();openSettings('privacy')">
       <span>Manage settings</span>
@@ -5374,6 +5403,7 @@ window.__neura = {
   focusSpotlight() { focusSpotlightSoon(); },
   showPermissionPrompt(id, origin, key) { showPermissionPrompt(id, origin, key); },
   reportSent(ok) { reportSent(!!ok); },
+  privacyDebugReport(report) { showPrivacyDebugReport(report || {}); },
   appendAiChunk(text, done) {
     if (aiStreamStopped) {
       if (done) finishAiBusy();
@@ -5786,6 +5816,8 @@ function _syncAdBlockModal() {
   const statusRow = document.getElementById('abm-status');
   const toggle = document.getElementById('abm-site-toggle');
   const toggleText = document.getElementById('abm-site-toggle-text');
+  const compatBox = document.getElementById('abm-x-compat-box');
+  if (compatBox) compatBox.style.display = active && !excepted && isXLoginCompatHost(activePageHost()) ? 'block' : 'none';
   if (!active) {
     if (statusRow) statusRow.className = 'abm-status-row off';
     if (dot) dot.className = 'abm-status-dot off';
@@ -7723,6 +7755,14 @@ function clearUrlSelection(input) {
 function currentTabUrl() {
   const tab = state.tabs && state.tabs.find(t => t.id === state.active_tab_id);
   return tab && tab.url ? tab.url : '';
+}
+function activePageHost() {
+  const url = currentTabUrl() || state.active_url || '';
+  try { return new URL(url).hostname.replace(/^www\./, '').toLowerCase(); } catch { return ''; }
+}
+function isXLoginCompatHost(host) {
+  host = String(host || '').toLowerCase();
+  return host === 'x.com' || host.endsWith('.x.com') || host === 'twitter.com' || host.endsWith('.twitter.com');
 }
 function fullUrlForCopy(input) {
   const url = currentTabUrl();
@@ -13909,6 +13949,44 @@ function toast(msg, type='info') {
 
 let restartPending = false;
 let restartPromptDismissed = false;
+
+function privacyReportValue(value) {
+  if (Array.isArray(value)) return value.length ? value.join(', ') : '(none)';
+  if (value && typeof value === 'object') return JSON.stringify(value);
+  return String(value);
+}
+
+function showPrivacyDebugReport(report) {
+  const enriched = {...(report || {}), restart_pending: !!restartPending};
+  const order = [
+    'active_url',
+    'host',
+    'ua_mode',
+    'ventus_page_identity_spoofing',
+    'fingerprint_protection_enabled',
+    'fingerprint_bypassed_for_site',
+    'fingerprint_seed_scope',
+    'x_login_compatibility_origin',
+    'ubol_global_enabled',
+    'ubol_site_excepted',
+    'ubol_effective_for_site',
+    'ubol_exceptions',
+    'block_third_party_cookies',
+    'storage_partitioning',
+    'strict_permissions',
+    'restart_pending',
+  ];
+  const used = new Set(order);
+  const lines = [];
+  order.forEach(key => {
+    if (Object.prototype.hasOwnProperty.call(enriched, key)) lines.push(`${key}: ${privacyReportValue(enriched[key])}`);
+  });
+  Object.keys(enriched).filter(key => !used.has(key)).sort().forEach(key => {
+    lines.push(`${key}: ${privacyReportValue(enriched[key])}`);
+  });
+  copyToClipboard(lines.join('\n'));
+  toast('Privacy debug report copied', 'success');
+}
 
 function markRestartPending() {
   restartPending = true;
