@@ -115,6 +115,7 @@ pub fn chrome_html() -> String {
   --scrollbar-w:4px;
   /* chrome shell */
   --chrome-bg:#141414;
+  --horizontal-tabs-bg:#090909;
   --chrome-border:rgba(255,255,255,0.06);
   /* modal / dialog surfaces */
   --modal-bg:#1a1a1a;
@@ -182,6 +183,7 @@ pub fn chrome_html() -> String {
   --ai-ring:rgba(85,87,232,0.18);
   --ai-shadow:rgba(30,40,100,0.12);
   --chrome-bg:#f2f3f7;
+  --horizontal-tabs-bg:#dfe1e6;
   --chrome-border:rgba(0,0,0,0.07);
   --modal-bg:#ffffff;
   --modal-bg-2:#f4f5fb;
@@ -291,7 +293,7 @@ button,input,select,textarea{font-family:var(--font)}
   display:none;align-items:center;gap:6px;
   height:var(--horizontal-tabs-h);flex:0 0 var(--horizontal-tabs-h);
   padding:4px 0 4px 8px;
-  background:var(--chrome-bg);border-bottom:1px solid var(--chrome-border);
+  background:var(--horizontal-tabs-bg);border-bottom:1px solid var(--chrome-border);
   min-width:0;position:relative;z-index:102;overflow:hidden;
 }
 #app.tabs-horizontal #horizontal-tabs{display:flex}
@@ -301,7 +303,7 @@ button,input,select,textarea{font-family:var(--font)}
 #app.tabs-horizontal #win-controls{display:none}
 .horizontal-win-controls{
   display:flex;align-items:stretch;align-self:center;flex-shrink:0;
-  height:32px;background:var(--chrome-bg);
+  height:32px;background:var(--horizontal-tabs-bg);
 }
 .horizontal-win-controls .win-btn{height:32px}
 .horizontal-workspace-btn{
@@ -430,6 +432,13 @@ button,input,select,textarea{font-family:var(--font)}
   pointer-events:none;
   z-index:1;
 }
+#app.tabs-horizontal #toolbar-url-area{
+  position:relative;left:auto;right:auto;top:auto;bottom:auto;
+  flex:1 1 auto;min-width:0;height:100%;padding:0;
+}
+#app.tabs-horizontal #url-group{width:100%;min-width:0;margin:0}
+#app.tabs-horizontal #address-bar{width:auto;min-width:0;flex:1 1 auto}
+#app.tabs-horizontal #toolbar-actions{margin-left:0}
 
 #sidebar{
   position:fixed;left:0;top:var(--top-chrome-h);

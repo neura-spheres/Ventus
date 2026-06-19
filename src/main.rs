@@ -32,7 +32,7 @@ use tao::{
     keyboard::KeyCode,
     window::{Fullscreen, WindowBuilder},
 };
-use wry::{Rect, WebView, WebViewBuilder};
+use wry::{Rect, Theme as WebViewTheme, WebView, WebViewBuilder};
 
 #[cfg(windows)]
 use tao::platform::windows::{EventLoopBuilderExtWindows, WindowExtWindows};
@@ -99,6 +99,14 @@ const RENDERER_REPORT_COOLDOWN: Duration = Duration::from_secs(60);
 // anything past FREEZE was a real "Not Responding" stall and is escalated to an auto report.
 const MAIN_SLOW_WARN_MS: u128 = 350;
 const MAIN_FREEZE_MS: u128 = 3000;
+
+fn webview_theme(theme: &config::Theme) -> WebViewTheme {
+    match theme {
+        config::Theme::Dark => WebViewTheme::Dark,
+        config::Theme::Light => WebViewTheme::Light,
+        config::Theme::System => WebViewTheme::Auto,
+    }
+}
 
 static WORST_FREEZE: std::sync::Mutex<Option<(u64, &'static str)>> = std::sync::Mutex::new(None);
 
@@ -791,6 +799,7 @@ fn main() {
             std::sync::Arc::clone(&shared_dl_dir),
             tab_zoom(&state, &first_tab_id),
             &browser_args,
+            webview_theme(&state.settings.appearance.theme),
             first_ad_script,
             state.settings.privacy.fingerprint_protection,
             state.settings.privacy.strict_permissions,
@@ -1386,6 +1395,7 @@ fn main() {
                             proxy_main.clone(),
                             web_ctx,
                             &browser_args,
+                            webview_theme(&state.settings.appearance.theme),
                         );
                         unsafe {
                             let _ = pending.deferral.Complete();
@@ -1433,6 +1443,7 @@ fn main() {
                             std::sync::Arc::clone(&shared_dl_dir),
                             tab_zoom(&state, &tab_id),
                             &browser_args,
+                            webview_theme(&state.settings.appearance.theme),
                             ad_script,
                             state.settings.privacy.fingerprint_protection,
                             state.settings.privacy.strict_permissions,
@@ -1642,6 +1653,7 @@ fn main() {
                     std::sync::Arc::clone(&shared_dl_dir),
                     tab_zoom(&state, &tab_id),
                     &browser_args,
+                    webview_theme(&state.settings.appearance.theme),
                     ad_script,
                     state.settings.privacy.fingerprint_protection,
                     state.settings.privacy.strict_permissions,
@@ -1988,6 +2000,10 @@ state.settings.privacy.default_permissions.clone(),
                         ChromeCommand::SaveSettings { .. } | ChromeCommand::BrowseDownloadFolder
                     )
                 );
+                let theme_changed = matches!(
+                    &app_event,
+                    AppEvent::Chrome(ChromeCommand::SaveSettings { key, .. }) if key == "theme"
+                );
                 let progress_tab_id = match &app_event {
                     AppEvent::ContentLoadProgress { tab_id, .. } => Some(tab_id.clone()),
                     _ => None,
@@ -2025,6 +2041,18 @@ state.settings.privacy.default_permissions.clone(),
                 );
                 let cover_before = state.content_cover_open;
                 let action_opt = handle_app_event_inner(app_event, &mut state, &chrome);
+                #[cfg(windows)]
+                if theme_changed {
+                    let theme = webview_theme(&state.settings.appearance.theme);
+                    for wv in content_views.values() {
+                        let _ = wv.set_theme(theme);
+                    }
+                    for popup in popups.values() {
+                        let _ = popup.content.set_theme(theme);
+                    }
+                }
+                #[cfg(not(windows))]
+                let _ = theme_changed;
                 #[cfg(windows)]
                 if permission_settings_changed {
                     set_permission_policy(&state.settings);
@@ -2174,6 +2202,7 @@ state.settings.privacy.default_permissions.clone(),
                                     std::sync::Arc::clone(&shared_dl_dir),
                                     tab_zoom(&state, &tab_id),
                                     &browser_args,
+                                    webview_theme(&state.settings.appearance.theme),
                                     ad_script,
                                     state.settings.privacy.fingerprint_protection,
                                     state.settings.privacy.strict_permissions,
@@ -2294,6 +2323,7 @@ state.settings.privacy.default_permissions.clone(),
                                                 std::sync::Arc::clone(&shared_dl_dir),
                                                 tab_zoom(&state, &active_id),
                                                 &browser_args,
+                                                webview_theme(&state.settings.appearance.theme),
                                                 ad_script,
                                                 state.settings.privacy.fingerprint_protection,
                                                 state.settings.privacy.strict_permissions,
@@ -2510,6 +2540,7 @@ state.settings.privacy.default_permissions.clone(),
                                         std::sync::Arc::clone(&shared_dl_dir),
                                         tab_zoom(&state, id),
                                         &browser_args,
+                                        webview_theme(&state.settings.appearance.theme),
                                         ad_script,
                                         state.settings.privacy.fingerprint_protection,
                                         state.settings.privacy.strict_permissions,
@@ -2644,6 +2675,7 @@ state.settings.privacy.default_permissions.clone(),
                                     std::sync::Arc::clone(&shared_dl_dir),
                                     tab_zoom(&state, &tab_id),
                                     &browser_args,
+                                    webview_theme(&state.settings.appearance.theme),
                                     ad_script,
                                     state.settings.privacy.fingerprint_protection,
                                     state.settings.privacy.strict_permissions,
@@ -2787,6 +2819,7 @@ state.settings.privacy.default_permissions.clone(),
                                 std::sync::Arc::clone(&shared_dl_dir),
                                 tab_zoom(&state, &tab_id),
                                 &browser_args,
+                                webview_theme(&state.settings.appearance.theme),
                                 ad_script,
                                 state.settings.privacy.fingerprint_protection,
                                 state.settings.privacy.strict_permissions,
@@ -5303,6 +5336,7 @@ fn spawn_popup_window(
     proxy: tao::event_loop::EventLoopProxy<AppEvent>,
     web_context: &mut wry::WebContext,
     browser_args: &str,
+    theme: WebViewTheme,
 ) -> Option<PopupWindow> {
     use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2;
 
@@ -5355,6 +5389,7 @@ fn spawn_popup_window(
         web_context,
         pending.incognito,
         browser_args,
+        theme,
     )?;
     let bar = build_popup_bar_webview(&window, bar_rect, web_context, proxy.clone(), id)?;
 
@@ -5389,6 +5424,7 @@ fn build_popup_content_webview(
     web_context: &mut wry::WebContext,
     incognito: bool,
     browser_args: &str,
+    theme: WebViewTheme,
 ) -> Option<WebView> {
     // No URL and no init script: WebView2 navigates this WebView to the popup target itself
     // once it is handed over via SetNewWindow. Same WebContext + browser args as the opener so
@@ -5399,6 +5435,7 @@ fn build_popup_content_webview(
         .with_incognito(incognito)
         .with_user_agent(&browser_user_agent())
         .with_browser_accelerator_keys(false)
+        .with_theme(theme)
         .with_additional_browser_args(browser_args.to_string());
     let wv = builder.with_web_context(web_context).build().ok()?;
     let _ = wv.set_background_color(CONTENT_BG);
@@ -5665,6 +5702,7 @@ fn build_content_webview(
     download_dir: std::sync::Arc<std::sync::Mutex<DownloadPrefs>>,
     global_zoom: f64,
     browser_args: &str,
+    theme: WebViewTheme,
     ad_block_script: String,
     fingerprint: bool,
     strict: bool,
@@ -5688,6 +5726,7 @@ fn build_content_webview(
             std::sync::Arc::clone(&download_dir),
             global_zoom,
             browser_args,
+            theme,
             ad_block_script.clone(),
             fingerprint,
             strict,
@@ -5734,6 +5773,7 @@ fn build_content_webview_once(
     download_dir: std::sync::Arc<std::sync::Mutex<DownloadPrefs>>,
     global_zoom: f64,
     browser_args: &str,
+    theme: WebViewTheme,
     ad_block_script: String,
     fingerprint: bool,
     strict: bool,
@@ -5768,7 +5808,10 @@ fn build_content_webview_once(
     #[cfg(windows)]
     let builder = builder
         .with_browser_accelerator_keys(false)
+        .with_theme(theme)
         .with_additional_browser_args(browser_args.to_string());
+    #[cfg(not(windows))]
+    let _ = theme;
     let builder = builder
         .with_ipc_handler(move |req: wry::http::Request<String>| {
             let body = req.body();
@@ -6316,6 +6359,7 @@ fn build_woken_content_tab(
         std::sync::Arc::clone(shared_dl_dir),
         tab_zoom(state, tab_id),
         browser_args,
+        webview_theme(&state.settings.appearance.theme),
         ad_script,
         state.settings.privacy.fingerprint_protection,
         state.settings.privacy.strict_permissions,
