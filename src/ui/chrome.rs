@@ -5264,10 +5264,15 @@ let suggestionHideTimer = null;
 let searchSuggestions = [];
 let searchSuggestionTimer = null;
 let searchSuggestionId = 0;
+let searchSuggestionQuery = '';
+let searchSuggestionAt = 0;
+let searchSuggestionNeedsRefresh = false;
 const searchSuggestionCache = new Map();
 const SEARCH_SUGGESTION_TTL = 300000;
 const SEARCH_SUGGESTION_CACHE_LIMIT = 80;
 const SEARCH_SUGGESTION_LIMIT = 10;
+const SEARCH_SUGGESTION_REUSE_MIN = 3;
+const SEARCH_SUGGESTION_DEBOUNCE = 260;
 let neuraFeed = [];
 let neuraFeedLoading = false;
 let neuraFeedLoaded = false;
@@ -8065,28 +8070,9 @@ function inlineCandidates() {
       return true;
     });
 }
-function inlineQueryText(typed, value) {
-  const raw = String(typed || '');
-  const next = String(value || '').trim();
-  if (raw.trim().length < 2 || next.length <= raw.length) return null;
-  if (!next.toLowerCase().startsWith(raw.toLowerCase())) return null;
-  return raw + next.slice(raw.length);
-}
-function inlineQueryCandidates() {
-  const out = [];
-  (state.omnibox || []).forEach(p => {
-    if (p && (p.kind === 'search' || p.kind === 'trend') && p.url) out.push(p.url);
-  });
-  searchSuggestions.forEach(value => out.push(value));
-  return [...new Set(out.map(v => String(v || '').trim()).filter(Boolean))];
-}
 function findInlineCompletion(typed) {
   for (const c of inlineCandidates()) {
     const next = inlineText(typed, c.host);
-    if (next) return next;
-  }
-  for (const value of inlineQueryCandidates()) {
-    const next = inlineQueryText(typed, value);
     if (next) return next;
   }
   return null;
@@ -8897,29 +8883,67 @@ function cancelSearchSuggestions() {
   searchSuggestionTimer = null;
   searchSuggestionId += 1;
   searchSuggestions = [];
+  searchSuggestionQuery = '';
+  searchSuggestionAt = 0;
+  searchSuggestionNeedsRefresh = false;
+}
+
+function searchSuggestionWordCount(q) {
+  return String(q || '').trim().split(/\s+/).filter(Boolean).length;
+}
+
+function matchingSearchSuggestions(q) {
+  const key = q.trim().toLowerCase();
+  return searchSuggestions.filter(value => String(value || '').trim().toLowerCase().startsWith(key));
 }
 
 function queueSearchSuggestions(raw) {
   clearTimeout(searchSuggestionTimer);
   searchSuggestionTimer = null;
   searchSuggestionId += 1;
-  searchSuggestions = [];
   const q = String(raw || '').trim();
-  if (!searchSuggestionsEnabled() || !canSearchSuggest(q)) return;
+  const engine = getDefaultEngine();
+  if (!searchSuggestionsEnabled() || !q || !engine || engine.id !== 'google') {
+    searchSuggestions = [];
+    searchSuggestionQuery = '';
+    searchSuggestionAt = 0;
+    searchSuggestionNeedsRefresh = false;
+    return;
+  }
+  if (q.length === 1) return;
+  if (!canSearchSuggest(q)) {
+    searchSuggestions = [];
+    searchSuggestionQuery = '';
+    searchSuggestionAt = 0;
+    searchSuggestionNeedsRefresh = false;
+    return;
+  }
   const id = searchSuggestionId;
   const key = searchSuggestionKey(q);
   const cached = searchSuggestionCache.get(key);
   if (cached && Date.now() - cached.at < SEARCH_SUGGESTION_TTL) {
-    searchSuggestions = cached.items.slice();
+    if (cached.items.length) searchSuggestions = cached.items.slice();
+    searchSuggestionQuery = q;
+    searchSuggestionAt = cached.at;
+    searchSuggestionNeedsRefresh = false;
     renderSuggestionPanels();
     refreshSpotlightSuggestions();
-    syncInlineCompletion();
     return;
   }
+  const source = searchSuggestionQuery.trim().toLowerCase();
+  const current = q.toLowerCase();
+  const extendsSource = !!source && current.startsWith(source);
+  const startedWord = extendsSource && searchSuggestionWordCount(q) > searchSuggestionWordCount(searchSuggestionQuery);
+  if (startedWord || Date.now() - searchSuggestionAt >= SEARCH_SUGGESTION_TTL) {
+    searchSuggestionNeedsRefresh = true;
+  }
+  const matching = matchingSearchSuggestions(q);
+  if (matching.length) searchSuggestions = matching;
+  if (extendsSource && matching.length >= SEARCH_SUGGESTION_REUSE_MIN && !searchSuggestionNeedsRefresh) return;
   searchSuggestionTimer = setTimeout(() => {
     searchSuggestionTimer = null;
     send('FetchSearchSuggestions', {q, id});
-  }, 160);
+  }, SEARCH_SUGGESTION_DEBOUNCE);
 }
 
 function currentSearchSuggestionQuery() {
@@ -8940,23 +8964,25 @@ function applySearchSuggestions(payload) {
   const q = String(payload.q || '').trim();
   if (!q || currentSearchSuggestionQuery().toLowerCase() !== q.toLowerCase()) return;
   const seen = new Set();
-  searchSuggestions = (Array.isArray(payload.items) ? payload.items : [])
+  const next = (Array.isArray(payload.items) ? payload.items : [])
     .map(v => String(v || '').trim())
     .filter(v => {
       const key = v.toLowerCase();
       return key && key !== q.toLowerCase() && key.startsWith(q.toLowerCase()) && !seen.has(key) && seen.add(key);
     })
     .slice(0, 8);
-  if (searchSuggestions.length) {
-    const key = searchSuggestionKey(q);
-    searchSuggestionCache.set(key, {at: Date.now(), items: searchSuggestions.slice()});
-    while (searchSuggestionCache.size > SEARCH_SUGGESTION_CACHE_LIMIT) {
-      searchSuggestionCache.delete(searchSuggestionCache.keys().next().value);
-    }
+  const now = Date.now();
+  if (next.length) searchSuggestions = next;
+  searchSuggestionQuery = q;
+  searchSuggestionAt = now;
+  searchSuggestionNeedsRefresh = false;
+  const key = searchSuggestionKey(q);
+  searchSuggestionCache.set(key, {at: now, items: next.slice()});
+  while (searchSuggestionCache.size > SEARCH_SUGGESTION_CACHE_LIMIT) {
+    searchSuggestionCache.delete(searchSuggestionCache.keys().next().value);
   }
   renderSuggestionPanels();
   refreshSpotlightSuggestions();
-  syncInlineCompletion();
 }
 
 function setUrlSuggestionsOpen(open) {
@@ -14627,6 +14653,26 @@ mod tests {
         let html = chrome_html();
         assert!(html.contains(
             r#"<input id="url-input" type="text" placeholder="Search or enter a URL" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false""#
+        ));
+    }
+
+    #[test]
+    fn phrase_suggestions_stay_list_only() {
+        let html = chrome_html();
+        assert!(html.contains("group: 'Search suggestions'"));
+        assert!(!html.contains("function inlineQueryCandidates"));
+        assert!(!html.contains("function inlineQueryText"));
+    }
+
+    #[test]
+    fn suggestions_stay_visible_while_refreshing() {
+        let html = chrome_html();
+        assert!(html.contains("function matchingSearchSuggestions(q)"));
+        assert!(html.contains("if (q.length === 1) return;"));
+        assert!(html.contains("matching.length >= SEARCH_SUGGESTION_REUSE_MIN"));
+        assert!(html.contains("if (next.length) searchSuggestions = next;"));
+        assert!(!html.contains(
+            "searchSuggestionId += 1;\n  searchSuggestions = [];\n  const q = String(raw || '').trim();"
         ));
     }
 }
