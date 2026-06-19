@@ -1316,6 +1316,11 @@ button,input,select,textarea{font-family:var(--font)}
 }
 .tab-favicon{width:14px;height:14px;border-radius:3px;flex-shrink:0;object-fit:contain}
 .tab-favicon.loading{opacity:0.4}
+/* Rotating spinner on a tab while it loads — mirrors #active-loading-icon in the address bar */
+.tab-favicon.tab-loading-spin{opacity:1;overflow:visible}
+.tab-favicon.tab-loading-spin .ld-ring{animation:ld-pulse 1.6s ease-in-out infinite}
+.tab-favicon.tab-loading-spin .ld-arc{animation:ld-spin .9s linear infinite;transform-origin:center}
+.tab-favicon.tab-loading-spin .ld-dot{animation:ld-orbit .9s linear infinite;transform-origin:7px 7px}
 .tab-info{flex:1;min-width:0}
 .tab-title{
   font-size:12px;font-weight:500;color:var(--text);
@@ -6177,6 +6182,10 @@ function tabIconUrl(tab) {
 
 function tabFallbackIcon(loading, hidden) {
   const style = hidden ? ' style="display:none"' : '';
+  if (loading) {
+    // Same spinner SVG as #active-loading-icon in the address bar
+    return `<svg class="tab-favicon tab-loading-spin ${loading}"${style} width="14" height="14" viewBox="0 0 14 14" style="overflow:visible"><circle class="ld-ring" cx="7" cy="7" r="5.5" fill="none" stroke="currentColor" stroke-width="1.4" opacity=".22"/><circle class="ld-arc" cx="7" cy="7" r="5.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="10 24"/><circle class="ld-dot" cx="7" cy="1.5" r="1.3" fill="currentColor"/></svg>`;
+  }
   return `<svg class="tab-favicon ${loading}"${style} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 0 20"/></svg>`;
 }
 
