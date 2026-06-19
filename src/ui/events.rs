@@ -229,6 +229,10 @@ pub enum ChromeCommand {
     OmniboxSuggest {
         q: String,
     },
+    FetchSearchSuggestions {
+        q: String,
+        id: u64,
+    },
     OmniboxPick {
         q: String,
         url: String,
@@ -419,6 +423,7 @@ impl ChromeCommand {
         match self {
             ChromeCommand::GetHistory { .. }
             | ChromeCommand::OmniboxSuggest { .. }
+            | ChromeCommand::FetchSearchSuggestions { .. }
             | ChromeCommand::SearchTabs { .. }
             | ChromeCommand::FindInPage { .. }
             | ChromeCommand::SidebarPeek { .. }
@@ -746,6 +751,11 @@ pub enum AppEvent {
     },
     TrendsFailed {
         region: String,
+    },
+    SearchSuggestionsLoaded {
+        q: String,
+        id: u64,
+        items: Vec<String>,
     },
     UpdateDownloadProgress {
         received: u64,

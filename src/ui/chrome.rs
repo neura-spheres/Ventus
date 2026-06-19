@@ -3682,7 +3682,7 @@ svg{display:block;flex-shrink:0}
     </span>
     <div id="url-field" oncontextmenu="urlInputContextMenu(event)">
       <div id="url-display"></div>
-      <input id="url-input" type="text" placeholder="Search or enter a URL"
+      <input id="url-input" type="text" placeholder="Search or enter a URL" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
         onkeydown="handleUrlKey(event)"
         oninput="handleUrlInput(event)"
         onfocus="handleUrlFocus()"
@@ -5261,6 +5261,13 @@ let selectedWsColor = '#8b5cf6';
 let wsColorManual = false;
 let activeSuggestions = [];
 let suggestionHideTimer = null;
+let searchSuggestions = [];
+let searchSuggestionTimer = null;
+let searchSuggestionId = 0;
+const searchSuggestionCache = new Map();
+const SEARCH_SUGGESTION_TTL = 300000;
+const SEARCH_SUGGESTION_CACHE_LIMIT = 80;
+const SEARCH_SUGGESTION_LIMIT = 10;
 let neuraFeed = [];
 let neuraFeedLoading = false;
 let neuraFeedLoaded = false;
@@ -5510,6 +5517,9 @@ window.__neura = {
     renderSuggestionPanels();
     refreshSpotlightSuggestions();
     syncInlineCompletion();
+  },
+  setSearchSuggestions(payload) {
+    applySearchSuggestions(payload || {});
   },
   refreshOmnibox() {
     refreshOmnibox();
@@ -7637,6 +7647,7 @@ function handleUrlFocus() {
   if (!searchSuggestionsEnabled()) return;
   activeSuggestionTarget = 'url';
   activeSuggestionIndex = -1;
+  queueSearchSuggestions('');
   renderSuggestions('url', '');
   send('RefreshTrends');
   send('OmniboxSuggest', {q: ''});
@@ -7652,6 +7663,7 @@ function handleUrlInput(e) {
     hideSuggestions();
     return;
   }
+  queueSearchSuggestions(value);
   applyInlineCompletion(input, value, e);
   renderSuggestions('url', value);
   send('OmniboxSuggest', {q: value});
@@ -7807,6 +7819,7 @@ function urlEditReplace(sel, insert) {
   delete input.dataset.showingCurrent;
   lastTypedOmnibox = next;
   if (searchSuggestionsEnabled()) {
+    queueSearchSuggestions(next);
     renderSuggestions('url', next);
     send('OmniboxSuggest', {q: next});
   } else {
@@ -8052,9 +8065,28 @@ function inlineCandidates() {
       return true;
     });
 }
+function inlineQueryText(typed, value) {
+  const raw = String(typed || '');
+  const next = String(value || '').trim();
+  if (raw.trim().length < 2 || next.length <= raw.length) return null;
+  if (!next.toLowerCase().startsWith(raw.toLowerCase())) return null;
+  return raw + next.slice(raw.length);
+}
+function inlineQueryCandidates() {
+  const out = [];
+  (state.omnibox || []).forEach(p => {
+    if (p && (p.kind === 'search' || p.kind === 'trend') && p.url) out.push(p.url);
+  });
+  searchSuggestions.forEach(value => out.push(value));
+  return [...new Set(out.map(v => String(v || '').trim()).filter(Boolean))];
+}
 function findInlineCompletion(typed) {
   for (const c of inlineCandidates()) {
     const next = inlineText(typed, c.host);
+    if (next) return next;
+  }
+  for (const value of inlineQueryCandidates()) {
+    const next = inlineQueryText(typed, value);
     if (next) return next;
   }
   return null;
@@ -8523,6 +8555,7 @@ function handleNewtabFocus() {
   resetInline(document.getElementById('newtab-input'));
   lastTypedOmnibox = '';
   if (!searchSuggestionsEnabled()) return;
+  queueSearchSuggestions('');
   openSuggestions('newtab');
   send('RefreshTrends');
   send('OmniboxSuggest', {q: ''});
@@ -8536,6 +8569,7 @@ function handleNewtabInput(e) {
     hideSuggestions();
     return;
   }
+  queueSearchSuggestions(value);
   applyInlineCompletion(input, value, e);
   renderSuggestions('newtab', value);
   send('OmniboxSuggest', {q: value});
@@ -8835,6 +8869,7 @@ function scheduleSuggestionClose() {
 function hideSuggestions() {
   clearTimeout(suggestionHideTimer);
   suggestionHideTimer = null;
+  cancelSearchSuggestions();
   activeSuggestionTarget = null;
   activeSuggestionIndex = -1;
   activeSuggestions = [];
@@ -8844,6 +8879,84 @@ function hideSuggestions() {
   document.getElementById('newtab-suggestions').classList.remove('open');
   document.querySelector('.newtab-search-wrap')?.classList.remove('suggestions-open');
   syncSuggestionOverlay(null);
+}
+
+function searchSuggestionKey(q) {
+  const engine = getDefaultEngine();
+  const region = (state.settings && state.settings.region) || '';
+  return `${engine ? engine.id : ''}\n${region}\n${q.trim().toLowerCase()}`;
+}
+
+function canSearchSuggest(q) {
+  const engine = getDefaultEngine();
+  return !!engine && engine.id === 'google' && q.length >= 2 && q.length <= 200 && !looksLikeNavigableUrl(q) && !q.includes('://');
+}
+
+function cancelSearchSuggestions() {
+  clearTimeout(searchSuggestionTimer);
+  searchSuggestionTimer = null;
+  searchSuggestionId += 1;
+  searchSuggestions = [];
+}
+
+function queueSearchSuggestions(raw) {
+  clearTimeout(searchSuggestionTimer);
+  searchSuggestionTimer = null;
+  searchSuggestionId += 1;
+  searchSuggestions = [];
+  const q = String(raw || '').trim();
+  if (!searchSuggestionsEnabled() || !canSearchSuggest(q)) return;
+  const id = searchSuggestionId;
+  const key = searchSuggestionKey(q);
+  const cached = searchSuggestionCache.get(key);
+  if (cached && Date.now() - cached.at < SEARCH_SUGGESTION_TTL) {
+    searchSuggestions = cached.items.slice();
+    renderSuggestionPanels();
+    refreshSpotlightSuggestions();
+    syncInlineCompletion();
+    return;
+  }
+  searchSuggestionTimer = setTimeout(() => {
+    searchSuggestionTimer = null;
+    send('FetchSearchSuggestions', {q, id});
+  }, 160);
+}
+
+function currentSearchSuggestionQuery() {
+  if (spotlightOpen && !tspAiMode) {
+    return typedInputValue(document.getElementById('tsp-input')).trim();
+  }
+  if (!activeSuggestionTarget) return '';
+  const input = getSuggestionInput(activeSuggestionTarget);
+  if (!input) return '';
+  if (activeSuggestionTarget === 'url' && input.dataset.showingCurrent === '1') return '';
+  return typedInputValue(input).trim();
+}
+
+function applySearchSuggestions(payload) {
+  if (Number(payload.id) !== searchSuggestionId) return;
+  const engine = getDefaultEngine();
+  if (!engine || engine.id !== 'google') return;
+  const q = String(payload.q || '').trim();
+  if (!q || currentSearchSuggestionQuery().toLowerCase() !== q.toLowerCase()) return;
+  const seen = new Set();
+  searchSuggestions = (Array.isArray(payload.items) ? payload.items : [])
+    .map(v => String(v || '').trim())
+    .filter(v => {
+      const key = v.toLowerCase();
+      return key && key !== q.toLowerCase() && key.startsWith(q.toLowerCase()) && !seen.has(key) && seen.add(key);
+    })
+    .slice(0, 8);
+  if (searchSuggestions.length) {
+    const key = searchSuggestionKey(q);
+    searchSuggestionCache.set(key, {at: Date.now(), items: searchSuggestions.slice()});
+    while (searchSuggestionCache.size > SEARCH_SUGGESTION_CACHE_LIMIT) {
+      searchSuggestionCache.delete(searchSuggestionCache.keys().next().value);
+    }
+  }
+  renderSuggestionPanels();
+  refreshSpotlightSuggestions();
+  syncInlineCompletion();
 }
 
 function setUrlSuggestionsOpen(open) {
@@ -9015,6 +9128,8 @@ function buildSuggestions(query) {
   const items = [];
   const predUrls = new Set();
   const seenRows = new Set();
+  const localLimit = q && searchSuggestions.length ? 4 : 8;
+  let localCount = 0;
 
   for (const p of (state.omnibox || [])) {
     if (!p || !p.url) continue;
@@ -9033,13 +9148,32 @@ function buildSuggestions(query) {
       recommend: !isSearch && !isTrend
     };
     const row = suggestionRowKey(item);
-    if (seenRows.has(row)) continue;
+    if (seenRows.has(row) || localCount >= localLimit) continue;
     seenRows.add(row);
     items.push(item);
     predUrls.add(suggestionUrlKey(p.url));
+    localCount += 1;
   }
 
   if (q) {
+    for (const value of searchSuggestions) {
+      const text = String(value || '').trim();
+      if (!text || predUrls.has(suggestionUrlKey(text))) continue;
+      const item = {
+        group: 'Search suggestions',
+        title: text,
+        sub: defaultEngine ? `Search ${defaultEngine.name}` : 'Search the web',
+        url: text,
+        icon: 'search',
+        predicted: true,
+        recommend: false
+      };
+      const row = suggestionRowKey(item);
+      if (seenRows.has(row)) continue;
+      seenRows.add(row);
+      predUrls.add(suggestionUrlKey(text));
+      items.push(item);
+    }
     if (looksLikeNavigableUrl(q) && !predUrls.has(suggestionUrlKey(q))) {
       const item = { group: 'Actions', title: `Go to ${q}`, sub: 'Open address', url: q, icon: 'globe' };
       const row = suggestionRowKey(item);
@@ -9065,7 +9199,11 @@ function buildSuggestions(query) {
     }
   }
 
-  return items.filter(item => item.url || item.group === 'Actions');
+  const filtered = items.filter(item => item.url || item.group === 'Actions');
+  if (filtered.length <= SEARCH_SUGGESTION_LIMIT) return filtered;
+  const actions = filtered.filter(item => item.group === 'Actions');
+  const rows = filtered.filter(item => item.group !== 'Actions');
+  return rows.slice(0, Math.max(0, SEARCH_SUGGESTION_LIMIT - actions.length)).concat(actions).slice(0, SEARCH_SUGGESTION_LIMIT);
 }
 
 function suggestionRowKey(item) {
@@ -10827,6 +10965,7 @@ function showSpotlight() {
   const inp = document.getElementById('tsp-input');
   if (inp) inp.value = '';
   lastTypedOmnibox = '';
+  queueSearchSuggestions('');
   renderTspSuggestions('');
   if (searchSuggestionsEnabled()) {
     send('RefreshTrends');
@@ -10859,6 +10998,7 @@ function openSpotlight() {
 function hideSpotlight() {
   if (!spotlightOpen) return;
   spotlightOpen = false;
+  cancelSearchSuggestions();
   tspExitAiMode();
   document.getElementById('tab-spotlight-overlay').classList.remove('open');
 }
@@ -11448,6 +11588,7 @@ function handleTspInput(e) {
     renderTspSuggestions(value || '');
     return;
   }
+  queueSearchSuggestions(value || '');
   applyInlineCompletion(input, value, e);
   renderTspSuggestions(value || '');
   send('OmniboxSuggest', {q: (value || '').trim()});
@@ -11514,7 +11655,6 @@ function renderTspOmniboxRows(items, query) {
   for (const item of items) {
     if (!item || !item.url) continue;
     const isSearch = item.icon === 'search';
-    if (isSearch && item.predicted) continue;
     let row = item;
     let favicon = '';
     if (!isSearch) {
@@ -14473,5 +14613,20 @@ mod tests {
         assert!(html.contains("send('PickAiAttachments')"));
         assert!(html.contains("send('RemoveAiAttachment', {id})"));
         assert!(!html.contains("Media attachments are not available yet"));
+    }
+
+    #[test]
+    fn spotlight_keeps_predicted_search_rows() {
+        let html = chrome_html();
+        assert!(!html.contains("if (isSearch && item.predicted) continue;"));
+        assert!(html.contains("group: 'Search suggestions'"));
+    }
+
+    #[test]
+    fn address_bar_disables_spellcheck() {
+        let html = chrome_html();
+        assert!(html.contains(
+            r#"<input id="url-input" type="text" placeholder="Search or enter a URL" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false""#
+        ));
     }
 }

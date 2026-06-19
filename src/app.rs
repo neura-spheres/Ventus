@@ -442,6 +442,12 @@ pub enum TabAction {
         query: String,
         forward: bool,
     },
+    FetchSearchSuggestions {
+        q: String,
+        id: u64,
+        engine: String,
+        region: String,
+    },
     ResolvePermission {
         origin: String,
         key: String,
@@ -1308,6 +1314,24 @@ pub fn handle_chrome_command(
                 payload
             ));
             None
+        }
+        ChromeCommand::FetchSearchSuggestions { q, id } => {
+            let q = q.trim().to_string();
+            if !state.settings.search.suggestions_enabled
+                || !crate::browser::omnibox::can_fetch_queries(&q)
+            {
+                return None;
+            }
+            let engine = state.settings.search.default_engine.clone();
+            if engine != "google" {
+                return None;
+            }
+            Some(TabAction::FetchSearchSuggestions {
+                q,
+                id,
+                engine,
+                region: state.settings.region.clone(),
+            })
         }
         ChromeCommand::OmniboxPick { q, url, shown } => {
             crate::browser::omnibox::learn(&state.conn, &mut state.omnibox, &q, &url, &shown);
@@ -3761,6 +3785,14 @@ pub fn handle_app_event_inner(
             }
             None
         }
+        AppEvent::SearchSuggestionsLoaded { q, id, items } => {
+            let payload = serde_json::json!({ "q": q, "id": id, "items": items });
+            let _ = chrome.evaluate_script(&format!(
+                "window.__neura && window.__neura.setSearchSuggestions({})",
+                payload
+            ));
+            None
+        }
         AppEvent::UpdateDownloadProgress { received, total } => {
             let _ = chrome.evaluate_script(&format!(
                 "window.__neura && window.__neura.setUpdateState({{status:'downloading',received:{},total:{}}})",
@@ -4575,12 +4607,15 @@ fn resolve_navigation_url_with_policy(input: &str, state: &AppState, https_only:
                 input.trim(),
                 &engines,
             ) {
+                let url =
+                    crate::browser::search_engine::add_google_context(&url, &state.settings.region);
                 return secure_nav_url_with_policy(&url, https_only);
             }
         }
     }
     let search_url = get_search_url(state);
     let url = crate::browser::navigation::resolve_input(input, &search_url).url;
+    let url = crate::browser::search_engine::add_google_context(&url, &state.settings.region);
     secure_nav_url_with_policy(&url, https_only)
 }
 

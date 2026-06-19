@@ -926,6 +926,12 @@ fn main() {
     }
     // Periodic proactive cookie snapshot (backs up cookies even between navigations).
     let mut cookie_save_at = Instant::now() + COOKIE_SAVE_EVERY;
+    let search_suggestion_client = reqwest::Client::builder()
+        .user_agent(crate::version::USER_AGENT)
+        .timeout(Duration::from_secs(4))
+        .build()
+        .ok();
+    let mut search_suggestion_task: Option<tokio::task::JoinHandle<()>> = None;
     event_loop.run(move |event, elwt, control_flow| {
         *control_flow = ControlFlow::Wait;
         let _ = &elwt;
@@ -2104,6 +2110,37 @@ state.settings.privacy.default_permissions.clone(),
                     refresh_nav_buttons(&chrome, &content_views, &mut state);
                 }
                 if let Some(action) = action_opt {
+                    if let TabAction::FetchSearchSuggestions {
+                        q,
+                        id,
+                        engine,
+                        region,
+                    } = &action
+                    {
+                        if let Some(task) = search_suggestion_task.take() {
+                            task.abort();
+                        }
+                        if let Some(client) = search_suggestion_client.clone() {
+                            let q = q.clone();
+                            let id = *id;
+                            let engine = engine.clone();
+                            let region = region.clone();
+                            let proxy = proxy_main.clone();
+                            search_suggestion_task = Some(rt.spawn(async move {
+                                let items = browser::omnibox::fetch_queries(
+                                    &client, &engine, &q, &region,
+                                )
+                                .await
+                                .unwrap_or_default();
+                                let _ = proxy.send_event(AppEvent::SearchSuggestionsLoaded {
+                                    q,
+                                    id,
+                                    items,
+                                });
+                            }));
+                        }
+                        return;
+                    }
                     sync_active_ubol(
                         &content_views,
                         &state,
@@ -2161,6 +2198,7 @@ state.settings.privacy.default_permissions.clone(),
                     let focus_spotlight = matches!(action, TabAction::FocusSpotlight);
                     match action {
                         TabAction::SyncClipOnly | TabAction::SyncSidebarClip => unreachable!(),
+                        TabAction::FetchSearchSuggestions { .. } => unreachable!(),
                         TabAction::ResolvePermission { origin, key, allow } => {
                             #[cfg(windows)]
                             resolve_permission(&origin, &key, allow);

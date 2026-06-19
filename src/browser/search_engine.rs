@@ -111,6 +111,48 @@ impl SearchEngine {
     }
 }
 
+pub fn add_google_context(url: &str, region: &str) -> String {
+    let Ok(mut parsed) = url::Url::parse(url) else {
+        return url.to_string();
+    };
+    let host = parsed.host_str().unwrap_or_default();
+    if !matches!(host, "google.com" | "www.google.com") || parsed.path() != "/search" {
+        return url.to_string();
+    }
+
+    let params: Vec<(String, String)> = parsed
+        .query_pairs()
+        .map(|(key, value)| (key.into_owned(), value.into_owned()))
+        .collect();
+    let Some(query) = params
+        .iter()
+        .find(|(key, _)| key == "q")
+        .map(|(_, value)| value.clone())
+    else {
+        return url.to_string();
+    };
+    let has = |key: &str| params.iter().any(|(name, _)| name == key);
+    let region = region.trim().to_uppercase();
+    let valid_region = region.len() == 2 && region.chars().all(|c| c.is_ascii_uppercase());
+
+    let mut pairs = parsed.query_pairs_mut();
+    if !has("oq") {
+        pairs.append_pair("oq", &query);
+    }
+    if !has("ie") {
+        pairs.append_pair("ie", "UTF-8");
+    }
+    if !has("oe") {
+        pairs.append_pair("oe", "UTF-8");
+    }
+    if valid_region && !has("gl") {
+        pairs.append_pair("gl", &region);
+    }
+    drop(pairs);
+
+    parsed.into()
+}
+
 fn urlencoding_encode(input: &str) -> String {
     let mut result = String::new();
     for byte in input.bytes() {
@@ -123,4 +165,42 @@ fn urlencoding_encode(input: &str) -> String {
         }
     }
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add_google_context;
+
+    #[test]
+    fn google_search_gets_reusable_context() {
+        let url = add_google_context("https://www.google.com/search?q=bioinformatika", "id");
+        let parsed = url::Url::parse(&url).unwrap();
+        let params: std::collections::HashMap<_, _> = parsed.query_pairs().into_owned().collect();
+
+        assert_eq!(params.get("q").map(String::as_str), Some("bioinformatika"));
+        assert_eq!(params.get("oq").map(String::as_str), Some("bioinformatika"));
+        assert_eq!(params.get("ie").map(String::as_str), Some("UTF-8"));
+        assert_eq!(params.get("oe").map(String::as_str), Some("UTF-8"));
+        assert_eq!(params.get("gl").map(String::as_str), Some("ID"));
+    }
+
+    #[test]
+    fn google_search_keeps_existing_context() {
+        let url = add_google_context(
+            "https://www.google.com/search?q=rust&oq=original&ie=latin1&gl=SG",
+            "id",
+        );
+        let parsed = url::Url::parse(&url).unwrap();
+        let params: std::collections::HashMap<_, _> = parsed.query_pairs().into_owned().collect();
+
+        assert_eq!(params.get("oq").map(String::as_str), Some("original"));
+        assert_eq!(params.get("ie").map(String::as_str), Some("latin1"));
+        assert_eq!(params.get("gl").map(String::as_str), Some("SG"));
+    }
+
+    #[test]
+    fn other_urls_are_unchanged() {
+        let url = "https://www.bing.com/search?q=rust";
+        assert_eq!(add_google_context(url, "ID"), url);
+    }
 }

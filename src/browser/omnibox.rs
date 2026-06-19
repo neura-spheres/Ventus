@@ -1,3 +1,4 @@
+use anyhow::Result;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -12,6 +13,7 @@ const ASSOC_LIMIT: i64 = 800;
 const CAND_POOL: usize = 60;
 const REC_POOL: usize = 1000;
 const TREND_LIMIT: usize = 3;
+const QUERY_LIMIT: usize = 8;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Model {
@@ -212,8 +214,9 @@ fn digest(assoc: &[Assoc], q: &str) -> Learned {
         if !host.is_empty() {
             *host_picks.entry(host).or_insert(0) += a.picks;
         }
-        if !q.is_empty() && a.prefix == q {
-            *q_assoc.entry(a.url.clone()).or_insert(0) += a.picks;
+        if prefix_matches(&a.prefix, q) {
+            let weight = if a.prefix == q { 2 } else { 1 };
+            *q_assoc.entry(a.url.clone()).or_insert(0) += a.picks * weight;
         }
     }
     Learned {
@@ -221,6 +224,75 @@ fn digest(assoc: &[Assoc], q: &str) -> Learned {
         host_picks,
         total_picks,
     }
+}
+
+fn prefix_matches(prefix: &str, q: &str) -> bool {
+    if !q.is_empty() && prefix == q {
+        return true;
+    }
+    if prefix.len() < 2 || q.len() < 2 {
+        return false;
+    }
+    prefix.starts_with(q) || q.starts_with(prefix)
+}
+
+pub fn can_fetch_queries(q: &str) -> bool {
+    let q = q.trim();
+    q.len() >= 2 && q.len() <= 200 && !q.contains("://") && (q.contains(' ') || !q.contains('.'))
+}
+
+pub async fn fetch_queries(
+    client: &reqwest::Client,
+    engine: &str,
+    q: &str,
+    region: &str,
+) -> Result<Vec<String>> {
+    if engine != "google" || !can_fetch_queries(q) {
+        return Ok(Vec::new());
+    }
+    let url = query_url(q, region)?;
+    let json = client
+        .get(url)
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<serde_json::Value>()
+        .await?;
+    Ok(parse_queries(&json, q))
+}
+
+fn query_url(q: &str, region: &str) -> Result<url::Url> {
+    let mut url = url::Url::parse("https://suggestqueries.google.com/complete/search")?;
+    let region = region.trim().to_uppercase();
+    let valid_region = region.len() == 2 && region.chars().all(|c| c.is_ascii_uppercase());
+    let mut pairs = url.query_pairs_mut();
+    pairs.append_pair("client", "firefox");
+    pairs.append_pair("q", q.trim());
+    if valid_region {
+        pairs.append_pair("gl", &region);
+    }
+    drop(pairs);
+    Ok(url)
+}
+
+fn parse_queries(json: &serde_json::Value, q: &str) -> Vec<String> {
+    let Some(items) = json.get(1).and_then(|v| v.as_array()) else {
+        return Vec::new();
+    };
+    let key = q.trim().to_lowercase();
+    let mut seen = HashSet::new();
+    items
+        .iter()
+        .filter_map(|v| v.as_str())
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .filter(|v| {
+            let lower = v.to_lowercase();
+            lower != key && lower.starts_with(&key) && seen.insert(lower)
+        })
+        .take(QUERY_LIMIT)
+        .map(str::to_string)
+        .collect()
 }
 
 struct Cand {
@@ -746,6 +818,81 @@ fn host_of(url: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parses_google_query_completions() {
+        let json = serde_json::json!([
+            "bioinformatika",
+            [
+                "bioinformatika",
+                "bioinformatika ipb",
+                "Bioinformatika IPB",
+                "bioinformatika kerja apa",
+                "unrelated"
+            ]
+        ]);
+        assert_eq!(
+            parse_queries(&json, "bioinformatika"),
+            vec!["bioinformatika ipb", "bioinformatika kerja apa"]
+        );
+    }
+
+    #[test]
+    fn query_fetch_rejects_addresses() {
+        assert!(can_fetch_queries("bioinformatika"));
+        assert!(can_fetch_queries("bioinformatika kerja"));
+        assert!(!can_fetch_queries("g"));
+        assert!(!can_fetch_queries("example.com"));
+        assert!(!can_fetch_queries("https://example.com"));
+    }
+
+    #[test]
+    fn prefix_match_keeps_exact_short_queries() {
+        assert!(prefix_matches("a", "a"));
+        assert!(!prefix_matches("ab", "a"));
+        assert!(prefix_matches("bio", "bioin"));
+    }
+
+    #[test]
+    fn query_url_uses_saved_region() {
+        let url = query_url("bio informatika", "id").unwrap();
+        let params: HashMap<_, _> = url.query_pairs().into_owned().collect();
+        assert_eq!(params.get("client").map(String::as_str), Some("firefox"));
+        assert_eq!(params.get("q").map(String::as_str), Some("bio informatika"));
+        assert_eq!(params.get("gl").map(String::as_str), Some("ID"));
+    }
+
+    #[test]
+    fn suggest_reuses_related_prefix_pick() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                url TEXT NOT NULL,
+                title TEXT NOT NULL DEFAULT '',
+                workspace_id TEXT,
+                visited_at INTEGER NOT NULL
+            );
+            CREATE TABLE omnibox_learn (
+                prefix TEXT NOT NULL,
+                url TEXT NOT NULL,
+                picks INTEGER NOT NULL DEFAULT 0,
+                last_pick INTEGER NOT NULL,
+                PRIMARY KEY (prefix, url)
+            );",
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO omnibox_learn(prefix, url, picks, last_pick) VALUES(?1, ?2, 3, ?3)",
+            params!["bio", "bioinformatika ipb", now_ms()],
+        )
+        .unwrap();
+
+        let items = suggest(&conn, &Model::default(), "bioin", &[], 8);
+        assert!(items
+            .iter()
+            .any(|item| item.kind == "search" && item.url == "bioinformatika ipb"));
+    }
 
     #[test]
     fn suggest_hides_same_visible_site() {
