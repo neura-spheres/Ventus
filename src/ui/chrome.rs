@@ -1352,29 +1352,42 @@ button,input,select,textarea{font-family:var(--font)}
 .tab-item.loading{animation:tab-chip-pulse 1.8s ease-in-out infinite}
 .tab-item.active.loading{animation:tab-chip-pulse-active 1.8s ease-in-out infinite}
 
-.tab-layout-picker{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.tab-layout-picker{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .tab-layout-option{
-  min-height:64px;padding:10px;border:1px solid var(--border);border-radius:11px;
+  min-height:76px;padding:11px 12px;border:1px solid var(--border);border-radius:13px;
   background:var(--soft-btn-bg);color:var(--text-muted);cursor:pointer;
-  display:flex;align-items:center;gap:10px;text-align:left;
+  display:flex;align-items:center;gap:12px;text-align:left;position:relative;overflow:hidden;
   transition:background var(--transition),border-color var(--transition),color var(--transition),box-shadow var(--transition);
 }
 .tab-layout-option:hover{background:var(--soft-btn-bg-hover);color:var(--text)}
 .tab-layout-option.selected{
   color:var(--text);border-color:var(--accent);
-  background:var(--accent-dim);box-shadow:0 0 0 2px var(--accent-dim);
+  background:var(--accent-dim);box-shadow:0 0 0 2px var(--accent-dim),0 8px 24px var(--ai-shadow);
 }
+.tab-layout-option::after{
+  content:'✓';width:17px;height:17px;border-radius:50%;margin-left:auto;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;background:var(--accent);color:var(--primary-btn-bg);
+  font-size:10px;font-weight:800;opacity:0;transition:opacity var(--transition);
+}
+.tab-layout-option.selected::after{opacity:1}
 .tab-layout-preview{
-  width:46px;height:34px;border:1px solid var(--border);border-radius:7px;
-  background:var(--bg);display:grid;overflow:hidden;flex-shrink:0;
+  width:58px;height:42px;border:1px solid var(--border);border-radius:10px;
+  background:var(--bg);display:block;overflow:hidden;flex-shrink:0;position:relative;
+  box-shadow:inset 0 1px 0 var(--soft-btn-bg-hover),0 3px 10px var(--ai-shadow);
 }
-.tab-layout-preview.vertical{grid-template-columns:12px 1fr;grid-template-rows:8px 1fr}
-.tab-layout-preview.horizontal{grid-template-columns:1fr;grid-template-rows:9px 8px 1fr}
-.tab-layout-preview span{display:block;background:var(--bg-elevated);border-color:var(--border-subtle)}
-.tab-layout-preview.vertical span:first-child{grid-row:1/3;border-right:1px solid var(--border-subtle)}
-.tab-layout-preview.vertical span:nth-child(2){border-bottom:1px solid var(--border-subtle)}
-.tab-layout-preview.horizontal span:first-child,
-.tab-layout-preview.horizontal span:nth-child(2){border-bottom:1px solid var(--border-subtle)}
+.tab-layout-preview span{display:block;position:absolute;background:var(--bg-elevated);border-color:var(--border-subtle)}
+.tab-layout-preview.vertical span:first-child{
+  left:4px;top:4px;bottom:4px;width:15px;border-right:1px solid var(--border-subtle);border-radius:5px 0 0 5px;
+  background:linear-gradient(var(--accent),var(--accent)) 3px 6px/9px 3px no-repeat,linear-gradient(var(--text-dim),var(--text-dim)) 3px 14px/8px 2px no-repeat,linear-gradient(var(--text-dim),var(--text-dim)) 3px 21px/7px 2px no-repeat,var(--bg-elevated);
+}
+.tab-layout-preview.vertical span:nth-child(2){left:20px;right:4px;top:4px;height:8px;border-bottom:1px solid var(--border-subtle);border-radius:0 5px 0 0;background:linear-gradient(var(--border),var(--border)) center/62% 3px no-repeat,var(--bg-elevated)}
+.tab-layout-preview.vertical span:nth-child(3){left:20px;right:4px;top:13px;bottom:4px;border-radius:0 0 5px 0;background:color-mix(in srgb,var(--bg-elevated) 72%,var(--bg))}
+.tab-layout-preview.horizontal span:first-child{
+  left:4px;right:4px;top:4px;height:9px;border-bottom:1px solid var(--border-subtle);border-radius:5px 5px 0 0;
+  background:linear-gradient(var(--accent),var(--accent)) 3px 3px/12px 4px no-repeat,linear-gradient(var(--text-dim),var(--text-dim)) 18px 4px/11px 2px no-repeat,linear-gradient(var(--text-dim),var(--text-dim)) 32px 4px/10px 2px no-repeat,var(--bg-elevated);
+}
+.tab-layout-preview.horizontal span:nth-child(2){left:4px;right:4px;top:14px;height:8px;border-bottom:1px solid var(--border-subtle);background:linear-gradient(var(--border),var(--border)) center/68% 3px no-repeat,var(--bg-elevated)}
+.tab-layout-preview.horizontal span:nth-child(3){left:4px;right:4px;top:23px;bottom:4px;border-radius:0 0 5px 5px;background:color-mix(in srgb,var(--bg-elevated) 72%,var(--bg))}
 .tab-layout-copy{display:flex;flex-direction:column;gap:2px;min-width:0}
 .tab-layout-title{font-size:12px;font-weight:650;color:inherit}
 .tab-layout-desc{font-size:10.5px;color:var(--text-dim);line-height:1.25}
@@ -4331,11 +4344,11 @@ svg{display:block;flex-shrink:0}
           <label>Tab layout</label>
           <div class="tab-layout-picker">
             <button type="button" class="tab-layout-option selected" id="tab-layout-vertical" onclick="setTabLayout('vertical')" aria-pressed="true">
-              <span class="tab-layout-preview vertical"><span></span><span></span><span></span></span>
+              <span class="tab-layout-preview vertical" aria-hidden="true"><span></span><span></span><span></span></span>
               <span class="tab-layout-copy"><span class="tab-layout-title">Vertical</span><span class="tab-layout-desc">Tabs in the sidebar</span></span>
             </button>
             <button type="button" class="tab-layout-option" id="tab-layout-horizontal" onclick="setTabLayout('horizontal')" aria-pressed="false">
-              <span class="tab-layout-preview horizontal"><span></span><span></span><span></span></span>
+              <span class="tab-layout-preview horizontal" aria-hidden="true"><span></span><span></span><span></span></span>
               <span class="tab-layout-copy"><span class="tab-layout-title">Horizontal</span><span class="tab-layout-desc">Tabs above the toolbar</span></span>
             </button>
           </div>
