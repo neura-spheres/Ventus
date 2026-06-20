@@ -133,6 +133,10 @@ pub fn chrome_html() -> String {
   --accent-text:#a5b4fc;
   --soft-btn-bg:rgba(255,255,255,0.06);
   --soft-btn-bg-hover:rgba(255,255,255,0.10);
+  --workspace-tile:#111111;
+  --workspace-tile-ink:#ffffff;
+  --workspace-tile-border:rgba(255,255,255,0.10);
+  --workspace-icon-shadow:rgba(255,255,255,0.32);
   --sidebar-bottom-icon:rgba(255,255,255,0.72);
   --sidebar-bottom-icon-hover:rgba(255,255,255,0.94);
   --sidebar-bottom-icon-disabled:rgba(255,255,255,0.34);
@@ -200,6 +204,10 @@ pub fn chrome_html() -> String {
   --accent-text:var(--accent);
   --soft-btn-bg:rgba(0,0,0,0.06);
   --soft-btn-bg-hover:rgba(0,0,0,0.10);
+  --workspace-tile:#ffffff;
+  --workspace-tile-ink:#111111;
+  --workspace-tile-border:rgba(0,0,0,0.10);
+  --workspace-icon-shadow:rgba(0,0,0,0.58);
   --sidebar-bottom-icon:rgba(26,27,46,0.66);
   --sidebar-bottom-icon-hover:rgba(26,27,46,0.9);
   --sidebar-bottom-icon-disabled:rgba(26,27,46,0.38);
@@ -316,30 +324,40 @@ button,input,select,textarea{font-family:var(--font)}
 .horizontal-win-controls .win-btn{height:32px}
 .horizontal-workspace-btn{
   --ws-color:#8b5cf6;
-  height:30px;max-width:172px;min-width:42px;padding:0 9px 0 6px;
-  display:flex;align-items:center;gap:8px;flex-shrink:0;
-  border:1px solid color-mix(in srgb, var(--ws-color) 24%, transparent);border-radius:9px;
-  background:linear-gradient(135deg, color-mix(in srgb, var(--ws-color) 17%, var(--horizontal-tabs-bg)), color-mix(in srgb, var(--ws-color) 5%, var(--horizontal-tabs-bg)));
+  height:30px;max-width:180px;min-width:42px;padding:3px 8px 3px 4px;
+  display:flex;align-items:center;gap:7px;flex-shrink:0;
+  border:1px solid color-mix(in srgb,var(--ws-color) 24%,transparent);border-radius:9px;
+  background:linear-gradient(135deg,color-mix(in srgb,var(--ws-color) 15%,var(--horizontal-tabs-bg)),color-mix(in srgb,var(--ws-color) 6%,var(--horizontal-tabs-bg)));
   color:var(--text);cursor:pointer;
-  transition:background var(--transition),border-color var(--transition);
+  transition:background var(--transition),border-color var(--transition),box-shadow var(--transition),transform .12s ease;
 }
 .horizontal-workspace-btn:hover{
-  background:linear-gradient(135deg, color-mix(in srgb, var(--ws-color) 26%, var(--horizontal-tabs-bg)), color-mix(in srgb, var(--ws-color) 10%, var(--horizontal-tabs-bg)));
-  border-color:color-mix(in srgb, var(--ws-color) 38%, transparent);
+  background:linear-gradient(135deg,color-mix(in srgb,var(--ws-color) 22%,var(--horizontal-tabs-bg)),color-mix(in srgb,var(--ws-color) 9%,var(--horizontal-tabs-bg)));
+  border-color:color-mix(in srgb,var(--ws-color) 34%,transparent);
 }
+.horizontal-workspace-btn:active{transform:scale(.98)}
 .horizontal-workspace-avatar{
-  width:20px;height:20px;border-radius:6px;display:flex;align-items:center;justify-content:center;
-  flex-shrink:0;font-size:11px;line-height:1;color:#fff;font-weight:700;text-transform:uppercase;
-  background:linear-gradient(140deg, var(--ws-color), color-mix(in srgb, var(--ws-color) 62%, #000));
-  box-shadow:inset 0 1px 0 rgba(255,255,255,0.22);
+  width:22px;height:22px;border-radius:7px;display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;font-size:13px;line-height:1;color:var(--workspace-tile-ink);font-weight:700;text-transform:uppercase;
+  background:var(--workspace-tile);box-shadow:inset 0 0 0 1px var(--workspace-tile-border),0 1px 3px var(--ai-shadow);position:relative;
+}
+.horizontal-workspace-avatar.has-icon{
+  font-family:"Segoe UI Emoji","Segoe UI Symbol",sans-serif;font-size:15px;font-weight:400;text-transform:none;
+  text-shadow:0 1px 2px var(--workspace-icon-shadow),0 0 1px var(--workspace-icon-shadow);
 }
 .horizontal-workspace-name{
   min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-  font-size:11.5px;font-weight:650;letter-spacing:-0.01em;
+  font-size:11.5px;font-weight:600;letter-spacing:-0.01em;color:var(--text-muted);
+  transition:color var(--transition);
 }
 .horizontal-workspace-chevron{display:flex;color:var(--text-dim);flex-shrink:0;opacity:.6;transition:opacity var(--transition),transform .18s ease}
+.horizontal-workspace-btn:hover .horizontal-workspace-name,
+.horizontal-workspace-btn.menu-open .horizontal-workspace-name{color:var(--text)}
 .horizontal-workspace-btn:hover .horizontal-workspace-chevron{opacity:1}
-.horizontal-workspace-btn.menu-open{background:var(--soft-btn-bg-hover);border-color:color-mix(in srgb,var(--ws-color) 38%,transparent)}
+.horizontal-workspace-btn.menu-open{
+  background:linear-gradient(135deg,color-mix(in srgb,var(--ws-color) 25%,var(--horizontal-tabs-bg)),color-mix(in srgb,var(--ws-color) 10%,var(--horizontal-tabs-bg)));
+  border-color:color-mix(in srgb,var(--ws-color) 38%,transparent);box-shadow:inset 0 1px 0 var(--soft-btn-bg);
+}
 .horizontal-workspace-btn.menu-open .horizontal-workspace-chevron{opacity:1;transform:rotate(180deg)}
 .horizontal-tab-divider{width:1px;height:20px;background:var(--chrome-border);flex-shrink:0}
 #horizontal-tab-scroll{
@@ -389,9 +407,8 @@ button,input,select,textarea{font-family:var(--font)}
 #horizontal-tab-list .tab-item.dz-line{box-shadow:inset 2px 0 0 0 var(--accent)}
 #horizontal-tab-list .tab-item.dz-line-end{box-shadow:inset -2px 0 0 0 var(--accent)}
 #horizontal-tab-list .tab-item.tab-dragging{
-  opacity:.28;background:var(--soft-btn-bg-hover);border-color:var(--chrome-border);
-  box-shadow:0 3px 12px var(--ai-shadow),inset 0 1px 0 var(--soft-btn-bg-hover);
-  transform:translateY(-1px) scale(.96);z-index:0;
+  opacity:0;background:transparent;border-color:transparent;box-shadow:none;
+  transform:translateY(-1px) scale(.96);z-index:0;transition:none;
 }
 #horizontal-tab-list.tab-drag-active .tab-item.dz-line,
 #horizontal-tab-list.tab-drag-active .tab-item.dz-line-end{
@@ -1462,8 +1479,7 @@ button,input,select,textarea{font-family:var(--font)}
 .tab-drag-active .tab-item.tab-dragging,
 .tab-drag-active .tab-item.tab-shifted{will-change:transform}
 .tab-item.tab-dragging{
-  opacity:.24;background:var(--bg-hover);box-shadow:0 5px 16px var(--ai-shadow);
-  transform:scale(.97);z-index:0;
+  opacity:0;background:transparent;box-shadow:none;transform:scale(.97);z-index:0;transition:none;
 }
 .tab-item.tab-shifted{z-index:1}
 .tab-drag-active .tab-item.dz-line,
@@ -3306,7 +3322,7 @@ button,input,select,textarea{font-family:var(--font)}
   padding:3px 8px;border-radius:var(--radius-sm);
   font-size:11px;color:var(--text-muted);cursor:pointer;
   white-space:nowrap;overflow:hidden;max-width:160px;
-  transition:background var(--transition),color var(--transition);
+  transition:transform .2s cubic-bezier(.2,.85,.25,1),opacity .14s ease,background var(--transition),color var(--transition),box-shadow var(--transition);
   flex-shrink:0;
 }
 .bm-bar-item:hover{background:var(--bg-hover);color:var(--text)}
@@ -3363,7 +3379,7 @@ button,input,select,textarea{font-family:var(--font)}
 .ctx-item.danger:hover{background:var(--danger-dim)}
 .ctx-sep{height:1px;background:var(--border-subtle);margin:3px 0}
 
-.bm-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:var(--radius-sm);background:var(--bg);border:1px solid var(--border-subtle);cursor:pointer;transition:background var(--transition),border-color var(--transition)}
+.bm-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:var(--radius-sm);background:var(--bg);border:1px solid var(--border-subtle);cursor:pointer;transition:transform .2s cubic-bezier(.2,.85,.25,1),opacity .14s ease,background var(--transition),border-color var(--transition),box-shadow var(--transition)}
 .bm-item:hover{background:var(--bg-hover)}
 .bm-item-info{flex:1;min-width:0}
 .bm-item-title{font-size:12px;font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -3382,6 +3398,14 @@ button,input,select,textarea{font-family:var(--font)}
 /* Drag-over-folder target highlight */
 .bm-item.bm-folder-target,.bm-bar-item.bm-folder-target{border-color:var(--accent)!important;background:color-mix(in srgb,var(--accent) 12%,var(--bg))!important;box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 25%,transparent)}
 .bm-bar-item{position:relative}
+.bookmark-drag-active .bm-bar-item.bookmark-dragging,
+.bookmark-drag-active .bm-bar-item.bookmark-shifted,
+.bookmark-drag-active .bm-item.bookmark-dragging,
+.bookmark-drag-active .bm-item.bookmark-shifted{will-change:transform}
+.bm-bar-item.bookmark-dragging,.bm-item.bookmark-dragging{
+  opacity:0;background:transparent;box-shadow:none;transform:scale(.96);z-index:1;transition:none;
+}
+.bm-bar-item.bookmark-shifted,.bm-item.bookmark-shifted{z-index:1}
 .bm-item.bm-merge-pending,.bm-bar-item.bm-merge-pending{position:relative;border-color:var(--accent)!important}
 .bm-item.bm-merge-pending::after,.bm-bar-item.bm-merge-pending::after{content:"";position:absolute;left:0;bottom:0;height:2.5px;width:0;background:var(--accent);border-radius:2px;animation:bmMergeFill 800ms linear forwards}
 .bm-item.bm-merge-armed,.bm-bar-item.bm-merge-armed{border-color:var(--accent)!important;background:color-mix(in srgb,var(--accent) 18%,var(--bg))!important;animation:bmMergePulse 0.9s ease-in-out infinite}
@@ -5521,6 +5545,11 @@ let tabSettle = null;
 let tabDropPending = false;
 let tabDropFallbackTimer = 0;
 let tabRenderPending = false;
+let bookmarkDrag = null;
+let bookmarkSettle = null;
+let bookmarkDropPending = false;
+let bookmarkDropFallbackTimer = 0;
+let bookmarkRenderPending = false;
 let obStep = 0;
 const OB_STEPS = 6;
 let obTheme = 'dark';
@@ -6203,6 +6232,7 @@ function renderHorizontalWorkspace(ws) {
   if (!btn || !avatar || !name) return;
   if (!ws) {
     avatar.textContent = '';
+    avatar.classList.remove('has-icon');
     name.textContent = 'Workspaces';
     btn.title = 'Workspaces';
     btn.style.setProperty('--ws-color', '#6b7280');
@@ -6211,6 +6241,7 @@ function renderHorizontalWorkspace(ws) {
   const accent = cleanHex(ws.accent_color) || (ws.icon ? emojiColor(ws.icon) : '') || '#8b5cf6';
   btn.style.setProperty('--ws-color', accent);
   avatar.style.background = '';
+  avatar.classList.toggle('has-icon', !!ws.icon);
   avatar.textContent = ws.icon || (ws.name || '').substring(0, 2);
   name.textContent = ws.name || 'Workspace';
   btn.title = 'Workspace: ' + (ws.name || 'Workspace');
@@ -6750,6 +6781,221 @@ function finishTabSettle() {
     tab.classList.add('tab-settling');
     anim.addEventListener('finish', cleanup, {once:true});
     anim.addEventListener('cancel', cleanup, {once:true});
+  });
+  return true;
+}
+
+function bookmarkListItems(list) {
+  if (!list) return [];
+  const selector = list.id === 'bookmarks-bar' ? '.bm-bar-item' : '.bm-item[data-reorder-id]';
+  return [...list.querySelectorAll(selector)];
+}
+
+function bookmarkItemId(item) {
+  return item ? (item.dataset.folderId || item.dataset.reorderId || '') : '';
+}
+
+function bookmarkById(id, list) {
+  return bookmarkListItems(list).find(item => bookmarkItemId(item) === id) || null;
+}
+
+function captureBookmarkRects(list) {
+  const rects = {};
+  bookmarkListItems(list).forEach(item => {
+    const id = bookmarkItemId(item);
+    if (!id) return;
+    const rect = item.getBoundingClientRect();
+    rects[id] = {left:rect.left,top:rect.top,width:rect.width,height:rect.height};
+  });
+  return rects;
+}
+
+function startBookmarkDrag(source, e) {
+  if (!source) return;
+  const list = source.closest('#bookmarks-bar,#bookmarks-list');
+  if (!list) return;
+  endBookmarkDrag(true);
+  const axis = list.id === 'bookmarks-bar' ? 'x' : 'y';
+  const items = bookmarkListItems(list);
+  const sourceId = bookmarkItemId(source);
+  if (!sourceId || !items.some(item => bookmarkItemId(item) === sourceId)) return;
+  const style = window.getComputedStyle(list);
+  const gap = parseFloat(axis === 'x' ? style.columnGap : style.rowGap) || parseFloat(style.gap || '0') || 0;
+  const group = items.map(item => {
+    const rect = item.getBoundingClientRect();
+    return {id:bookmarkItemId(item),start:axis === 'x' ? rect.left : rect.top,size:axis === 'x' ? rect.width : rect.height};
+  }).filter(item => !!item.id);
+  const rect = source.getBoundingClientRect();
+  if (e && e.dataTransfer) {
+    const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+    const y = Math.max(0, Math.min(rect.height, e.clientY - rect.top));
+    e.dataTransfer.setDragImage(source, x, y);
+  }
+  bookmarkDrag = {
+    id:sourceId,list,listId:list.id,axis,gap,group,
+    candidates:group.filter(item => item.id !== sourceId),positions:new Map(group.map(item => [item.id,item])),
+    shifted:new Set(),beforeId:undefined,
+    scrollStart:axis === 'x' ? list.scrollLeft : list.scrollTop
+  };
+  list.classList.add('bookmark-drag-active');
+  source.classList.add('bookmark-dragging');
+}
+
+function computeBookmarkBefore(e, listId) {
+  if (!bookmarkDrag || bookmarkDrag.id !== dragId || bookmarkDrag.listId !== listId) return undefined;
+  const scroll = bookmarkDrag.axis === 'x' ? bookmarkDrag.list.scrollLeft : bookmarkDrag.list.scrollTop;
+  const pos = (bookmarkDrag.axis === 'x' ? e.clientX : e.clientY) + scroll - bookmarkDrag.scrollStart;
+  let low = 0;
+  let high = bookmarkDrag.candidates.length;
+  while (low < high) {
+    const mid = (low + high) >> 1;
+    const item = bookmarkDrag.candidates[mid];
+    if (pos < item.start + item.size / 2) high = mid;
+    else low = mid + 1;
+  }
+  const item = bookmarkDrag.candidates[low];
+  return item ? bookmarkById(item.id, bookmarkDrag.list) : null;
+}
+
+function bookmarkMergeZone(e, listId) {
+  if (dragKind !== 'bookmark') return false;
+  const target = e.target.closest('[data-folder-id],[data-reorder-id]');
+  if (!target || !target.closest('#' + listId)) return false;
+  if (target.dataset.folderId) return true;
+  const id = target.dataset.reorderId;
+  if (!id || id === dragId) return false;
+  const item = bookmarkDrag && bookmarkDrag.positions.get(id);
+  if (!item) return false;
+  const scroll = bookmarkDrag.axis === 'x' ? bookmarkDrag.list.scrollLeft : bookmarkDrag.list.scrollTop;
+  const pointer = bookmarkDrag.axis === 'x' ? e.clientX : e.clientY;
+  const start = item.start - scroll + bookmarkDrag.scrollStart;
+  const rel = item.size > 0 ? (pointer - start) / item.size : 0;
+  return rel >= .25 && rel <= .75;
+}
+
+function resetBookmarkDragPreview() {
+  if (!bookmarkDrag) return;
+  bookmarkDrag.beforeId = undefined;
+  bookmarkDrag.shifted.forEach(id => {
+    const item = bookmarkById(id, bookmarkDrag.list);
+    if (!item) return;
+    item.style.removeProperty('transform');
+    item.classList.remove('bookmark-shifted');
+  });
+  bookmarkDrag.shifted = new Set();
+}
+
+function previewBookmarkReorder(beforeId) {
+  if (!bookmarkDrag) return;
+  const before = beforeId || null;
+  if (bookmarkDrag.beforeId === before) return;
+  bookmarkDrag.beforeId = before;
+  const group = bookmarkDrag.group;
+  const fromIndex = group.findIndex(item => item.id === bookmarkDrag.id);
+  const source = group[fromIndex];
+  if (!source || fromIndex < 0) return;
+  const remaining = group.filter(item => item.id !== bookmarkDrag.id);
+  let finalIndex = before ? remaining.findIndex(item => item.id === before) : remaining.length;
+  if (finalIndex < 0) finalIndex = remaining.length;
+  const step = source.size + bookmarkDrag.gap;
+  const shifted = new Set();
+  const shiftBack = finalIndex > fromIndex;
+  group.forEach((item, index) => {
+    if (item.id === bookmarkDrag.id) return;
+    const move = shiftBack
+      ? index > fromIndex && index <= finalIndex
+      : index >= finalIndex && index < fromIndex;
+    if (move) shifted.add(item.id);
+  });
+  bookmarkDrag.shifted.forEach(id => {
+    if (shifted.has(id)) return;
+    const item = bookmarkById(id, bookmarkDrag.list);
+    if (!item) return;
+    item.style.removeProperty('transform');
+    item.classList.remove('bookmark-shifted');
+  });
+  const offset = shiftBack ? -step : step;
+  const x = bookmarkDrag.axis === 'x' ? offset : 0;
+  const y = bookmarkDrag.axis === 'y' ? offset : 0;
+  shifted.forEach(id => {
+    if (bookmarkDrag.shifted.has(id)) return;
+    const item = bookmarkById(id, bookmarkDrag.list);
+    if (!item) return;
+    item.style.transform = `translate3d(${x}px,${y}px,0)`;
+    item.classList.add('bookmark-shifted');
+  });
+  bookmarkDrag.shifted = shifted;
+}
+
+function hoverBookmarkReorder(beforeId, e, listId) {
+  if (bookmarkMergeZone(e, listId)) {
+    resetBookmarkDragPreview();
+    return;
+  }
+  previewBookmarkReorder(beforeId);
+}
+
+function prepareBookmarkReorderCommit(id, beforeId) {
+  if (!bookmarkDrag || bookmarkDrag.id !== id) return;
+  previewBookmarkReorder(beforeId);
+  bookmarkSettle = {listId:bookmarkDrag.listId,sourceId:id,rects:captureBookmarkRects(bookmarkDrag.list)};
+  bookmarkDropPending = true;
+  if (bookmarkDropFallbackTimer) clearTimeout(bookmarkDropFallbackTimer);
+  bookmarkDropFallbackTimer = setTimeout(() => {
+    bookmarkDropPending = false;
+    bookmarkSettle = null;
+    bookmarkDropFallbackTimer = 0;
+    endBookmarkDrag(true);
+  }, 700);
+}
+
+function endBookmarkDrag(force=false) {
+  if (bookmarkDropPending && !force) return;
+  if (force && bookmarkDropPending) {
+    bookmarkDropPending = false;
+    bookmarkSettle = null;
+    if (bookmarkDropFallbackTimer) clearTimeout(bookmarkDropFallbackTimer);
+    bookmarkDropFallbackTimer = 0;
+  }
+  if (bookmarkDrag) {
+    resetBookmarkDragPreview();
+    bookmarkDrag.list.classList.remove('bookmark-drag-active');
+    const source = bookmarkById(bookmarkDrag.id, bookmarkDrag.list);
+    if (source) source.classList.remove('bookmark-dragging');
+  }
+  bookmarkDrag = null;
+  if (!bookmarkRenderPending) return;
+  bookmarkRenderPending = false;
+  requestAnimationFrame(() => {
+    renderBookmarks();
+    renderBookmarksBar();
+  });
+}
+
+function finishBookmarkSettle(listId) {
+  const pending = bookmarkSettle;
+  if (!pending || pending.listId !== listId) return false;
+  bookmarkSettle = null;
+  bookmarkDropPending = false;
+  if (bookmarkDropFallbackTimer) clearTimeout(bookmarkDropFallbackTimer);
+  bookmarkDropFallbackTimer = 0;
+  endBookmarkDrag(true);
+  const list = document.getElementById(listId);
+  if (!list) return false;
+  const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  bookmarkListItems(list).forEach(item => {
+    const id = bookmarkItemId(item);
+    if (id === pending.sourceId) return;
+    const from = pending.rects[id];
+    if (!from) return;
+    const to = item.getBoundingClientRect();
+    const x = from.left - to.left;
+    const y = from.top - to.top;
+    if (reduceMotion || (Math.abs(x) < .5 && Math.abs(y) < .5)) return;
+    item.animate([
+      {transform:`translate3d(${x}px,${y}px,0)`},
+      {transform:'translate3d(0,0,0)'}
+    ], {duration:210,easing:'cubic-bezier(.22,1,.36,1)'});
   });
   return true;
 }
@@ -13058,6 +13304,13 @@ function saveAiSettings() {
 function renderBookmarks() {
   const list = document.getElementById('bookmarks-list');
   if (!list) return;
+  if (bookmarkDrag && bookmarkDrag.listId === 'bookmarks-list' && !bookmarkDropPending) {
+    bookmarkRenderPending = true;
+    return;
+  }
+  if ((bookmarkDrag && bookmarkDrag.listId === 'bookmarks-list') || (bookmarkSettle && bookmarkSettle.listId === 'bookmarks-list')) {
+    bookmarkRenderPending = false;
+  }
   const bms = state.bookmarks || [];
   const folders = state.bookmark_folders || [];
   if (!bms.length && !folders.length) {
@@ -13087,6 +13340,7 @@ function renderBookmarks() {
   });
   list.innerHTML = html;
   setupBookmarkFolderDrop(list);
+  requestAnimationFrame(() => finishBookmarkSettle('bookmarks-list'));
 }
 
 let historyItems = [];
@@ -13789,6 +14043,13 @@ function computeBarEntries() {
 function renderBookmarksBar() {
   const bar = document.getElementById('bookmarks-bar');
   if (!bar) return;
+  if (bookmarkDrag && bookmarkDrag.listId === 'bookmarks-bar' && !bookmarkDropPending) {
+    bookmarkRenderPending = true;
+    return;
+  }
+  if ((bookmarkDrag && bookmarkDrag.listId === 'bookmarks-bar') || (bookmarkSettle && bookmarkSettle.listId === 'bookmarks-bar')) {
+    bookmarkRenderPending = false;
+  }
   const show = document.getElementById('app').classList.contains('show-bookmarks-bar');
   if (!show) return;
   const folders = state.bookmark_folders || [];
@@ -13827,7 +14088,10 @@ function renderBookmarksBar() {
     const b = bMap.get(e.id); return b ? bmChip(b) : '';
   }).join('');
   setupBookmarkFolderDrop(bar);
-  requestAnimationFrame(() => updateBmBarOverflow());
+  requestAnimationFrame(() => {
+    finishBookmarkSettle('bookmarks-bar');
+    updateBmBarOverflow();
+  });
 }
 
 // Persist a bar reorder. `id`/`isFolder` identify the dragged chip; `beforeId` is the
@@ -15264,6 +15528,7 @@ function clearAllDropFeedback() {
   document.querySelectorAll('.dz-save').forEach((e) => e.classList.remove('dz-save'));
   document.querySelectorAll('.dragging-url').forEach((e) => e.classList.remove('dragging-url'));
   endTabDrag();
+  endBookmarkDrag();
   const bar = document.getElementById('address-bar');
   if (bar) bar.classList.remove('drag-over');
   _clearFolderTarget();
@@ -15279,6 +15544,7 @@ document.addEventListener('dragstart', function(e) {
     dragTitle = folderEl.dataset.label || '';
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('application/x-ventus-folder', dragId);
+    startBookmarkDrag(folderEl, e);
     folderEl.classList.add('dragging-url');
     return;
   }
@@ -15305,8 +15571,9 @@ document.addEventListener('dragstart', function(e) {
   e.dataTransfer.effectAllowed = dragKind === 'url' ? 'copy' : 'copyMove';
   e.dataTransfer.setData('text/uri-list', url);
   e.dataTransfer.setData('text/plain', url);
-  el.classList.add('dragging-url');
   if (dragKind === 'tab') startTabDrag(el, e);
+  if (dragKind === 'bookmark') startBookmarkDrag(el, e);
+  el.classList.add('dragging-url');
 }, false);
 document.addEventListener('dragend', function() {
   clearAllDropFeedback();
@@ -15492,6 +15759,14 @@ setupDropZone(document.getElementById('bookmarks-bar'), {
   item: '.bm-bar-item',
   idOf: (el) => (el.dataset.folderId || el.dataset.reorderId),
   axis: 'x',
+  hideLine: true,
+  computeBefore: (e, fallback) => {
+    const before = computeBookmarkBefore(e, 'bookmarks-bar');
+    return before === undefined ? fallback(e) : before;
+  },
+  onReorderHover: (_id, beforeId, _before, e) => hoverBookmarkReorder(beforeId, e, 'bookmarks-bar'),
+  onBeforeReorder: (id, beforeId) => prepareBookmarkReorderCommit(id, beforeId),
+  onReorderClear: () => resetBookmarkDragPreview(),
   onReorder: (id, before) => reorderBarItem(id, dragKind === 'folder', before),
   onExternal: (url) => send('BookmarkAddUrl', {url, title: dragTitle || ''}),
   folderDrop: true,
@@ -15512,6 +15787,14 @@ setupDropZone(document.getElementById('bookmarks-bar'), {
 })();
 setupDropZone(document.getElementById('bookmarks-list'), {
   reorderKind: 'bookmark', item: '.bm-item[data-reorder-id]', axis: 'y',
+  hideLine: true,
+  computeBefore: (e, fallback) => {
+    const before = computeBookmarkBefore(e, 'bookmarks-list');
+    return before === undefined ? fallback(e) : before;
+  },
+  onReorderHover: (_id, beforeId, _before, e) => hoverBookmarkReorder(beforeId, e, 'bookmarks-list'),
+  onBeforeReorder: (id, beforeId) => prepareBookmarkReorderCommit(id, beforeId),
+  onReorderClear: () => resetBookmarkDragPreview(),
   onReorder: moveBookmarkToBar,
   onExternal: (url) => send('BookmarkAddUrl', {url, title: dragTitle || ''}),
   folderDrop: true,

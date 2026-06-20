@@ -1,44 +1,14 @@
-//! WebView2 cookie bridge.
-//!
-//! Two public entry-points:
-//!
-//! * `restore_cookies(wv, cookies)` — inject a `CookieRecord` slice into the
-//!   WebView2 profile via `ICoreWebView2CookieManager::AddOrUpdateCookie`.
-//!   Called once at startup after the first content WebView is ready.
-//!
-//! * `trigger_save(wv, tx)` — asynchronously read every cookie from the
-//!   profile via `ICoreWebView2CookieManager::GetCookies` and forward the
-//!   result to the isolated save task through `tx`.  The callback fires on
-//!   the TAO event-loop thread on the next message-pump tick.
-//!
-//! Both functions are no-ops on non-Windows targets so the rest of the
-//! codebase can call them unconditionally.
-//!
-//! ## windows-core version note
-//!
-//! webview2-com 0.29 links against `windows-core 0.54` while the rest of the
-//! project uses `windows 0.57` (→ `windows-core 0.57`).  These produce
-//! incompatible types at the Rust level even though they are layout-identical
-//! at the ABI.  PCWSTR / PWSTR / Interface are imported through the `wv2core`
-//! Cargo alias (→ `windows-core 0.54`) so all calls into webview2-com accept
-//! correctly-typed arguments.  Primitive types (u32, f64, i32) and webview2-com
-//! enum types are passed directly; they are compatible across crate versions.
-
 use crate::storage::cookie_store::CookieRecord;
 use tokio::sync::mpsc::UnboundedSender;
 use wry::WebView;
-
-// ─── Windows implementation ──────────────────────────────────────────────────
 
 #[cfg(windows)]
 mod win {
     use super::*;
     use std::sync::mpsc;
     use std::time::{Duration, Instant};
-
-    // Import COM infrastructure from windows-core 0.54 (the version webview2-com uses).
     use wv2core::{Interface, PCWSTR, PWSTR};
-    // BOOL out-params in ICoreWebView2Cookie getters expect the windows 0.54 version.
+
     use wv2win::Win32::Foundation::BOOL as WV2BOOL;
 
     use webview2_com::{
@@ -51,11 +21,6 @@ mod win {
     };
     use wry::WebViewExtWindows;
 
-    // ── string helpers ────────────────────────────────────────────────────────
-
-    /// Build a NUL-terminated wide-string Vec and return a PCWSTR valid for
-    /// the lifetime of that Vec.  Caller must keep the Vec alive for the whole
-    /// duration of any COM call that uses the pointer.
     fn to_wide(s: &str) -> (PCWSTR, Vec<u16>) {
         let mut v: Vec<u16> = s.encode_utf16().collect();
         v.push(0u16);
@@ -63,12 +28,6 @@ mod win {
         (ptr, v)
     }
 
-    /// Convert a CoTaskMem-allocated PWSTR to a Rust String and free the
-    /// original allocation.
-    ///
-    /// # Safety
-    /// `ptr` must be a valid pointer returned by a WebView2 COM property
-    /// getter (CoTaskMemAlloc'd), or null.
     unsafe fn pwstr_to_string(ptr: PWSTR) -> String {
         if ptr.is_null() {
             return String::new();
@@ -80,10 +39,6 @@ mod win {
         s
     }
 
-    // ── cookie-manager accessor ───────────────────────────────────────────────
-
-    /// Obtain the shared `ICoreWebView2CookieManager` from any content WebView.
-    /// All tabs that share the same `WebContext` see the same cookie store.
     pub fn get_cookie_manager(wv: &WebView) -> Option<ICoreWebView2CookieManager> {
         let controller = wv.controller();
         let webview: ICoreWebView2 = unsafe { controller.CoreWebView2().ok()? };
@@ -93,9 +48,6 @@ mod win {
         unsafe { webview2.CookieManager().ok() }
     }
 
-    // ── restore ───────────────────────────────────────────────────────────────
-
-    /// Inject saved cookies into the WebView2 profile.
     pub fn restore_cookies(wv: &WebView, cookies: &[CookieRecord]) {
         if cookies.is_empty() {
             return;
@@ -109,7 +61,6 @@ mod win {
         let mut fail = 0usize;
 
         for c in cookies {
-            // PCWSTR backing Vecs must outlive each COM call.
             let (name_p, _nv) = to_wide(&c.name);
             let (value_p, _vv) = to_wide(&c.value);
             let (domain_p, _dv) = to_wide(&c.domain);
@@ -359,11 +310,7 @@ mod win {
         use windows::Win32::UI::WindowsAndMessaging::{
             DispatchMessageW, PeekMessageW, TranslateMessage, MSG, PM_REMOVE,
         };
-        // Drain every message currently queued, not just one. While we block on the
-        // synchronous GetCookies COM callback the UI thread is otherwise frozen; dispatching a
-        // single message per 8 ms tick lets paint/input messages pile up faster than they
-        // clear, which is exactly what makes the window read as "Not Responding". The budget
-        // bounds the drain so a steady inflow of messages can't trap us here indefinitely.
+
         unsafe {
             let mut msg = MSG::default();
             let mut budget = 256u32;
@@ -376,10 +323,6 @@ mod win {
     }
 }
 
-// ─── Platform-dispatching public API ─────────────────────────────────────────
-
-/// Inject previously saved cookies into the WebView2 profile.
-/// No-op on non-Windows platforms.
 #[cfg_attr(not(windows), allow(unused_variables))]
 pub fn restore_cookies(wv: &WebView, cookies: &[CookieRecord]) {
     #[cfg(windows)]

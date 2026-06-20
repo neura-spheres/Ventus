@@ -1,14 +1,5 @@
-/// Browser tool definitions (JSON Schema format) and JS execution helpers.
-///
-/// Tools fall into three categories:
-///   1. State tools — answered directly from the AgentSnapshot (no async needed)
-///   2. Action tools — dispatch a proxy event and return immediately
-///   3. Page tools — inject JS into the active content WebView and await a result via IPC
 use serde_json::{json, Value};
-
 use super::provider::Tool;
-
-// ── Tool schema definitions ────────────────────────────────────────────────────
 
 pub fn browser_tool_definitions() -> Vec<Tool> {
     vec![
