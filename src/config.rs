@@ -67,11 +67,28 @@ fn default_font_family() -> String {
     "system".to_string()
 }
 
-pub const TOOLBAR_BUTTON_LIMIT: usize = 4;
-pub const TOOLBAR_BUTTON_IDS: [&str; 5] = ["ai", "downloads", "history", "bookmarks", "settings"];
+pub const TOOLBAR_BUTTON_LIMIT: usize = 5;
+pub const TOOLBAR_BUTTON_IDS: [&str; 6] =
+    ["ai", "apps", "downloads", "history", "bookmarks", "settings"];
 
 pub fn default_toolbar_buttons() -> Vec<String> {
     vec!["ai".to_string()]
+}
+
+pub fn default_sidebar_apps() -> Vec<CustomApp> {
+    [
+        ("ChatGPT", "https://chatgpt.com"),
+        ("Claude", "https://claude.ai"),
+        ("Gemini", "https://gemini.google.com"),
+        ("Perplexity", "https://www.perplexity.ai"),
+        ("WhatsApp", "https://web.whatsapp.com"),
+    ]
+    .iter()
+    .map(|(name, url)| CustomApp {
+        name: name.to_string(),
+        url: url.to_string(),
+    })
+    .collect()
 }
 
 pub fn clean_toolbar_buttons(values: &[String]) -> Vec<String> {
@@ -113,6 +130,8 @@ pub struct AppearanceSettings {
     pub zoom_level: f64,
     #[serde(default = "default_toolbar_buttons")]
     pub toolbar_buttons: Vec<String>,
+    #[serde(default = "default_sidebar_apps")]
+    pub sidebar_apps: Vec<CustomApp>,
 }
 
 impl Default for AppearanceSettings {
@@ -133,6 +152,7 @@ impl Default for AppearanceSettings {
             new_tab_bg_color: "#141414".to_string(),
             zoom_level: 1.0,
             toolbar_buttons: default_toolbar_buttons(),
+            sidebar_apps: default_sidebar_apps(),
         }
     }
 }
@@ -594,6 +614,12 @@ impl Default for AiSettings {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CustomApp {
+    pub name: String,
+    pub url: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderConfig {
     pub id: String,
     pub enabled: bool,
@@ -624,6 +650,8 @@ pub struct AppSettings {
     #[serde(default)]
     pub region: String,
     #[serde(default)]
+    pub custom_apps: Vec<CustomApp>,
+    #[serde(default)]
     pub settings_rev: i64,
 }
 
@@ -645,6 +673,7 @@ impl Default for AppSettings {
             window_y: None,
             sidebar_width: 240,
             region: String::new(),
+            custom_apps: Vec::new(),
             settings_rev: 0,
         }
     }
@@ -803,7 +832,8 @@ mod tests {
                 "ai".to_string(),
                 "history".to_string(),
                 "downloads".to_string(),
-                "bookmarks".to_string()
+                "bookmarks".to_string(),
+                "settings".to_string()
             ]
         );
     }

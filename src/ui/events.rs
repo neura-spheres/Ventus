@@ -82,6 +82,15 @@ pub enum ChromeCommand {
         id: String,
     },
     ToggleAiSidebar,
+    ToggleAppSidebar,
+    AppPanelSelect {
+        url: String,
+    },
+    AppPanelReload,
+    AppPanelOpenInTab {
+        url: String,
+    },
+    AppPanelClose,
     PickAiAttachments,
     RemoveAiAttachment {
         id: String,
@@ -452,6 +461,11 @@ impl ChromeCommand {
             ChromeCommand::DeleteWorkspace { .. } => Some("delete_workspace"),
             ChromeCommand::SwitchWorkspace { .. } => Some("switch_workspace"),
             ChromeCommand::ToggleAiSidebar => Some("toggle_ai_sidebar"),
+            ChromeCommand::ToggleAppSidebar => Some("toggle_app_sidebar"),
+            ChromeCommand::AppPanelSelect { .. } => Some("app_panel_select"),
+            ChromeCommand::AppPanelReload => Some("app_panel_reload"),
+            ChromeCommand::AppPanelOpenInTab { .. } => Some("app_panel_open_in_tab"),
+            ChromeCommand::AppPanelClose => Some("app_panel_close"),
             ChromeCommand::PickAiAttachments => Some("pick_ai_attachments"),
             ChromeCommand::RemoveAiAttachment { .. } => Some("remove_ai_attachment"),
             ChromeCommand::AiMessage { .. } => Some("ai_message"),
@@ -568,6 +582,9 @@ pub enum AppEvent {
     Chrome(ChromeCommand),
     ChromeReady,
     SaveSession {
+        id: u64,
+    },
+    AppPanelSleep {
         id: u64,
     },
     /// Timer-driven safety net: force-dismiss the loading cover if it has obscured
@@ -773,6 +790,14 @@ pub enum AppEvent {
         tab_id: String,
         can_back: bool,
         can_forward: bool,
+    },
+    /// Native WebView2 (browser-process) audio-playing signal for a tab. Unlike the JS
+    /// `tab_audio_state` heartbeat it is computed by the browser process, so it is immune
+    /// to background-tab timer throttling — this is what keeps a backgrounded media tab
+    /// (e.g. a YouTube livestream in another tab) from being put to sleep.
+    ContentAudioPlaying {
+        tab_id: String,
+        playing: bool,
     },
     ContentContextMenu {
         tab_id: String,

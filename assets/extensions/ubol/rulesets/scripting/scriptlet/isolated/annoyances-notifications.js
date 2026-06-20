@@ -69,6 +69,13 @@ function getSafeCookieValuesFn() {
     ];
 }
 
+function onIdleFn(fn, options) {
+    if ( self.requestIdleCallback ) {
+        return self.requestIdleCallback(fn, options);
+    }
+    return self.requestAnimationFrame(fn);
+}
+
 function removeClass(
     rawToken = '',
     rawSelector = '',
@@ -115,7 +122,7 @@ function removeClass(
             }
         }
         if ( skip ) { return; }
-        timer = safe.onIdle(rmclass, { timeout: 67 });
+        timer = onIdleFn(rmclass, { timeout: 67 });
     };
     const observer = new MutationObserver(mutationHandler);
     const start = ( ) => {
@@ -281,18 +288,6 @@ function safeSelf() {
             }, []);
             return this.Object_fromEntries(entries);
         },
-        onIdle(fn, options) {
-            if ( self.requestIdleCallback ) {
-                return self.requestIdleCallback(fn, options);
-            }
-            return self.requestAnimationFrame(fn);
-        },
-        offIdle(id) {
-            if ( self.requestIdleCallback ) {
-                return self.cancelIdleCallback(id);
-            }
-            return self.cancelAnimationFrame(id);
-        }
     };
     scriptletGlobals.safeSelf = safe;
     if ( scriptletGlobals.bcSecret === undefined ) { return safe; }
@@ -548,13 +543,13 @@ const scriptletGlobals = {}; // eslint-disable-line
 const $scriptletFunctions$ = /* 4 */
 [setCookie,setSessionStorageItem,setLocalStorageItem,removeClass];
 
-const $scriptletArgs$ = /* 58 */ ["pushNotifications_popup_displayed_v2","true","barcelona_mobile_upsell_state","1","lodum","loggedOutCTAIsShown","modalDismissed","promotion-popup-closed","PromptLater","scroll-disabled","body","stay","xpromo-consolidation","rpl-scroll-lock","scroll-is-blocked","webapp_first_open_cta","twilight.custom-smart-banner-dismissed","appDownloadBannerDismissed","hideMobileAppPromoBanner","smartBannerDismissed","mapslitepromosdismissed","nudgeStickyBannerHide","undefinedpopup-pdfpcouponoffer","entity-limiter-views","$remove$","rn","hideMacDesktopDialog","navBasedDialogManager","enable-sda","windows_prompt_shown_v3","push-notifications","no","scrollLock","","kumulos-background-mask-blur","no-scroll","html","show-app-bar","closeGuideRegisterTime","permission_open_push","open_in_browser","isDownloadAppBannerClosed","map_new_features_new_flightradar24_com_label_options","ErxModal","fn_cookie_whatsapp_alert","app-announcement-banner-count-guest","app-announcement-banner-guest","LMT_browserExtensionPromo.displayed","ndtvfood_isSubscribed_elex_v1","request-permission-modal","is_announcement_closed","ignore_language_guide","appCardSeen","has-uitk-sheet","app-banner-parent","smartbanner-active","o-push-alert","is-hidden"];
+const $scriptletArgs$ = /* 59 */ ["pushNotifications_popup_displayed_v2","true","barcelona_mobile_upsell_state","1","lodum","loggedOutCTAIsShown","modalDismissed","promotion-popup-closed","PromptLater","scroll-disabled","body","stay","xpromo-consolidation","rpl-scroll-lock","scroll-is-blocked","prevent-scrolling","webapp_first_open_cta","twilight.custom-smart-banner-dismissed","appDownloadBannerDismissed","hideMobileAppPromoBanner","smartBannerDismissed","mapslitepromosdismissed","nudgeStickyBannerHide","undefinedpopup-pdfpcouponoffer","entity-limiter-views","$remove$","rn","hideMacDesktopDialog","navBasedDialogManager","enable-sda","windows_prompt_shown_v3","push-notifications","no","scrollLock","","kumulos-background-mask-blur","no-scroll","html","show-app-bar","closeGuideRegisterTime","permission_open_push","open_in_browser","isDownloadAppBannerClosed","map_new_features_new_flightradar24_com_label_options","ErxModal","fn_cookie_whatsapp_alert","app-announcement-banner-count-guest","app-announcement-banner-guest","LMT_browserExtensionPromo.displayed","ndtvfood_isSubscribed_elex_v1","request-permission-modal","is_announcement_closed","ignore_language_guide","appCardSeen","has-uitk-sheet","app-banner-parent","smartbanner-active","o-push-alert","is-hidden"];
 
-const $scriptletArglists$ = /* 50 */ "0,0,1;1,2,3;1,4,3;1,5,3;0,6,3;2,7,3;0,8,1;3,9,10,11;2,12,3;3,13,10,11;3,14,10,11;1,15,3;1,16,1;1,17,1;1,18,1;2,19,3;2,20,3;1,21,1;0,22,3;2,23,24;2,25,24;0,26,1;0,27,1;3,28,10,11;2,29,3;2,30,31;3,32,33,11;3,34,33,11;3,35,36,11;3,37,33,11;2,38,3;2,39,3;1,40,3;1,41,1;0,42,3;1,43,1;0,44,3;0,45,3;0,46,1;1,47,1;0,48,31;2,49,3;2,50,1;0,51,1;2,52,1;3,53,10,11;3,54,10,11;3,55,10;0,56,3;3,57,10";
+const $scriptletArglists$ = /* 51 */ "0,0,1;1,2,3;1,4,3;1,5,3;0,6,3;2,7,3;0,8,1;3,9,10,11;2,12,3;3,13,10,11;3,14,10,11;3,15,10,11;1,16,3;1,17,1;1,18,1;1,19,1;2,20,3;2,21,3;1,22,1;0,23,3;2,24,25;2,26,25;0,27,1;0,28,1;3,29,10,11;2,30,3;2,31,32;3,33,34,11;3,35,34,11;3,36,37,11;3,38,34,11;2,39,3;2,40,3;1,41,3;1,42,1;0,43,3;1,44,1;0,45,3;0,46,3;0,47,1;1,48,1;0,49,32;2,50,3;2,51,1;0,52,1;2,53,1;3,54,10,11;3,55,10,11;3,56,10;0,57,3;3,58,10";
 
-const $scriptletArglistRefs$ = /* 44 */ "6;4;45;26;39;16;0;48;7,8,9,10;49;11;24;21,22;42;15;44;12;27;1;1;36;37,38;40;2,3;13;43;41;25;19;33;28;32;46;14;47;23;30,31;34;29;18;35;20;5;17";
+const $scriptletArglistRefs$ = /* 45 */ "6;4;46;27;40;17;0;49;7,8,9,10;50;12;25;22,23;43;16;45;13;28;1;1;11;37;38,39;41;2,3;14;44;42;26;20;34;29;33;47;15;48;24;31,32;35;30;19;36;21;5;18";
 
-const $scriptletHostnames$ = /* 44 */ ["gq.co.za","ktoo.org","vrbo.com","audius.co","deepl.com","google.com","noovo.info","onedio.com","reddit.com","shufoo.net","tiktok.com","tubitv.com","tunein.com","belstad.com","bestbuy.com","deribit.com","m.twitch.tv","thestar.com","threads.com","threads.net","fogaonet.com","tvtropes.org","food.ndtv.com","instagram.com","perplexity.ai","s.tabelog.com","sammobile.com","sigmalive.com","crunchbase.com","foundit.com.ph","inews.hket.com","m.kaskus.co.id","similarweb.com","app.uniswap.org","mydramalist.com","wunderground.com","crealitycloud.com","flightradar24.com","jp-m.banggood.com","mypenndentist.org","shop-apotheke.com","themonthly.com.au","livesportsontv.com","m.economictimes.com"];
+const $scriptletHostnames$ = /* 45 */ ["gq.co.za","ktoo.org","vrbo.com","audius.co","deepl.com","google.com","noovo.info","onedio.com","reddit.com","shufoo.net","tiktok.com","tubitv.com","tunein.com","belstad.com","bestbuy.com","deribit.com","m.twitch.tv","thestar.com","threads.com","threads.net","facebook.com","fogaonet.com","tvtropes.org","food.ndtv.com","instagram.com","perplexity.ai","s.tabelog.com","sammobile.com","sigmalive.com","crunchbase.com","foundit.com.ph","inews.hket.com","m.kaskus.co.id","similarweb.com","app.uniswap.org","mydramalist.com","wunderground.com","crealitycloud.com","flightradar24.com","jp-m.banggood.com","mypenndentist.org","shop-apotheke.com","themonthly.com.au","livesportsontv.com","m.economictimes.com"];
 
 const $scriptletFromRegexes$ = /* 0 */ [];
 
@@ -601,51 +596,51 @@ const entries = (( ) => {
 })();
 if ( entries.length === 0 ) { return; }
 
-const collectArglistRefIndices = (out, hn, r) => {
-    let l = 0, i = 0, d = 0;
-    let candidate = '';
-    while ( l < r ) {
-        i = l + r >>> 1;
-        candidate = $scriptletHostnames$[i];
-        d = hn.length - candidate.length;
-        if ( d === 0 ) {
-            if ( hn === candidate ) {
-                out.add(i); break;
-            }
-            d = hn < candidate ? -1 : 1;
-        }
-        if ( d < 0 ) {
-            r = i;
-        } else {
-            l = i + 1;
-        }
-    }
-    return i;
-};
-
-const indicesFromHostname = (out, hnDetails, suffix = '') => {
-    if ( hnDetails.hns.length === 0 ) { return; }
-    let r = $scriptletHostnames$.length;
-    for ( const hn of hnDetails.hns ) {
-        r = collectArglistRefIndices(out, `${hn}${suffix}`, r);
-    }
-    if ( $hasEntities$ ) {
-        let r = $scriptletHostnames$.length;
-        for ( const en of hnDetails.ens ) {
-            r = collectArglistRefIndices(out, `${en}${suffix}`, r);
-        }
-    }
-};
-
 const todoIndices = new Set();
-indicesFromHostname(todoIndices, entries[0]);
-if ( $hasAncestors$ ) {
-    for ( const entry of entries ) {
-        if ( entry.i === 0 ) { continue; }
-        indicesFromHostname(todoIndices, entry, '>>');
+if ( $scriptletHostnames$.length ) {
+    const collectArglistRefIndices = (out, hn, r) => {
+        let l = 0, i = 0, d = 0;
+        let candidate = '';
+        while ( l < r ) {
+            i = l + r >>> 1;
+            candidate = $scriptletHostnames$[i];
+            d = hn.length - candidate.length;
+            if ( d === 0 ) {
+                if ( hn === candidate ) {
+                    out.add(i); break;
+                }
+                d = hn < candidate ? -1 : 1;
+            }
+            if ( d < 0 ) {
+                r = i;
+            } else {
+                l = i + 1;
+            }
+        }
+        return i + 1;
+    };
+    const indicesFromHostname = (out, hnDetails, suffix = '') => {
+        if ( hnDetails.hns.length === 0 ) { return; }
+        let r = $scriptletHostnames$.length;
+        for ( const hn of hnDetails.hns ) {
+            r = collectArglistRefIndices(out, `${hn}${suffix}`, r);
+        }
+        if ( $hasEntities$ ) {
+            let r = $scriptletHostnames$.length;
+            for ( const en of hnDetails.ens ) {
+                r = collectArglistRefIndices(out, `${en}${suffix}`, r);
+            }
+        }
+    };
+    indicesFromHostname(todoIndices, entries[0]);
+    if ( $hasAncestors$ ) {
+        for ( const entry of entries ) {
+            if ( entry.i === 0 ) { continue; }
+            indicesFromHostname(todoIndices, entry, '>>');
+        }
     }
+    $scriptletHostnames$.length = 0;
 }
-$scriptletHostnames$.length = 0;
 
 // Collect arglist references
 const todo = new Set();

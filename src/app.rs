@@ -58,6 +58,8 @@ pub struct AppState {
     pub current_ai_provider: String,
     pub sidebar_collapsed: bool,
     pub ai_sidebar_open: bool,
+    pub app_sidebar_open: bool,
+    pub app_panel_active: Option<String>,
     pub chrome_overlay_open: bool,
     pub sidebar_auto_hide_open: bool,
     pub sidebar_pinned: bool,
@@ -172,6 +174,8 @@ impl AppState {
             current_ai_provider: ai_provider,
             sidebar_collapsed,
             ai_sidebar_open: false,
+            app_sidebar_open: false,
+            app_panel_active: None,
             chrome_overlay_open: false,
             sidebar_auto_hide_open: false,
             sidebar_pinned: false,
@@ -364,6 +368,8 @@ impl AppState {
             "search_engines": &self.cached_search_engines,
             "sidebar_collapsed": self.sidebar_collapsed,
             "ai_open": self.ai_sidebar_open,
+            "app_open": self.app_sidebar_open,
+            "app_panel_active": self.app_panel_active,
             "bookmarks": &self.cached_bookmarks,
             "bookmark_folders": &self.cached_bookmark_folders,
             "bar_order": &self.bookmark_bar_order,
@@ -482,6 +488,11 @@ pub enum TabAction {
         allow: bool,
     },
     SendReport(Box<crate::cloud::report::Report>),
+    AppPanelSelect {
+        url: String,
+    },
+    AppPanelReload,
+    AppPanelCloseView,
 }
 
 fn switch_to_tab(state: &mut AppState, chrome: &WebView, id: String) -> Option<TabAction> {
@@ -681,8 +692,57 @@ pub fn handle_chrome_command(
         }
         ChromeCommand::ToggleAiSidebar => {
             state.ai_sidebar_open = !state.ai_sidebar_open;
+            if state.ai_sidebar_open {
+                state.app_sidebar_open = false;
+            }
             state.push_state_to_chrome(chrome);
             Some(TabAction::SyncViews)
+        }
+        ChromeCommand::ToggleAppSidebar => {
+            state.app_sidebar_open = !state.app_sidebar_open;
+            if state.app_sidebar_open {
+                state.ai_sidebar_open = false;
+            }
+            state.push_state_to_chrome(chrome);
+            if state.app_sidebar_open {
+                if let Some(url) = state.app_panel_active.clone() {
+                    return Some(TabAction::AppPanelSelect { url });
+                }
+            }
+            Some(TabAction::SyncViews)
+        }
+        ChromeCommand::AppPanelSelect { url } => {
+            let url = url.trim().to_string();
+            if url.is_empty() {
+                return None;
+            }
+            state.app_sidebar_open = true;
+            state.ai_sidebar_open = false;
+            state.app_panel_active = Some(url.clone());
+            state.push_state_to_chrome(chrome);
+            Some(TabAction::AppPanelSelect { url })
+        }
+        ChromeCommand::AppPanelReload => {
+            state.app_panel_active.as_ref()?;
+            Some(TabAction::AppPanelReload)
+        }
+        ChromeCommand::AppPanelOpenInTab { url } => {
+            let url = url.trim().to_string();
+            if url.is_empty() {
+                return None;
+            }
+            let tab_id;
+            {
+                let tab = state.tab_manager.new_tab(Some(&url));
+                tab_id = tab.id.clone();
+            }
+            state.push_state_to_chrome(chrome);
+            Some(TabAction::Create { tab_id, url })
+        }
+        ChromeCommand::AppPanelClose => {
+            state.app_sidebar_open = false;
+            state.push_state_to_chrome(chrome);
+            Some(TabAction::AppPanelCloseView)
         }
         ChromeCommand::PickAiAttachments => {
             let used_count = state
@@ -1125,6 +1185,9 @@ pub fn handle_chrome_command(
             if let Some(tab) = state.tab_manager.tabs.iter_mut().find(|t| t.id == tab_id) {
                 tab.is_audio_playing = playing;
                 tab.is_media_active = active;
+                if active || playing {
+                    tab.last_media_active_at = chrono::Utc::now().timestamp_millis();
+                }
             }
             state.push_state_to_chrome(chrome);
             None
@@ -2607,6 +2670,7 @@ fn report_context(state: &AppState) -> String {
             "sidebar_pinned": state.sidebar_pinned,
             "sidebar_auto_hide_open": state.sidebar_auto_hide_open,
             "ai_sidebar_open": state.ai_sidebar_open,
+            "app_sidebar_open": state.app_sidebar_open,
             "spotlight_open": state.spotlight_open,
             "content_cover_open": state.content_cover_open,
             "content_fullscreen": state.content_fullscreen,
@@ -2836,6 +2900,7 @@ pub fn handle_app_event_inner(
             None
         }
         AppEvent::SaveSession { .. } => None,
+        AppEvent::AppPanelSleep { .. } => None,
         AppEvent::PermissionRequested { origin, key } => {
             if origin.is_empty() || !valid_site_permission_key(&key) {
                 return None;
@@ -3006,6 +3071,8 @@ pub fn handle_app_event_inner(
             if let Some(tab) = state.tab_manager.tabs.iter_mut().find(|t| t.id == tab_id) {
                 tab.is_audio_playing = false;
                 tab.is_media_active = false;
+                tab.native_audio = false;
+                tab.last_media_active_at = 0;
                 tab.is_muted = false;
             }
             if new_url {
@@ -3924,6 +3991,20 @@ pub fn handle_app_event_inner(
             None
         }
         AppEvent::ContentNavState { .. } => None,
+        AppEvent::ContentAudioPlaying { tab_id, playing } => {
+            if let Some(tab) = state.tab_manager.tabs.iter_mut().find(|t| t.id == tab_id) {
+                let was = tab.is_audio_playing;
+                tab.native_audio = playing;
+                tab.is_audio_playing = playing;
+                if playing {
+                    tab.last_media_active_at = chrono::Utc::now().timestamp_millis();
+                }
+                if was != playing {
+                    state.push_state_to_chrome(chrome);
+                }
+            }
+            None
+        }
         AppEvent::AuthApplied {
             session,
             profile,
@@ -4578,6 +4659,20 @@ fn handle_save_settings(
                 state.trends.clear();
                 state.trends_region.clear();
                 state.trends_fetched_at = 0;
+            }
+        }
+        "custom_apps" => {
+            if let Ok(apps) =
+                serde_json::from_value::<Vec<crate::config::CustomApp>>(value.clone())
+            {
+                state.settings.custom_apps = apps;
+            }
+        }
+        "sidebar_apps" => {
+            if let Ok(apps) =
+                serde_json::from_value::<Vec<crate::config::CustomApp>>(value.clone())
+            {
+                state.settings.appearance.sidebar_apps = apps;
             }
         }
         _ => {

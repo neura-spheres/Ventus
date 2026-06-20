@@ -78,8 +78,13 @@ const SC_PREV_TAB: usize = 33;
 const LOAD_STALL_AFTER: u64 = 6;
 const BLACK_PROBE_AFTER: u64 = 3;
 const COVER_MAX_MS: u64 = 1000;
+const APP_PANEL_SLEEP_AFTER: Duration = Duration::from_secs(30);
 const TAB_SLEEP_CHECK_EVERY: Duration = Duration::from_secs(20);
 const SUSPEND_IDLE_MS: i64 = 180_000;
+// Grace period after media (audio or a large playing video) last stopped before a tab is
+// eligible for sleep again. Gives hysteresis so a transient buffer/ad blip on a backgrounded
+// livestream — where the keep-alive signal can briefly drop — does not get the tab suspended.
+const MEDIA_GRACE_MS: i64 = 90_000;
 const DISCARD_FREE_MB: u64 = 512;
 const MAX_PRESERVED_WEBVIEWS: usize = 32;
 const HEAL_CONTENT_EVERY: Duration = Duration::from_millis(750);
@@ -447,6 +452,8 @@ fn main() {
         ai_sidebar_w: 340,
         min_content_w: 320,
         min_ai_sidebar_w: 280,
+        app_sidebar_w: 380,
+        app_header_h: 46,
     };
 
     let mut state = AppState::new(conn, settings, &data_dir, device_id, session_id);
@@ -741,6 +748,8 @@ fn main() {
     let mut incognito_web_context = Some(wry::WebContext::new(Some(incognito_data_dir.clone())));
 
     let mut content_views: HashMap<String, WebView> = HashMap::new();
+    let mut app_panel_views: HashMap<String, WebView> = HashMap::new();
+    let mut app_panel_suspended: HashSet<String> = HashSet::new();
     let mut suspended_tabs: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut popups: HashMap<u64, PopupWindow> = HashMap::new();
     let mut next_popup_id: u64 = 1;
@@ -754,6 +763,8 @@ fn main() {
     let mut pending_image_saves: HashMap<String, PendingImageSave> = HashMap::new();
     let mut cover_was_open = false;
     let mut cover_watch_id = 0u64;
+    let mut app_panel_sleep_id = 0u64;
+    let mut app_panel_sleep_task: Option<tokio::task::JoinHandle<()>> = None;
     let mut last_active_tab_id: Option<String> = state.tab_manager.active_tab_id.clone();
     let mut sleep_check_at = Instant::now() + TAB_SLEEP_CHECK_EVERY;
     let mut heal_content_at = Instant::now() + HEAL_CONTENT_EVERY;
@@ -1373,6 +1384,7 @@ fn main() {
                     &[webview_data_dir.as_path(), incognito_data_dir.as_path()],
                     &mut content_views,
                     &mut content_hwnds,
+                    &mut app_panel_views,
                     &mut content_web_context,
                     &mut incognito_web_context,
                 );
@@ -1535,6 +1547,17 @@ fn main() {
                 if save_id == id {
                     save_id = 0;
                     save_session(&state);
+                }
+            }
+
+            Event::UserEvent(AppEvent::AppPanelSleep { id }) => {
+                if id == app_panel_sleep_id && !state.app_sidebar_open {
+                    app_panel_sleep_id = 0;
+                    app_panel_sleep_task = None;
+                    let count = app_panel_views.len();
+                    app_panel_views.clear();
+                    app_panel_suspended.clear();
+                    tracing::debug!("app_panel_sleep: released {} view(s)", count);
                 }
             }
 
@@ -2052,7 +2075,23 @@ fn main() {
                         if key == "strict_permissions"
                 );
                 let cover_before = state.content_cover_open;
+                let app_was_open = state.app_sidebar_open;
                 let action_opt = handle_app_event_inner(app_event, &mut state, &chrome);
+                if app_was_open && !state.app_sidebar_open {
+                    if let Some(task) = app_panel_sleep_task.take() {
+                        task.abort();
+                    }
+                    app_panel_sleep_task = Some(arm_app_panel_sleep(
+                        &rt,
+                        &proxy_main,
+                        &mut app_panel_sleep_id,
+                    ));
+                } else if !app_was_open && state.app_sidebar_open {
+                    if let Some(task) = app_panel_sleep_task.take() {
+                        task.abort();
+                    }
+                    app_panel_sleep_id = app_panel_sleep_id.wrapping_add(1).max(1);
+                }
                 #[cfg(windows)]
                 if theme_changed {
                     let theme = webview_theme(&state.settings.appearance.theme);
@@ -2193,6 +2232,13 @@ fn main() {
                         &state,
                         &layout_config,
                         &window,
+                    );
+                    sync_app_panel_views(
+                        &app_panel_views,
+                        &mut app_panel_suspended,
+                        &state,
+                        &window,
+                        &layout_config,
                     );
                     let layout = AppLayout::calculate(
                         layout_size(&window, &state),
@@ -2947,6 +2993,7 @@ fn main() {
                                     &[webview_data_dir.as_path(), incognito_data_dir.as_path()],
                                     &mut content_views,
                                     &mut content_hwnds,
+                                    &mut app_panel_views,
                                     &mut content_web_context,
                                     &mut incognito_web_context,
                                 );
@@ -3017,6 +3064,7 @@ fn main() {
                                 &[webview_data_dir.as_path(), incognito_data_dir.as_path()],
                                 &mut content_views,
                                 &mut content_hwnds,
+                                &mut app_panel_views,
                                 &mut content_web_context,
                                 &mut incognito_web_context,
                             );
@@ -3187,6 +3235,67 @@ fn main() {
                             sync_fullscreen_layout = true;
                             window.request_redraw();
                         }
+                        TabAction::AppPanelSelect { url } => {
+                            if !app_panel_views.contains_key(&url) {
+                                let panel_id = app_panel_id(&url);
+                                let rect = layout.app_panel_body.unwrap_or(layout.content);
+                                let ctx = content_web_context.as_mut().unwrap();
+                                let ad_script = state.ad_block_engine.init_script().to_string();
+                                match build_content_webview(
+                                    &window,
+                                    &panel_id,
+                                    &url,
+                                    rect,
+                                    proxy_main.clone(),
+                                    ctx,
+                                    false,
+                                    std::sync::Arc::clone(&shared_dl_dir),
+                                    state.settings.appearance.zoom_level,
+                                    &browser_args,
+                                    webview_theme(&state.settings.appearance.theme),
+                                    ad_script,
+                                    state.settings.privacy.fingerprint_protection,
+                                    state.fingerprint_seed(false).to_string(),
+                                    false,
+                                    state.settings.privacy.strict_permissions,
+                                    state.settings.privacy.site_permissions.clone(),
+                                    state.settings.privacy.default_permissions.clone(),
+                                    state.settings.privacy.https_only,
+                                    true,
+                                ) {
+                                    Ok(wv) => {
+                                        app_panel_views.insert(url.clone(), wv);
+                                    }
+                                    Err(e) => tracing::error!("create app panel view: {}", e),
+                                }
+                            }
+                            sync_app_panel_views(
+                                &app_panel_views,
+                                &mut app_panel_suspended,
+                                &state,
+                                &window,
+                                &layout_config,
+                            );
+                            if let Some(wv) = app_panel_views.get(&url) {
+                                wake_content_webview(wv);
+                            }
+                        }
+                        TabAction::AppPanelReload => {
+                            if let Some(url) = state.app_panel_active.as_ref() {
+                                if let Some(wv) = app_panel_views.get(url) {
+                                    let _ = wv.evaluate_script("location.reload()");
+                                }
+                            }
+                        }
+                        TabAction::AppPanelCloseView => {
+                            sync_app_panel_views(
+                                &app_panel_views,
+                                &mut app_panel_suspended,
+                                &state,
+                                &window,
+                                &layout_config,
+                            );
+                        }
                     }
                     let current_active = state.tab_manager.active_tab_id.clone();
                     if current_active != last_active_tab_id {
@@ -3355,6 +3464,20 @@ fn main() {
                     let threshold_ms = sleep_threshold_ms(free_mb) as i64;
                     let active = state.tab_manager.active_tab_id.clone().unwrap_or_default();
                     let mut tabs_changed = false;
+                    // Keep the media keep-alive timestamp fresh for any tab currently producing
+                    // audio (native browser signal) or showing a large playing video (JS). The
+                    // MEDIA_GRACE_MS window below then keeps it awake briefly after media truly
+                    // stops, so a transient drop can't get a backgrounded livestream suspended.
+                    for t in state.tab_manager.tabs.iter_mut() {
+                        if t.native_audio || t.is_media_active {
+                            t.last_media_active_at = now_ms;
+                        }
+                    }
+                    let media_keep = |t: &crate::browser::tab::Tab| {
+                        t.native_audio
+                            || t.is_media_active
+                            || (now_ms - t.last_media_active_at) < MEDIA_GRACE_MS
+                    };
                     let to_suspend: Vec<String> = state
                         .tab_manager
                         .tabs
@@ -3363,7 +3486,7 @@ fn main() {
                             t.id != active
                                 && !t.is_neura_page()
                                 && t.status != crate::browser::tab::TabStatus::Loading
-                                && !t.is_media_active
+                                && !media_keep(t)
                                 && !tab_notifications_allowed(&t.url, &state.settings)
                                 && content_views.contains_key(&t.id)
                                 && !t.sleeping
@@ -3398,7 +3521,7 @@ fn main() {
                                     && !t.pinned
                                     && !t.is_essential
                                     && t.status != crate::browser::tab::TabStatus::Loading
-                                    && !t.is_media_active
+                                    && !media_keep(t)
                                     && !tab_notifications_allowed(&t.url, &state.settings)
                                     && content_views.contains_key(&t.id)
                                     && (now_ms - t.last_active_at) >= threshold_ms
@@ -3423,7 +3546,7 @@ fn main() {
                                 t.id != active
                                     && !t.is_neura_page()
                                     && t.status != crate::browser::tab::TabStatus::Loading
-                                    && !t.is_media_active
+                                    && !media_keep(t)
                                     && !tab_notifications_allowed(&t.url, &state.settings)
                                     && content_views.contains_key(&t.id)
                                     && !to_discard.iter().any(|id| id == &t.id)
@@ -3610,6 +3733,13 @@ fn main() {
                     &layout_config,
                     &window,
                 );
+                sync_app_panel_views(
+                    &app_panel_views,
+                    &mut app_panel_suspended,
+                    &state,
+                    &window,
+                    &layout_config,
+                );
             }
 
             Event::WindowEvent {
@@ -3648,6 +3778,13 @@ fn main() {
                     &layout_config,
                     &window,
                 );
+                sync_app_panel_views(
+                    &app_panel_views,
+                    &mut app_panel_suspended,
+                    &state,
+                    &window,
+                    &layout_config,
+                );
             }
 
             Event::WindowEvent {
@@ -3670,6 +3807,7 @@ fn main() {
                     &[webview_data_dir.as_path(), incognito_data_dir.as_path()],
                     &mut content_views,
                     &mut content_hwnds,
+                    &mut app_panel_views,
                     &mut content_web_context,
                     &mut incognito_web_context,
                 );
@@ -3952,6 +4090,69 @@ fn attach_fullscreen_handler(wv: &WebView, proxy: tao::event_loop::EventLoopProx
     }
 }
 
+/// Subscribe to WebView2's native `IsDocumentPlayingAudio` signal for a content tab.
+///
+/// This is computed by the browser process, so — unlike the JS `tab_audio_state`
+/// heartbeat which runs on a `setInterval` that Chromium throttles in hidden tabs — it
+/// stays accurate while a tab is backgrounded. It is the authoritative keep-alive signal
+/// that stops a tab playing audio (e.g. a YouTube livestream left in another tab) from
+/// being suspended by the idle-tab sleeper. Requires `ICoreWebView2_8` (Edge 87+); on
+/// older runtimes the cast fails and we fall back to the JS signal + grace window.
+#[cfg(windows)]
+fn attach_audio_playing_handler(
+    wv: &WebView,
+    proxy: tao::event_loop::EventLoopProxy<AppEvent>,
+    tab_id: String,
+) {
+    use webview2_com::IsDocumentPlayingAudioChangedEventHandler;
+    use webview2_com::Microsoft::Web::WebView2::Win32::{ICoreWebView2, ICoreWebView2_8};
+    use wv2core::Interface;
+
+    let controller = wv.controller();
+    let core: ICoreWebView2 = match unsafe { controller.CoreWebView2() } {
+        Ok(c) => c,
+        Err(_) => return,
+    };
+    let Ok(core8) = core.cast::<ICoreWebView2_8>() else {
+        return;
+    };
+
+    // Emit the current state once so a tab already producing audio when the handler attaches
+    // (e.g. after a deferred wake/rebuild) is registered as media-active right away.
+    unsafe {
+        let mut playing = Default::default();
+        if core8.IsDocumentPlayingAudio(&mut playing).is_ok() {
+            let _ = proxy.send_event(AppEvent::ContentAudioPlaying {
+                tab_id: tab_id.clone(),
+                playing: playing.as_bool(),
+            });
+        }
+    }
+
+    let handler =
+        IsDocumentPlayingAudioChangedEventHandler::create(Box::new(move |sender, _args| {
+            if let Some(sender) = sender {
+                if let Ok(core8) = sender.cast::<ICoreWebView2_8>() {
+                    unsafe {
+                        let mut playing = Default::default();
+                        if core8.IsDocumentPlayingAudio(&mut playing).is_ok() {
+                            let _ = proxy.send_event(AppEvent::ContentAudioPlaying {
+                                tab_id: tab_id.clone(),
+                                playing: playing.as_bool(),
+                            });
+                        }
+                    }
+                }
+            }
+            Ok(())
+        }));
+
+    let mut token = Default::default();
+    unsafe {
+        let _ = core8.add_IsDocumentPlayingAudioChanged(&handler, &mut token);
+    }
+}
+
 /// Isolated cookie-save Tokio task.
 ///
 /// Owns the long-lived write connection to `cookie_store.db`.  Receives
@@ -4221,6 +4422,7 @@ fn shutdown_webview2(
     profile_roots: &[&std::path::Path],
     content_views: &mut HashMap<String, WebView>,
     content_hwnds: &mut HashMap<String, isize>,
+    app_panel_views: &mut HashMap<String, WebView>,
     content_web_context: &mut Option<wry::WebContext>,
     incognito_web_context: &mut Option<wry::WebContext>,
 ) {
@@ -4232,6 +4434,7 @@ fn shutdown_webview2(
     drain_message_queue_ms(300);
     content_views.clear();
     content_hwnds.clear();
+    app_panel_views.clear();
     drop(content_web_context.take());
     drop(incognito_web_context.take());
     #[cfg(windows)]
@@ -6188,6 +6391,7 @@ fn build_content_webview_once(
         attach_new_window_handler(&wv, proxy.clone(), incognito);
         attach_permission_handler(&wv, proxy.clone(), site_permissions.clone());
         attach_download_handler(&wv, proxy.clone(), std::sync::Arc::clone(&download_dir));
+        attach_audio_playing_handler(&wv, proxy.clone(), tab_id.to_string());
     }
 
     tracing::info!(target: "ventus::nav", tab = %tab_id, url = %url, load_now, incognito, "content WebView built");
@@ -6260,6 +6464,46 @@ fn sleep_content_webview(wv: &WebView) -> bool {
 #[cfg(not(windows))]
 fn sleep_content_webview(_wv: &WebView) -> bool {
     false
+}
+
+fn app_panel_id(url: &str) -> String {
+    format!("__app__:{}", url)
+}
+
+fn sync_app_panel_views(
+    app_panel_views: &HashMap<String, WebView>,
+    suspended: &mut HashSet<String>,
+    state: &AppState,
+    window: &tao::window::Window,
+    config: &LayoutConfig,
+) {
+    if app_panel_views.is_empty() {
+        return;
+    }
+    let layout = AppLayout::calculate(
+        layout_size(window, state),
+        window.scale_factor(),
+        state,
+        config,
+    );
+    let active = if state.app_sidebar_open {
+        state.app_panel_active.as_deref()
+    } else {
+        None
+    };
+    for (url, wv) in app_panel_views {
+        if Some(url.as_str()) == active {
+            if let Some(rect) = layout.app_panel_body {
+                set_content_bounds(wv, rect);
+                let _ = wv.set_visible(true);
+                if suspended.remove(url) {
+                    resume_content_webview(wv);
+                }
+            }
+        } else if !suspended.contains(url) && sleep_content_webview(wv) {
+            suspended.insert(url.clone());
+        }
+    }
 }
 
 fn clear_tab_favicon(state: &mut AppState, tab_id: &str) {
@@ -7353,10 +7597,11 @@ fn content_initialization_script(
         post({cmd:'tab_audio_state', playing: audible, active: active});
       }
     };
-    document.addEventListener('play',         __checkAudio, true);
-    document.addEventListener('pause',        __checkAudio, true);
-    document.addEventListener('ended',        __checkAudio, true);
-    document.addEventListener('volumechange', __checkAudio, true);
+    // 'playing'/'waiting'/'loadeddata' matter for livestreams: a stream that rebuffers fires
+    // 'waiting' then 'playing' (not 'play') when it resumes, so without these the keep-alive
+    // state could stay stale across a stall.
+    ['play','playing','pause','ended','waiting','volumechange','ratechange','loadeddata','emptied','seeked']
+      .forEach(function(ev){ document.addEventListener(ev, __checkAudio, true); });
     setInterval(__checkAudio, 3000);
     window.__muteTab = function(muted) {
       document.querySelectorAll('audio,video').forEach(function(m) { m.muted = muted; });
@@ -7695,6 +7940,8 @@ struct LayoutConfig {
     ai_sidebar_w: u32,
     min_content_w: u32,
     min_ai_sidebar_w: u32,
+    app_sidebar_w: u32,
+    app_header_h: u32,
 }
 
 #[derive(Clone, Copy)]
@@ -7708,6 +7955,11 @@ struct AppLayout {
     sidebar_css_w: f64,
     toolbar_css_h: f64,
     ai_css_w: f64,
+    app_w: u32,
+    app_css_w: f64,
+    app_header_h: u32,
+    app_body_chrome_owned: bool,
+    app_panel_body: Option<Rect>,
     frame_side_w: u32,
     frame_bottom_h: u32,
     frame_side_css: f64,
@@ -7738,6 +7990,11 @@ impl AppLayout {
                 sidebar_css_w: 0.0,
                 toolbar_css_h: 0.0,
                 ai_css_w: 0.0,
+                app_w: 0,
+                app_css_w: 0.0,
+                app_header_h: 0,
+                app_body_chrome_owned: false,
+                app_panel_body: None,
                 frame_side_w: 0,
                 frame_bottom_h: 0,
                 frame_side_css: 0.0,
@@ -7793,6 +8050,13 @@ impl AppLayout {
             0.0
         };
 
+        let app_css_w = if state.app_sidebar_open {
+            let max_for_app = (logical_w - min_content_w).max(0.0);
+            (config.app_sidebar_w as f64).min(max_for_app)
+        } else {
+            0.0
+        };
+
         let bm_bar_extra = if state.settings.appearance.show_bookmarks_bar {
             30u32
         } else {
@@ -7834,6 +8098,9 @@ impl AppLayout {
 
         let toolbar_h = logical_to_physical(toolbar_css_h, scale);
         let ai_w = logical_to_physical(ai_css_w, scale).min(size.width);
+        let app_w = logical_to_physical(app_css_w, scale).min(size.width);
+        let right_w = (ai_w + app_w).min(size.width);
+        let app_header_h = logical_to_physical(config.app_header_h as f64, scale);
 
         let content_offset = if is_horizontal || is_auto_hide && !state.sidebar_pinned {
             frame_side
@@ -7844,7 +8111,7 @@ impl AppLayout {
         let content_x = content_offset as i32;
         let content_w = size
             .width
-            .saturating_sub(ai_w)
+            .saturating_sub(right_w)
             .saturating_sub(content_offset)
             .saturating_sub(frame_side) // right frame strip
             .max(1);
@@ -7853,6 +8120,23 @@ impl AppLayout {
             .saturating_sub(toolbar_h)
             .saturating_sub(frame_bottom)
             .max(1);
+
+        let app_body_chrome_owned = state.app_sidebar_open && state.app_panel_active.is_none();
+        let app_panel_body = if state.app_sidebar_open && state.app_panel_active.is_some() {
+            let body_h = size
+                .height
+                .saturating_sub(toolbar_h + app_header_h)
+                .saturating_sub(frame_bottom)
+                .max(1);
+            Some(Rect {
+                x: size.width.saturating_sub(app_w) as i32,
+                y: (toolbar_h + app_header_h) as i32,
+                width: app_w.max(1),
+                height: body_h,
+            })
+        } else {
+            None
+        };
 
         Self {
             window_w: size.width.max(1),
@@ -7864,6 +8148,11 @@ impl AppLayout {
             sidebar_css_w,
             toolbar_css_h,
             ai_css_w,
+            app_w,
+            app_css_w,
+            app_header_h,
+            app_body_chrome_owned,
+            app_panel_body,
             frame_side_w: frame_side,
             frame_bottom_h: frame_bottom,
             frame_side_css: FRAME_LOGICAL,
@@ -7925,6 +8214,20 @@ fn arm_cover_watch(
         tokio::time::sleep(Duration::from_millis(COVER_MAX_MS)).await;
         let _ = proxy.send_event(AppEvent::CoverWatchdog { id: watch_id });
     });
+}
+
+fn arm_app_panel_sleep(
+    rt: &tokio::runtime::Runtime,
+    proxy: &tao::event_loop::EventLoopProxy<AppEvent>,
+    id: &mut u64,
+) -> tokio::task::JoinHandle<()> {
+    *id = id.wrapping_add(1).max(1);
+    let sleep_id = *id;
+    let proxy = proxy.clone();
+    rt.spawn(async move {
+        tokio::time::sleep(APP_PANEL_SLEEP_AFTER).await;
+        let _ = proxy.send_event(AppEvent::AppPanelSleep { id: sleep_id });
+    })
 }
 
 fn refresh_nav_buttons(
@@ -8701,12 +9004,13 @@ fn sync_chrome(chrome: &WebView, chrome_hwnd: Option<isize>, state: &AppState, l
         height: layout.window_h,
     });
     let _ = chrome.evaluate_script(&format!(
-        "window.__neura&&window.__neura.setLayout({:.3},{:.3},{:.3},{:.3},{:.3})",
+        "window.__neura&&window.__neura.setLayout({:.3},{:.3},{:.3},{:.3},{:.3},{:.3})",
         layout.sidebar_css_w,
         layout.toolbar_css_h,
         layout.ai_css_w,
         layout.frame_side_css,
-        layout.frame_bottom_css
+        layout.frame_bottom_css,
+        layout.app_css_w
     ));
 
     #[cfg(windows)]
@@ -8729,6 +9033,10 @@ fn sync_chrome(chrome: &WebView, chrome_hwnd: Option<isize>, state: &AppState, l
             &floating_rects,
             layout.frame_side_w,
             layout.frame_bottom_h,
+            layout.app_w,
+            state.app_sidebar_open,
+            layout.app_header_h,
+            layout.app_body_chrome_owned,
         );
     }
 }
@@ -8753,6 +9061,10 @@ fn sync_chrome_clip(chrome_hwnd: Option<isize>, state: &AppState, layout: AppLay
             &floating_rects,
             layout.frame_side_w,
             layout.frame_bottom_h,
+            layout.app_w,
+            state.app_sidebar_open,
+            layout.app_header_h,
+            layout.app_body_chrome_owned,
         );
     }
 
@@ -8804,6 +9116,7 @@ fn chrome_needs_top(state: &AppState) -> bool {
     chrome_owns_content(state)
         || !state.suggestion_overlay_rects.is_empty()
         || state.ai_sidebar_open
+        || state.app_sidebar_open
 }
 
 #[cfg(windows)]
@@ -8938,6 +9251,10 @@ fn set_chrome_clip_region(
     floating_rects: &[PhysicalClipRect],
     frame_side_w: u32,
     frame_bottom_h: u32,
+    app_w: u32,
+    app_open: bool,
+    app_header_h: u32,
+    app_body_chrome_owned: bool,
 ) {
     use windows::Win32::{
         Foundation::HWND,
@@ -8956,6 +9273,10 @@ fn set_chrome_clip_region(
         floating_rects: &'a [PhysicalClipRect],
         frame_side_w: u32,
         frame_bottom_h: u32,
+        app_w: u32,
+        app_open: bool,
+        app_header_h: u32,
+        app_body_chrome_owned: bool,
     }
 
     unsafe fn create_region(spec: ClipSpec<'_>) -> windows::Win32::Graphics::Gdi::HRGN {
@@ -8985,6 +9306,25 @@ fn set_chrome_clip_region(
             let _ = DeleteObject(ai);
         }
 
+        if spec.app_open {
+            let left = spec.window_w.saturating_sub(spec.app_w) as i32;
+            let header_bottom = (spec.toolbar_h + spec.app_header_h).min(spec.window_h) as i32;
+            let header = CreateRectRgn(
+                left,
+                spec.toolbar_h as i32,
+                spec.window_w as i32,
+                header_bottom,
+            );
+            let _ = CombineRgn(toolbar, toolbar, header, RGN_OR);
+            let _ = DeleteObject(header);
+            if spec.app_body_chrome_owned {
+                let body =
+                    CreateRectRgn(left, header_bottom, spec.window_w as i32, spec.window_h as i32);
+                let _ = CombineRgn(toolbar, toolbar, body, RGN_OR);
+                let _ = DeleteObject(body);
+            }
+        }
+
         for rect in spec.floating_rects {
             let left = rect.x.clamp(0, spec.window_w as i32);
             let top = rect.y.clamp(0, spec.window_h as i32);
@@ -8999,7 +9339,9 @@ fn set_chrome_clip_region(
 
         // Right frame strip: between content and window/AI-panel edge
         if spec.frame_side_w > 0 {
-            let right_r = spec.window_w.saturating_sub(spec.ai_sidebar_w) as i32;
+            let right_r = spec
+                .window_w
+                .saturating_sub(spec.ai_sidebar_w + spec.app_w) as i32;
             let right_l = right_r - spec.frame_side_w as i32;
             if right_l >= 0 && right_r > right_l {
                 let rf = CreateRectRgn(
@@ -9036,6 +9378,10 @@ fn set_chrome_clip_region(
             floating_rects,
             frame_side_w,
             frame_bottom_h,
+            app_w,
+            app_open,
+            app_header_h,
+            app_body_chrome_owned,
         };
         let region = create_region(spec);
         let _ = SetWindowRgn(HWND(hwnd), region, false);
