@@ -667,6 +667,11 @@ button,input,select,textarea{font-family:var(--font)}
   box-shadow:none;
   background:var(--address-fill);
 }
+#address-bar.suggestions-detached,
+#address-bar.suggestions-detached:focus-within{
+  --address-fill:var(--bg-elevated);
+  background:var(--address-fill);
+}
 @property --load-angle{
   syntax:"<angle>";
   inherits:false;
@@ -843,6 +848,10 @@ button,input,select,textarea{font-family:var(--font)}
   padding:7px 6px 8px;
   border-top:0;
   border-radius:0 0 16px 16px;
+}
+#url-suggestions.detached{
+  border-top:1px solid var(--border);
+  border-radius:16px;
 }
 .suggestion-section{
   padding:6px 8px 4px;
@@ -5529,6 +5538,7 @@ let state = {
   downloads: [],
   search_engines: [],
   settings: {},
+  active_zoom: 1.0,
   ai_key_status: {},
   ai_provider: 'openai',
   ai_model: '',
@@ -10263,9 +10273,11 @@ function applySearchSuggestions(payload) {
   refreshSpotlightSuggestions();
 }
 
-function setUrlSuggestionsOpen(open) {
+function setUrlSuggestionsOpen(open, detached) {
   const bar = document.getElementById('address-bar');
-  if (bar) bar.classList.toggle('suggestions-open', !!open);
+  if (!bar) return;
+  bar.classList.toggle('suggestions-open', !!open && !detached);
+  bar.classList.toggle('suggestions-detached', !!open && !!detached);
 }
 
 function refreshOmnibox() {
@@ -10368,8 +10380,8 @@ function renderSuggestions(target, rawQuery) {
     });
   });
   if (target === 'url') {
-    positionUrlSuggestions(panel);
-    setUrlSuggestionsOpen(true);
+    const detached = positionUrlSuggestions(panel);
+    setUrlSuggestionsOpen(true, detached);
   } else {
     setUrlSuggestionsOpen(false);
   }
@@ -10382,10 +10394,17 @@ function positionUrlSuggestions(panel) {
   const bar = document.getElementById('address-bar');
   if (!bar) return;
   const rect = bar.getBoundingClientRect();
+  const topChrome = document.getElementById('top-chrome');
+  const bookmarksBar = document.getElementById('bookmarks-bar');
+  const bookmarksVisible = !!(bookmarksBar && getComputedStyle(bookmarksBar).display !== 'none');
+  const chromeRect = topChrome ? topChrome.getBoundingClientRect() : null;
+  const top = bookmarksVisible && chromeRect ? chromeRect.bottom - 1 : rect.bottom - 1;
   panel.style.left = rect.left + 'px';
   panel.style.width = rect.width + 'px';
-  panel.style.top = (rect.bottom - 1) + 'px';
-  panel.style.maxHeight = Math.max(180, window.innerHeight - rect.bottom - 10) + 'px';
+  panel.style.top = top + 'px';
+  panel.style.maxHeight = Math.max(180, window.innerHeight - top - 10) + 'px';
+  panel.classList.toggle('detached', bookmarksVisible);
+  return bookmarksVisible;
 }
 
 function syncSuggestionOverlay(panel) {
@@ -14008,7 +14027,7 @@ function closeMoreMenu() {
 
 function updateMoreMenuZoom() {
   const el = document.getElementById('more-zoom-pct');
-  if (el) el.textContent = Math.round(globalZoomLevel() * 100) + '%';
+  if (el) el.textContent = Math.round(activeZoomLevel() * 100) + '%';
 }
 
 function muteTab(e, tabId) {
@@ -14215,20 +14234,24 @@ function globalZoomLevel() {
   return (((state.settings || {}).appearance || {}).zoom_level) || 1.0;
 }
 
+function activeZoomLevel() {
+  return Number(state.active_zoom || globalZoomLevel() || 1.0);
+}
+
 function setLocalZoom(level) {
-  if (state.settings && state.settings.appearance) state.settings.appearance.zoom_level = level;
+  state.active_zoom = level;
 }
 
 function zoomIn() {
-  applyZoom(parseFloat(Math.min(globalZoomLevel() + 0.1, 3.0).toFixed(2)));
+  applyZoom(parseFloat(Math.min(activeZoomLevel() + 0.1, 3.0).toFixed(2)));
 }
 
 function zoomOut() {
-  applyZoom(parseFloat(Math.max(globalZoomLevel() - 0.1, 0.25).toFixed(2)));
+  applyZoom(parseFloat(Math.max(activeZoomLevel() - 0.1, 0.25).toFixed(2)));
 }
 
 function zoomReset() {
-  applyZoom(1.0);
+  send('ZoomReset');
 }
 
 function applyZoom(level) {
@@ -16032,5 +16055,14 @@ mod tests {
         assert!(!html.contains(
             "searchSuggestionId += 1;\n  searchSuggestions = [];\n  const q = String(raw || '').trim();"
         ));
+    }
+
+    #[test]
+    fn address_suggestions_detach_below_bookmarks_bar() {
+        let html = chrome_html();
+        assert!(html.contains("suggestions-detached"));
+        assert!(html.contains("#url-suggestions.detached"));
+        assert!(html.contains("document.getElementById('top-chrome')"));
+        assert!(html.contains("panel.classList.toggle('detached', bookmarksVisible)"));
     }
 }

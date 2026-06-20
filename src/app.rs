@@ -361,6 +361,7 @@ impl AppState {
             "active_workspace_id": self.tab_manager.active_workspace_id,
             "active_url": active_url,
             "active_title": active_tab.map(|t| t.title.as_str()).unwrap_or(""),
+            "active_zoom": self.tab_manager.active_tab_id.as_ref().map(|id| tab_zoom(self, id)).unwrap_or(self.settings.appearance.zoom_level),
             "can_go_back": active_tab.map(|t| t.nav_back()).unwrap_or(false),
             "can_go_fwd": active_tab.map(|t| t.nav_forward()).unwrap_or(false),
             "is_loading": active_tab.map(|t| t.status == crate::browser::tab::TabStatus::Loading).unwrap_or(false),
@@ -419,6 +420,7 @@ pub enum TabAction {
         level: f64,
     },
     SetZoomAll(f64),
+    SetDefaultZoom(f64),
     ContentNavigate(String),
     ContentGoBack,
     ContentGoForward,
@@ -582,6 +584,7 @@ pub fn handle_chrome_command(
             state.native_nav_ids.remove(&id);
             state.history_last_saved.remove(&id);
             state.x_login_compat_tabs.remove(&id);
+            state.zoom_levels.remove(&id);
             state.push_state_to_chrome(chrome);
             let ws_id = state.tab_manager.active_workspace_id.clone();
             let landed_on_lone_newtab = state.tab_manager.workspace_tabs(&ws_id).count() == 1
@@ -668,6 +671,7 @@ pub fn handle_chrome_command(
                 state.native_nav_ids.remove(tab_id);
                 state.history_last_saved.remove(tab_id);
                 state.x_login_compat_tabs.remove(tab_id);
+                state.zoom_levels.remove(tab_id);
             }
             state.push_state_to_chrome(chrome);
             Some(TabAction::RemoveMany(tab_ids))
@@ -1699,30 +1703,52 @@ pub fn handle_chrome_command(
         }
         ChromeCommand::ZoomSet { level } => {
             let clamped = (level.clamp(0.25, 3.0) * 10.0).round() / 10.0;
-            state.settings.appearance.zoom_level = clamped;
-            state.zoom_levels.clear();
-            let _ = settings_store::set(&state.conn, "app_settings", &state.settings);
+            let Some(tab_id) = state.tab_manager.active_tab_id.clone() else {
+                return None;
+            };
+            state.zoom_levels.insert(tab_id.clone(), clamped);
             state.push_state_to_chrome(chrome);
-            Some(TabAction::SetZoomAll(clamped))
+            Some(TabAction::SetZoomFor {
+                tab_id,
+                level: clamped,
+            })
+        }
+        ChromeCommand::ZoomReset => {
+            let Some(tab_id) = state.tab_manager.active_tab_id.clone() else {
+                return None;
+            };
+            state.zoom_levels.remove(&tab_id);
+            let level = state.settings.appearance.zoom_level;
+            state.push_state_to_chrome(chrome);
+            let _ = chrome.evaluate_script(&format!(
+                "window.__neura && window.__neura.setActiveZoom({})",
+                level
+            ));
+            Some(TabAction::SetZoomFor { tab_id, level })
         }
         ChromeCommand::ZoomDelta { delta } => {
-            let cur = state.settings.appearance.zoom_level;
+            let Some(tab_id) = state.tab_manager.active_tab_id.clone() else {
+                return None;
+            };
+            let cur = tab_zoom(state, &tab_id);
             let next = ((cur + delta).clamp(0.25, 3.0) * 10.0).round() / 10.0;
-            state.settings.appearance.zoom_level = next;
-            state.zoom_levels.clear();
-            let _ = settings_store::set(&state.conn, "app_settings", &state.settings);
+            state.zoom_levels.insert(tab_id.clone(), next);
+            state.push_state_to_chrome(chrome);
             let _ = chrome.evaluate_script(&format!(
                 "window.__neura && window.__neura.setActiveZoom({})",
                 next
             ));
-            Some(TabAction::SetZoomAll(next))
+            Some(TabAction::SetZoomFor {
+                tab_id,
+                level: next,
+            })
         }
         ChromeCommand::ZoomGlobal { level } => {
             let clamped = (level.clamp(0.5, 1.5) * 10.0).round() / 10.0;
             state.settings.appearance.zoom_level = clamped;
-            state.zoom_levels.clear();
             let _ = settings_store::set(&state.conn, "app_settings", &state.settings);
-            Some(TabAction::SetZoomAll(clamped))
+            state.push_state_to_chrome(chrome);
+            Some(TabAction::SetDefaultZoom(clamped))
         }
         ChromeCommand::ToggleFullscreen => {
             let new_state = !state.content_fullscreen;
@@ -2034,11 +2060,11 @@ fn show_error_page(
 }
 
 pub fn tab_zoom(state: &AppState, id: &str) -> f64 {
-    state
-        .zoom_levels
-        .get(id)
-        .copied()
-        .unwrap_or(state.settings.appearance.zoom_level)
+    effective_tab_zoom(&state.zoom_levels, state.settings.appearance.zoom_level, id)
+}
+
+fn effective_tab_zoom(zoom_levels: &HashMap<String, f64>, default_zoom: f64, id: &str) -> f64 {
+    zoom_levels.get(id).copied().unwrap_or(default_zoom)
 }
 
 fn favicon_for_url(url: &str, favicon: Option<String>) -> Option<String> {
@@ -4256,7 +4282,11 @@ fn track_https_upgrade(state: &mut AppState, tab_id: &str, before: &str, after: 
 
 #[cfg(test)]
 mod tests {
-    use super::{favicon_for_url, load_key, normalize_homepage, should_record_replace_as_visit};
+    use super::{
+        effective_tab_zoom, favicon_for_url, load_key, normalize_homepage,
+        should_record_replace_as_visit,
+    };
+    use std::collections::HashMap;
 
     #[test]
     fn youtube_route_replace_counts_as_visit() {
@@ -4330,6 +4360,33 @@ mod tests {
     #[test]
     fn homepage_empty_uses_newtab() {
         assert_eq!(normalize_homepage(""), "neura://newtab");
+    }
+
+    #[test]
+    fn per_tab_zoom_does_not_change_other_tabs() {
+        let mut levels = HashMap::new();
+        levels.insert("tab-a".to_string(), 1.2);
+
+        assert_eq!(effective_tab_zoom(&levels, 1.0, "tab-a"), 1.2);
+        assert_eq!(effective_tab_zoom(&levels, 1.0, "tab-b"), 1.0);
+    }
+
+    #[test]
+    fn default_zoom_applies_only_without_override() {
+        let mut levels = HashMap::new();
+        levels.insert("tab-a".to_string(), 1.3);
+
+        assert_eq!(effective_tab_zoom(&levels, 1.5, "tab-a"), 1.3);
+        assert_eq!(effective_tab_zoom(&levels, 1.5, "tab-b"), 1.5);
+    }
+
+    #[test]
+    fn removing_tab_zoom_returns_to_default() {
+        let mut levels = HashMap::new();
+        levels.insert("tab-a".to_string(), 1.2);
+        levels.remove("tab-a");
+
+        assert_eq!(effective_tab_zoom(&levels, 0.9, "tab-a"), 0.9);
     }
 }
 
@@ -4662,15 +4719,13 @@ fn handle_save_settings(
             }
         }
         "custom_apps" => {
-            if let Ok(apps) =
-                serde_json::from_value::<Vec<crate::config::CustomApp>>(value.clone())
+            if let Ok(apps) = serde_json::from_value::<Vec<crate::config::CustomApp>>(value.clone())
             {
                 state.settings.custom_apps = apps;
             }
         }
         "sidebar_apps" => {
-            if let Ok(apps) =
-                serde_json::from_value::<Vec<crate::config::CustomApp>>(value.clone())
+            if let Ok(apps) = serde_json::from_value::<Vec<crate::config::CustomApp>>(value.clone())
             {
                 state.settings.appearance.sidebar_apps = apps;
             }
