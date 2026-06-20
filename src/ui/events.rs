@@ -373,6 +373,7 @@ pub enum ChromeCommand {
     /// Toggle the ad blocker exception for the currently active tab's site.
     /// Rust adds/removes the host from exceptions and reloads the tab.
     AdBlockToggleSite,
+    XLoginCompatibilityToggle,
     /// Reported by the content WebView init script: how many DOM elements were hidden/removed.
     AdBlockStats {
         killed: u32,
@@ -544,6 +545,7 @@ impl ChromeCommand {
             ChromeCommand::MuteTab { .. } => Some("mute_tab"),
             ChromeCommand::BeginResize { .. } => Some("begin_resize"),
             ChromeCommand::AdBlockToggleSite => Some("adblock_toggle_site"),
+            ChromeCommand::XLoginCompatibilityToggle => Some("x_login_compatibility_toggle"),
             ChromeCommand::AdBlockStats { .. } => Some("adblock_stats"),
             ChromeCommand::FetchCurrencyRates => Some("fetch_currency_rates"),
             ChromeCommand::OpenIncognito => Some("open_incognito"),

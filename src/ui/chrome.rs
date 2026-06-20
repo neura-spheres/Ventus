@@ -2892,6 +2892,17 @@ button,input,select,textarea{font-family:var(--font)}
 }
 .abm-action-btn.off{color:var(--text-dim);cursor:not-allowed;opacity:.6}
 .abm-btn-right,.abm-settings-btn-right{display:flex;align-items:center;color:var(--text-dim)}
+.abm-compat-box{
+  display:none;margin:4px;padding:8px;border:1px solid var(--border-subtle);
+  border-radius:8px;background:var(--bg);gap:5px;flex-direction:column;
+}
+.abm-compat-title{font-size:12px;font-weight:600;color:var(--text)}
+.abm-compat-copy{font-size:11px;line-height:1.35;color:var(--text-muted)}
+.abm-compat-btn{
+  margin-top:2px;padding:6px 8px;border:1px solid var(--border);border-radius:7px;
+  background:var(--bg-hover);color:var(--text);font:600 11px var(--font);cursor:pointer;
+}
+.abm-compat-btn:hover{background:var(--bg-active)}
 .dl-spin{
   width:12px;height:12px;border:2px solid var(--border);
   border-top-color:var(--accent);border-radius:50%;
@@ -3870,6 +3881,11 @@ svg{display:block;flex-shrink:0}
     <button class="abm-action-btn" id="abm-site-toggle" onclick="send('AdBlockToggleSite')">
       <span id="abm-site-toggle-text">Pause for this site</span>
     </button>
+    <div class="abm-compat-box" id="abm-x-compat-box">
+      <span class="abm-compat-title">X login compatibility</span>
+      <span class="abm-compat-copy">Temporarily pauses uBO and fingerprint protection for this tab while you sign in.</span>
+      <button class="abm-compat-btn" id="abm-x-compat-btn" onclick="closeAdBlockModal();send('XLoginCompatibilityToggle')">Open X login</button>
+    </div>
     <button class="abm-settings-btn" onclick="closeAdBlockModal();openSettings('privacy')">
       <span>Manage settings</span>
       <span class="abm-settings-btn-right">
@@ -5725,7 +5741,13 @@ function renderAdBlockBtn() {
   if (!btn || !iconOn || !iconOff) return;
   const active = !!state.ad_blocker_active;
   const excepted = !!state.ad_blocker_site_excepted;
-  if (!active) {
+  const compat = !!state.x_login_compat_active;
+  if (compat) {
+    btn.style.color = 'var(--warning)';
+    btn.title = 'X login compatibility active - click for info';
+    iconOn.style.display = '';
+    iconOff.style.display = 'none';
+  } else if (!active) {
     btn.style.color = 'var(--text-dim)';
     btn.title = 'Ad blocker - click for info';
     iconOn.style.display = 'none';
@@ -5781,12 +5803,24 @@ function _syncAdBlockModal() {
   if (!modal || !modal.classList.contains('open')) return;
   const active = !!state.ad_blocker_active;
   const excepted = !!state.ad_blocker_site_excepted;
+  const compat = !!state.x_login_compat_active;
+  const xSite = isXSiteUrl(currentTabUrl());
   const dot = document.getElementById('abm-dot');
   const statusText = document.getElementById('abm-status-text');
   const statusRow = document.getElementById('abm-status');
   const toggle = document.getElementById('abm-site-toggle');
   const toggleText = document.getElementById('abm-site-toggle-text');
-  if (!active) {
+  const compatBox = document.getElementById('abm-x-compat-box');
+  const compatBtn = document.getElementById('abm-x-compat-btn');
+  if (compatBox) compatBox.style.display = xSite ? 'flex' : 'none';
+  if (compatBtn) compatBtn.textContent = compat ? 'Turn off' : 'Open X login';
+  if (compat) {
+    if (statusRow) statusRow.className = 'abm-status-row warn';
+    if (dot) dot.className = 'abm-status-dot warn';
+    if (statusText) { statusText.className = 'abm-status-label'; statusText.textContent = 'Login compatibility active'; }
+    if (toggle) { toggle.className = 'abm-action-btn off'; toggle.disabled = true; }
+    if (toggleText) toggleText.textContent = 'Managed by login mode';
+  } else if (!active) {
     if (statusRow) statusRow.className = 'abm-status-row off';
     if (dot) dot.className = 'abm-status-dot off';
     if (statusText) { statusText.className = 'abm-status-label muted'; statusText.textContent = 'Disabled globally'; }
@@ -7724,6 +7758,15 @@ function currentTabUrl() {
   const tab = state.tabs && state.tabs.find(t => t.id === state.active_tab_id);
   return tab && tab.url ? tab.url : '';
 }
+function isXSiteUrl(url) {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    return (parsed.protocol === 'https:' || parsed.protocol === 'http:') && (host === 'x.com' || host.endsWith('.x.com') || host === 'twitter.com' || host.endsWith('.twitter.com'));
+  } catch (_) {
+    return false;
+  }
+}
 function fullUrlForCopy(input) {
   const url = currentTabUrl();
   if (!url || url.startsWith('neura://')) return '';
@@ -8273,9 +8316,10 @@ function renderSiteTrackingRow(canPerm) {
   if (!canPerm) return '';
   const active = !!state.ad_blocker_active;
   const excepted = !!state.ad_blocker_site_excepted;
-  const label = !active ? 'Off globally' : excepted ? 'Paused for this site' : 'Active on this page';
-  const action = !active ? 'Settings' : excepted ? 'Resume' : 'Pause';
-  const click = !active ? "closeSiteInfo();openSettings('privacy')" : 'toggleSiteTracking()';
+  const compat = !!state.x_login_compat_active;
+  const label = compat ? 'X login compatibility active' : !active ? 'Off globally' : excepted ? 'Paused for this site' : 'Active on this page';
+  const action = compat ? 'Turn off' : !active ? 'Settings' : excepted ? 'Resume' : 'Pause';
+  const click = !compat && !active ? "closeSiteInfo();openSettings('privacy')" : 'toggleSiteTracking()';
   return `<div class="site-pop-divider"></div><div class="site-pop-section">
     <div class="site-pop-row">
       <div class="site-pop-icon info">${siteInfoSvg('shield')}</div>
@@ -8318,6 +8362,10 @@ function setDefaultPermission(key, value) {
   send('SetDefaultPermission', {permission:key, value});
 }
 function toggleSiteTracking() {
+  if (state.x_login_compat_active) {
+    send('XLoginCompatibilityToggle');
+    return;
+  }
   state.ad_blocker_site_excepted = !state.ad_blocker_site_excepted;
   renderSiteInfoPopover();
   renderAdBlockBtn();

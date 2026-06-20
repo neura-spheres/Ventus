@@ -1,12 +1,12 @@
 use rusqlite::Connection;
 use std::{
-    collections::{BTreeSet, HashMap},
+    collections::{BTreeSet, HashMap, HashSet},
     sync::{Arc, Mutex},
 };
 use tokio::sync::oneshot;
 use wry::WebView;
 
-use crate::adblock::AdBlockEngine;
+use crate::adblock::{is_x_auth_url, is_x_url, AdBlockEngine};
 use crate::browser::downloads::DownloadManager;
 use crate::browser::tab_manager::TabManager;
 use crate::config::{
@@ -87,6 +87,9 @@ pub struct AppState {
     /// Agent loop inserts a sender; main loop resolves it when the IPC result arrives.
     pub ai_pending_tools: Arc<Mutex<HashMap<String, oneshot::Sender<String>>>>,
     pub ad_block_engine: AdBlockEngine,
+    pub fingerprint_seed: String,
+    pub incognito_fingerprint_seed: String,
+    pub x_login_compat_tabs: HashSet<String>,
     /// Element kill count reported by the init script for the currently active page.
     pub adblock_page_kills: u32,
     /// Cached DB data — refreshed only when the underlying data changes.
@@ -152,6 +155,12 @@ impl AppState {
             .unwrap_or_default();
         let cached_history = repositories::list_history(&conn, 30).unwrap_or_default();
         let omnibox = crate::browser::omnibox::load(&conn);
+        let fingerprint_seed = settings_store::get::<String>(&conn, "fingerprint_seed")
+            .ok()
+            .flatten()
+            .filter(|seed| !seed.trim().is_empty())
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+        let _ = settings_store::set(&conn, "fingerprint_seed", &fingerprint_seed);
         Self {
             tab_manager: TabManager::new(),
             downloads: DownloadManager::with_downloads(downloads),
@@ -184,6 +193,9 @@ impl AppState {
             zoom_levels: HashMap::new(),
             ai_pending_tools: Arc::new(Mutex::new(HashMap::new())),
             ad_block_engine: AdBlockEngine::new(ad_block_enabled, &ad_block_exceptions),
+            fingerprint_seed,
+            incognito_fingerprint_seed: uuid::Uuid::new_v4().to_string(),
+            x_login_compat_tabs: HashSet::new(),
             adblock_page_kills: 0,
             cached_search_engines,
             cached_bookmarks,
@@ -205,6 +217,18 @@ impl AppState {
             device_id,
             session_id,
         }
+    }
+
+    pub fn fingerprint_seed(&self, incognito: bool) -> &str {
+        if incognito {
+            &self.incognito_fingerprint_seed
+        } else {
+            &self.fingerprint_seed
+        }
+    }
+
+    pub fn x_login_compat(&self, tab_id: &str, url: &str) -> bool {
+        self.x_login_compat_tabs.contains(tab_id) && is_x_url(url)
     }
 
     fn download_speed(&mut self, id: &str, received: u64) -> u64 {
@@ -312,6 +336,9 @@ impl AppState {
         let ad_blocker_active = self.settings.privacy.ad_blocker_enabled;
         let ad_blocker_site_excepted =
             !active_url.is_empty() && self.ad_block_engine.is_site_excepted(active_url);
+        let x_login_compat_active = active_tab
+            .map(|tab| self.x_login_compat(&tab.id, &tab.url))
+            .unwrap_or(false);
         let mut settings_value = serde_json::to_value(&self.settings).unwrap_or_default();
         if let Some(nt) = settings_value
             .get_mut("new_tab")
@@ -354,6 +381,7 @@ impl AppState {
             "ad_blocker_active": ad_blocker_active,
             "ad_blocker_site_excepted": ad_blocker_site_excepted,
             "ad_blocker_kills": self.adblock_page_kills,
+            "x_login_compat_active": x_login_compat_active,
             "requested_permissions": &self.requested_permissions,
         }))
         .unwrap_or_default()
@@ -542,6 +570,7 @@ pub fn handle_chrome_command(
             state.native_loads.remove(&id);
             state.native_nav_ids.remove(&id);
             state.history_last_saved.remove(&id);
+            state.x_login_compat_tabs.remove(&id);
             state.push_state_to_chrome(chrome);
             let ws_id = state.tab_manager.active_workspace_id.clone();
             let landed_on_lone_newtab = state.tab_manager.workspace_tabs(&ws_id).count() == 1
@@ -627,6 +656,7 @@ pub fn handle_chrome_command(
                 state.native_loads.remove(tab_id);
                 state.native_nav_ids.remove(tab_id);
                 state.history_last_saved.remove(tab_id);
+                state.x_login_compat_tabs.remove(tab_id);
             }
             state.push_state_to_chrome(chrome);
             Some(TabAction::RemoveMany(tab_ids))
@@ -1134,6 +1164,41 @@ pub fn handle_chrome_command(
             let _ = settings_store::set(&state.conn, "app_settings", &state.settings);
             state.push_state_to_chrome(chrome);
             Some(TabAction::RebuildContent { tab_id, url })
+        }
+        ChromeCommand::XLoginCompatibilityToggle => {
+            let (tab_id, url) = match state.tab_manager.active_tab() {
+                Some(tab) => (tab.id.clone(), tab.url.clone()),
+                None => return None,
+            };
+            if !is_x_url(&url) {
+                let _ = chrome.evaluate_script(
+                    "window.__neura && window.__neura.showError('Open x.com or twitter.com first')",
+                );
+                return None;
+            }
+            let enable = !state.x_login_compat_tabs.remove(&tab_id);
+            let action = if enable {
+                state.x_login_compat_tabs.insert(tab_id.clone());
+                navigate_current_tab("https://x.com/i/flow/login".to_string(), state, chrome)
+            } else {
+                reload_current_tab(state, chrome)
+            };
+            let message = if enable {
+                "X login compatibility is on for this tab"
+            } else {
+                "X login compatibility is off"
+            };
+            let message = serde_json::to_string(message).unwrap_or_default();
+            let _ = chrome.evaluate_script(&format!(
+                "window.__neura && window.__neura.showSuccess({message})"
+            ));
+            match action {
+                Some(TabAction::ContentNavigate(url))
+                | Some(TabAction::ReloadContent { url, .. }) => {
+                    Some(TabAction::RebuildContent { tab_id, url })
+                }
+                action => action,
+            }
         }
         ChromeCommand::AdBlockStats { killed } => {
             state.adblock_page_kills = killed;
@@ -2823,6 +2888,11 @@ pub fn handle_app_event_inner(
                 .map(|tab| tab.status == crate::browser::tab::TabStatus::Loading)
                 .unwrap_or(false);
             let clean_url = crate::utils::url::clean_tracking_url(&url);
+            let restore_x_protections =
+                state.x_login_compat_tabs.contains(&tab_id) && !is_x_auth_url(&clean_url);
+            if restore_x_protections {
+                state.x_login_compat_tabs.remove(&tab_id);
+            }
             match take_pending(state, &tab_id, &clean_url) {
                 PendingNav::Match => {
                     state
@@ -2862,6 +2932,12 @@ pub fn handle_app_event_inner(
                 ));
             }
             state.push_state_to_chrome(chrome);
+            if restore_x_protections && !clean_url.starts_with("neura://") {
+                return Some(TabAction::RebuildContent {
+                    tab_id,
+                    url: clean_url,
+                });
+            }
             None
         }
         AppEvent::ContentLoadStart {

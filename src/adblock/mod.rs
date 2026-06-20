@@ -73,3 +73,59 @@ fn host_matches_list<S: AsRef<str>>(host: &str, list: &[S]) -> bool {
     }
     false
 }
+
+pub fn is_x_url(url: &str) -> bool {
+    let Ok(url) = url::Url::parse(url) else {
+        return false;
+    };
+    if !matches!(url.scheme(), "http" | "https") {
+        return false;
+    }
+    let Some(host) = url.host_str() else {
+        return false;
+    };
+    let host = host.trim_end_matches('.').to_ascii_lowercase();
+    host == "x.com"
+        || host.ends_with(".x.com")
+        || host == "twitter.com"
+        || host.ends_with(".twitter.com")
+}
+
+pub fn is_x_auth_url(url: &str) -> bool {
+    let Ok(url) = url::Url::parse(url) else {
+        return false;
+    };
+    if !is_x_url(url.as_str()) {
+        return false;
+    }
+    let path = url.path().to_ascii_lowercase();
+    path == "/"
+        || path == "/login"
+        || path.starts_with("/i/flow/")
+        || path.starts_with("/account/")
+        || path.starts_with("/oauth/")
+        || path.starts_with("/i/oauth")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn x_urls_require_real_x_hosts() {
+        assert!(is_x_url("https://x.com/i/flow/login"));
+        assert!(is_x_url("https://mobile.twitter.com/login"));
+        assert!(!is_x_url("https://example.com/x.com"));
+        assert!(!is_x_url("https://x.com.example/login"));
+        assert!(!is_x_url("file:///x.com/login"));
+    }
+
+    #[test]
+    fn x_auth_urls_exclude_normal_browsing() {
+        assert!(is_x_auth_url("https://x.com/i/flow/login"));
+        assert!(is_x_auth_url("https://twitter.com/login"));
+        assert!(is_x_auth_url("https://x.com/account/access"));
+        assert!(!is_x_auth_url("https://x.com/home"));
+        assert!(!is_x_auth_url("https://x.com/someone/status/1"));
+    }
+}
