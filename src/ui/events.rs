@@ -313,6 +313,7 @@ pub enum ChromeCommand {
     ZoomSet {
         level: f64,
     },
+    ZoomReset,
     ZoomDelta {
         delta: f64,
     },
@@ -535,6 +536,7 @@ impl ChromeCommand {
             ChromeCommand::LoadNeuraFeed => Some("load_neura_feed"),
             ChromeCommand::InstallUpdate => Some("install_update"),
             ChromeCommand::ZoomSet { .. } => Some("zoom_set"),
+            ChromeCommand::ZoomReset => Some("zoom_reset"),
             ChromeCommand::ZoomDelta { .. } => Some("zoom_delta"),
             ChromeCommand::ZoomGlobal { .. } => Some("zoom_global"),
             ChromeCommand::ToggleFullscreen => Some("toggle_fullscreen"),

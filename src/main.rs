@@ -2580,6 +2580,13 @@ fn main() {
                                 let _ = wv.zoom(level);
                             }
                         }
+                        TabAction::SetDefaultZoom(level) => {
+                            for (id, wv) in &content_views {
+                                if !state.zoom_levels.contains_key(id) {
+                                    let _ = wv.zoom(level);
+                                }
+                            }
+                        }
                         TabAction::ContentNavigate(url) => {
                             let watch_tab_id = state.tab_manager.active_tab_id.clone();
                             if let Some(id) = watch_tab_id.clone() {
@@ -8621,7 +8628,7 @@ fn run_shortcut(code: usize, proxy: &tao::event_loop::EventLoopProxy<AppEvent>, 
         SC_RELOAD => Some(ChromeCommand::Reload),
         SC_ZOOM_IN => Some(ChromeCommand::ZoomDelta { delta: 0.1 }),
         SC_ZOOM_OUT => Some(ChromeCommand::ZoomDelta { delta: -0.1 }),
-        SC_ZOOM_RESET => Some(ChromeCommand::ZoomSet { level: 1.0 }),
+        SC_ZOOM_RESET => Some(ChromeCommand::ZoomReset),
         SC_BACK => Some(ChromeCommand::Back),
         SC_FORWARD => Some(ChromeCommand::Forward),
         SC_FULLSCREEN => Some(ChromeCommand::ToggleFullscreen),
@@ -9318,8 +9325,12 @@ fn set_chrome_clip_region(
             let _ = CombineRgn(toolbar, toolbar, header, RGN_OR);
             let _ = DeleteObject(header);
             if spec.app_body_chrome_owned {
-                let body =
-                    CreateRectRgn(left, header_bottom, spec.window_w as i32, spec.window_h as i32);
+                let body = CreateRectRgn(
+                    left,
+                    header_bottom,
+                    spec.window_w as i32,
+                    spec.window_h as i32,
+                );
                 let _ = CombineRgn(toolbar, toolbar, body, RGN_OR);
                 let _ = DeleteObject(body);
             }
@@ -9339,9 +9350,7 @@ fn set_chrome_clip_region(
 
         // Right frame strip: between content and window/AI-panel edge
         if spec.frame_side_w > 0 {
-            let right_r = spec
-                .window_w
-                .saturating_sub(spec.ai_sidebar_w + spec.app_w) as i32;
+            let right_r = spec.window_w.saturating_sub(spec.ai_sidebar_w + spec.app_w) as i32;
             let right_l = right_r - spec.frame_side_w as i32;
             if right_l >= 0 && right_r > right_l {
                 let rf = CreateRectRgn(
