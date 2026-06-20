@@ -337,7 +337,7 @@ button,input,select,textarea{font-family:var(--font)}
   width:var(--horizontal-tab-width,154px);min-width:72px;max-width:154px;height:32px;min-height:32px;
   flex:0 0 var(--horizontal-tab-width,154px);padding:0 9px;gap:7px;border-radius:9px;
   border:1px solid transparent;background:transparent;
-  transition:width .2s cubic-bezier(.2,.75,.25,1),flex-basis .2s cubic-bezier(.2,.75,.25,1),background var(--transition),border-color var(--transition),box-shadow var(--transition);
+  transition:transform .18s cubic-bezier(.2,.8,.25,1),opacity .14s ease,width .2s cubic-bezier(.2,.75,.25,1),flex-basis .2s cubic-bezier(.2,.75,.25,1),background var(--transition),border-color var(--transition),box-shadow var(--transition);
 }
 #horizontal-tab-list .tab-item:hover{background:var(--soft-btn-bg)}
 #horizontal-tab-list .tab-item:has(+ .tab-item)::after{
@@ -370,6 +370,17 @@ button,input,select,textarea{font-family:var(--font)}
 #horizontal-tab-list .tab-item.pinned::before{top:4px;right:4px}
 #horizontal-tab-list .tab-item.dz-line{box-shadow:inset 2px 0 0 0 var(--accent)}
 #horizontal-tab-list .tab-item.dz-line-end{box-shadow:inset -2px 0 0 0 var(--accent)}
+#horizontal-tab-list.h-tab-drag-active .tab-item{will-change:transform}
+#horizontal-tab-list .tab-item.h-tab-dragging{
+  opacity:.28;background:var(--soft-btn-bg-hover);border-color:var(--chrome-border);
+  box-shadow:0 3px 12px var(--ai-shadow),inset 0 1px 0 var(--soft-btn-bg-hover);
+  transform:translateY(-1px) scale(.96);z-index:0;
+}
+#horizontal-tab-list .tab-item.h-tab-shifted{z-index:1}
+#horizontal-tab-list.h-tab-drag-active .tab-item.dz-line,
+#horizontal-tab-list.h-tab-drag-active .tab-item.dz-line-end{
+  background:var(--accent-dim);border-color:rgba(59,130,246,0.28);
+}
 .horizontal-new-tab{
   width:30px;height:30px;border:none;border-radius:9px;background:transparent;
   color:var(--text-muted);display:flex;align-items:center;justify-content:center;
@@ -5240,6 +5251,10 @@ const H_TAB_ADD = `<button class="horizontal-new-tab" onclick="openNewTabSpotlig
 let hTabIds = [];
 let hTabWorkspace = '';
 let hTabsReady = false;
+let hTabDrag = null;
+let hTabSettleRects = null;
+let hTabDropPending = false;
+let hTabDropFallbackTimer = 0;
 let obStep = 0;
 const OB_STEPS = 6;
 let obTheme = 'dark';
@@ -6123,7 +6138,10 @@ function renderTabs() {
     list.innerHTML = '<div style="text-align:center;padding:20px 8px;color:var(--text-dim);font-size:11px">No tabs open</div>';
     if (horizontalList) horizontalList.innerHTML = H_TAB_ADD;
     __animateSbPageEntry(list);
-    requestAnimationFrame(sizeHorizontalTabs);
+    requestAnimationFrame(() => {
+      sizeHorizontalTabs();
+      finishHorizontalTabSettle();
+    });
     return;
   }
   const html = tabs.map(tab => {
@@ -6168,7 +6186,8 @@ function renderTabs() {
   __animateSbPageEntry(list);
   requestAnimationFrame(() => {
     sizeHorizontalTabs();
-    scrollHorizontalActiveTab();
+    const handledHorizontalDrop = finishHorizontalTabSettle();
+    if (!handledHorizontalDrop) scrollHorizontalActiveTab();
   });
 }
 
@@ -6213,6 +6232,172 @@ function animateClosedHorizontalTabs(nextIds) {
     requestAnimationFrame(() => ghost.classList.add('leaving'));
     setTimeout(() => ghost.remove(), 240);
   });
+}
+
+function horizontalTabItems() {
+  const list = document.getElementById('horizontal-tab-list');
+  return list ? [...list.querySelectorAll('.tab-item')] : [];
+}
+
+function horizontalTabById(id) {
+  return horizontalTabItems().find(tab => tab.dataset.reorderId === id) || null;
+}
+
+function captureHorizontalTabRects() {
+  const rects = {};
+  horizontalTabItems().forEach(tab => {
+    const id = tab.dataset.reorderId;
+    if (!id) return;
+    const rect = tab.getBoundingClientRect();
+    rects[id] = {left:rect.left, top:rect.top, width:rect.width, height:rect.height};
+  });
+  return rects;
+}
+
+function startHorizontalTabDrag(source) {
+  if (!horizontalTabs() || !source || !source.closest('#horizontal-tab-list')) return;
+  clearHorizontalTabDragFeedback(true);
+  const list = document.getElementById('horizontal-tab-list');
+  if (!list) return;
+  const tabs = horizontalTabItems();
+  const sourceId = source.dataset.reorderId;
+  const sourceIndex = tabs.findIndex(tab => tab.dataset.reorderId === sourceId);
+  if (!sourceId || sourceIndex < 0) return;
+  const style = window.getComputedStyle(list);
+  const gap = parseFloat(style.columnGap || style.gap || '0') || 0;
+  const rects = tabs.map((tab, index) => {
+    const rect = tab.getBoundingClientRect();
+    return {
+      id:tab.dataset.reorderId,
+      index,
+      pinned:tab.classList.contains('pinned'),
+      left:rect.left,
+      width:rect.width
+    };
+  }).filter(item => !!item.id);
+  hTabDrag = {
+    id:sourceId,
+    pinned:source.classList.contains('pinned'),
+    beforeId:undefined,
+    gap,
+    rects
+  };
+  list.classList.add('h-tab-drag-active');
+  source.classList.add('h-tab-dragging');
+}
+
+function computeHorizontalTabBefore(e) {
+  if (!hTabDrag || hTabDrag.id !== dragId) return undefined;
+  const candidates = hTabDrag.rects.filter(item => item.id !== hTabDrag.id && item.pinned === hTabDrag.pinned);
+  for (const item of candidates) {
+    if (e.clientX < item.left + item.width / 2) return horizontalTabById(item.id);
+  }
+  return null;
+}
+
+function previewHorizontalTabReorder(beforeId) {
+  if (!hTabDrag) return;
+  const list = document.getElementById('horizontal-tab-list');
+  if (!list) return;
+  const normalizedBefore = beforeId || null;
+  if (hTabDrag.beforeId === normalizedBefore) return;
+  hTabDrag.beforeId = normalizedBefore;
+
+  const group = hTabDrag.rects.filter(item => item.pinned === hTabDrag.pinned);
+  const fromIndex = group.findIndex(item => item.id === hTabDrag.id);
+  const source = group[fromIndex];
+  if (!source || fromIndex < 0) return;
+  const remaining = group.filter(item => item.id !== hTabDrag.id);
+  let finalIndex = normalizedBefore
+    ? remaining.findIndex(item => item.id === normalizedBefore)
+    : remaining.length;
+  if (finalIndex < 0) finalIndex = remaining.length;
+  const step = source.width + hTabDrag.gap;
+
+  horizontalTabItems().forEach(tab => {
+    if (tab.dataset.reorderId === hTabDrag.id) return;
+    tab.style.transform = '';
+    tab.classList.remove('h-tab-shifted');
+  });
+
+  if (finalIndex === fromIndex) return;
+  const shiftLeft = finalIndex > fromIndex;
+  group.forEach((item, index) => {
+    if (item.id === hTabDrag.id) return;
+    const shouldShift = shiftLeft
+      ? index > fromIndex && index <= finalIndex
+      : index >= finalIndex && index < fromIndex;
+    if (!shouldShift) return;
+    const tab = horizontalTabById(item.id);
+    if (!tab) return;
+    tab.style.transform = `translateX(${shiftLeft ? -step : step}px)`;
+    tab.classList.add('h-tab-shifted');
+  });
+}
+
+function prepareHorizontalTabReorderCommit(id, beforeId) {
+  if (!hTabDrag || hTabDrag.id !== id) return;
+  previewHorizontalTabReorder(beforeId);
+  hTabSettleRects = captureHorizontalTabRects();
+  hTabDropPending = true;
+  if (hTabDropFallbackTimer) clearTimeout(hTabDropFallbackTimer);
+  hTabDropFallbackTimer = setTimeout(() => {
+    hTabDropPending = false;
+    hTabSettleRects = null;
+    hTabDropFallbackTimer = 0;
+    clearHorizontalTabDragFeedback(true);
+  }, 700);
+}
+
+function clearHorizontalTabDragFeedback(force=false) {
+  if (hTabDropPending && !force) return;
+  if (force && hTabDropPending) {
+    hTabDropPending = false;
+    hTabSettleRects = null;
+    if (hTabDropFallbackTimer) {
+      clearTimeout(hTabDropFallbackTimer);
+      hTabDropFallbackTimer = 0;
+    }
+  }
+  const list = document.getElementById('horizontal-tab-list');
+  if (list) list.classList.remove('h-tab-drag-active');
+  horizontalTabItems().forEach(tab => {
+    tab.style.transform = '';
+    tab.classList.remove('h-tab-dragging','h-tab-shifted');
+  });
+  hTabDrag = null;
+}
+
+function finishHorizontalTabSettle() {
+  const priorRects = hTabSettleRects;
+  if (!priorRects) return false;
+  hTabSettleRects = null;
+  hTabDropPending = false;
+  if (hTabDropFallbackTimer) {
+    clearTimeout(hTabDropFallbackTimer);
+    hTabDropFallbackTimer = 0;
+  }
+  clearHorizontalTabDragFeedback(true);
+  const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  horizontalTabItems().forEach(tab => {
+    const id = tab.dataset.reorderId;
+    const from = priorRects[id];
+    if (!from) return;
+    const to = tab.getBoundingClientRect();
+    const dx = from.left - to.left;
+    const dy = from.top - to.top;
+    if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return;
+    if (reduceMotion) return;
+    const anim = tab.animate([
+      {transform:`translate(${dx}px, ${dy}px)`},
+      {transform:'translate(0, 0)'}
+    ], {duration:220, easing:'cubic-bezier(.2,.8,.25,1)'});
+    const cleanup = () => tab.classList.remove('h-tab-settling');
+    tab.classList.add('h-tab-settling');
+    anim.addEventListener('finish', cleanup, {once:true});
+    anim.addEventListener('cancel', cleanup, {once:true});
+  });
+  return true;
 }
 
 function scrollHorizontalActiveTab() {
@@ -14276,6 +14461,7 @@ function clearAllDropFeedback() {
   document.querySelectorAll('.dz-line,.dz-line-end').forEach((e) => e.classList.remove('dz-line','dz-line-end'));
   document.querySelectorAll('.dz-save').forEach((e) => e.classList.remove('dz-save'));
   document.querySelectorAll('.dragging-url').forEach((e) => e.classList.remove('dragging-url'));
+  clearHorizontalTabDragFeedback();
   const bar = document.getElementById('address-bar');
   if (bar) bar.classList.remove('drag-over');
   _clearFolderTarget();
@@ -14318,6 +14504,7 @@ document.addEventListener('dragstart', function(e) {
   e.dataTransfer.setData('text/uri-list', url);
   e.dataTransfer.setData('text/plain', url);
   el.classList.add('dragging-url');
+  if (dragKind === 'tab') startHorizontalTabDrag(el);
 }, false);
 document.addEventListener('dragend', function() {
   clearAllDropFeedback();
@@ -14337,7 +14524,7 @@ function setupDropZone(container, cfg) {
     container.querySelectorAll('.dz-line,.dz-line-end').forEach((e) => e.classList.remove('dz-line','dz-line-end'));
     container.classList.remove('dz-save');
   };
-  const computeBefore = (e) => {
+  const defaultComputeBefore = (e) => {
     for (const it of groupItems()) {
       const r = it.getBoundingClientRect();
       const mid = cfg.axis === 'x' ? r.left + r.width / 2 : r.top + r.height / 2;
@@ -14345,6 +14532,11 @@ function setupDropZone(container, cfg) {
       if (pos < mid) return it;
     }
     return null;
+  };
+  const computeBefore = (e) => {
+    if (!cfg.computeBefore) return defaultComputeBefore(e);
+    const custom = cfg.computeBefore(e, defaultComputeBefore);
+    return custom === undefined ? defaultComputeBefore(e) : custom;
   };
   container.addEventListener('dragover', function(e) {
     if (e.defaultPrevented) return;
@@ -14359,13 +14551,18 @@ function setupDropZone(container, cfg) {
       const before = computeBefore(e);
       if (before) before.classList.add('dz-line');
       else { const g = groupItems(); const last = g[g.length - 1]; if (last) last.classList.add('dz-line-end'); }
+      if (cfg.onReorderHover) cfg.onReorderHover(dragId, before ? idOf(before) : null, before, e);
     } else {
       e.dataTransfer.dropEffect = 'copy';
       container.classList.add('dz-save');
+      if (cfg.onReorderClear) cfg.onReorderClear();
     }
   }, false);
   container.addEventListener('dragleave', function(e) {
-    if (!container.contains(e.relatedTarget)) clearLines();
+    if (!container.contains(e.relatedTarget)) {
+      clearLines();
+      if (cfg.onReorderClear) cfg.onReorderClear();
+    }
   }, false);
   container.addEventListener('drop', function(e) {
     if (e.defaultPrevented) return;
@@ -14376,10 +14573,12 @@ function setupDropZone(container, cfg) {
     if (reorder) {
       const before = computeBefore(e);
       const beforeId = before ? idOf(before) : null;
+      if (cfg.onBeforeReorder) cfg.onBeforeReorder(dragId, beforeId, before, e);
       clearLines();
       cfg.onReorder(dragId, beforeId);
     } else {
       clearLines();
+      if (cfg.onReorderClear) cfg.onReorderClear();
       const url = extractDropUrl(e.dataTransfer);
       if (url) cfg.onExternal(url);
     }
@@ -14457,6 +14656,13 @@ setupDropZone(document.getElementById('sb-page'), {
 setupDropZone(document.getElementById('horizontal-tab-list'), {
   reorderKind: 'tab', item: '.tab-item', axis: 'x',
   sameGroup: (it) => it.classList.contains('pinned') === dragPinned,
+  computeBefore: (e, fallback) => {
+    const before = computeHorizontalTabBefore(e);
+    return before === undefined ? fallback(e) : before;
+  },
+  onReorderHover: (_id, beforeId) => previewHorizontalTabReorder(beforeId),
+  onBeforeReorder: (id, beforeId) => prepareHorizontalTabReorderCommit(id, beforeId),
+  onReorderClear: () => clearHorizontalTabDragFeedback(),
   onReorder: (id, before) => send('MoveTab', {id, before}),
   onExternal: (url) => send('OpenInNewTab', {url}),
 });
