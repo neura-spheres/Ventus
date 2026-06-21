@@ -47,6 +47,8 @@ pub fn chrome_html() -> String {
   --primary-btn-bg-active:#ececf0;
   --primary-btn-text:#1d1d1f;
   --primary-btn-border:rgba(255,255,255,0.72);
+  --zoom-reset-bg:#ffffff;
+  --zoom-reset-text:#111111;
   --danger-btn-text:#ffffff;
   /* AI panel */
   --ai-bg:var(--chrome-bg);
@@ -166,6 +168,8 @@ pub fn chrome_html() -> String {
   --primary-btn-bg-active:#ececf0;
   --primary-btn-text:#1d1d1f;
   --primary-btn-border:rgba(0,0,0,0.12);
+  --zoom-reset-bg:#111111;
+  --zoom-reset-text:#ffffff;
   --danger-btn-text:#ffffff;
   --success:#16a34a;
   --success-dim:rgba(22,163,74,0.10);
@@ -667,11 +671,6 @@ button,input,select,textarea{font-family:var(--font)}
   box-shadow:none;
   background:var(--address-fill);
 }
-#address-bar.suggestions-detached,
-#address-bar.suggestions-detached:focus-within{
-  --address-fill:var(--bg-elevated);
-  background:var(--address-fill);
-}
 @property --load-angle{
   syntax:"<angle>";
   inherits:false;
@@ -694,6 +693,7 @@ button,input,select,textarea{font-family:var(--font)}
 #address-bar.drag-over{border-color:var(--accent)!important;box-shadow:0 0 0 2px var(--accent-dim)!important}
 [data-nav-url][draggable="true"]{-webkit-user-drag:element}
 .dragging-url{opacity:0.45}
+.tab-item.dragging-url,.bm-item.dragging-url,.bm-bar-item.dragging-url{opacity:1}
 .tab-item.dz-line,.bm-item.dz-line{box-shadow:inset 0 2px 0 0 var(--accent)}
 .tab-item.dz-line-end,.bm-item.dz-line-end{box-shadow:inset 0 -2px 0 0 var(--accent)}
 .bm-bar-item.dz-line{box-shadow:inset 2px 0 0 0 var(--accent)}
@@ -848,10 +848,6 @@ button,input,select,textarea{font-family:var(--font)}
   padding:7px 6px 8px;
   border-top:0;
   border-radius:0 0 16px 16px;
-}
-#url-suggestions.detached{
-  border-top:1px solid var(--border);
-  border-radius:16px;
 }
 .suggestion-section{
   padding:6px 8px 4px;
@@ -3354,6 +3350,44 @@ button,input,select,textarea{font-family:var(--font)}
 .bm-overflow-fallback{width:14px;height:14px;border-radius:3px;flex-shrink:0;background:var(--accent-dim);color:var(--accent);font-size:8px;font-weight:800;display:flex;align-items:center;justify-content:center}
 .bm-overflow-label{font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
 
+/* zoom modal */
+#zoom-backdrop{
+  display:none;position:fixed;inset:0;z-index:9998;background:transparent;
+}
+#zoom-backdrop.open{display:block}
+#zoom-modal{
+  display:none;position:fixed;z-index:9999;top:50px;width:214px;
+  background:var(--modal-bg);
+  border:1px solid var(--modal-border);
+  border-radius:10px;
+  box-shadow:var(--modal-shadow);
+  padding:6px;
+  transform-origin:top left;
+}
+#zoom-modal.open{display:block;animation:abmIn .16s cubic-bezier(.16,1,.3,1)}
+.zm-controls{display:grid;grid-template-columns:28px 42px 28px 1fr;align-items:center;gap:4px}
+.zm-step{
+  width:28px;height:28px;border-radius:7px;
+  display:flex;align-items:center;justify-content:center;
+  border:none;background:var(--bg-hover);color:var(--text);
+  cursor:pointer;transition:background var(--transition);
+}
+.zm-step:hover{background:var(--bg-active)}
+.zm-step:active{transform:scale(.94)}
+.zm-pct{
+  text-align:center;min-width:0;
+  font-size:13px;font-weight:650;color:var(--text);
+  letter-spacing:-.2px;font-variant-numeric:tabular-nums;
+}
+.zm-reset{
+  height:28px;padding:0 11px;border-radius:7px;border:none;
+  background:var(--zoom-reset-bg);color:var(--zoom-reset-text);
+  font-size:11.5px;font-weight:650;font-family:var(--font);cursor:pointer;
+  transition:opacity var(--transition);
+}
+.zm-reset:hover{opacity:.84}
+.zm-reset:disabled{opacity:.32;cursor:default}
+
 /* zoom toast */
 #zoom-toast{
   position:fixed;bottom:48px;left:50%;
@@ -3946,6 +3980,10 @@ svg{display:block;flex-shrink:0}
         oncopy="handleUrlCopy(event)"
         onblur="handleUrlBlur()">
     </div>
+    <button class="ab-icon-btn" id="btn-zoom" onclick="event.stopPropagation();toggleZoomModal()" title="Zoom" style="display:none">
+      <svg id="zoom-icon-in" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+      <svg id="zoom-icon-out" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+    </button>
     <button class="ab-icon-btn" id="btn-bookmark" onclick="event.stopPropagation();toggleBookmark()" title="Bookmark (Ctrl+D)">
       <svg id="bm-icon-empty" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>
       <svg id="bm-icon-filled" width="13" height="13" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;color:var(--accent)"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>
@@ -4141,6 +4179,21 @@ svg{display:block;flex-shrink:0}
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
       </span>
     </button>
+  </div>
+</div>
+
+<!-- ZOOM MODAL -->
+<div id="zoom-backdrop" onclick="closeZoomModal()"></div>
+<div id="zoom-modal">
+  <div class="zm-controls">
+    <button class="zm-step" onclick="zoomOut()" title="Zoom out" aria-label="Zoom out">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </button>
+    <span id="zm-pct" class="zm-pct">100%</span>
+    <button class="zm-step" onclick="zoomIn()" title="Zoom in" aria-label="Zoom in">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </button>
+    <button class="zm-reset" id="zm-reset" onclick="zoomReset();closeZoomModal()">Reset</button>
   </div>
 </div>
 
@@ -5690,6 +5743,8 @@ window.__neura = {
   setActiveZoom(level) {
     setLocalZoom(level);
     updateMoreMenuZoom();
+    renderZoomBtn();
+    syncZoomModal();
     showZoomToast(Math.round(level * 100));
   },
   setNewtabWallpaperData(d) {
@@ -5874,7 +5929,7 @@ window.__neura = {
     if (findOpen) closeFindBar(true);
     const updateModal = document.getElementById('update-modal');
     if (updateModal && updateModal.classList.contains('open')) closeUpdateModal(false);
-    ['settings-overlay','tab-search-modal','workspace-modal','ws-switcher-modal','workspace-delete-modal','history-clear-confirm','context-menu','adblock-modal','adblock-backdrop','download-panel','model-modal','tab-spotlight-overlay','update-modal','folder-modal','bm-edit-backdrop','bm-edit-modal','site-info-popover'].forEach(id => {
+    ['settings-overlay','tab-search-modal','workspace-modal','ws-switcher-modal','workspace-delete-modal','history-clear-confirm','context-menu','adblock-modal','adblock-backdrop','zoom-modal','zoom-backdrop','download-panel','model-modal','tab-spotlight-overlay','update-modal','folder-modal','bm-edit-backdrop','bm-edit-modal','site-info-popover'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.classList.remove('open');
     });
@@ -6052,6 +6107,7 @@ function render() {
   }
   window.__neura.updateNavState(!!state.can_go_back, !!state.can_go_fwd, !!state.is_loading);
   renderAdBlockBtn();
+  renderZoomBtn();
   if (siteInfoOpen) renderSiteInfoPopover();
   _syncAdBlockModal();
   refreshMoreAttention();
@@ -6096,6 +6152,7 @@ function openAdBlockModal() {
   const backdrop = document.getElementById('adblock-backdrop');
   if (!modal) return;
   if (modal.classList.contains('open')) { closeAdBlockModal(); return; }
+  closeZoomModal();
   if (backdrop) backdrop.classList.add('open');
   modal.classList.add('open');
   _syncAdBlockModal();
@@ -6640,7 +6697,11 @@ function startTabDrag(source, e) {
     scrollStart:axis === 'x' ? (scroll ? scroll.scrollLeft : 0) : list.scrollTop
   };
   list.classList.add('tab-drag-active');
-  source.classList.add('tab-dragging');
+  setTimeout(() => {
+    if (!tabDrag || tabDrag.id !== sourceId) return;
+    const el = tabById(sourceId, tabDrag.list);
+    if (el) el.classList.add('tab-dragging');
+  }, 0);
 }
 
 function computeTabBefore(e, listId) {
@@ -6848,7 +6909,11 @@ function startBookmarkDrag(source, e) {
     scrollStart:axis === 'x' ? list.scrollLeft : list.scrollTop
   };
   list.classList.add('bookmark-drag-active');
-  source.classList.add('bookmark-dragging');
+  setTimeout(() => {
+    if (!bookmarkDrag || bookmarkDrag.id !== sourceId) return;
+    const el = bookmarkById(sourceId, bookmarkDrag.list);
+    if (el) el.classList.add('bookmark-dragging');
+  }, 0);
 }
 
 function computeBookmarkBefore(e, listId) {
@@ -10273,11 +10338,10 @@ function applySearchSuggestions(payload) {
   refreshSpotlightSuggestions();
 }
 
-function setUrlSuggestionsOpen(open, detached) {
+function setUrlSuggestionsOpen(open) {
   const bar = document.getElementById('address-bar');
   if (!bar) return;
-  bar.classList.toggle('suggestions-open', !!open && !detached);
-  bar.classList.toggle('suggestions-detached', !!open && !!detached);
+  bar.classList.toggle('suggestions-open', !!open);
 }
 
 function refreshOmnibox() {
@@ -10368,20 +10432,20 @@ function renderSuggestions(target, rawQuery) {
     syncSuggestionOverlay(null);
     return;
   }
-  panel.innerHTML = renderSuggestionGroups(activeSuggestions);
+  panel.innerHTML = renderSuggestionGroups(activeSuggestions, target);
   panel.querySelectorAll('.suggestion-item').forEach((el, index) => {
     el.addEventListener('mousedown', ev => {
-      ev.preventDefault();             // keep the input focused (no blur-close)
-      if (ev.button === 0) chooseSuggestion(index);
+      if (ev.button === 0) ev.preventDefault();
     });
+    el.addEventListener('click', () => chooseSuggestion(index));
     el.addEventListener('contextmenu', ev => {
       const it = activeSuggestions[index];
       if (it && it.url && it.recommend) omniboxItemMenu(ev, it.url, !!it.pinned, !!it.blocked);
     });
   });
   if (target === 'url') {
-    const detached = positionUrlSuggestions(panel);
-    setUrlSuggestionsOpen(true, detached);
+    positionUrlSuggestions(panel);
+    setUrlSuggestionsOpen(true);
   } else {
     setUrlSuggestionsOpen(false);
   }
@@ -10394,17 +10458,11 @@ function positionUrlSuggestions(panel) {
   const bar = document.getElementById('address-bar');
   if (!bar) return;
   const rect = bar.getBoundingClientRect();
-  const topChrome = document.getElementById('top-chrome');
-  const bookmarksBar = document.getElementById('bookmarks-bar');
-  const bookmarksVisible = !!(bookmarksBar && getComputedStyle(bookmarksBar).display !== 'none');
-  const chromeRect = topChrome ? topChrome.getBoundingClientRect() : null;
-  const top = bookmarksVisible && chromeRect ? chromeRect.bottom - 1 : rect.bottom - 1;
+  const top = rect.bottom - 1;
   panel.style.left = rect.left + 'px';
   panel.style.width = rect.width + 'px';
   panel.style.top = top + 'px';
   panel.style.maxHeight = Math.max(180, window.innerHeight - top - 10) + 'px';
-  panel.classList.toggle('detached', bookmarksVisible);
-  return bookmarksVisible;
 }
 
 function syncSuggestionOverlay(panel) {
@@ -10554,15 +10612,19 @@ function suggestionUrlKey(url) {
   return raw.replace(/\/+$/, '').toLowerCase();
 }
 
-function renderSuggestionGroups(items) {
+function renderSuggestionGroups(items, target) {
+  const allowDrag = target === 'url';
   let currentGroup = '';
   return items.map((item, index) => {
     const groupHtml = item.group !== currentGroup
       ? (currentGroup = item.group, `<div class="suggestion-section">${escHtml(item.group)}</div>`)
       : '';
     const pin = item.pinned ? `<span class="omni-pin" title="Pinned">${omniPinSvg}</span>` : '';
+    const drag = allowDrag && item.url && item.icon === 'globe'
+      ? ` draggable="true" data-nav-url="${escAttr(item.url)}"`
+      : '';
     return `${groupHtml}
-      <div class="suggestion-item${item.pinned ? ' suggestion-pinned' : ''}" data-index="${index}">
+      <div class="suggestion-item${item.pinned ? ' suggestion-pinned' : ''}" data-index="${index}"${drag}>
         <div class="suggestion-item-icon">${suggestionIconSvg(item.icon)}</div>
         <div class="suggestion-item-info">
           <div class="suggestion-item-title">${escHtml(item.title)}</div>
@@ -13769,6 +13831,9 @@ function closeChromePopovers(target) {
   const adblock = document.getElementById('adblock-modal');
   if (adblock && adblock.classList.contains('open') && !inside('#adblock-modal') && !inside('#btn-adblock')) closeAdBlockModal();
 
+  const zoomModal = document.getElementById('zoom-modal');
+  if (zoomModal && zoomModal.classList.contains('open') && !inside('#zoom-modal') && !inside('#btn-zoom')) closeZoomModal();
+
   if (siteInfoOpen && !inside('#site-info-popover') && !inside('#site-info-btn')) closeSiteInfo();
 
   if (_providerDdOpen && !inside('#ai-provider-dd')) {
@@ -14258,7 +14323,76 @@ function applyZoom(level) {
   setLocalZoom(level);
   send('ZoomSet', {level});
   updateMoreMenuZoom();
+  renderZoomBtn();
+  syncZoomModal();
   showZoomToast(Math.round(level * 100));
+}
+
+function renderZoomBtn() {
+  const btn = document.getElementById('btn-zoom');
+  if (!btn) return;
+  const cur = Math.round(activeZoomLevel() * 100);
+  const def = Math.round(globalZoomLevel() * 100);
+  const modal = document.getElementById('zoom-modal');
+  const modalOpen = !!modal && modal.classList.contains('open');
+  if (cur === def && !modalOpen) {
+    btn.style.display = 'none';
+    return;
+  }
+  btn.style.display = 'flex';
+  const zoomedOut = cur < def;
+  const iconIn = document.getElementById('zoom-icon-in');
+  const iconOut = document.getElementById('zoom-icon-out');
+  if (iconIn) iconIn.style.display = zoomedOut ? 'none' : '';
+  if (iconOut) iconOut.style.display = zoomedOut ? '' : 'none';
+  btn.title = 'Zoom ' + cur + '%';
+}
+
+function toggleZoomModal() {
+  const modal = document.getElementById('zoom-modal');
+  if (!modal) return;
+  if (modal.classList.contains('open')) closeZoomModal();
+  else openZoomModal();
+}
+
+function openZoomModal() {
+  const modal = document.getElementById('zoom-modal');
+  const backdrop = document.getElementById('zoom-backdrop');
+  const btn = document.getElementById('btn-zoom');
+  if (!modal || !btn) return;
+  closeAdBlockModal();
+  if (backdrop) backdrop.classList.add('open');
+  modal.classList.add('open');
+  syncZoomModal();
+  const r = btn.getBoundingClientRect();
+  const modalW = modal.offsetWidth;
+  let left = r.right - modalW;
+  if (left + modalW > window.innerWidth - 8) left = window.innerWidth - modalW - 8;
+  if (left < 8) left = 8;
+  modal.style.left = left + 'px';
+  modal.style.top = (r.bottom + 6) + 'px';
+  modal.style.right = 'auto';
+  setChromeOverlay('zoom-modal', {x:0, y:0, width:window.innerWidth, height:window.innerHeight});
+}
+
+function closeZoomModal() {
+  const modal = document.getElementById('zoom-modal');
+  const backdrop = document.getElementById('zoom-backdrop');
+  if (backdrop) backdrop.classList.remove('open');
+  if (modal) modal.classList.remove('open');
+  clearChromeOverlay('zoom-modal');
+  renderZoomBtn();
+}
+
+function syncZoomModal() {
+  const modal = document.getElementById('zoom-modal');
+  if (!modal || !modal.classList.contains('open')) return;
+  const cur = Math.round(activeZoomLevel() * 100);
+  const def = Math.round(globalZoomLevel() * 100);
+  const pct = document.getElementById('zm-pct');
+  if (pct) pct.textContent = cur + '%';
+  const reset = document.getElementById('zm-reset');
+  if (reset) reset.disabled = cur === def;
 }
 
 function showZoomToast(pct) {
@@ -15426,6 +15560,7 @@ document.addEventListener('keydown', e => {
     else if (document.getElementById('app').classList.contains('content-fullscreen')) { send('ToggleFullscreen'); }
     else if (document.getElementById('context-menu').classList.contains('open')) closeContextMenu();
     else if (document.getElementById('adblock-modal').classList.contains('open')) closeAdBlockModal();
+    else if (document.getElementById('zoom-modal').classList.contains('open')) closeZoomModal();
     else if (document.getElementById('more-menu').classList.contains('open')) closeMoreMenu();
     else if (document.getElementById('download-panel').classList.contains('open')) closeDownloadPanel();
     else if (document.getElementById('model-modal').classList.contains('open')) closeModelModal();
@@ -15557,6 +15692,7 @@ function clearAllDropFeedback() {
   _clearFolderTarget();
 }
 document.addEventListener('dragstart', function(e) {
+  hideSuggestions();
   // URL input has its own dedicated handler below that sets dataTransfer before this fires.
   if (e.target.id === 'url-input') return;
   if (e.target.closest('button')) { e.preventDefault(); return; }
@@ -16058,11 +16194,13 @@ mod tests {
     }
 
     #[test]
-    fn address_suggestions_detach_below_bookmarks_bar() {
+    fn address_suggestions_attach_under_address_bar() {
         let html = chrome_html();
-        assert!(html.contains("suggestions-detached"));
-        assert!(html.contains("#url-suggestions.detached"));
-        assert!(html.contains("document.getElementById('top-chrome')"));
-        assert!(html.contains("panel.classList.toggle('detached', bookmarksVisible)"));
+        assert!(!html.contains("suggestions-detached"));
+        assert!(!html.contains("#url-suggestions.detached"));
+        assert!(!html.contains("panel.classList.toggle('detached', bookmarksVisible)"));
+        assert!(html.contains(
+            "document.addEventListener('dragstart', function(e) {\n  hideSuggestions();"
+        ));
     }
 }

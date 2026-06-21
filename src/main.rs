@@ -5982,6 +5982,7 @@ fn build_content_webview_once(
         .with_bounds(rect)
         .with_background_color(CONTENT_BG)
         .with_incognito(incognito)
+        .with_user_agent(&browser_user_agent())
         .with_initialization_script(&content_initialization_script(
             global_zoom,
             &ad_block_script,
@@ -7878,7 +7879,50 @@ fn privacy_initialization_script(
     } else {
         String::new()
     };
-    format!("{fingerprint_script}{strict_script}")
+    let ua_data_script = r#"
+(() => {
+  if (window.__neuraUAData) return;
+  window.__neuraUAData = true;
+  try {
+    const ua = navigator.userAgent;
+    const m = ua.match(/Chrome\/(\d+)/);
+    const major = m ? m[1] : '149';
+    const brands = [
+      {brand: 'Not)A;Brand', version: '24'},
+      {brand: 'Chromium', version: major},
+      {brand: 'Ventus', version: major}
+    ];
+    const fullVersionList = [
+      {brand: 'Not)A;Brand', version: '24.0.0.0'},
+      {brand: 'Chromium', version: major + '.0.0.0'},
+      {brand: 'Ventus', version: major + '.0.0.0'}
+    ];
+    const ghev = function getHighEntropyValues(hints) {
+      const r = {};
+      const h = hints || [];
+      if (h.includes('brands')) r.brands = brands;
+      if (h.includes('mobile')) r.mobile = false;
+      if (h.includes('platform')) r.platform = 'Windows';
+      if (h.includes('platformVersion')) r.platformVersion = '10.0.0';
+      if (h.includes('architecture')) r.architecture = 'x86';
+      if (h.includes('bitness')) r.bitness = '64';
+      if (h.includes('model')) r.model = '';
+      if (h.includes('uaFullVersion')) r.uaFullVersion = major + '.0.0.0';
+      if (h.includes('fullVersionList')) r.fullVersionList = fullVersionList;
+      if (h.includes('wow64')) r.wow64 = false;
+      return Promise.resolve(r);
+    };
+    try {
+      Object.defineProperty(ghev, 'toString', {value: function() { return 'function getHighEntropyValues() { [native code] }'; }, configurable: true});
+    } catch (_) {}
+    const uaData = {brands, mobile: false, platform: 'Windows', getHighEntropyValues: ghev, toJSON() { return {brands, mobile: false, platform: 'Windows'}; }};
+    try {
+      Object.defineProperty(navigator, 'userAgentData', {get: () => uaData, configurable: true});
+    } catch (_) {}
+  } catch (_) {}
+})();
+"#;
+    format!("{ua_data_script}{fingerprint_script}{strict_script}")
 }
 
 fn slim_feed_articles(json: &serde_json::Value) -> serde_json::Value {
@@ -11642,7 +11686,7 @@ mod webview_arg_tests {
     }
 
     #[test]
-    fn content_identity_uses_webview_defaults() {
+    fn content_identity_overrides_ua_data() {
         let sites = config::SitePermissionMap::new();
         let defaults = config::SitePermissions::default();
         let script = content_initialization_script(
@@ -11656,7 +11700,10 @@ mod webview_arg_tests {
             &defaults,
         );
         assert!(!script.contains("__ventusIdentity"));
-        assert!(!script.contains("userAgentData"));
+        assert!(script.contains("userAgentData"));
+        assert!(script.contains("Ventus"));
+        assert!(script.contains("Chromium"));
+        assert!(script.contains("Not)A;Brand"));
     }
 
     #[test]
