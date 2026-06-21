@@ -599,17 +599,38 @@ button,input,select,textarea{font-family:var(--font)}
 }
 .app-empty-tile span{font-size:11px;color:var(--text-muted);max-width:72px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .app-empty-add{margin-top:4px;font-size:12px;color:var(--accent);background:none;border:none;cursor:pointer}
-.app-add-row{display:flex;gap:6px;margin-top:8px}
+.app-settings-panel{gap:6px}
+.app-settings-item{
+  display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px;
+  min-height:40px;padding:6px 7px 6px 10px;border-radius:8px;
+  border:1px solid var(--modal-border);background:var(--modal-bg-2);color:var(--text);
+}
+.app-settings-name{display:flex;align-items:center;gap:9px;min-width:0;font-size:12px;font-weight:600;line-height:1.2}
+.app-settings-name span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.app-settings-actions{display:flex;align-items:center;gap:2px}
+.app-settings-btn{
+  width:26px;height:26px;border:0;border-radius:6px;background:transparent;color:var(--text-muted);
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+}
+.app-settings-btn:hover{background:var(--bg-hover);color:var(--text)}
+.app-settings-btn:disabled{opacity:.3;cursor:default;pointer-events:none}
+.app-settings-remove{margin-left:2px}
+.app-settings-remove:hover{background:var(--danger-dim);color:var(--danger)}
+.app-add-row{display:flex;gap:8px;margin-top:10px}
 .app-add-row input{
-  flex:1;min-width:0;height:32px;padding:0 10px;border-radius:var(--radius-sm);
+  flex:1;min-width:0;height:36px;padding:0 11px;border-radius:var(--radius-sm);
   border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;outline:none;
 }
-.app-add-row input:focus{border-color:var(--accent)}
+.app-add-row input:first-child{flex:1.35}
+.app-add-row input:last-of-type{flex:.8}
+.app-add-row input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-dim)}
 .app-add-go{
-  height:32px;padding:0 14px;border-radius:var(--radius-sm);border:none;cursor:pointer;
-  background:var(--accent);color:#fff;font-size:12px;font-weight:600;flex-shrink:0;
+  height:36px;padding:0 16px;border-radius:var(--radius-sm);border:none;cursor:pointer;
+  background:var(--primary-btn-bg);color:var(--primary-btn-text);font-size:12px;font-weight:600;flex-shrink:0;
 }
-.app-add-go:disabled{opacity:0.4;cursor:default}
+.app-add-go:hover{background:var(--primary-btn-bg-hover)}
+.app-add-go:disabled{opacity:.4;cursor:default}
+.app-add-go:disabled:hover{background:var(--primary-btn-bg)}
 .app-list-ico{width:18px;height:18px;border-radius:4px;flex-shrink:0}
 
 /* toolbar items */
@@ -4741,7 +4762,7 @@ svg{display:block;flex-shrink:0}
         <div class="settings-group">
           <label>App sidebar</label>
           <div class="hint" style="margin:0 0 8px">Web apps shown in the Apps panel. They stay signed in and load instantly.</div>
-          <div class="toolbar-pick-panel" id="app-list-settings"></div>
+          <div class="toolbar-pick-panel app-settings-panel" id="app-list-settings"></div>
           <div class="app-add-row">
             <input type="text" id="app-add-url" placeholder="Website URL (e.g. notion.so)" autocomplete="off" spellcheck="false" oninput="onAppAddInput()" onkeydown="if(event.key==='Enter')submitSidebarApp()">
             <input type="text" id="app-add-name" placeholder="Name (optional)" autocomplete="off" spellcheck="false" onkeydown="if(event.key==='Enter')submitSidebarApp()">
@@ -7588,12 +7609,12 @@ function renderSidebarAppsSettings() {
     const name = a.name || shortcutDomain(a.url || '');
     const first = i === 0;
     const last = i === apps.length - 1;
-    return `<div class="toolbar-order-item">
-      <div class="toolbar-order-name"><img class="app-list-ico" src="${escAttr(shortcutIconUrl(a.url))}" alt="" onerror="this.style.visibility='hidden'"><span>${escHtml(name)}</span></div>
-      <div class="toolbar-order-actions">
-        <button type="button" class="toolbar-order-btn" ${first ? 'disabled' : ''} onclick="moveSidebarApp(${i},-1)" title="Move up">${chevronIcon('up')}</button>
-        <button type="button" class="toolbar-order-btn" ${last ? 'disabled' : ''} onclick="moveSidebarApp(${i},1)" title="Move down">${chevronIcon('down')}</button>
-        <button type="button" class="toolbar-order-btn" onclick="removeSidebarApp(${i})" title="Remove">${xIcon()}</button>
+    return `<div class="app-settings-item">
+      <div class="app-settings-name"><img class="app-list-ico" src="${escAttr(shortcutIconUrl(a.url))}" alt="" onerror="this.style.visibility='hidden'"><span>${escHtml(name)}</span></div>
+      <div class="app-settings-actions">
+        <button type="button" class="app-settings-btn" ${first ? 'disabled' : ''} onclick="moveSidebarApp(${i},-1)" title="Move up" aria-label="Move ${escAttr(name)} up">${chevronIcon('up')}</button>
+        <button type="button" class="app-settings-btn" ${last ? 'disabled' : ''} onclick="moveSidebarApp(${i},1)" title="Move down" aria-label="Move ${escAttr(name)} down">${chevronIcon('down')}</button>
+        <button type="button" class="app-settings-btn app-settings-remove" onclick="removeSidebarApp(${i})" title="Remove" aria-label="Remove ${escAttr(name)}">${xIcon()}</button>
       </div>
     </div>`;
   }).join('');
@@ -13403,7 +13424,7 @@ function renderBookmarks() {
   folders.forEach(f => {
     const items = bms.filter(b => b.folder_id === f.id);
     const count = items.length;
-    html += `<div class="bm-item bm-folder-item" data-folder-id="${escAttr(f.id)}" onclick="openFolderModal('${escAttr(f.id)}',this)" oncontextmenu="bmFolderContextMenu(event,this)">
+    html += `<div class="bm-item bm-folder-item" data-folder-id="${escAttr(f.id)}" onclick="openFolderModal('${escAttr(f.id)}',this,false,true)" oncontextmenu="bmFolderContextMenu(event,this)">
       <div class="bm-folder-icon">${folderSvg}</div>
       <div class="bm-item-info">
         <div class="bm-item-title">${escHtml(f.name)}</div>
@@ -14148,7 +14169,7 @@ function renderBookmarksBar() {
   const bMap = new Map(allBms.map(b => [b.id, b]));
   const folderChip = f => {
     const label = f.name.length > 18 ? f.name.slice(0,16)+'...' : f.name;
-    return `<div class="bm-bar-item" draggable="true" data-folder-id="${escAttr(f.id)}" data-label="${escAttr(f.name)}" title="${escAttr(f.name)}" onclick="openFolderModal('${escAttr(f.id)}',this)" oncontextmenu="bmFolderContextMenu(event,this)">
+    return `<div class="bm-bar-item" draggable="true" data-folder-id="${escAttr(f.id)}" data-label="${escAttr(f.name)}" title="${escAttr(f.name)}" onclick="openFolderModal('${escAttr(f.id)}',this,false,true)" oncontextmenu="bmFolderContextMenu(event,this)">
       <span style="display:flex;align-items:center;gap:4px;opacity:0.75">${folderSvg}</span>
       <span class="bm-bar-text">${escHtml(label)}</span>
     </div>`;
@@ -14446,7 +14467,10 @@ function bmItemContextMenu(ev, el) {
   const onBar = !!el.closest('#bookmarks-bar');
   const items = [
     { label: 'Open', action: () => navigateToUrl(url) },
-    { label: 'Open in new tab', action: () => send('OpenInNewTab', {url}) },
+    { label: 'Open in new tab', action: () => {
+      if (el.closest('#folder-modal')) closeFolderModal();
+      send('OpenInNewTab', {url});
+    } },
     { label: 'Copy URL', action: () => copyToClipboard(url) },
   ];
   if (bmId) {
@@ -14586,14 +14610,19 @@ function placeFolderModal(anchor) {
   syncFolderModalClip();
 }
 
-function openFolderModal(folderId, anchor, rename) {
+function openFolderModal(folderId, anchor, rename, toggle) {
   const folder = (state.bookmark_folders || []).find(f => f.id === folderId);
   if (!folder) return;
+  const modal = document.getElementById('folder-modal');
+  if (toggle && !rename && _activeFolderId === folderId && modal.classList.contains('open')) {
+    closeFolderModal();
+    return;
+  }
   _activeFolderId = folderId;
   _activeFolderAnchor = folderAnchor(folderId, anchor);
   _fmOrigName = folder.name;
   renderFolderModalBody(folderId);
-  document.getElementById('folder-modal').classList.add('open');
+  modal.classList.add('open');
   setChromeOverlay('bookmark-folder', {x:0, y:0, width:window.innerWidth, height:window.innerHeight});
   requestAnimationFrame(() => placeFolderModal(_activeFolderAnchor));
   if (rename) setTimeout(() => openFolderEdit(folderId), 40);
@@ -15300,7 +15329,10 @@ function wsContextMenu(ev, wsId) {
 }
 let _ctxOverlayActive = false;
 function _hideCtxMenu() {
-  document.getElementById('ctx-menu').style.display = 'none';
+  const menu = document.getElementById('ctx-menu');
+  menu.style.display = 'none';
+  menu.replaceChildren();
+  _ctxActions = [];
   if (!_ctxOverlayActive) return;
   _ctxOverlayActive = false;
   clearChromeOverlay('context-menu');
@@ -15318,6 +15350,11 @@ function _hideCtxMenu() {
   if (!spotlightOpen && panel && panel.classList.contains('open')) { syncSuggestionOverlay(panel); return; }
   // Spotlight keeps its own full-window clip (Rust spotlight_open); clearing here is safe.
 }
+function runCtxAction(idx) {
+  const action = _ctxActions[idx];
+  _hideCtxMenu();
+  if (action) action();
+}
 function showContextMenu(x, y, items) {
   // Cancel any in-flight auto-hide so a timer armed just before the right-click
   // can't collapse the sidebar while the menu is up.
@@ -15331,7 +15368,7 @@ function showContextMenu(x, y, items) {
     const i = idx;
     _ctxActions.push(item.action);
     idx++;
-    return `<div class="ctx-item ${item.danger?'danger':''}" onclick="_hideCtxMenu();_ctxActions[${i}]()">
+    return `<div class="ctx-item ${item.danger?'danger':''}" onclick="runCtxAction(${i})">
       ${escHtml(item.label)}
     </div>`;
   }).join('');
@@ -16201,6 +16238,32 @@ mod tests {
         assert!(!html.contains("panel.classList.toggle('detached', bookmarksVisible)"));
         assert!(html.contains(
             "document.addEventListener('dragstart', function(e) {\n  hideSuggestions();"
+        ));
+    }
+
+    #[test]
+    fn bookmark_folder_icons_toggle_the_modal() {
+        let html = chrome_html();
+        assert!(html.contains("openFolderModal('${escAttr(f.id)}',this,false,true)"));
+        assert!(html.contains("if (toggle && !rename && _activeFolderId === folderId"));
+        assert!(html.contains("closeFolderModal();\n    return;"));
+    }
+
+    #[test]
+    fn context_actions_clear_the_menu_before_running() {
+        let html = chrome_html();
+        assert!(html.contains("onclick=\"runCtxAction(${i})\""));
+        assert!(html.contains(
+            "const action = _ctxActions[idx];\n  _hideCtxMenu();\n  if (action) action();"
+        ));
+        assert!(html.contains("menu.replaceChildren();\n  _ctxActions = [];"));
+    }
+
+    #[test]
+    fn folder_bookmark_new_tab_closes_the_folder() {
+        let html = chrome_html();
+        assert!(html.contains(
+            "if (el.closest('#folder-modal')) closeFolderModal();\n      send('OpenInNewTab', {url});"
         ));
     }
 }

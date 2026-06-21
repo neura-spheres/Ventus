@@ -1,5 +1,5 @@
-use serde_json::{json, Value};
 use super::provider::Tool;
+use serde_json::{json, Value};
 
 pub fn browser_tool_definitions() -> Vec<Tool> {
     vec![

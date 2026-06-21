@@ -2201,7 +2201,7 @@ fn recover_loading_tab(
     // stop the spinner and keep what loaded. This MUST include native loads — on Windows
     // every real web navigation is native, so excluding them (the previous behaviour)
     // meant every slow-but-fine page got reloaded/rebuilt and ultimately blanked.
-    if !failed && pct >= 0.5 {
+    if !failed && pct > 0.0 {
         return stop_failed_load(state, chrome, &tab_id, &key);
     }
 

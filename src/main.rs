@@ -3317,10 +3317,16 @@ fn main() {
                             }
                             if let Some(tab) = state.tab_manager.get_tab(id) {
                                 let url = tab.url.clone();
-                                if tab.status == crate::browser::tab::TabStatus::Loading
-                                    && !url.trim().is_empty()
-                                    && !url.starts_with("neura://")
-                                {
+                                let is_neura = tab.is_neura_page();
+                                let loading =
+                                    tab.status == crate::browser::tab::TabStatus::Loading;
+                                let missing = tab_needs_content(tab, content_views.contains_key(id));
+                                if missing {
+                                    state.tab_manager.wake_tab(id);
+                                    state.set_content_cover(&chrome, true);
+                                    state.push_state_to_chrome(&chrome);
+                                    pending_wake_build = Some((id.clone(), url));
+                                } else if loading && !url.trim().is_empty() && !is_neura {
                                     state.load_recoveries.remove(&app::load_key(id, &url));
                                     watch_load(
                                         &rt,
@@ -7493,10 +7499,10 @@ fn content_initialization_script(
       post({cmd:'open_downloads_panel'});
     }
   }, true);
-  document.addEventListener('wheel', function(e) {
+  window.addEventListener('wheel', function(e) {
     if (!e.ctrlKey && !e.metaKey) return;
     e.preventDefault();
-    e.stopPropagation();
+    e.stopImmediatePropagation();
     const delta = e.deltaY < 0 ? 0.1 : -0.1;
     post({cmd:'zoom_delta', delta});
   }, {capture:true, passive:false});
@@ -8500,6 +8506,14 @@ fn action_content_cover(
     state: &AppState,
     content_views: &HashMap<String, WebView>,
 ) -> bool {
+    let active_missing = state
+        .tab_manager
+        .active_tab()
+        .map(|tab| tab_needs_content(tab, content_views.contains_key(&tab.id)))
+        .unwrap_or(false);
+    if active_missing {
+        return true;
+    }
     match action {
         TabAction::Create { url, .. } => !url.starts_with("neura://"),
         TabAction::ContentNavigate(url) => {
@@ -8521,6 +8535,10 @@ fn action_content_cover(
         }
         _ => state.content_cover_open && active_tab_loading(state),
     }
+}
+
+fn tab_needs_content(tab: &crate::browser::tab::Tab, has_view: bool) -> bool {
+    !tab.is_neura_page() && !has_view
 }
 
 fn find_page_script(query: &str, forward: bool) -> String {
@@ -11704,6 +11722,34 @@ mod webview_arg_tests {
         assert!(script.contains("Ventus"));
         assert!(script.contains("Chromium"));
         assert!(script.contains("Not)A;Brand"));
+    }
+
+    #[test]
+    fn content_zoom_wheel_runs_before_page_handlers() {
+        let sites = config::SitePermissionMap::new();
+        let defaults = config::SitePermissions::default();
+        let script = content_initialization_script(
+            1.0,
+            "",
+            false,
+            "test-seed",
+            false,
+            false,
+            &sites,
+            &defaults,
+        );
+        assert!(script.contains("window.addEventListener('wheel'"));
+        assert!(script.contains("e.stopImmediatePropagation()"));
+        assert!(!script.contains("document.addEventListener('wheel'"));
+    }
+
+    #[test]
+    fn missing_web_tab_needs_content_view() {
+        let web = crate::browser::tab::Tab::new("ws", "https://example.com");
+        let internal = crate::browser::tab::Tab::new("ws", "neura://newtab");
+        assert!(tab_needs_content(&web, false));
+        assert!(!tab_needs_content(&web, true));
+        assert!(!tab_needs_content(&internal, false));
     }
 
     #[test]

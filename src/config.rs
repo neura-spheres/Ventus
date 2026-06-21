@@ -68,8 +68,14 @@ fn default_font_family() -> String {
 }
 
 pub const TOOLBAR_BUTTON_LIMIT: usize = 5;
-pub const TOOLBAR_BUTTON_IDS: [&str; 6] =
-    ["ai", "apps", "downloads", "history", "bookmarks", "settings"];
+pub const TOOLBAR_BUTTON_IDS: [&str; 6] = [
+    "ai",
+    "apps",
+    "downloads",
+    "history",
+    "bookmarks",
+    "settings",
+];
 
 pub fn default_toolbar_buttons() -> Vec<String> {
     vec!["ai".to_string()]
