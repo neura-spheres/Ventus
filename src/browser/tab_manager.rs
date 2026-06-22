@@ -245,16 +245,16 @@ impl TabManager {
 
     pub fn visit_tab(&mut self, id: &str, url: &str, title: &str) {
         if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == id) {
+            let same_page = same_page_url(&tab.url, url);
             if tab.url != url {
                 push_nav_url(&mut tab.back_stack, &tab.url);
                 tab.forward_stack.clear();
             }
             tab.url = url.to_string();
-            tab.title = if title.is_empty() {
-                url.to_string()
-            } else {
-                title.to_string()
-            };
+            let new_title = if title.is_empty() { url } else { title };
+            if !keep_real_title(same_page, new_title, &tab.title) {
+                tab.title = new_title.to_string();
+            }
             tab.status = crate::browser::tab::TabStatus::Complete;
             tab.last_active_at = chrono::Utc::now().timestamp_millis();
             tab.sync_nav_flags();
@@ -263,8 +263,9 @@ impl TabManager {
 
     pub fn replace_tab_nav(&mut self, id: &str, url: &str, title: &str) {
         if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == id) {
+            let same_page = same_page_url(&tab.url, url);
             tab.url = url.to_string();
-            if !title.is_empty() {
+            if !title.is_empty() && !keep_real_title(same_page, title, &tab.title) {
                 tab.title = title.to_string();
             }
             tab.status = crate::browser::tab::TabStatus::Complete;
@@ -343,6 +344,18 @@ fn push_nav_url(stack: &mut Vec<String>, url: &str) {
     if stack.len() > MAX_NAV_STACK {
         stack.remove(0);
     }
+}
+
+fn is_url_like(s: &str) -> bool {
+    s.starts_with("http://") || s.starts_with("https://")
+}
+
+fn same_page_url(a: &str, b: &str) -> bool {
+    a.trim_end_matches('/') == b.trim_end_matches('/')
+}
+
+fn keep_real_title(same_page: bool, new_title: &str, current: &str) -> bool {
+    same_page && is_url_like(new_title) && !current.is_empty() && !is_url_like(current)
 }
 
 #[cfg(test)]

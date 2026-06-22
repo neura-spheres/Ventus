@@ -663,6 +663,10 @@ pub enum AppEvent {
         favicon: Option<String>,
         replace: bool,
     },
+    ContentTitle {
+        tab_id: String,
+        title: String,
+    },
     ContentPageText {
         tab_id: String,
         text: String,

@@ -3603,6 +3603,25 @@ pub fn handle_app_event_inner(
             state.push_state_to_chrome(chrome);
             None
         }
+        AppEvent::ContentTitle { tab_id, title } => {
+            let title = title.trim().to_string();
+            if title.is_empty() {
+                return None;
+            }
+            let changed = match state.tab_manager.tabs.iter_mut().find(|t| t.id == tab_id) {
+                Some(tab) if tab.url.starts_with("neura://") || tab.title == title => false,
+                Some(tab) => {
+                    tab.title = title.clone();
+                    true
+                }
+                None => return None,
+            };
+            if !changed {
+                return None;
+            }
+            state.push_state_to_chrome(chrome);
+            None
+        }
         AppEvent::AiChunk { text, done } => {
             let text_js = serde_json::to_string(&text).unwrap_or_default();
             let _ = chrome.evaluate_script(&format!(

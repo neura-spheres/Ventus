@@ -6,9 +6,10 @@ Read this before changing the code. Ventus is a Rust desktop browser for Windows
 
 Ventus is not a normal web app. It is a native Rust process that owns a frameless desktop window and several WebView2 child windows.
 
-- `src/main.rs` owns process startup, the Tao event loop, WebView creation, Win32 layout/clipping, downloads, update downloads, and dispatching `TabAction`s.
+- `src/main.rs` is only the binary entry point. It calls `runtime::run()`.
+- `src/runtime/` owns process startup, the Tao event loop, WebView creation, Win32 layout/clipping, downloads, update downloads, and dispatching `TabAction`s.
 - `src/app.rs` owns `AppState`, most browser command handling, state serialization for the chrome UI, settings persistence, history/bookmark/download updates, and navigation decisions.
-- `src/ui/chrome.rs` contains the entire browser interface as one embedded HTML document with CSS and JavaScript.
+- `src/ui/chrome.rs` builds the chrome document and owns its Rust tests. `src/ui/chrome.html` contains the browser interface, CSS, and JavaScript compiled into the executable.
 - `src/ui/events.rs` defines the IPC contract between JS and Rust with `ChromeCommand` and `AppEvent`.
 - `src/browser/` contains tab, workspace, navigation, search-engine, downloads, and split-view models.
 - `src/storage/` contains SQLite setup, migrations, repositories, keychain access, and settings serialization.
@@ -19,11 +20,32 @@ Ventus is not a normal web app. It is a native Rust process that owns a frameles
 
 Some local checkouts may include `RULES.md` with stricter project style notes. If it is present, read it before coding. Otherwise, follow the conventions in this file and the surrounding source.
 
+## Runtime Source Map
+
+The runtime fragments use `include!` from `src/runtime/mod.rs`. This keeps them in one Rust module scope, so the refactor does not change private visibility or event-loop captures.
+
+| File | Owns |
+| --- | --- |
+| `src/runtime/mod.rs` | Runtime setup, shared imports/constants, window and WebContext creation |
+| `src/runtime/event_loop.rs` | Tao event callback and `TabAction` execution |
+| `src/runtime/startup.rs` | Single-instance startup, relaunch, profile locks, shutdown, process failure |
+| `src/runtime/permissions.rs` | Live WebView2 permission policy and permission callbacks |
+| `src/runtime/downloads.rs` | WebView2 download lifecycle and accelerated downloads |
+| `src/runtime/native_events.rs` | Navigation, popup windows, new-window handling, keyboard accelerators |
+| `src/runtime/webviews.rs` | Content WebView creation, browser arguments, settings load, secure DNS setup |
+| `src/runtime/scripts.rs` | Content and privacy initialization scripts injected into pages |
+| `src/runtime/feed.rs` | Trends and feed refresh helpers |
+| `src/runtime/layout.rs` | `AppLayout`, clipping, z-order, content bounds, load watches, cookie snapshots |
+| `src/runtime/services.rs` | Session saves, cloud sync, notification icons, stale-event guards |
+| `src/runtime/assistant.rs` | AI agent execution, account auth, profile work, AI streaming |
+| `src/runtime/search_answers.rs` | Currency, market, Wikipedia, and instant-answer helpers |
+| `src/runtime/system.rs` | Memory limits, image saving, and clipboard integration |
+
 ## WebView Architecture
 
 The app uses a layered WebView model.
 
-The chrome WebView is created first in `main.rs` with `WebViewBuilder::new_as_child(&window)`, `with_transparent(true)`, and `with_html(chrome_html())`. It covers the whole window. It renders the toolbar, address bar, sidebar, settings modal, onboarding modal, new-tab page, suggestions, download panel, AI sidebar, and window controls.
+The chrome WebView is created first in `src/runtime/mod.rs` with `WebViewBuilder::new_as_child(&window)`, `with_transparent(true)`, and `with_html(chrome_html())`. It covers the whole window. It renders the toolbar, address bar, sidebar, settings modal, onboarding modal, new-tab page, suggestions, download panel, AI sidebar, and window controls.
 
 Content WebViews are created per tab by `build_content_webview()`. They use a shared `wry::WebContext` rooted under the app data directory so cookies, local storage, and cache persist across tabs and restarts. Normal web pages get content WebViews. `neura://` pages are chrome-rendered and should not keep an active content WebView for that tab.
 
@@ -34,13 +56,13 @@ On Windows, the chrome WebView is clipped with `SetWindowRgn` so only UI regions
 - `AppLayout::calculate()` is the single source of truth for toolbar height, sidebar width, AI width, content bounds, and the chrome clip region.
 - `SyncViews` means content bounds may change. `SyncClipOnly` means only the chrome clip region changes.
 
-This layering is fragile. When fixing black content, unclickable pages, sidebar peek issues, or broken overlays, check both the CSS state in `chrome.rs` and the Win32 clipping/z-order logic in `main.rs`.
+This layering is fragile. When fixing black content, unclickable pages, sidebar peek issues, or broken overlays, check both the CSS state in `src/ui/chrome.html` and the Win32 clipping and z-order logic in `src/runtime/layout.rs`.
 
 ## Runtime Flow
 
 Startup flow:
 
-1. `main()` initializes logging and Tokio.
+1. `main()` calls `runtime::run()`, which initializes logging and Tokio.
 2. The app data directory comes from `utils::platform::data_dir()`, using `ProjectDirs::from("com", "neura", "NeuraBrowser")`.
 3. SQLite opens at `neura.db`; migrations run; built-in search engines are seeded.
 4. `AppSettings` loads from the `app_settings` row in the `settings` table.
@@ -58,7 +80,7 @@ Most user actions are:
 3. Rust deserializes it as `ChromeCommand` using `#[serde(tag = "cmd", rename_all = "snake_case")]`.
 4. `handle_app_event_inner()` calls `handle_chrome_command()`.
 5. The handler mutates `AppState`, persists data when needed, pushes state to JS, and may return a `TabAction`.
-6. `main.rs` executes the `TabAction` because it owns the actual WebViews and window.
+6. `src/runtime/event_loop.rs` executes the `TabAction` because the runtime owns the actual WebViews and window.
 
 ## IPC Contract
 
@@ -76,9 +98,9 @@ This posts:
 {"cmd":"navigate","url":"..."}
 ```
 
-New UI commands should be added to `ChromeCommand` in `src/ui/events.rs` and handled in `src/app.rs`. Keep direct WebView operations in `main.rs` by returning a `TabAction`; do not make `app.rs` own WebView lifecycle work.
+New UI commands should be added to `ChromeCommand` in `src/ui/events.rs` and handled in `src/app.rs`. Keep direct WebView operations in `src/runtime/` by returning a `TabAction`; do not make `app.rs` own WebView lifecycle work.
 
-Rust-to-JS calls go through the `window.__neura` object in `chrome.rs`. If Rust needs a new UI update method, add it there and call it with `chrome.evaluate_script(...)`.
+Rust-to-JS calls go through the `window.__neura` object in `src/ui/chrome.html`. If Rust needs a new UI update method, add it there and call it with `chrome.evaluate_script(...)`.
 
 ## UI State
 
@@ -86,7 +108,7 @@ Rust-to-JS calls go through the `window.__neura` object in `chrome.rs`. If Rust 
 
 `window.__neura.setState(s)` merges state into the JS `state` object and calls `render()`. `render()` updates workspaces, tabs, address bar, search settings, bookmarks, downloads, new-tab shortcuts, theme, sidebar mode, and settings fields.
 
-Important UI areas in `src/ui/chrome.rs`:
+Important UI areas in `src/ui/chrome.html`:
 
 - Address bar and omnibox suggestions use `#url-input`, `#url-suggestions`, `GetHistory`, `SuggestionOverlay`, and `syncSuggestionOverlay()`.
 - New tab page is rendered by chrome through `#newtab-placeholder`, not by a content WebView.
@@ -103,7 +125,7 @@ Navigation is resolved in `app.rs`:
 - `resolve_input()` handles empty input, `neura://`, full HTTP/HTTPS/file URLs, dotted domains, localhost addresses, and search queries.
 - Built-in search engines live in `browser::search_engine::SearchEngine::builtin_engines()` and are seeded into SQLite.
 
-Content navigation events come back from `main.rs` page-load handlers and the content initialization script. Metadata and favicon updates come from `content_initialization_script()`.
+Content navigation events come back from `src/runtime/native_events.rs` and the content initialization script in `src/runtime/scripts.rs`. Metadata and favicon updates come from `content_initialization_script()`.
 
 History stores cleaned URLs through `utils::url::clean_tracking_url()`. Do not save `neura://` pages into history.
 
@@ -134,7 +156,7 @@ Downloads are loaded on startup with `repositories::list_downloads(&conn, 100)`.
 
 ## Downloads
 
-Downloads are controlled from `build_content_webview()` in `main.rs`.
+Downloads are attached to content WebViews from `src/runtime/downloads.rs`. Content WebViews are built in `src/runtime/webviews.rs`.
 
 - `with_download_started_handler()` chooses the final download path.
 - `download_dir_from_settings()` uses `settings.downloads.default_folder` when set; otherwise it falls back to the OS Downloads directory.
@@ -170,7 +192,7 @@ AI provider selection is configured through `AppSettings.ai`.
 - OpenAI and OpenRouter share `OpenAiProvider`.
 - Anthropic uses `/v1/messages`.
 - Ollama targets `http://localhost:11434`.
-- Chat requests are sent from `handle_ai_message()` in `main.rs` so async streaming can use Tokio and send `AppEvent::AiChunk` back to the UI.
+- Chat requests are sent from `handle_ai_message()` in `src/runtime/assistant.rs` so async streaming can use Tokio and send `AppEvent::AiChunk` back to the UI.
 
 The current page context is basic title and URL text. The richer page-text extraction flow is only partially represented by events and prompt helpers.
 
@@ -189,12 +211,12 @@ cargo build
 cargo build --release
 ```
 
-For changes inside the embedded JS in `src/ui/chrome.rs`, validate the script syntax:
+For changes inside the embedded JS in `src/ui/chrome.html`, validate the script syntax:
 
 ```powershell
 @'
 const fs = require('fs');
-const s = fs.readFileSync('src/ui/chrome.rs','utf8');
+const s = fs.readFileSync('src/ui/chrome.html','utf8');
 const m = s.match(/<script>([\s\S]*)<\/script>/);
 if (!m) throw new Error('script block not found');
 new Function(m[1]);
@@ -218,13 +240,13 @@ Before editing:
 
 - Read `RULES.md` if it exists in your checkout.
 - Check `git status --short`; do not revert user changes.
-- For UI bugs, inspect both `src/ui/chrome.rs` and `src/main.rs`.
+- For UI bugs, inspect `src/ui/chrome.html`, `src/runtime/event_loop.rs`, and `src/runtime/layout.rs`.
 - For persistence bugs, inspect `src/app.rs`, `src/storage/repositories.rs`, and the relevant settings path.
 
 After editing:
 
 - Run `cargo fmt` for Rust changes.
-- Run the Node inline-script syntax check after `chrome.rs` JS changes.
+- Run the Node inline-script syntax check after `chrome.html` JS changes.
 - Run `cargo check` for code changes.
 - Run `cargo build` when touching startup, WebView creation, Windows APIs, downloads, or update behavior.
 - Manually reason through whether chrome owns content, content owns clicks, or a floating panel needs `SuggestionOverlay`.

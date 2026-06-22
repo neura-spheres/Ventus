@@ -19,7 +19,7 @@ The most critical architectural concept. Two types of WebViews co-exist as Win32
 **Content WebViews** — one per tab, positioned below chrome in Z-order.
 - Rect is `(content_x, toolbar_h, content_w, content_h)`.
 - In auto-hide-pinned mode: `content_x = sidebar_w`. In all other modes: `content_x = 0`.
-- Managed by `build_content_webview()` in `main.rs`.
+- Managed by `build_content_webview()` in `src/runtime/webviews.rs`.
 
 **Key constraint**: `WM_MOUSELEAVE` never fires when cursor moves from chrome clip region into content area (content is a sibling HWND, not the chrome's client). The content WebView's `mousemove` IPC is used instead to signal Rust to close the sidebar.
 
@@ -31,9 +31,11 @@ The most critical architectural concept. Two types of WebViews co-exist as Win32
 
 | File | Purpose |
 |------|---------|
-| `src/main.rs` | Event loop, WebView creation, layout engine, Win32 clip/Z management |
+| `src/main.rs` | Small binary entry point that calls `runtime::run()` |
+| `src/runtime/` | Event loop, WebView creation, layout engine, Win32 clip/Z management, downloads, and native services |
 | `src/app.rs` | `AppState`, all `ChromeCommand` handlers, `TabAction` dispatch |
-| `src/ui/chrome.rs` | Entire browser UI as one HTML/CSS/JS string (`chrome_html()`) |
+| `src/ui/chrome.rs` | Chrome document loader, token replacement, and Rust tests |
+| `src/ui/chrome.html` | Entire browser UI, CSS, and JavaScript compiled into the app |
 | `src/ui/events.rs` | `ChromeCommand` enum (JS→Rust IPC), `AppEvent` enum (Rust→JS+internal) |
 | `src/updater.rs` | GitHub release checker + .bat-based self-update |
 | `src/browser/tab_manager.rs` | Tab + workspace state |
@@ -42,7 +44,7 @@ The most critical architectural concept. Two types of WebViews co-exist as Win32
 
 ---
 
-## Layout Engine (`main.rs`)
+## Layout Engine (`src/runtime/layout.rs`)
 
 `AppLayout::calculate()` computes all pixel values from `AppState` + `LayoutConfig`.
 
@@ -103,7 +105,7 @@ Main event loop dispatches:
 
 ---
 
-## Chrome Clip Region (`set_chrome_clip_region` in main.rs)
+## Chrome Clip Region (`set_chrome_clip_region` in `src/runtime/layout.rs`)
 
 ```rust
 fn set_chrome_clip_region(hwnd, window_w, window_h, sidebar_w, toolbar_h, ai_sidebar_w, ai_open, overlay_open)
@@ -118,7 +120,7 @@ fn set_chrome_clip_region(hwnd, window_w, window_h, sidebar_w, toolbar_h, ai_sid
 
 ## Sidebar Auto-Hide System
 
-**JS side** (`chrome.rs`):
+**JS side** (`src/ui/chrome.html`):
 - `sidebarPeeking` / `sidebarPinned` — module-level state vars
 - `showFloatingSidebar()` → adds `.sidebar-floating-open` class → CSS transition slides sidebar in → sends `SidebarPeek{visible:true, pinned: sidebarPinned}`
 - `_doHideSidebar()` → removes class → 220ms delay → sends `SidebarPeek{visible:false, pinned:false}`
@@ -154,7 +156,7 @@ Serde deserializes via `#[serde(tag = "cmd", rename_all = "snake_case")]` on `Ch
 
 ---
 
-## chrome.rs JS Interface (`window.__neura`)
+## Chrome JS Interface (`window.__neura` in `src/ui/chrome.html`)
 
 Key methods called by Rust:
 - `setState(s)` — merges into `state`, calls `render()`
@@ -173,39 +175,7 @@ Key methods called by Rust:
 
 ## New Tab Page
 
-The new tab page (`neura://newtab` or `about:blank`) is rendered in the CHROME WebView via `#newtab-placeholder` div (NOT a separate WebView). `checkNewtabPlaceholder(url)` shows/hides it.
-
-`#newtab-shortcuts` div exists but **is not populated** — `populateNewtabShortcuts()` function was NEVER implemented. This is a known open bug.
-
----
-
-## Open Bugs / Pending Work
-
-### 1. New Tab Shortcuts (NOT IMPLEMENTED)
-`#newtab-shortcuts` div in `chrome.rs` HTML is always empty. Need to add `populateNewtabShortcuts()` that:
-- Uses `state.bookmarks` if populated, else hardcoded defaults (Google, YouTube, GitHub, Reddit, etc.)
-- Renders `.newtab-shortcut` divs with colored letter-icon squares
-- Called from `checkNewtabPlaceholder()` when showing the new tab
-
-### 2. Address Bar Omnibox (NOT IMPLEMENTED)
-`#url-input` only handles Enter (navigate) and Escape (blur). No suggestion dropdown.
-Need:
-- `#url-suggestions` fixed-position dropdown (add to `<body>`)
-- CSS: `.url-suggestion`, `.url-suggestion.highlighted`
-- On focus: `send('GetHistory', {q: ''})` to prefetch recent history
-- `oninput="filterOmnibox(this.value)"` handler
-- `showOmniboxSuggestions(q)` — filters `state.history`, adds "Search X for..." option
-- Keyboard: ArrowUp/Down navigate, Enter selects, Escape closes
-- `onmousedown` on suggestions with `e.preventDefault()` (prevents blur before selection)
-- Update `__neura.setHistory` to also refresh open omnibox
-- `handleUrlKey()` needs ArrowUp/Down handling before current Enter/Escape logic
-
-### 3. Content Becomes Black on Settings Open / Sidebar Peek
-Root cause: `SetWindowRgn(..., bRedraw=true)` forces chrome repaint → opaque `body{background:var(--bg)}` covers content WebView.
-
-Two-part fix (NOT YET APPLIED):
-1. Change `bRedraw` from `true` to `false` in the `overlay_open=true` branch of `set_chrome_clip_region`
-2. (Optional deeper fix) Add `.with_transparent(true)` to chrome `WebViewBuilder::new_as_child` + change `body{background: transparent}` in chrome CSS. WRY 0.38 supports `with_transparent` via `put_DefaultBackgroundColor`.
+The new tab page (`neura://newtab` or `about:blank`) is rendered in the chrome WebView through `#newtab-placeholder`, not a content WebView. `checkNewtabPlaceholder(url)` controls visibility, and `renderNewtabShortcuts()` fills the quick links.
 
 ---
 
