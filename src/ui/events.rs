@@ -35,6 +35,9 @@ pub enum ChromeCommand {
     Reload,
     Stop,
     OmniboxPaste,
+    WriteClipboard {
+        text: String,
+    },
     NewTab,
     CloseTab {
         id: String,
@@ -450,6 +453,7 @@ impl ChromeCommand {
             ChromeCommand::Reload => Some("reload"),
             ChromeCommand::Stop => Some("stop"),
             ChromeCommand::OmniboxPaste => Some("omnibox_paste"),
+            ChromeCommand::WriteClipboard { .. } => Some("write_clipboard"),
             ChromeCommand::NewTab => Some("new_tab"),
             ChromeCommand::CloseTab { .. } => Some("close_tab"),
             ChromeCommand::SwitchTab { .. } => Some("switch_tab"),

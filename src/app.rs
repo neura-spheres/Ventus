@@ -425,6 +425,7 @@ pub enum TabAction {
     ContentGoBack,
     ContentGoForward,
     ReadClipboardForOmnibox,
+    WriteClipboardText(String),
     ReloadContent {
         tab_id: String,
         url: String,
@@ -564,6 +565,7 @@ pub fn handle_chrome_command(
         ChromeCommand::Reload => reload_current_tab(state, chrome),
         ChromeCommand::Stop => Some(TabAction::ContentScript("window.stop()".into())),
         ChromeCommand::OmniboxPaste => Some(TabAction::ReadClipboardForOmnibox),
+        ChromeCommand::WriteClipboard { text } => Some(TabAction::WriteClipboardText(text)),
         ChromeCommand::NewTab => {
             let tab_id;
             let url;
@@ -4728,6 +4730,16 @@ fn handle_save_settings(
             if let Ok(apps) = serde_json::from_value::<Vec<crate::config::CustomApp>>(value.clone())
             {
                 state.settings.appearance.sidebar_apps = apps;
+            }
+        }
+        "beta_channel" => {
+            if let Some(v) = value.as_bool() {
+                state.settings.beta_channel = v;
+            }
+        }
+        "compact_tabs" => {
+            if let Some(v) = value.as_bool() {
+                state.settings.tabs.compact_tabs = v;
             }
         }
         _ => {

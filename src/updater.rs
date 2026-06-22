@@ -15,17 +15,36 @@ pub struct ReleaseInfo {
     pub download_url: String,
 }
 
-pub async fn check_latest() -> Result<Option<ReleaseInfo>> {
-    let url = format!(
-        "https://api.github.com/repos/{}/{}/releases/latest",
-        GITHUB_OWNER, GITHUB_REPO
-    );
-
-    let resp: serde_json::Value = reqwest::Client::builder()
+pub async fn check_latest(beta: bool) -> Result<Option<ReleaseInfo>> {
+    let client = reqwest::Client::builder()
         .user_agent(USER_AGENT)
         .connect_timeout(std::time::Duration::from_secs(6))
         .timeout(std::time::Duration::from_secs(12))
-        .build()?
+        .build()?;
+
+    let current = semver::Version::parse(CURRENT_VERSION)?;
+
+    if !beta {
+        let url = format!(
+            "https://api.github.com/repos/{}/{}/releases/latest",
+            GITHUB_OWNER, GITHUB_REPO
+        );
+        let resp: serde_json::Value = client
+            .get(&url)
+            .header("Accept", "application/vnd.github+json")
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+        return resolve(&resp, &current);
+    }
+
+    let url = format!(
+        "https://api.github.com/repos/{}/{}/releases?per_page=30",
+        GITHUB_OWNER, GITHUB_REPO
+    );
+    let releases: serde_json::Value = client
         .get(&url)
         .header("Accept", "application/vnd.github+json")
         .send()
@@ -34,7 +53,28 @@ pub async fn check_latest() -> Result<Option<ReleaseInfo>> {
         .json()
         .await?;
 
-    let tag = resp["tag_name"]
+    let Some(list) = releases.as_array() else {
+        return Ok(None);
+    };
+
+    let newest = list
+        .iter()
+        .filter(|r| r["draft"].as_bool() != Some(true))
+        .filter_map(|r| {
+            let tag = r["tag_name"].as_str()?.trim_start_matches('v');
+            semver::Version::parse(tag).ok().map(|v| (v, r))
+        })
+        .max_by(|a, b| a.0.cmp(&b.0));
+
+    let Some((_, release)) = newest else {
+        return Ok(None);
+    };
+
+    resolve(release, &current)
+}
+
+fn resolve(release: &serde_json::Value, current: &semver::Version) -> Result<Option<ReleaseInfo>> {
+    let tag = release["tag_name"]
         .as_str()
         .unwrap_or("")
         .trim_start_matches('v')
@@ -44,37 +84,14 @@ pub async fn check_latest() -> Result<Option<ReleaseInfo>> {
         return Err(anyhow!("No releases found on GitHub."));
     }
 
-    let current = semver::Version::parse(CURRENT_VERSION)?;
     let latest = semver::Version::parse(&tag)
         .map_err(|_| anyhow!("Could not parse release version '{}'", tag))?;
 
-    if latest <= current {
+    if latest <= *current {
         return Ok(None);
     }
 
-    let installer_name = format!("Ventus-Setup-{}.exe", latest);
-    let download_url = resp["assets"]
-        .as_array()
-        .and_then(|assets| {
-            assets
-                .iter()
-                .find(|a| a["name"].as_str() == Some(&installer_name))
-                .or_else(|| {
-                    assets.iter().find(|a| {
-                        let name = a["name"].as_str().unwrap_or("");
-                        name.starts_with("Ventus-Setup-") && name.ends_with(".exe")
-                    })
-                })
-                .or_else(|| {
-                    assets
-                        .iter()
-                        .find(|a| a["name"].as_str() == Some("ventus.exe"))
-                })
-        })
-        .and_then(|a| a["browser_download_url"].as_str())
-        .unwrap_or("")
-        .to_string();
-
+    let download_url = pick_asset(&release["assets"], &latest).unwrap_or_default();
     if download_url.is_empty() {
         return Err(anyhow!(
             "Release v{} has no Ventus installer or ventus.exe asset attached.",
@@ -84,9 +101,30 @@ pub async fn check_latest() -> Result<Option<ReleaseInfo>> {
 
     Ok(Some(ReleaseInfo {
         version: latest.to_string(),
-        notes: resp["body"].as_str().unwrap_or("").to_string(),
+        notes: release["body"].as_str().unwrap_or("").to_string(),
         download_url,
     }))
+}
+
+fn pick_asset(assets: &serde_json::Value, version: &semver::Version) -> Option<String> {
+    let assets = assets.as_array()?;
+    let installer_name = format!("Ventus-Setup-{}.exe", version);
+    assets
+        .iter()
+        .find(|a| a["name"].as_str() == Some(&installer_name))
+        .or_else(|| {
+            assets.iter().find(|a| {
+                let name = a["name"].as_str().unwrap_or("");
+                name.starts_with("Ventus-Setup-") && name.ends_with(".exe")
+            })
+        })
+        .or_else(|| {
+            assets
+                .iter()
+                .find(|a| a["name"].as_str() == Some("ventus.exe"))
+        })
+        .and_then(|a| a["browser_download_url"].as_str())
+        .map(|s| s.to_string())
 }
 
 pub async fn download_update(
@@ -207,5 +245,55 @@ fn update_file_name(url: &str) -> String {
         "ventus-update.exe".to_string()
     } else {
         clean
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use semver::Version;
+
+    fn v(s: &str) -> Version {
+        Version::parse(s).expect("valid version")
+    }
+
+    #[test]
+    fn prerelease_chain_orders_chronologically() {
+        let chain = [
+            "1.0.33",
+            "1.0.34-pre26062201",
+            "1.0.34-pre26062202",
+            "1.0.34-pre26070101",
+            "1.0.34",
+        ];
+        for pair in chain.windows(2) {
+            assert!(v(pair[0]) < v(pair[1]), "{} should be < {}", pair[0], pair[1]);
+        }
+    }
+
+    #[test]
+    fn stable_beats_its_prerelease() {
+        assert!(v("1.0.34") > v("1.0.34-pre26070101"));
+    }
+
+    #[test]
+    fn picks_highest_when_releases_unsorted() {
+        let mut versions = [
+            v("1.0.34-pre26062202"),
+            v("1.0.34"),
+            v("1.0.33"),
+            v("1.0.34-pre26062201"),
+        ];
+        versions.sort();
+        assert_eq!(versions.last().unwrap(), &v("1.0.34"));
+    }
+
+    #[test]
+    fn pick_asset_prefers_exact_installer() {
+        let assets = serde_json::json!([
+            {"name": "ventus.exe", "browser_download_url": "u-raw"},
+            {"name": "Ventus-Setup-1.0.34-pre26062201.exe", "browser_download_url": "u-exact"}
+        ]);
+        let url = super::pick_asset(&assets, &v("1.0.34-pre26062201"));
+        assert_eq!(url.as_deref(), Some("u-exact"));
     }
 }

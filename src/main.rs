@@ -404,8 +404,9 @@ fn main() {
     if !new_window {
         let proxy_upd = proxy.clone();
         let dismissed_ver = dismissed_update_version.clone();
+        let beta = settings.beta_channel;
         rt.spawn(async move {
-            if let Ok(Some(info)) = updater::check_latest().await {
+            if let Ok(Some(info)) = updater::check_latest(beta).await {
                 if dismissed_ver.as_deref() != Some(info.version.as_str()) {
                     let _ = proxy_upd.send_event(AppEvent::UpdateCheckResult {
                         available: true,
@@ -997,8 +998,9 @@ fn main() {
             Event::UserEvent(AppEvent::Chrome(ChromeCommand::CheckForUpdate)) => {
                 tracing::info!(target: "ventus::feature", action = "check_update", "feature action");
                 let proxy_upd = proxy_main.clone();
+                let beta = state.settings.beta_channel;
                 rt.spawn(async move {
-                    match updater::check_latest().await {
+                    match updater::check_latest(beta).await {
                         Ok(Some(info)) => {
                             let _ = proxy_upd.send_event(AppEvent::UpdateCheckResult {
                                 available: true,
@@ -2531,6 +2533,9 @@ fn main() {
                                 "window.__neura && window.__neura.applyClipboardPaste({})",
                                 json
                             ));
+                        }
+                        TabAction::WriteClipboardText(text) => {
+                            let _ = write_clipboard_text(&text);
                         }
                         TabAction::FindInPage {
                             tab_id,
@@ -12653,6 +12658,41 @@ fn read_clipboard_text() -> Option<String> {
 #[cfg(not(windows))]
 fn read_clipboard_text() -> Option<String> {
     None
+}
+
+#[cfg(windows)]
+fn write_clipboard_text(text: &str) -> anyhow::Result<()> {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::System::DataExchange::{CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData};
+    use windows::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE};
+    use windows::Win32::Foundation::HANDLE;
+
+    const CF_UNICODETEXT: u32 = 13;
+    let wide: Vec<u16> = text.encode_utf16().chain(std::iter::once(0)).collect();
+    let byte_len = wide.len() * 2;
+    unsafe {
+        OpenClipboard(HWND(0))?;
+        EmptyClipboard()?;
+        let hmem = GlobalAlloc(GMEM_MOVEABLE, byte_len)?;
+        let ptr = GlobalLock(hmem) as *mut u16;
+        if ptr.is_null() {
+            let _ = CloseClipboard();
+            return Err(anyhow::anyhow!("GlobalLock failed"));
+        }
+        std::ptr::copy_nonoverlapping(wide.as_ptr(), ptr, wide.len());
+        let _ = GlobalUnlock(hmem);
+        if let Err(e) = SetClipboardData(CF_UNICODETEXT, HANDLE(hmem.0 as isize)) {
+            let _ = CloseClipboard();
+            return Err(anyhow::anyhow!("SetClipboardData: {e}"));
+        }
+        let _ = CloseClipboard();
+        Ok(())
+    }
+}
+
+#[cfg(not(windows))]
+fn write_clipboard_text(_text: &str) -> anyhow::Result<()> {
+    Ok(())
 }
 
 /// JS injected into the active content WebView to fetch an image the way the page itself

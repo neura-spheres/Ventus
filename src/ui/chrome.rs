@@ -1070,11 +1070,12 @@ button,input,select,textarea{font-family:var(--font)}
 }
 .tsp-calc-result{
   font-size:30px;font-weight:700;color:var(--text);letter-spacing:-0.5px;
-  font-variant-numeric:tabular-nums;
+  font-variant-numeric:tabular-nums;user-select:text;cursor:text;
 }
 .tsp-calc-copy-hint{
-  font-size:10px;color:var(--text-dim);margin-top:4px;opacity:.7;
+  font-size:10px;color:var(--text-dim);margin-top:4px;opacity:.7;transition:color .15s ease;
 }
+.tsp-calc-card.copied .tsp-calc-copy-hint{color:var(--success);opacity:1}
 .tsp-conv-type{
   font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;
   color:var(--accent);opacity:.8;margin-bottom:4px;align-self:flex-start;
@@ -2125,8 +2126,17 @@ button,input,select,textarea{font-family:var(--font)}
 .acct-empty h3{font-size:14px;font-weight:600;color:var(--text);margin:0 0 6px}
 .acct-empty p{font-size:12px;line-height:1.5;max-width:320px;margin:0 auto}
 #account-body{max-width:720px}
-.acct-auth{max-width:360px}
-.acct-tabs{display:flex;gap:3px;background:var(--modal-bg-2);border:1px solid var(--modal-border);border-radius:10px;padding:3px;margin-bottom:16px}
+.acct-region{max-width:720px;margin-top:24px;padding-top:20px;border-top:1px solid var(--border-subtle);display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.acct-region-title{font-size:13px;font-weight:600;color:var(--text)}
+.acct-region-sub{font-size:12px;color:var(--text-muted);margin-top:2px}
+.acct-region select{max-width:280px;flex:1;min-width:200px}
+.acct-auth{width:100%;padding:4px 0}
+.acct-auth-split{display:grid;grid-template-columns:1fr 1.25fr;gap:36px;align-items:flex-start}
+.acct-auth-lhs{padding:6px 0 0}
+.acct-auth-lhs h3{font-size:22px;font-weight:760;letter-spacing:-0.3px;color:var(--text);margin:0 0 10px;line-height:1.2}
+.acct-auth-lhs p{font-size:13px;line-height:1.65;color:var(--text-muted);margin:0;max-width:280px}
+.acct-auth-rhs{background:var(--bg-elevated);border:1px solid var(--modal-border);border-radius:13px;padding:20px 22px}
+.acct-tabs{display:flex;gap:3px;background:var(--modal-bg-2);border:1px solid var(--modal-border);border-radius:10px;padding:3px;margin-bottom:18px}
 .acct-tab{flex:1;padding:7px 8px;font-size:12px;font-weight:600;color:var(--text-muted);background:transparent;border:none;border-radius:7px;cursor:pointer;transition:all .12s ease;font-family:var(--font)}
 .acct-tab:hover{color:var(--text)}
 .acct-tab.active{background:var(--accent);color:#fff}
@@ -2139,6 +2149,8 @@ button,input,select,textarea{font-family:var(--font)}
 }
 .acct-fields input{margin-bottom:13px}
 .acct-fields .acct-primary{margin-top:2px}
+.acct-field select{width:100%;box-sizing:border-box;background:var(--bg-hover);border:1px solid var(--border);color:var(--text);border-radius:9px;padding:9px 32px 9px 12px;font-size:13px;outline:none;font-family:var(--font);cursor:pointer;appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");background-repeat:no-repeat;background-position:right 11px center;transition:border-color .12s ease,background-color .12s ease}
+.acct-field select:focus{border-color:var(--text-dim);background-color:var(--bg-active)}
 .acct-fields input:focus,.acct-field input:focus,.acct-field textarea:focus{border-color:var(--text-dim);background:var(--bg-active)}
 .acct-field input:disabled,.acct-field textarea:disabled{opacity:.6;cursor:not-allowed}
 .acct-field textarea{resize:vertical;min-height:86px;line-height:1.5}
@@ -2190,8 +2202,9 @@ button,input,select,textarea{font-family:var(--font)}
 .acct-danger-row{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:54px}
 .acct-signout{padding:8px 15px;font-size:12.5px;font-weight:650;color:var(--danger);background:transparent;border:1px solid color-mix(in srgb,var(--danger) 36%,transparent);border-radius:8px;cursor:pointer;font-family:var(--font);transition:background .12s ease}
 .acct-signout:hover{background:var(--danger-dim)}
-@media(max-width:760px){.acct-hero{grid-template-columns:96px minmax(0,1fr);gap:14px}.acct-hero-actions{grid-column:1 / -1;justify-content:flex-start}.acct-grid,.acct-pw-fields{grid-template-columns:1fr}.acct-head-email{max-width:100%}}
+@media(max-width:760px){.acct-hero{grid-template-columns:96px minmax(0,1fr);gap:14px}.acct-hero-actions{grid-column:1 / -1;justify-content:flex-start}.acct-grid,.acct-pw-fields{grid-template-columns:1fr}.acct-head-email{max-width:100%}.acct-auth-split{grid-template-columns:1fr;gap:20px}}
 .settings-group{margin-bottom:24px}
+.settings-toggle + .settings-group{margin-top:16px}
 .settings-group label{
   display:block;font-size:12px;font-weight:600;
   color:var(--text);margin-bottom:7px;
@@ -3443,18 +3456,30 @@ button,input,select,textarea{font-family:var(--font)}
 .ctx-item.danger:hover{background:var(--danger-dim)}
 .ctx-sep{height:1px;background:var(--border-subtle);margin:3px 0}
 
-.bm-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:var(--radius-sm);background:var(--bg);border:1px solid var(--border-subtle);cursor:pointer;transition:transform .2s cubic-bezier(.2,.85,.25,1),opacity .14s ease,background var(--transition),border-color var(--transition),box-shadow var(--transition)}
+/* Bookmarks settings list — grouped Apple-style */
+#bookmarks-list{display:flex;flex-direction:column;border:1px solid var(--border-subtle);border-radius:10px;overflow:hidden;background:var(--bg-elevated)}
+.bm-item{display:flex;align-items:center;gap:10px;padding:9px 14px;background:transparent;border:none;border-top:1px solid var(--border-subtle);cursor:pointer;transition:transform .2s cubic-bezier(.2,.85,.25,1),opacity .14s ease,background var(--transition),box-shadow var(--transition)}
+.bm-item:first-child{border-top:none}
 .bm-item:hover{background:var(--bg-hover)}
 .bm-item-info{flex:1;min-width:0}
-.bm-item-title{font-size:12px;font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.bm-item-url{font-size:11px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-/* Bookmarks section header + new-folder button */
-.bm-section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
-.bm-newfolder-btn{display:inline-flex;align-items:center;gap:6px;flex-shrink:0;border:1px solid var(--modal-border);background:var(--modal-bg-2);color:var(--text);border-radius:8px;padding:6px 12px;font-size:11px;font-weight:500;font-family:var(--font);cursor:pointer;white-space:nowrap;transition:all var(--transition)}
-.bm-newfolder-btn:hover{border-color:var(--accent);background:var(--accent-dim);color:var(--accent)}
+.bm-item-title{font-size:13px;font-weight:450;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bm-item-url{font-size:11px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}
+.bm-item{cursor:grab}
+.bm-item:active{cursor:grabbing}
+.bm-reorder{display:flex;flex-direction:column;gap:1px;flex-shrink:0;margin-left:4px;opacity:0.4;transition:opacity var(--transition)}
+.bm-item:hover .bm-reorder{opacity:1}
+.bm-item.bookmark-dragging .bm-reorder{opacity:0}
+.bm-reorder-btn{display:flex;align-items:center;justify-content:center;width:24px;height:17px;border:none;background:transparent;color:var(--text-muted);cursor:pointer;border-radius:5px;padding:0;transition:background var(--transition),color var(--transition)}
+.bm-reorder-btn:hover:not(:disabled){background:var(--bg-hover);color:var(--text)}
+.bm-reorder-btn:disabled{opacity:0.3;cursor:default}
+.bm-list-icon{width:18px;height:18px;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.bm-list-icon img{width:16px;height:16px;object-fit:contain}
+.bm-list-fallback{width:18px;height:18px;flex-shrink:0;display:flex;align-items:center;justify-content:center;border-radius:4px;background:color-mix(in srgb,var(--text) 10%,transparent);font-size:10px;font-weight:600;color:var(--text-muted)}
+.bm-add-folder-row{display:flex;align-items:center;gap:10px;padding:9px 14px;border-top:1px solid var(--border-subtle);border-left:none;border-right:none;border-bottom:none;background:transparent;width:100%;font-family:var(--font);font-size:13px;font-weight:500;color:var(--accent);cursor:pointer;text-align:left;transition:background var(--transition)}
+.bm-add-folder-row:hover{background:var(--accent-dim)}
 /* Folder item */
-.bm-folder-item{background:color-mix(in srgb,var(--accent) 4%,var(--bg))}
-.bm-folder-item:hover{background:color-mix(in srgb,var(--accent) 8%,var(--bg-hover))}
+.bm-folder-item{background:transparent}
+.bm-folder-item:hover{background:var(--bg-hover)}
 .bm-folder-icon{width:32px;height:32px;border-radius:7px;background:color-mix(in srgb,var(--accent) 14%,var(--bg));display:flex;align-items:center;justify-content:center;color:var(--accent);flex-shrink:0}
 .bm-folder-grid{display:grid;grid-template-columns:1fr 1fr;gap:2px;width:18px;height:18px}
 .bm-folder-grid span{border-radius:2px;background:currentColor;opacity:0.7}
@@ -4634,7 +4659,6 @@ svg{display:block;flex-shrink:0}
       <div class="settings-nav-item" data-section="search" onclick="switchSettings('search')">Search</div>
       <div class="settings-nav-group">Browser</div>
       <div class="settings-nav-item" data-section="newtab" onclick="switchSettings('newtab')">New tab</div>
-      <div class="settings-nav-item" data-section="tabs" onclick="switchSettings('tabs')">Tabs</div>
       <div class="settings-nav-item" data-section="bookmarks" onclick="switchSettings('bookmarks')">Bookmarks</div>
       <div class="settings-nav-item" data-section="history" onclick="switchSettings('history')">History</div>
       <div class="settings-nav-item" data-section="downloads" onclick="switchSettings('downloads')">Downloads</div>
@@ -4689,13 +4713,6 @@ svg{display:block;flex-shrink:0}
           </div>
           <div class="toggle-switch" id="toggle-ask-download" onclick="toggleSetting('ask_download')"></div>
         </div>
-        <div class="settings-group">
-          <label>Country / Region</label>
-          <select class="settings-select" id="set-region" onchange="onRegionChange(this.value)">
-            <option value="">Not set</option>
-          </select>
-          <div class="hint">Adjusts unit and currency suggestions in Spotlight</div>
-        </div>
       </div>
 
       <div class="settings-section" id="section-appearance">
@@ -4741,6 +4758,13 @@ svg{display:block;flex-shrink:0}
               <span class="tab-layout-copy"><span class="tab-layout-title">Horizontal</span><span class="tab-layout-desc">Tabs above the toolbar</span></span>
             </button>
           </div>
+        </div>
+        <div class="settings-toggle">
+          <div class="settings-toggle-info">
+            <div class="toggle-title">Compact tab style</div>
+            <div class="toggle-desc">Show smaller tabs in the sidebar</div>
+          </div>
+          <div class="toggle-switch" id="toggle-compact-tabs" onclick="toggleSetting('compact_tabs')"></div>
         </div>
         <div class="settings-group" id="sidebar-behavior-settings">
           <label>Sidebar mode</label>
@@ -4941,42 +4965,12 @@ svg{display:block;flex-shrink:0}
         </div>
       </div>
 
-      <div class="settings-section" id="section-tabs">
-        <h2>Tabs</h2>
-        <p class="subtitle">How tabs behave</p>
-        <div class="settings-toggle">
-          <div class="settings-toggle-info">
-            <div class="toggle-title">Restore closed tabs</div>
-            <div class="toggle-desc">Keep a history of recently closed tabs</div>
-          </div>
-          <div class="toggle-switch on" id="toggle-restore-tabs" onclick="toggleSetting('restore_tabs')"></div>
-        </div>
-        <div class="settings-toggle">
-          <div class="settings-toggle-info">
-            <div class="toggle-title">Compact tab style</div>
-            <div class="toggle-desc">Show smaller tabs in the sidebar</div>
-          </div>
-          <div class="toggle-switch" id="toggle-compact-tabs" onclick="toggleSetting('compact_tabs')"></div>
-        </div>
-        <div class="settings-toggle">
-          <div class="settings-toggle-info">
-            <div class="toggle-title">Auto-pin essential tabs</div>
-            <div class="toggle-desc">Automatically pin tabs marked as essential</div>
-          </div>
-          <div class="toggle-switch" id="toggle-auto-pin" onclick="toggleSetting('auto_pin')"></div>
-        </div>
-      </div>
-
       <div class="settings-section" id="section-bookmarks">
-        <div class="bm-section-head">
-          <div>
-            <h2>Bookmarks</h2>
-            <p class="subtitle">Your saved pages</p>
-          </div>
-          <button class="bm-newfolder-btn" onclick="newBookmarkFolder()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>New folder</button>
-        </div>
-        <div id="bookmarks-list" style="display:flex;flex-direction:column;gap:4px">
-          <div style="color:var(--text-muted);font-size:12px;text-align:center;padding:24px 0">No bookmarks yet. Hit the bookmark icon in the address bar to save a page.</div>
+        <h2>Bookmarks</h2>
+        <p class="subtitle" style="margin-bottom:12px">Your saved pages</p>
+        <div id="bookmarks-list">
+          <div style="color:var(--text-muted);font-size:12px;text-align:center;padding:20px 0">No bookmarks yet. Tap the bookmark icon to save a page.</div>
+          <button class="bm-add-folder-row" onclick="newBookmarkFolder()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New folder</button>
         </div>
       </div>
 
@@ -5318,6 +5312,14 @@ svg{display:block;flex-shrink:0}
             <button class="auc-btn" id="btn-check-update" onclick="checkForUpdate()">Check for updates</button>
           </div>
           <div id="update-status-area"></div>
+        </div>
+
+        <div class="settings-toggle">
+          <div class="settings-toggle-info">
+            <div class="toggle-title">Get beta updates</div>
+            <div class="toggle-desc">Pre-release builds. Newest features, rougher edges.</div>
+          </div>
+          <div class="toggle-switch" id="toggle-beta-channel" onclick="toggleSetting('beta_channel')"></div>
         </div>
 
         <!-- Actions -->
@@ -6908,7 +6910,10 @@ function startBookmarkDrag(source, e) {
   if (!list) return;
   endBookmarkDrag(true);
   const axis = list.id === 'bookmarks-bar' ? 'x' : 'y';
-  const items = bookmarkListItems(list);
+  const sourceKind = source.dataset.kind || '';
+  const items = (list.id === 'bookmarks-list' && sourceKind)
+    ? bookmarkListItems(list).filter(it => (it.dataset.kind || '') === sourceKind)
+    : bookmarkListItems(list);
   const sourceId = bookmarkItemId(source);
   if (!sourceId || !items.some(item => bookmarkItemId(item) === sourceId)) return;
   const style = window.getComputedStyle(list);
@@ -6954,6 +6959,7 @@ function computeBookmarkBefore(e, listId) {
 }
 
 function bookmarkMergeZone(e, listId) {
+  if (listId === 'bookmarks-list') return false;
   if (dragKind !== 'bookmark') return false;
   const target = e.target.closest('[data-folder-id],[data-reorder-id]');
   if (!target || !target.closest('#' + listId)) return false;
@@ -8383,6 +8389,7 @@ function populateSettingsPanel() {
   setSelectValue('set-font-family', fontFamilyKey(app.font_family || 'system'));
   setToggleEl('toggle-show-bookmarks-bar', !!app.show_bookmarks_bar);
   setToggleEl('toggle-show-url', app.show_tab_url !== false);
+  setToggleEl('toggle-compact-tabs', !!(s.tabs && s.tabs.compact_tabs));
   renderToolbarButtonSettings();
   renderSidebarAppsSettings();
   setToggleEl('toggle-suggestions', searchSuggestionsEnabled());
@@ -8394,6 +8401,7 @@ function populateSettingsPanel() {
   setToggleEl('toggle-fingerprint-protection', priv.fingerprint_protection !== false);
   setToggleEl('toggle-strict-permissions', priv.strict_permissions !== false);
   setToggleEl('toggle-auto-crash-report', priv.auto_crash_report !== false);
+  setToggleEl('toggle-beta-channel', !!s.beta_channel);
   renderDefaultPermissions();
   setToggleEl('toggle-secure-dns-enabled', !!priv.secure_dns_enabled);
   setSelectValue('set-secure-dns-provider', priv.secure_dns_provider || 'cloudflare');
@@ -11981,7 +11989,6 @@ function switchSettings(sec) {
   }
   if (sec === 'bookmarks') renderBookmarks();
   if (sec === 'downloads') renderDownloads();
-  if (sec === 'general') populateRegionSettings();
   if (sec === 'account') { renderAccountPanel(); send('GetAccountState'); }
 }
 
@@ -11993,16 +12000,35 @@ function renderAccountPanel() {
   const body = document.getElementById('account-body');
   if (!body) return;
   const a = state.account || {};
+  let inner;
+  let signedIn = false;
   if (!a.configured) {
-    body.innerHTML = `<div class="acct-empty">
+    inner = `<div class="acct-empty">
       <div class="acct-empty-icon"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg></div>
       <h3>Cloud accounts aren't set up</h3>
       <p>This build of Ventus was compiled without cloud credentials, so sign-in is unavailable.</p>
     </div>`;
-    return;
+  } else if (!a.signed_in) {
+    inner = renderAccountSignedOut();
+  } else {
+    inner = renderAccountSignedIn(a.profile || {});
+    signedIn = true;
   }
-  if (!a.signed_in) { body.innerHTML = renderAccountSignedOut(); return; }
-  body.innerHTML = renderAccountSignedIn(a.profile || {});
+  body.innerHTML = signedIn ? inner : inner + renderAccountRegion();
+  populateRegionSettings();
+}
+
+function renderAccountRegion() {
+  return `
+  <div class="acct-region">
+    <div>
+      <div class="acct-region-title">Country / Region</div>
+      <div class="acct-region-sub">Adjusts unit and currency suggestions in Spotlight.</div>
+    </div>
+    <select class="settings-select" id="set-region" onchange="onRegionChange(this.value)">
+      <option value="">Not set</option>
+    </select>
+  </div>`;
 }
 
 function renderAccountSignedOut() {
@@ -12011,22 +12037,30 @@ function renderAccountSignedOut() {
   const emailVal = escAttr(accountLastEmail || '');
   return `
   <div class="acct-auth">
-    <div class="acct-tabs">
-      <button class="acct-tab ${!isSignup?'active':''}" ${dis} onclick="accountSetMode('signin')">Sign in</button>
-      <button class="acct-tab ${isSignup?'active':''}" ${dis} onclick="accountSetMode('signup')">Create account</button>
+    <div class="acct-auth-split">
+      <div class="acct-auth-lhs">
+        <h3>${isSignup ? 'Create your account' : 'Sign in to Ventus'}</h3>
+        <p>Sync your bookmarks, history, and settings securely across every device.</p>
+      </div>
+      <div class="acct-auth-rhs">
+        <div class="acct-tabs">
+          <button class="acct-tab ${!isSignup?'active':''}" ${dis} onclick="accountSetMode('signin')">Sign in</button>
+          <button class="acct-tab ${isSignup?'active':''}" ${dis} onclick="accountSetMode('signup')">Create account</button>
+        </div>
+        <form id="acct-form" class="acct-fields" onsubmit="event.preventDefault();accountSubmit()">
+          <label>Email</label>
+          <input id="acct-email" type="email" autocomplete="username" placeholder="you@example.com" value="${emailVal}" ${dis}>
+          <label>Password</label>
+          <input id="acct-password" type="password" autocomplete="${isSignup?'new-password':'current-password'}" placeholder="${isSignup?'At least 6 characters':'Your password'}" ${dis}>
+          <button class="acct-primary" type="submit" ${dis}>${accountPending?'Please wait...':(isSignup?'Create account':'Sign in')}</button>
+        </form>
+        <div class="acct-divider"><span>or</span></div>
+        <button class="acct-google" ${dis} onclick="accountGoogle()">
+          <svg width="16" height="16" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.6 6.1 29.6 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.3-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.6 6.1 29.6 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.5 0 10.5-2.1 14.3-5.6l-6.6-5.6C29.6 34.6 26.9 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.6 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.2 4.2-4 5.6l6.6 5.6C41.4 36.3 44 30.7 44 24c0-1.3-.1-2.3-.4-3.5z"/></svg>
+          Continue with Google
+        </button>
+      </div>
     </div>
-    <form id="acct-form" class="acct-fields" onsubmit="event.preventDefault();accountSubmit()">
-      <label>Email</label>
-      <input id="acct-email" type="email" autocomplete="username" placeholder="you@example.com" value="${emailVal}" ${dis}>
-      <label>Password</label>
-      <input id="acct-password" type="password" autocomplete="${isSignup?'new-password':'current-password'}" placeholder="${isSignup?'At least 6 characters':'Your password'}" ${dis}>
-      <button class="acct-primary" type="submit" ${dis}>${accountPending?'Please wait...':(isSignup?'Create account':'Sign in')}</button>
-    </form>
-    <div class="acct-divider"><span>or</span></div>
-    <button class="acct-google" ${dis} onclick="accountGoogle()">
-      <svg width="16" height="16" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.6 6.1 29.6 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.3-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.6 6.1 29.6 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.5 0 10.5-2.1 14.3-5.6l-6.6-5.6C29.6 34.6 26.9 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.6 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.2 4.2-4 5.6l6.6 5.6C41.4 36.3 44 30.7 44 24c0-1.3-.1-2.3-.4-3.5z"/></svg>
-      Continue with Google
-    </button>
   </div>`;
 }
 
@@ -12065,7 +12099,7 @@ function renderAccountSignedIn(p) {
           <div class="acct-field"><label>Username</label><input id="acct-username" type="text" value="${escAttr(p.username||'')}" placeholder="username" ${dis}></div>
           <div class="acct-field"><label>Full name</label><input id="acct-fullname" type="text" value="${escAttr(p.full_name||'')}" placeholder="Your name" ${dis}></div>
           <div class="acct-field"><label>Birthdate</label><input id="acct-birthdate" type="date" value="${escAttr(p.birthdate||'')}" ${dis}></div>
-          <div class="acct-field"><label>Country</label><input type="text" value="${escAttr(p.country||'')}" placeholder="Set in General" disabled></div>
+          <div class="acct-field"><label>Country / Region</label><select id="set-region" onchange="onRegionChange(this.value)"><option value="">Not set</option></select></div>
         </div>
         <div class="acct-field acct-field-wide"><label>Bio</label><textarea id="acct-bio" rows="3" placeholder="A little about you" ${dis}>${escHtml(p.bio||'')}</textarea></div>
         <div class="acct-actions">
@@ -12215,6 +12249,11 @@ function toggleSetting(key) {
     applyNewtabSettings();
     renderNewtabShortcuts();
     renderNeuraFeed();
+  }
+  if (key === 'beta_channel') {
+    if (!state.settings) state.settings = {};
+    state.settings.beta_channel = val;
+    if (val) checkForUpdate();
   }
 }
 function setTheme(t) {
@@ -12459,6 +12498,17 @@ function tspRow(title, url, favicon, isSearch, subText, pinned) {
 const omniPinSvg = '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M16 3l5 5-2 2-1-1-4 4v5l-2 2-3-3-4 4-1-1 4-4-3-3 2-2h5l4-4-1-1z"/></svg>';
 
 // ── Spotlight calculator ──────────────────────────────────────────────────────â”€
+
+function tspCopyCalc(card, text) {
+  send('WriteClipboard', {text});
+  card.classList.add('copied');
+  const hint = card.querySelector('.tsp-calc-copy-hint');
+  if (hint) hint.textContent = 'Copied!';
+  setTimeout(() => {
+    card.classList.remove('copied');
+    if (hint) hint.textContent = 'click to copy';
+  }, 2000);
+}
 
 /** Returns true if the query looks like a pure math expression (no plain words). */
 function isMathExpr(q) {
@@ -12973,7 +13023,7 @@ function renderConvCard(query) {
       disc = `<div class="tsp-conv-disclaimer">Live rates</div>`;
     }
   }
-  return `<div class="tsp-calc-card" onclick="navigator.clipboard&&navigator.clipboard.writeText('${copyVal}').catch(()=>{})" title="Click to copy">
+  return `<div class="tsp-calc-card" onclick="tspCopyCalc(this,'${escAttr(copyVal)}')" title="Click to copy">
     <div class="tsp-conv-type">${escHtml(label)}</div>
     <div class="tsp-calc-expr">${escHtml(expr)}</div>
     <div class="tsp-calc-result">${escHtml(formatted)}</div>
@@ -13156,9 +13206,10 @@ function renderTspSuggestions(q) {
   if (query && isMathExpr(query)) {
     const calcResult = evaluateMath(query);
     if (calcResult !== null) {
-      html += `<div class="tsp-calc-card" onclick="navigator.clipboard&&navigator.clipboard.writeText('${calcResult}').catch(()=>{})" title="Click to copy">
+      const calcCopyVal = fmtCalcResult(calcResult);
+      html += `<div class="tsp-calc-card" onclick="tspCopyCalc(this,'${escAttr(calcCopyVal)}')" title="Click to copy">
         <div class="tsp-calc-expr">${escHtml(query)}</div>
-        <div class="tsp-calc-result">= ${escHtml(fmtCalcResult(calcResult))}</div>
+        <div class="tsp-calc-result">= ${escHtml(calcCopyVal)}</div>
         <div class="tsp-calc-copy-hint">click to copy</div>
       </div>`;
     }
@@ -13414,35 +13465,60 @@ function renderBookmarks() {
     bookmarkRenderPending = false;
   }
   const bms = state.bookmarks || [];
+  const unfiled = bms.filter(b => !b.folder_id);
   const folders = state.bookmark_folders || [];
-  if (!bms.length && !folders.length) {
-    list.innerHTML = '<div style="color:var(--text-muted);font-size:12px;text-align:center;padding:24px 0">No bookmarks yet. Hit the bookmark icon in the address bar to save a page.</div>';
+  const folderSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
+  const upSvg = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>';
+  const downSvg = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+  const reorder = (id, kind, isFirst, isLast) => `<div class="bm-reorder">
+      <button class="bm-reorder-btn" ${isFirst ? 'disabled' : ''} title="Move up" onclick="event.stopPropagation();bmMoveItem('${escAttr(id)}','${kind}',-1)">${upSvg}</button>
+      <button class="bm-reorder-btn" ${isLast ? 'disabled' : ''} title="Move down" onclick="event.stopPropagation();bmMoveItem('${escAttr(id)}','${kind}',1)">${downSvg}</button>
+    </div>`;
+  const newFolderRow = '<button class="bm-add-folder-row" onclick="newBookmarkFolder()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New folder</button>';
+  let html = '';
+  if (!unfiled.length && !folders.length) {
+    list.innerHTML = '<div style="color:var(--text-muted);font-size:12px;text-align:center;padding:20px 0">No bookmarks yet. Tap the bookmark icon to save a page.</div>' + newFolderRow;
     return;
   }
-  const folderSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
-  let html = '';
-  folders.forEach(f => {
-    const items = bms.filter(b => b.folder_id === f.id);
-    const count = items.length;
-    html += `<div class="bm-item bm-folder-item" data-folder-id="${escAttr(f.id)}" onclick="openFolderModal('${escAttr(f.id)}',this,false,true)" oncontextmenu="bmFolderContextMenu(event,this)">
-      <div class="bm-folder-icon">${folderSvg}</div>
+  folders.forEach((f, i) => {
+    const count = bms.filter(b => b.folder_id === f.id).length;
+    html += `<div class="bm-item bm-folder-item" draggable="true" data-kind="folder" data-folder-id="${escAttr(f.id)}" data-reorder-id="${escAttr(f.id)}" onclick="openFolderModal('${escAttr(f.id)}',this,false,true)" oncontextmenu="bmFolderContextMenu(event,this)">
+      <div class="bm-list-icon" style="color:var(--accent)">${folderSvg}</div>
       <div class="bm-item-info">
         <div class="bm-item-title">${escHtml(f.name)}</div>
         <div class="bm-item-url">${count} bookmark${count !== 1 ? 's' : ''}</div>
       </div>
+      ${reorder(f.id, 'folder', i === 0, i === folders.length - 1)}
     </div>`;
   });
-  bms.filter(b => !b.folder_id).forEach(b => {
-    html += `<div class="bm-item" draggable="true" data-reorder-id="${escAttr(b.id)}" data-nav-url="${escAttr(b.url)}" oncontextmenu="bmItemContextMenu(event,this)">
+  unfiled.forEach((b, i) => {
+    const icon = bookmarkIconUrl(b.url, b.favicon);
+    const iconHtml = icon
+      ? `<div class="bm-list-icon"><img src="${escAttr(icon)}" alt="" loading="lazy" width="16" height="16" onerror="this.style.display='none'"></div>`
+      : `<div class="bm-list-fallback">${escHtml(siteInitial(b.title || b.url))}</div>`;
+    html += `<div class="bm-item" draggable="true" data-kind="bookmark" data-reorder-id="${escAttr(b.id)}" data-nav-url="${escAttr(b.url)}" oncontextmenu="bmItemContextMenu(event,this)">
+      ${iconHtml}
       <div class="bm-item-info">
         <div class="bm-item-title">${escHtml(b.title || b.url)}</div>
         <div class="bm-item-url">${escHtml(b.url)}</div>
       </div>
+      ${reorder(b.id, 'bookmark', i === 0, i === unfiled.length - 1)}
     </div>`;
   });
-  list.innerHTML = html;
-  setupBookmarkFolderDrop(list);
+  list.innerHTML = html + newFolderRow;
   requestAnimationFrame(() => finishBookmarkSettle('bookmarks-list'));
+}
+
+function bmMoveItem(id, kind, dir) {
+  const arr = kind === 'folder'
+    ? (state.bookmark_folders || [])
+    : (state.bookmarks || []).filter(b => !b.folder_id);
+  const i = arr.findIndex(x => x.id === id);
+  if (i < 0) return;
+  const j = i + dir;
+  if (j < 0 || j >= arr.length) return;
+  const before = dir < 0 ? arr[j].id : (j + 1 < arr.length ? arr[j + 1].id : null);
+  send(kind === 'folder' ? 'MoveBookmarkFolder' : 'MoveBookmark', {id, before});
 }
 
 let historyItems = [];
@@ -15733,8 +15809,8 @@ document.addEventListener('dragstart', function(e) {
   // URL input has its own dedicated handler below that sets dataTransfer before this fires.
   if (e.target.id === 'url-input') return;
   if (e.target.closest('button')) { e.preventDefault(); return; }
-  // Bookmark-bar folder: reorder-only drag (no URL to carry).
-  const folderEl = e.target.closest('.bm-bar-item[data-folder-id]');
+  // Folder chip (bar) or folder row (settings list): reorder-only drag (no URL to carry).
+  const folderEl = e.target.closest('.bm-bar-item[data-folder-id],.bm-item[data-folder-id]');
   if (folderEl) {
     dragKind = 'folder'; dragId = folderEl.dataset.folderId; dragPinned = false; dragFolderId = '';
     dragTitle = folderEl.dataset.label || '';
@@ -15861,6 +15937,7 @@ function setupDropZone(container, cfg) {
 }
 
 function moveBookmarkToBar(id, before) {
+  if (dragKind === 'folder') { send('MoveBookmarkFolder', {id, before}); return; }
   if (dragFolderId) send('BookmarkRemoveFromFolder', {bookmark_id: id});
   send('MoveBookmark', {id, before});
 }
@@ -15982,7 +16059,7 @@ setupDropZone(document.getElementById('bookmarks-bar'), {
   });
 })();
 setupDropZone(document.getElementById('bookmarks-list'), {
-  reorderKind: 'bookmark', item: '.bm-item[data-reorder-id]', axis: 'y',
+  reorderKind: (k) => k === 'bookmark' || k === 'folder', item: '.bm-item[data-reorder-id]', axis: 'y',
   hideLine: true,
   computeBefore: (e, fallback) => {
     const before = computeBookmarkBefore(e, 'bookmarks-list');
@@ -15993,7 +16070,7 @@ setupDropZone(document.getElementById('bookmarks-list'), {
   onReorderClear: () => resetBookmarkDragPreview(),
   onReorder: moveBookmarkToBar,
   onExternal: (url) => send('BookmarkAddUrl', {url, title: dragTitle || ''}),
-  folderDrop: true,
+  folderDrop: false,
 });
 
 // ── Global fallback: drop a URL anywhere in chrome → new tab ────────────────â”€

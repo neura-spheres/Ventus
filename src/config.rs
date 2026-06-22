@@ -190,6 +190,7 @@ pub struct TabSettings {
     pub confirm_close_many: bool,
     pub enable_pinned_tabs: bool,
     pub restore_tabs_on_startup: bool,
+    pub compact_tabs: bool,
 }
 
 impl Default for TabSettings {
@@ -200,6 +201,7 @@ impl Default for TabSettings {
             confirm_close_many: true,
             enable_pinned_tabs: true,
             restore_tabs_on_startup: true,
+            compact_tabs: false,
         }
     }
 }
@@ -659,6 +661,8 @@ pub struct AppSettings {
     pub custom_apps: Vec<CustomApp>,
     #[serde(default)]
     pub settings_rev: i64,
+    #[serde(default)]
+    pub beta_channel: bool,
 }
 
 impl Default for AppSettings {
@@ -681,6 +685,7 @@ impl Default for AppSettings {
             region: String::new(),
             custom_apps: Vec::new(),
             settings_rev: 0,
+            beta_channel: false,
         }
     }
 }

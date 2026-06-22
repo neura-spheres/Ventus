@@ -1,5 +1,7 @@
 param(
-    [switch]$Debug
+    [switch]$Debug,
+    [switch]$PreRelease,
+    [int]$Iteration = 0
 )
 
 $ErrorActionPreference = 'Stop'
@@ -9,6 +11,26 @@ Set-Location $PSScriptRoot\..
 $versionLine = Get-Content config.yaml | Where-Object { $_ -match '^\s*version:' } | Select-Object -First 1
 if (-not $versionLine) { Write-Error "version: not found in config.yaml"; exit 1 }
 $version = $versionLine -replace '^\s*version:\s*', '' -replace '[''"]', '' -replace '\s', ''
+
+if ($PreRelease) {
+    $base = $version
+    $date = (Get-Date).ToString('yyMMdd')
+    $iter = $Iteration
+    if ($iter -le 0) {
+        $iter = 1
+        $existing = Get-ChildItem dist -Filter "Ventus-Setup-$base-pre$date*.exe" -ErrorAction SilentlyContinue
+        foreach ($f in $existing) {
+            if ($f.Name -match "-pre$date(\d{2})\.exe$") {
+                $n = [int]$matches[1]
+                if ($n -ge $iter) { $iter = $n + 1 }
+            }
+        }
+    }
+    $ii = '{0:D2}' -f $iter
+    $version = "$base-pre$date$ii"
+    $env:VENTUS_VERSION = $version
+}
+
 Write-Host "Building Ventus v$version"
 
 # Build

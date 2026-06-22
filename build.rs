@@ -29,8 +29,12 @@ const VENTUS_MANIFEST: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone
 "#;
 
 fn main() {
-    let version = app_version();
+    let version = std::env::var("VENTUS_VERSION")
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .unwrap_or_else(app_version);
     println!("cargo:rerun-if-changed=config.yaml");
+    println!("cargo:rerun-if-env-changed=VENTUS_VERSION");
     println!("cargo:rustc-env=NEURA_APP_VERSION={version}");
 
     emit_cloud_env();
@@ -109,7 +113,8 @@ fn app_version() -> String {
 }
 
 fn version_info(version: &str) -> Option<u64> {
-    let mut parts = version.split('.');
+    let core = version.split('-').next().unwrap_or(version);
+    let mut parts = core.split('.');
     let major = parts.next()?.parse::<u64>().ok()?;
     let minor = parts.next()?.parse::<u64>().ok()?;
     let patch = parts.next()?.parse::<u64>().ok()?;
