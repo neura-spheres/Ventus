@@ -338,6 +338,33 @@ fn build_content_webview_once(
                         proxy_ipc.send_event(AppEvent::Chrome(ChromeCommand::ContentPointerDown));
                     return;
                 }
+                if value.get("cmd").and_then(|v| v.as_str()) == Some("translate_unavailable") {
+                    let host = value
+                        .get("host")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default()
+                        .to_string();
+                    let silent = value
+                        .get("silent")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
+                    if !host.is_empty() {
+                        let _ = proxy_ipc
+                            .send_event(AppEvent::TranslateUnavailable { host, silent });
+                    }
+                    return;
+                }
+                if value.get("cmd").and_then(|v| v.as_str()) == Some("translate_available") {
+                    let host = value
+                        .get("host")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default()
+                        .to_string();
+                    if !host.is_empty() {
+                        let _ = proxy_ipc.send_event(AppEvent::TranslateAvailable { host });
+                    }
+                    return;
+                }
                 if value.get("cmd").and_then(|v| v.as_str()) == Some("web_notification") {
                     let get = |k: &str| {
                         value
@@ -526,6 +553,9 @@ fn build_content_webview_once(
     {
         attach_process_failed_handler(&wv, proxy.clone(), tab_id.to_string());
         attach_navigation_handler(&wv, proxy.clone(), tab_id.to_string());
+        if !incognito {
+            attach_csp_translate_check(&wv, proxy.clone());
+        }
         attach_title_handler(&wv, proxy.clone(), tab_id.to_string());
         attach_new_window_handler(&wv, proxy.clone(), incognito);
         attach_permission_handler(&wv, proxy.clone(), site_permissions.clone());
@@ -805,11 +835,22 @@ fn webview_args(settings: &config::AppSettings) -> String {
         "CalculateNativeWinOcclusion".to_string(),
     ];
     let mut enable_features = vec!["ParallelDownloading".to_string()];
+    let total_mb = crate::utils::sysinfo::total_memory_mb();
+    let low_spec = total_mb > 0 && total_mb <= 4096;
+    let very_low_spec = total_mb > 0 && total_mb <= 2048;
+    let (disk_cache, media_cache) = if low_spec {
+        (268435456u64, 134217728u64)
+    } else {
+        (1073741824u64, 536870912u64)
+    };
     let mut args = vec![
         "--no-first-run".to_string(),
-        "--disk-cache-size=1073741824".to_string(),
-        "--media-cache-size=536870912".to_string(),
+        format!("--disk-cache-size={}", disk_cache),
+        format!("--media-cache-size={}", media_cache),
     ];
+    if very_low_spec {
+        args.push("--renderer-process-limit=4".to_string());
+    }
     if settings.privacy.block_third_party_cookies {
         args.push("--webview-force-disable-3pcs".to_string());
     }

@@ -220,6 +220,9 @@ pub enum ChromeCommand {
         tab_id: Option<String>,
     },
     GetPageText,
+    TranslatePage {
+        lang: String,
+    },
     SplitView {
         mode: String,
     },
@@ -515,6 +518,7 @@ impl ChromeCommand {
             ChromeCommand::OpenTabSearch => Some("open_tab_search"),
             ChromeCommand::OpenFindBar => Some("open_find_bar"),
             ChromeCommand::GetPageText => Some("get_page_text"),
+            ChromeCommand::TranslatePage { .. } => Some("translate_page"),
             ChromeCommand::SplitView { .. } => Some("split_view"),
             ChromeCommand::CloseSplit => Some("close_split"),
             ChromeCommand::OpenDevtools => Some("open_devtools"),
@@ -670,6 +674,13 @@ pub enum AppEvent {
     ContentPageText {
         tab_id: String,
         text: String,
+    },
+    TranslateUnavailable {
+        host: String,
+        silent: bool,
+    },
+    TranslateAvailable {
+        host: String,
     },
     /// A content WebView's site requested a browser permission (camera, mic, etc.).
     /// Recorded per-origin so the site-info popover can show only what was actually asked for.

@@ -1,0 +1,425 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - link "Skip to content" [ref=e4] [cursor=pointer]:
+      - /url: "#start-of-content"
+    - banner [ref=e6]:
+      - heading "Navigation Menu" [level=2] [ref=e7]
+      - generic [ref=e8]:
+        - link "Homepage" [ref=e10] [cursor=pointer]:
+          - /url: /
+          - img [ref=e11]
+        - generic [ref=e13]:
+          - navigation "Global" [ref=e16]:
+            - list [ref=e17]:
+              - listitem [ref=e18]:
+                - button "Platform" [ref=e20] [cursor=pointer]:
+                  - text: Platform
+                  - img [ref=e21]
+              - listitem [ref=e23]:
+                - button "Solutions" [ref=e25] [cursor=pointer]:
+                  - text: Solutions
+                  - img [ref=e26]
+              - listitem [ref=e28]:
+                - button "Resources" [ref=e30] [cursor=pointer]:
+                  - text: Resources
+                  - img [ref=e31]
+              - listitem [ref=e33]:
+                - button "Open Source" [ref=e35] [cursor=pointer]:
+                  - text: Open Source
+                  - img [ref=e36]
+              - listitem [ref=e38]:
+                - button "Enterprise" [ref=e40] [cursor=pointer]:
+                  - text: Enterprise
+                  - img [ref=e41]
+              - listitem [ref=e43]:
+                - link "Pricing" [ref=e44] [cursor=pointer]:
+                  - /url: https://github.com/pricing
+                  - generic [ref=e45]: Pricing
+          - generic [ref=e46]:
+            - button "Search or jump to…" [ref=e49] [cursor=pointer]:
+              - img [ref=e51]
+              - generic [ref=e53]: Search or jump to...
+              - img [ref=e55]
+            - link "Sign in" [ref=e59] [cursor=pointer]:
+              - /url: /login?return_to=https%3A%2F%2Fgithub.com%2Fneura-spheres
+            - link "Sign up" [ref=e60] [cursor=pointer]:
+              - /url: /signup?ref_cta=Sign+up&ref_loc=header+logged+out&ref_page=%2F%3Corg-login%3E&source=header
+            - button "Appearance settings" [ref=e63] [cursor=pointer]:
+              - img
+  - main [ref=e66]:
+    - generic [ref=e67]:
+      - generic [ref=e68]:
+        - generic [ref=e70]:
+          - img "@neura-spheres" [ref=e72]
+          - generic [ref=e73]:
+            - heading "Neurasphere" [level=1] [ref=e74]
+            - list:
+              - listitem
+        - navigation "Organization" [ref=e76]:
+          - list [ref=e78]:
+            - listitem [ref=e79]:
+              - link "Overview" [ref=e80] [cursor=pointer]:
+                - /url: /neura-spheres
+                - img [ref=e81]
+                - text: Overview
+            - listitem [ref=e83]:
+              - link "Repositories" [ref=e84] [cursor=pointer]:
+                - /url: /orgs/neura-spheres/repositories
+                - img [ref=e85]
+                - text: Repositories
+            - listitem [ref=e87]:
+              - link "Projects" [ref=e88] [cursor=pointer]:
+                - /url: /orgs/neura-spheres/projects
+                - img [ref=e89]
+                - text: Projects
+            - listitem [ref=e91]:
+              - link "Packages" [ref=e92] [cursor=pointer]:
+                - /url: /orgs/neura-spheres/packages
+                - img [ref=e93]
+                - text: Packages
+            - listitem [ref=e95]:
+              - link "People" [ref=e96] [cursor=pointer]:
+                - /url: /orgs/neura-spheres/people
+                - img [ref=e97]
+                - text: People
+      - generic [ref=e100]:
+        - generic [ref=e103]:
+          - generic [ref=e104]:
+            - heading "Popular repositories Loading" [level=2] [ref=e105]:
+              - text: Popular repositories
+              - generic [ref=e106]: Loading
+              - status
+            - list [ref=e107]:
+              - listitem [ref=e108]:
+                - generic [ref=e110]:
+                  - generic [ref=e111]:
+                    - link "Ventus" [ref=e113] [cursor=pointer]:
+                      - /url: /neura-spheres/Ventus
+                    - generic [ref=e115]: Public
+                  - paragraph [ref=e116]: Ventus is a focused desktop browser with AI built in
+                  - paragraph [ref=e117]:
+                    - generic [ref=e118]: JavaScript
+                    - link "stars 2" [ref=e120] [cursor=pointer]:
+                      - /url: /neura-spheres/Ventus/stargazers
+                      - img "stars" [ref=e121]
+                      - text: "2"
+                    - link "fork 1" [ref=e123] [cursor=pointer]:
+                      - /url: /neura-spheres/Ventus/forks
+                      - img "fork" [ref=e124]
+                      - text: "1"
+              - listitem [ref=e126]:
+                - generic [ref=e128]:
+                  - generic [ref=e129]:
+                    - link "NeuraOS" [ref=e131] [cursor=pointer]:
+                      - /url: /neura-spheres/NeuraOS
+                    - generic [ref=e133]: Public
+                  - paragraph [ref=e134]: An AI-native terminal OS written in Rust that includes its own shell, apps, and AI integration so you can interact with your system directly through AI.
+                  - paragraph [ref=e135]:
+                    - generic [ref=e136]: Rust
+                    - link "star 1" [ref=e138] [cursor=pointer]:
+                      - /url: /neura-spheres/NeuraOS/stargazers
+                      - img "star" [ref=e139]
+                      - text: "1"
+                    - link "fork 1" [ref=e141] [cursor=pointer]:
+                      - /url: /neura-spheres/NeuraOS/forks
+                      - img "fork" [ref=e142]
+                      - text: "1"
+              - listitem [ref=e144]:
+                - generic [ref=e146]:
+                  - generic [ref=e147]:
+                    - link "WebGraph" [ref=e149] [cursor=pointer]:
+                      - /url: /neura-spheres/WebGraph
+                    - generic [ref=e151]: Public
+                  - paragraph [ref=e152]: Web crawler, BM25 indexer, and PageRank ranking pipeline built from scratch in Python with a FastAPI search API.
+                  - paragraph [ref=e153]:
+                    - generic [ref=e154]: Python
+                    - link "star 1" [ref=e156] [cursor=pointer]:
+                      - /url: /neura-spheres/WebGraph/stargazers
+                      - img "star" [ref=e157]
+                      - text: "1"
+              - listitem [ref=e159]:
+                - generic [ref=e161]:
+                  - generic [ref=e162]:
+                    - link "Discord.Net" [ref=e164] [cursor=pointer]:
+                      - /url: /neura-spheres/Discord.Net
+                    - generic [ref=e166]: Public
+                  - paragraph [ref=e167]:
+                    - text: Forked from
+                    - link "discord-net/Discord.Net" [ref=e168] [cursor=pointer]:
+                      - /url: /discord-net/Discord.Net
+                  - paragraph [ref=e169]: An unofficial .Net wrapper for the Discord API (https://discord.com/)
+                  - paragraph [ref=e170]:
+                    - generic [ref=e171]: C#
+                    - link "star 1" [ref=e173] [cursor=pointer]:
+                      - /url: /neura-spheres/Discord.Net/stargazers
+                      - img "star" [ref=e174]
+                      - text: "1"
+              - listitem [ref=e176]:
+                - generic [ref=e178]:
+                  - generic [ref=e179]:
+                    - link "speek" [ref=e181] [cursor=pointer]:
+                      - /url: /neura-spheres/speek
+                    - generic [ref=e183]: Public
+                  - paragraph [ref=e184]: A programming language you write in plain English. No AI, no internet required, no syntax to memorize.
+                  - paragraph [ref=e185]:
+                    - generic [ref=e186]: Go
+                    - link "star 1" [ref=e188] [cursor=pointer]:
+                      - /url: /neura-spheres/speek/stargazers
+                      - img "star" [ref=e189]
+                      - text: "1"
+          - generic [ref=e192]:
+            - heading "Repositories" [level=3] [ref=e193]:
+              - img [ref=e194]
+              - text: Repositories
+            - search [ref=e198]:
+              - generic [ref=e199]:
+                - generic [ref=e200]:
+                  - searchbox "Find a repository…" [ref=e201]
+                  - img [ref=e202]
+                  - generic [ref=e204]: Loading
+                - generic [ref=e205]:
+                  - group [ref=e206]:
+                    - button "Type" [ref=e207] [cursor=pointer]: Type
+                  - group [ref=e209]:
+                    - button "Language" [ref=e210] [cursor=pointer]: Language
+                  - group [ref=e212]:
+                    - button "Sort" [ref=e213] [cursor=pointer]: Sort
+            - generic [ref=e216]:
+              - generic [ref=e217]: Showing 5 of 5 repositories
+              - list [ref=e219]:
+                - listitem [ref=e220]:
+                  - generic [ref=e221]:
+                    - generic [ref=e222]:
+                      - generic [ref=e223]:
+                        - link "Ventus" [ref=e224] [cursor=pointer]:
+                          - /url: /neura-spheres/Ventus
+                        - 'generic "Label: Public" [ref=e225]': Public
+                        - paragraph [ref=e226]: Ventus is a focused desktop browser with AI built in
+                      - generic:
+                        - link "neura-spheres/Ventus’s past year of commit activity":
+                          - /url: /neura-spheres/Ventus/graphs/commit-activity
+                        - generic:
+                          - link:
+                            - /url: /neura-spheres/Ventus/graphs/commit-activity
+                    - generic [ref=e227]:
+                      - generic [ref=e228]: JavaScript
+                      - link "2 stars" [ref=e230] [cursor=pointer]:
+                        - /url: /neura-spheres/Ventus/stargazers
+                        - img [ref=e231]
+                        - text: "2"
+                      - generic [ref=e233]:
+                        - img [ref=e234]
+                        - text: MIT
+                      - link "1 fork" [ref=e236] [cursor=pointer]:
+                        - /url: /neura-spheres/Ventus/forks
+                        - img [ref=e237]
+                        - text: "1"
+                      - link "0 issues" [ref=e239] [cursor=pointer]:
+                        - /url: /neura-spheres/Ventus/issues
+                        - img [ref=e240]
+                        - text: "0"
+                      - link "0 pull requests" [ref=e243] [cursor=pointer]:
+                        - /url: /neura-spheres/Ventus/pulls
+                        - img [ref=e244]
+                        - text: "0"
+                      - generic [ref=e246]: Updated Jun 22, 202613 hours ago
+                - listitem [ref=e247]:
+                  - generic [ref=e248]:
+                    - generic [ref=e249]:
+                      - generic [ref=e250]:
+                        - link "speek" [ref=e251] [cursor=pointer]:
+                          - /url: /neura-spheres/speek
+                        - 'generic "Label: Public" [ref=e252]': Public
+                        - paragraph [ref=e253]: A programming language you write in plain English. No AI, no internet required, no syntax to memorize.
+                      - generic:
+                        - link "neura-spheres/speek’s past year of commit activity":
+                          - /url: /neura-spheres/speek/graphs/commit-activity
+                        - generic:
+                          - link:
+                            - /url: /neura-spheres/speek/graphs/commit-activity
+                    - generic [ref=e254]:
+                      - generic [ref=e255]: Go
+                      - link "1 star" [ref=e257] [cursor=pointer]:
+                        - /url: /neura-spheres/speek/stargazers
+                        - img [ref=e258]
+                        - text: "1"
+                      - generic [ref=e260]:
+                        - img [ref=e261]
+                        - text: MIT
+                      - generic "0 forks" [ref=e263]:
+                        - img [ref=e264]
+                        - text: "0"
+                      - link "0 issues" [ref=e266] [cursor=pointer]:
+                        - /url: /neura-spheres/speek/issues
+                        - img [ref=e267]
+                        - text: "0"
+                      - link "0 pull requests" [ref=e270] [cursor=pointer]:
+                        - /url: /neura-spheres/speek/pulls
+                        - img [ref=e271]
+                        - text: "0"
+                      - generic [ref=e273]: Updated Mar 26, 2026on Mar 26
+                - listitem [ref=e274]:
+                  - generic [ref=e275]:
+                    - generic [ref=e276]:
+                      - generic [ref=e277]:
+                        - link "Discord.Net" [ref=e278] [cursor=pointer]:
+                          - /url: /neura-spheres/Discord.Net
+                        - 'generic "Label: Public" [ref=e279]': Public
+                        - generic [ref=e280]:
+                          - text: Forked from
+                          - link "discord-net/Discord.Net" [ref=e281] [cursor=pointer]:
+                            - /url: /discord-net/Discord.Net
+                        - paragraph [ref=e282]:
+                          - text: An unofficial .Net wrapper for the Discord API (
+                          - link "https://discord.com/" [ref=e283] [cursor=pointer]:
+                            - /url: https://discord.com/
+                          - text: )
+                      - generic:
+                        - link "neura-spheres/Discord.Net’s past year of commit activity":
+                          - /url: /neura-spheres/Discord.Net/graphs/commit-activity
+                        - generic:
+                          - link:
+                            - /url: /neura-spheres/Discord.Net/graphs/commit-activity
+                    - generic [ref=e284]:
+                      - generic [ref=e285]: C#
+                      - link "1 star" [ref=e287] [cursor=pointer]:
+                        - /url: /neura-spheres/Discord.Net/stargazers
+                        - img [ref=e288]
+                        - text: "1"
+                      - generic [ref=e290]:
+                        - img [ref=e291]
+                        - text: MIT
+                      - link "783 forks" [ref=e293] [cursor=pointer]:
+                        - /url: /neura-spheres/Discord.Net/forks
+                        - img [ref=e294]
+                        - text: "783"
+                      - link "0 issues" [ref=e296] [cursor=pointer]:
+                        - /url: /neura-spheres/Discord.Net/issues
+                        - img [ref=e297]
+                        - text: "0"
+                      - link "0 pull requests" [ref=e300] [cursor=pointer]:
+                        - /url: /neura-spheres/Discord.Net/pulls
+                        - img [ref=e301]
+                        - text: "0"
+                      - generic [ref=e303]: Updated Mar 22, 2026on Mar 23
+                - listitem [ref=e304]:
+                  - generic [ref=e305]:
+                    - generic [ref=e306]:
+                      - generic [ref=e307]:
+                        - link "WebGraph" [ref=e308] [cursor=pointer]:
+                          - /url: /neura-spheres/WebGraph
+                        - 'generic "Label: Public" [ref=e309]': Public
+                        - paragraph [ref=e310]: Web crawler, BM25 indexer, and PageRank ranking pipeline built from scratch in Python with a FastAPI search API.
+                      - generic:
+                        - link "neura-spheres/WebGraph’s past year of commit activity":
+                          - /url: /neura-spheres/WebGraph/graphs/commit-activity
+                        - generic:
+                          - link:
+                            - /url: /neura-spheres/WebGraph/graphs/commit-activity
+                    - generic [ref=e311]:
+                      - generic [ref=e312]: Python
+                      - link "1 star" [ref=e314] [cursor=pointer]:
+                        - /url: /neura-spheres/WebGraph/stargazers
+                        - img [ref=e315]
+                        - text: "1"
+                      - generic [ref=e317]:
+                        - img [ref=e318]
+                        - text: MIT
+                      - generic "0 forks" [ref=e320]:
+                        - img [ref=e321]
+                        - text: "0"
+                      - link "0 issues" [ref=e323] [cursor=pointer]:
+                        - /url: /neura-spheres/WebGraph/issues
+                        - img [ref=e324]
+                        - text: "0"
+                      - link "0 pull requests" [ref=e327] [cursor=pointer]:
+                        - /url: /neura-spheres/WebGraph/pulls
+                        - img [ref=e328]
+                        - text: "0"
+                      - generic [ref=e330]: Updated Mar 6, 2026on Mar 6
+                - listitem [ref=e331]:
+                  - generic [ref=e332]:
+                    - generic [ref=e333]:
+                      - generic [ref=e334]:
+                        - link "NeuraOS" [ref=e335] [cursor=pointer]:
+                          - /url: /neura-spheres/NeuraOS
+                        - 'generic "Label: Public" [ref=e336]': Public
+                        - paragraph [ref=e337]: An AI-native terminal OS written in Rust that includes its own shell, apps, and AI integration so you can interact with your system directly through AI.
+                      - generic:
+                        - link "neura-spheres/NeuraOS’s past year of commit activity":
+                          - /url: /neura-spheres/NeuraOS/graphs/commit-activity
+                        - generic:
+                          - link:
+                            - /url: /neura-spheres/NeuraOS/graphs/commit-activity
+                    - generic [ref=e338]:
+                      - generic [ref=e339]: Rust
+                      - link "1 star" [ref=e341] [cursor=pointer]:
+                        - /url: /neura-spheres/NeuraOS/stargazers
+                        - img [ref=e342]
+                        - text: "1"
+                      - generic [ref=e344]:
+                        - img [ref=e345]
+                        - text: MIT
+                      - link "1 fork" [ref=e347] [cursor=pointer]:
+                        - /url: /neura-spheres/NeuraOS/forks
+                        - img [ref=e348]
+                        - text: "1"
+                      - link "0 issues" [ref=e350] [cursor=pointer]:
+                        - /url: /neura-spheres/NeuraOS/issues
+                        - img [ref=e351]
+                        - text: "0"
+                      - link "0 pull requests" [ref=e354] [cursor=pointer]:
+                        - /url: /neura-spheres/NeuraOS/pulls
+                        - img [ref=e355]
+                        - text: "0"
+                      - generic [ref=e357]: Updated Feb 27, 2026on Feb 27
+        - generic [ref=e359]:
+          - generic [ref=e362]:
+            - link "People" [ref=e363] [cursor=pointer]:
+              - /url: /orgs/neura-spheres/people
+              - heading "People" [level=4] [ref=e364]
+            - link "@Akihiro2004" [ref=e366] [cursor=pointer]:
+              - /url: /Akihiro2004
+              - img "@Akihiro2004" [ref=e367]
+          - generic [ref=e370]:
+            - heading "Top languages" [level=4] [ref=e371]
+            - paragraph [ref=e372]: Loading…
+          - generic [ref=e375]:
+            - heading "Most used topics" [level=4] [ref=e376]
+            - paragraph [ref=e377]: Loading…
+  - contentinfo [ref=e378]:
+    - heading "Footer" [level=2] [ref=e379]
+    - generic [ref=e380]:
+      - generic [ref=e381]:
+        - link "GitHub Homepage" [ref=e382] [cursor=pointer]:
+          - /url: https://github.com
+          - img [ref=e383]
+        - generic [ref=e385]: © 2026 GitHub, Inc.
+      - navigation "Footer" [ref=e386]:
+        - heading "Footer navigation" [level=3] [ref=e387]
+        - list "Footer navigation" [ref=e388]:
+          - listitem [ref=e389]:
+            - link "Terms" [ref=e390] [cursor=pointer]:
+              - /url: https://docs.github.com/site-policy/github-terms/github-terms-of-service
+          - listitem [ref=e391]:
+            - link "Privacy" [ref=e392] [cursor=pointer]:
+              - /url: https://docs.github.com/site-policy/privacy-policies/github-privacy-statement
+          - listitem [ref=e393]:
+            - link "Security" [ref=e394] [cursor=pointer]:
+              - /url: https://github.com/security
+          - listitem [ref=e395]:
+            - link "Status" [ref=e396] [cursor=pointer]:
+              - /url: https://www.githubstatus.com/
+          - listitem [ref=e397]:
+            - link "Community" [ref=e398] [cursor=pointer]:
+              - /url: https://github.community/
+          - listitem [ref=e399]:
+            - link "Docs" [ref=e400] [cursor=pointer]:
+              - /url: https://docs.github.com/
+          - listitem [ref=e401]:
+            - link "Contact" [ref=e402] [cursor=pointer]:
+              - /url: https://support.github.com?tags=dotcom-footer
+          - listitem [ref=e403]:
+            - button "Manage cookies" [ref=e405] [cursor=pointer]
+          - listitem [ref=e406]:
+            - button "Do not share my personal information" [ref=e408] [cursor=pointer]

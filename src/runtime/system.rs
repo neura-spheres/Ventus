@@ -18,6 +18,17 @@ fn available_memory_mb() -> u64 {
     u64::MAX
 }
 
+#[cfg(windows)]
+fn trim_working_set() {
+    use windows::Win32::System::Threading::{GetCurrentProcess, SetProcessWorkingSetSize};
+    unsafe {
+        let _ = SetProcessWorkingSetSize(GetCurrentProcess(), usize::MAX, usize::MAX);
+    }
+}
+
+#[cfg(not(windows))]
+fn trim_working_set() {}
+
 fn sleep_threshold_ms(free_mb: u64) -> u64 {
     match free_mb {
         m if m > 8192 => 4 * 60 * 60 * 1000,
@@ -37,6 +48,42 @@ fn max_live_webviews(free_mb: u64) -> usize {
         m if m > 1024 => 6,
         _ => 4,
     }
+}
+
+fn suspend_idle_ms(free_mb: u64) -> i64 {
+    match free_mb {
+        m if m > 8192 => 180_000,
+        m if m > 4096 => 120_000,
+        m if m > 2048 => 75_000,
+        m if m > 1024 => 45_000,
+        m if m > 512 => 25_000,
+        _ => 12_000,
+    }
+}
+
+fn is_comm_app(url: &str) -> bool {
+    let Ok(parsed) = url::Url::parse(url) else {
+        return false;
+    };
+    let host = parsed.host_str().unwrap_or("").to_lowercase();
+    if host.is_empty() {
+        return false;
+    }
+    const COMM_HOSTS: &[&str] = &[
+        "web.whatsapp.com",
+        "discord.com",
+        "discordapp.com",
+        "web.telegram.org",
+        "messenger.com",
+        "teams.microsoft.com",
+        "teams.live.com",
+        "web.skype.com",
+        "chat.google.com",
+        "slack.com",
+    ];
+    COMM_HOSTS
+        .iter()
+        .any(|h| host == *h || host.ends_with(&format!(".{}", h)))
 }
 
 fn tab_notifications_allowed(url: &str, settings: &config::AppSettings) -> bool {

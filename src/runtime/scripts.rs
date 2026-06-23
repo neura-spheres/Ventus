@@ -266,10 +266,10 @@ fn content_initialization_script(
   const faviconHref = () => {
     const root = document.head || document.documentElement;
     if (!root) return '';
-    const icons = root.querySelectorAll('link[rel]');
-    for (const icon of icons) {
-      const rel = (icon.getAttribute('rel') || '').toLowerCase();
-      if (icon.href && (rel.includes('icon') || rel.includes('apple-touch-icon') || rel.includes('mask-icon'))) return icon.href;
+    const icons = Array.from(root.querySelectorAll('link[rel]'));
+    for (const token of ['icon', 'apple-touch-icon', 'apple-touch-icon-precomposed', 'mask-icon']) {
+      const icon = icons.find(link => (link.getAttribute('rel') || '').toLowerCase().split(/\s+/).includes(token) && link.href);
+      if (icon) return icon.href;
     }
     try { return new URL('/favicon.ico', location.href).href; } catch (_) { return ''; }
   };
@@ -973,4 +973,3 @@ fn privacy_initialization_script(
 "#;
     format!("{ua_data_script}{fingerprint_script}{strict_script}")
 }
-

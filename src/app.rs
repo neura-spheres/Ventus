@@ -127,6 +127,8 @@ pub struct AppState {
     pub trends_loading: bool,
     pub device_id: String,
     pub session_id: String,
+    pub untranslatable_hosts: HashSet<String>,
+    pub translatable_hosts: HashSet<String>,
 }
 
 impl AppState {
@@ -163,6 +165,15 @@ impl AppState {
             .filter(|seed| !seed.trim().is_empty())
             .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
         let _ = settings_store::set(&conn, "fingerprint_seed", &fingerprint_seed);
+        let untranslatable_hosts: HashSet<String> =
+            settings_store::get::<Vec<String>>(&conn, "untranslatable_hosts")
+                .ok()
+                .flatten()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|host| host.trim().to_lowercase())
+                .filter(|host| !host.is_empty())
+                .collect();
         Self {
             tab_manager: TabManager::new(),
             downloads: DownloadManager::with_downloads(downloads),
@@ -220,6 +231,8 @@ impl AppState {
             trends_loading: false,
             device_id,
             session_id,
+            untranslatable_hosts,
+            translatable_hosts: HashSet::new(),
         }
     }
 
@@ -390,6 +403,8 @@ impl AppState {
             "ad_blocker_kills": self.adblock_page_kills,
             "x_login_compat_active": x_login_compat_active,
             "requested_permissions": &self.requested_permissions,
+            "untranslatable_hosts": &self.untranslatable_hosts,
+            "translatable_hosts": &self.translatable_hosts,
         }))
         .unwrap_or_default()
     }
@@ -564,6 +579,9 @@ pub fn handle_chrome_command(
         }
         ChromeCommand::Reload => reload_current_tab(state, chrome),
         ChromeCommand::Stop => Some(TabAction::ContentScript("window.stop()".into())),
+        ChromeCommand::TranslatePage { lang } => {
+            Some(TabAction::ContentScript(translate_js(&lang)))
+        }
         ChromeCommand::OmniboxPaste => Some(TabAction::ReadClipboardForOmnibox),
         ChromeCommand::WriteClipboard { text } => Some(TabAction::WriteClipboardText(text)),
         ChromeCommand::NewTab => {
@@ -1193,6 +1211,7 @@ pub fn handle_chrome_command(
                 tab.is_media_active = active;
                 if active || playing {
                     tab.last_media_active_at = chrono::Utc::now().timestamp_millis();
+                    tab.played_media = true;
                 }
             }
             state.push_state_to_chrome(chrome);
@@ -1862,9 +1881,10 @@ fn clear_transient_chrome(state: &mut AppState, chrome: &WebView) {
     state.chrome_overlay_open = false;
     state.spotlight_open = false;
     state.suggestion_overlay_rects.clear();
-    state.sidebar_auto_hide_open = false;
-    state.sidebar_pinned = false;
-    state.sidebar_clip_w_override = None;
+    if !state.sidebar_pinned {
+        state.sidebar_auto_hide_open = false;
+        state.sidebar_clip_w_override = None;
+    }
     let _ = chrome.evaluate_script(
         "window.__neura&&window.__neura.clearTransientUi&&window.__neura.clearTransientUi()",
     );
@@ -2026,6 +2046,48 @@ fn reload_current_tab(state: &mut AppState, chrome: &WebView) -> Option<TabActio
     Some(TabAction::ReloadContent { tab_id, url })
 }
 
+pub(crate) fn translate_probe_action(
+    tab_id: &str,
+    url: &str,
+    state: &AppState,
+) -> Option<TabAction> {
+    if state.tab_manager.active_tab_id.as_deref() != Some(tab_id) {
+        return None;
+    }
+    if state.tab_manager.tab_is_incognito(tab_id) {
+        return None;
+    }
+    let host = url::Url::parse(url).ok().and_then(|url| {
+        let scheme = url.scheme();
+        if scheme != "http" && scheme != "https" {
+            return None;
+        }
+        url.host_str().map(|host| host.to_lowercase())
+    })?;
+    if state.untranslatable_hosts.contains(&host) || state.translatable_hosts.contains(&host) {
+        return None;
+    }
+    Some(TabAction::ContentScriptOnTab {
+        tab_id: tab_id.to_string(),
+        js: translate_probe_js(),
+    })
+}
+
+fn translate_probe_js() -> String {
+    r#"(function(){if(!/^https?:$/.test(location.protocol))return;var host=location.hostname;if(!host)return;function post(cmd,silent){try{window.ipc.postMessage(JSON.stringify({cmd:cmd,host:host,silent:!!silent}));}catch(e){}}function avail(){if(window.__ventusTransAvailable)return;window.__ventusTransAvailable=true;post('translate_available',false);}function unavail(){if(window.__ventusTransUnavail)return;window.__ventusTransUnavail=true;post('translate_unavailable',true);}function allows(s){return String(s||'').split(/\s+/).some(function(tok){tok=tok.trim();return tok==='*'||tok==='https:'||tok.indexOf('https://*')===0||tok.indexOf('google.com')>=0||tok.indexOf('gstatic.com')>=0||tok.indexOf('googleapis.com')>=0;});}function dir(policy,name){var parts=String(policy||'').toLowerCase().split(';');for(var i=0;i<parts.length;i++){var seg=parts[i].trim();if(!seg)continue;var sp=seg.search(/\s/);var key=sp<0?seg:seg.slice(0,sp);if(key===name)return sp<0?'':seg.slice(sp+1).trim();}return null;}function blocks(csp){return String(csp||'').split(',').some(function(policy){var s=dir(policy,'script-src-elem')||dir(policy,'script-src')||dir(policy,'default-src');return s!=null&&!allows(s);});}function metaBlocked(){try{var nt=document.querySelector('meta[name="google"][content*="notranslate" i]');if(nt)return true;var html=document.documentElement;if(html&&String(html.getAttribute('translate')||'').toLowerCase()==='no')return true;var metas=document.querySelectorAll('meta[http-equiv]');for(var i=0;i<metas.length;i++){if(String(metas[i].getAttribute('http-equiv')||'').toLowerCase()==='content-security-policy'&&blocks(metas[i].getAttribute('content')||''))return true;}}catch(e){}return false;}if(metaBlocked()){unavail();return;}if(window.__ventusTransReady||document.querySelector('.goog-te-combo')){avail();return;}if(window.__ventusTransProbeStarted)return;window.__ventusTransProbeStarted=true;function waitCombo(limit){var n=0,t=setInterval(function(){n++;if(document.querySelector('.goog-te-combo')){clearInterval(t);avail();return;}if(n>limit){clearInterval(t);unavail();}},200);}function start(){if(document.visibilityState&&document.visibilityState==='hidden'){document.addEventListener('visibilitychange',function onv(){if(document.visibilityState!=='hidden'){document.removeEventListener('visibilitychange',onv);start();}});return;}if(metaBlocked()){unavail();return;}if(window.__ventusTransReady||document.querySelector('.goog-te-combo')){avail();return;}var d=document.getElementById('ventus_gt_element');if(!d){d=document.createElement('div');d.id='ventus_gt_element';d.style.display='none';(document.body||document.documentElement).appendChild(d);}if(!document.getElementById('ventus_gt_style')){var st=document.createElement('style');st.id='ventus_gt_style';st.textContent='.goog-te-banner-frame,.skiptranslate{display:none!important}body{top:0!important}';(document.head||document.documentElement).appendChild(st);}try{document.addEventListener('securitypolicyviolation',function(e){if(e&&String(e.blockedURI||'').indexOf('translate.google')>=0)unavail();});}catch(e){}window.googleTranslateElementInit=function(){try{new google.translate.TranslateElement({pageLanguage:'auto',autoDisplay:false},'ventus_gt_element');}catch(e){unavail();return;}window.__ventusTransReady=true;waitCombo(25);};if(!document.getElementById('ventus_gt_script')){var s=document.createElement('script');s.id='ventus_gt_script';s.onerror=function(){unavail();};s.src='https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit';(document.head||document.documentElement).appendChild(s);setTimeout(function(){if(!window.__ventusTransReady&&!document.querySelector('.goog-te-combo'))unavail();},6500);}else{waitCombo(25);}}var idle=window.requestIdleCallback?function(fn){window.requestIdleCallback(fn,{timeout:2500});}:function(fn){setTimeout(fn,1500);};idle(start);})();"#
+        .to_string()
+}
+
+fn translate_js(lang: &str) -> String {
+    if lang == "__original__" {
+        return r#"(function(){var ex='=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/';document.cookie='googtrans'+ex;document.cookie='googtrans'+ex+';domain='+location.hostname;document.cookie='googtrans'+ex+';domain=.'+location.hostname;location.reload();})();"#.to_string();
+    }
+    let lang_json = serde_json::to_string(lang).unwrap_or_else(|_| "\"en\"".into());
+    let prefix = r#"(function(){var lang="#;
+    let suffix = r#";function post(cmd){try{window.ipc.postMessage(JSON.stringify({cmd:cmd,host:location.hostname}));}catch(e){}}function avail(){window.__ventusTransAvailable=true;post('translate_available');}function unavail(){if(window.__ventusTransUnavail)return;window.__ventusTransUnavail=true;post('translate_unavailable');}function drive(){var c=document.querySelector('.goog-te-combo');if(!c)return false;c.value=lang;c.dispatchEvent(new Event('change'));avail();return true;}if(window.__ventusTransReady){if(!drive())unavail();return;}var d=document.getElementById('ventus_gt_element');if(!d){d=document.createElement('div');d.id='ventus_gt_element';d.style.display='none';(document.body||document.documentElement).appendChild(d);}if(!document.getElementById('ventus_gt_style')){var st=document.createElement('style');st.id='ventus_gt_style';st.textContent='.goog-te-banner-frame,.skiptranslate{display:none!important}body{top:0!important}';(document.head||document.documentElement).appendChild(st);}try{document.addEventListener('securitypolicyviolation',function(e){if(e&&(''+e.blockedURI).indexOf('translate.google')>=0)unavail();});}catch(e){}window.googleTranslateElementInit=function(){try{new google.translate.TranslateElement({pageLanguage:'auto',autoDisplay:false},'ventus_gt_element');}catch(e){unavail();return;}window.__ventusTransReady=true;var n=0,t=setInterval(function(){n++;if(drive()){clearInterval(t);return;}if(n>50){clearInterval(t);unavail();}},200);};if(!document.getElementById('ventus_gt_script')){var s=document.createElement('script');s.id='ventus_gt_script';s.onerror=function(){unavail();};s.src='https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit';(document.head||document.documentElement).appendChild(s);}else{var m=0,t2=setInterval(function(){m++;if(drive()){clearInterval(t2);return;}if(m>50){clearInterval(t2);unavail();}},200);}})();"#;
+    format!("{prefix}{lang_json}{suffix}")
+}
+
 fn show_error_page(
     tab_id: String,
     url: String,
@@ -2118,6 +2180,44 @@ fn host_key(host: Option<&str>) -> String {
         .to_lowercase()
 }
 
+pub(crate) fn csp_blocks_translate(csp: &str) -> bool {
+    csp.split(',').any(csp_policy_blocks)
+}
+
+fn csp_policy_blocks(policy: &str) -> bool {
+    let lower = policy.to_ascii_lowercase();
+    match csp_directive(&lower, "script-src-elem")
+        .or_else(|| csp_directive(&lower, "script-src"))
+        .or_else(|| csp_directive(&lower, "default-src"))
+    {
+        None => false,
+        Some(sources) => !csp_allows_google(sources),
+    }
+}
+
+fn csp_directive<'a>(policy: &'a str, name: &str) -> Option<&'a str> {
+    for seg in policy.split(';') {
+        let seg = seg.trim();
+        let mut parts = seg.splitn(2, char::is_whitespace);
+        if parts.next().map(str::trim) == Some(name) {
+            return Some(parts.next().unwrap_or("").trim());
+        }
+    }
+    None
+}
+
+fn csp_allows_google(sources: &str) -> bool {
+    sources.split_whitespace().any(|tok| {
+        let tok = tok.trim();
+        tok == "*"
+            || tok == "https:"
+            || tok.starts_with("https://*")
+            || tok.contains("google.com")
+            || tok.contains("gstatic.com")
+            || tok.contains("googleapis.com")
+    })
+}
+
 fn can_accept_redirect(state: &AppState, tab_id: &str, url: &str) -> bool {
     if !(url.starts_with("http://") || url.starts_with("https://") || url.starts_with("file://")) {
         return false;
@@ -2127,6 +2227,36 @@ fn can_accept_redirect(state: &AppState, tab_id: &str, url: &str) -> bool {
         .get_tab(tab_id)
         .map(|tab| tab.status == crate::browser::tab::TabStatus::Loading)
         .unwrap_or(false)
+}
+
+// A native NavigationCompleted (IsSuccess=true) means the page genuinely loaded. If the
+// ContentLoadEnd handler's URL-matching guards bailed (e.g. an in-page redirect changed the
+// URL out from under us) the tab can be left stuck in Loading with no watchdog. Trust the
+// native completion and clear the spinner without rebuilding — the page is already up.
+pub(crate) fn finalize_completed_load(state: &mut AppState, chrome: &WebView, tab_id: &str) {
+    if let Some(tab) = state.tab_manager.get_tab(tab_id) {
+        state.load_recoveries.remove(&load_key(tab_id, &tab.url));
+    }
+    state.native_loads.remove(tab_id);
+    state.native_nav_ids.remove(tab_id);
+    state.load_progress.remove(tab_id);
+    state.nav_started_at.remove(tab_id);
+    clear_https_upgrades(state, tab_id);
+    state.tab_manager.set_tab_loading(tab_id, false);
+    if state.tab_manager.active_tab_id.as_deref() == Some(tab_id) {
+        let active = state
+            .tab_manager
+            .active_tab()
+            .map(|t| (t.nav_back(), t.nav_forward()));
+        if let Some((back, fwd)) = active {
+            let _ = chrome.evaluate_script(&format!(
+                "window.__neura && window.__neura.updateNavState({},{},false)",
+                back, fwd
+            ));
+        }
+        let _ = chrome.evaluate_script("window.__neura && window.__neura.finishLoadProgress()");
+    }
+    state.push_state_to_chrome(chrome);
 }
 
 fn recover_loading_tab(
@@ -3100,7 +3230,7 @@ pub fn handle_app_event_inner(
                 tab.is_audio_playing = false;
                 tab.is_media_active = false;
                 tab.native_audio = false;
-                tab.last_media_active_at = 0;
+                tab.played_media = false;
                 tab.is_muted = false;
             }
             if new_url {
@@ -3230,6 +3360,11 @@ pub fn handle_app_event_inner(
             }
             clear_https_upgrades(state, &tab_id);
             state.tab_manager.set_tab_loading(&tab_id, false);
+            if let Some(tab) = state.tab_manager.get_tab_mut(&tab_id) {
+                if tab.favicon.is_none() {
+                    tab.favicon = favicon_for_url(&clean_url, None);
+                }
+            }
             if state.tab_manager.active_tab_id.as_deref() == Some(tab_id.as_str()) {
                 let active = state
                     .tab_manager
@@ -3245,7 +3380,7 @@ pub fn handle_app_event_inner(
                     chrome.evaluate_script("window.__neura && window.__neura.finishLoadProgress()");
             }
             state.push_state_to_chrome(chrome);
-            None
+            translate_probe_action(&tab_id, &clean_url, state)
         }
         AppEvent::ContentLoadProgress {
             tab_id,
@@ -3620,6 +3755,44 @@ pub fn handle_app_event_inner(
                 return None;
             }
             state.push_state_to_chrome(chrome);
+            None
+        }
+        AppEvent::TranslateUnavailable { host, silent } => {
+            let host = host.trim().to_lowercase();
+            if host.is_empty() {
+                return None;
+            }
+            let changed_available = state.translatable_hosts.remove(&host);
+            let changed_unavailable = state.untranslatable_hosts.insert(host);
+            if !changed_available && !changed_unavailable {
+                return None;
+            }
+            let mut hosts: Vec<String> = state.untranslatable_hosts.iter().cloned().collect();
+            hosts.sort();
+            let _ = settings_store::set(&state.conn, "untranslatable_hosts", &hosts);
+            if !silent {
+                let _ = chrome.evaluate_script(
+                    "window.__neura && window.__neura.showError(\"Can't translate this page\")",
+                );
+            }
+            state.push_state_to_chrome(chrome);
+            None
+        }
+        AppEvent::TranslateAvailable { host } => {
+            let host = host.trim().to_lowercase();
+            if host.is_empty() {
+                return None;
+            }
+            let changed_unavailable = state.untranslatable_hosts.remove(&host);
+            let changed_available = state.translatable_hosts.insert(host);
+            if changed_unavailable {
+                let mut hosts: Vec<String> = state.untranslatable_hosts.iter().cloned().collect();
+                hosts.sort();
+                let _ = settings_store::set(&state.conn, "untranslatable_hosts", &hosts);
+            }
+            if changed_unavailable || changed_available {
+                state.push_state_to_chrome(chrome);
+            }
             None
         }
         AppEvent::AiChunk { text, done } => {
@@ -4045,8 +4218,10 @@ pub fn handle_app_event_inner(
                 tab.is_audio_playing = playing;
                 if playing {
                     tab.last_media_active_at = chrono::Utc::now().timestamp_millis();
+                    tab.played_media = true;
                 }
                 if was != playing {
+                    tracing::info!(target: "ventus::media", tab = %tab_id, playing, url = %tab.url, "tab audio keep-alive signal changed");
                     state.push_state_to_chrome(chrome);
                 }
             }
@@ -4304,10 +4479,35 @@ fn track_https_upgrade(state: &mut AppState, tab_id: &str, before: &str, after: 
 #[cfg(test)]
 mod tests {
     use super::{
-        effective_tab_zoom, favicon_for_url, load_key, normalize_homepage,
+        csp_blocks_translate, effective_tab_zoom, favicon_for_url, load_key, normalize_homepage,
         should_record_replace_as_visit,
     };
     use std::collections::HashMap;
+
+    #[test]
+    fn csp_hides_translate_on_strict_sites() {
+        assert!(csp_blocks_translate(
+            "default-src 'none'; script-src github.githubassets.com; style-src 'self'"
+        ));
+        assert!(csp_blocks_translate(
+            "script-src 'self' 'nonce-x' 'strict-dynamic'"
+        ));
+        assert!(csp_blocks_translate("default-src 'self'"));
+        assert!(csp_blocks_translate(
+            "script-src 'self', default-src 'none'"
+        ));
+    }
+
+    #[test]
+    fn csp_allows_translate_on_permissive_sites() {
+        assert!(!csp_blocks_translate("script-src 'self' https:"));
+        assert!(!csp_blocks_translate("script-src *"));
+        assert!(!csp_blocks_translate("img-src 'self'; style-src 'self'"));
+        assert!(!csp_blocks_translate(
+            "script-src 'self' https://translate.google.com https://*.gstatic.com"
+        ));
+        assert!(!csp_blocks_translate(""));
+    }
 
     #[test]
     fn youtube_route_replace_counts_as_visit() {

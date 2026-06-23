@@ -289,8 +289,12 @@ fn attach_audio_playing_handler(
         Ok(c) => c,
         Err(_) => return,
     };
-    let Ok(core8) = core.cast::<ICoreWebView2_8>() else {
-        return;
+    let core8 = match core.cast::<ICoreWebView2_8>() {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!(target: "ventus::media", tab = %tab_id, error = %e, "audio keep-alive OFF: ICoreWebView2_8 cast failed (runtime too old)");
+            return;
+        }
     };
 
     // Emit the current state once so a tab already producing audio when the handler attaches
@@ -305,6 +309,7 @@ fn attach_audio_playing_handler(
         }
     }
 
+    let handler_tab = tab_id.clone();
     let handler =
         IsDocumentPlayingAudioChangedEventHandler::create(Box::new(move |sender, _args| {
             if let Some(sender) = sender {
@@ -312,8 +317,9 @@ fn attach_audio_playing_handler(
                     unsafe {
                         let mut playing = Default::default();
                         if core8.IsDocumentPlayingAudio(&mut playing).is_ok() {
+                            tracing::debug!(target: "ventus::media", tab = %handler_tab, playing = playing.as_bool(), "native audio changed event fired");
                             let _ = proxy.send_event(AppEvent::ContentAudioPlaying {
-                                tab_id: tab_id.clone(),
+                                tab_id: handler_tab.clone(),
                                 playing: playing.as_bool(),
                             });
                         }
@@ -324,8 +330,10 @@ fn attach_audio_playing_handler(
         }));
 
     let mut token = Default::default();
-    unsafe {
-        let _ = core8.add_IsDocumentPlayingAudioChanged(&handler, &mut token);
+    let added = unsafe { core8.add_IsDocumentPlayingAudioChanged(&handler, &mut token) };
+    match added {
+        Ok(_) => tracing::info!(target: "ventus::media", tab = %tab_id, "audio keep-alive handler attached"),
+        Err(e) => tracing::warn!(target: "ventus::media", tab = %tab_id, error = %e, "audio keep-alive OFF: add_IsDocumentPlayingAudioChanged failed"),
     }
 }
 

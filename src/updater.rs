@@ -266,7 +266,12 @@ mod tests {
             "1.0.34",
         ];
         for pair in chain.windows(2) {
-            assert!(v(pair[0]) < v(pair[1]), "{} should be < {}", pair[0], pair[1]);
+            assert!(
+                v(pair[0]) < v(pair[1]),
+                "{} should be < {}",
+                pair[0],
+                pair[1]
+            );
         }
     }
 

@@ -43,6 +43,8 @@ pub struct Tab {
     pub native_audio: bool,
     #[serde(skip)]
     pub last_media_active_at: i64,
+    #[serde(skip)]
+    pub played_media: bool,
     pub is_muted: bool,
     pub sleeping: bool,
     pub discarded: bool,
@@ -79,6 +81,7 @@ impl Tab {
             is_media_active: false,
             native_audio: false,
             last_media_active_at: 0,
+            played_media: false,
             is_muted: false,
             sleeping: false,
             discarded: false,

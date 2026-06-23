@@ -396,6 +396,7 @@
             Event::UserEvent(AppEvent::Chrome(ChromeCommand::WindowMinimize)) => {
                 tracing::info!(target: "ventus::window", action = "minimize", "window action");
                 window.set_minimized(true);
+                trim_working_set();
             }
 
             Event::UserEvent(AppEvent::Chrome(ChromeCommand::WindowMaximize)) => {
@@ -1032,7 +1033,6 @@
                     }
                 }
                 if let AppEvent::ContentLoadEnd { tab_id, url, .. } = &app_event {
-                    clear_load_watches(&mut load_watches, tab_id);
                     // Snapshot cookies after each page load into our isolated store.
                     // Skip internal pages and incognito tabs (they never share cookies).
                     if !url.starts_with("neura://") && !state.tab_manager.tab_is_incognito(tab_id) {
@@ -1179,6 +1179,20 @@
                 clear_stale_cover(&mut state, &chrome);
                 let cover_cleared = cover_before && !state.content_cover_open;
                 if let Some(tab_id) = load_end_tab_id {
+                    let still_loading = state
+                        .tab_manager
+                        .get_tab(&tab_id)
+                        .map(|tab| tab.status == crate::browser::tab::TabStatus::Loading)
+                        .unwrap_or(false);
+                    if still_loading {
+                        tracing::warn!(
+                            target: "ventus::nav",
+                            tab = %tab_id,
+                            "ContentLoadEnd left tab Loading (in-page redirect mismatch) — finalizing from native completion"
+                        );
+                        app::finalize_completed_load(&mut state, &chrome, &tab_id);
+                    }
+                    clear_load_watches(&mut load_watches, &tab_id);
                     let done = state
                         .tab_manager
                         .get_tab(&tab_id)
@@ -1944,6 +1958,13 @@
                                         url.clone(),
                                     );
                                 }
+                                if !restored && !is_loading {
+                                    if let Some(TabAction::ContentScriptOnTab { js, .. }) =
+                                        app::translate_probe_action(&tab_id, &url, &state)
+                                    {
+                                        let _ = wv.evaluate_script(&js);
+                                    }
+                                }
                             } else {
                                 // The tab has no WebView yet (restored/discarded). Building one is
                                 // a ~400 ms synchronous, UI-thread-bound WebView2 operation, so
@@ -2528,9 +2549,14 @@
                     }
                 }
                 if Instant::now() >= sleep_check_at {
-                    sleep_check_at = Instant::now() + TAB_SLEEP_CHECK_EVERY;
                     let now_ms = chrono::Utc::now().timestamp_millis();
                     let free_mb = available_memory_mb();
+                    let next_check = if free_mb <= 1024 {
+                        TAB_SLEEP_CHECK_FAST
+                    } else {
+                        TAB_SLEEP_CHECK_EVERY
+                    };
+                    sleep_check_at = Instant::now() + next_check;
                     let threshold_ms = sleep_threshold_ms(free_mb) as i64;
                     let active = state.tab_manager.active_tab_id.clone().unwrap_or_default();
                     let mut tabs_changed = false;
@@ -2548,6 +2574,12 @@
                             || t.is_media_active
                             || (now_ms - t.last_media_active_at) < MEDIA_GRACE_MS
                     };
+                    let keep_alive = |t: &crate::browser::tab::Tab| {
+                        media_keep(t)
+                            || t.played_media
+                            || is_comm_app(&t.url)
+                            || tab_notifications_allowed(&t.url, &state.settings)
+                    };
                     let to_suspend: Vec<String> = state
                         .tab_manager
                         .tabs
@@ -2556,12 +2588,11 @@
                             t.id != active
                                 && !t.is_neura_page()
                                 && t.status != crate::browser::tab::TabStatus::Loading
-                                && !media_keep(t)
-                                && !tab_notifications_allowed(&t.url, &state.settings)
+                                && !keep_alive(t)
                                 && content_views.contains_key(&t.id)
                                 && !t.sleeping
                                 && !suspended_tabs.contains(&t.id)
-                                && (now_ms - t.last_active_at) >= SUSPEND_IDLE_MS
+                                && (now_ms - t.last_active_at) >= suspend_idle_ms(free_mb)
                         })
                         .map(|t| t.id.clone())
                         .collect();
@@ -2591,8 +2622,7 @@
                                     && !t.pinned
                                     && !t.is_essential
                                     && t.status != crate::browser::tab::TabStatus::Loading
-                                    && !media_keep(t)
-                                    && !tab_notifications_allowed(&t.url, &state.settings)
+                                    && !keep_alive(t)
                                     && content_views.contains_key(&t.id)
                                     && (now_ms - t.last_active_at) >= threshold_ms
                             })
@@ -2616,8 +2646,7 @@
                                 t.id != active
                                     && !t.is_neura_page()
                                     && t.status != crate::browser::tab::TabStatus::Loading
-                                    && !media_keep(t)
-                                    && !tab_notifications_allowed(&t.url, &state.settings)
+                                    && !keep_alive(t)
                                     && content_views.contains_key(&t.id)
                                     && !to_discard.iter().any(|id| id == &t.id)
                             })

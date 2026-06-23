@@ -125,6 +125,132 @@ fn attach_navigation_handler(
 }
 
 #[cfg(windows)]
+fn attach_csp_translate_check(
+    wv: &WebView,
+    proxy: tao::event_loop::EventLoopProxy<AppEvent>,
+) {
+    use webview2_com::Microsoft::Web::WebView2::Win32::{ICoreWebView2, ICoreWebView2_2};
+    use webview2_com::{NavigationStartingEventHandler, WebResourceResponseReceivedEventHandler};
+    use wv2core::{Interface, PCWSTR, PWSTR};
+
+    let controller = wv.controller();
+    let webview: ICoreWebView2 = match unsafe { controller.CoreWebView2() } {
+        Ok(w) => w,
+        Err(_) => return,
+    };
+    let Ok(wv2) = webview.cast::<ICoreWebView2_2>() else {
+        return;
+    };
+
+    let nav_url = Arc::new(Mutex::new(String::new()));
+    let nav_url_start = Arc::clone(&nav_url);
+    let start_handler = NavigationStartingEventHandler::create(Box::new(move |_sender, args| {
+        let Some(args) = args else {
+            return Ok(());
+        };
+        unsafe {
+            let mut ptr = PWSTR::null();
+            args.Uri(&mut ptr)?;
+            let url = take_pwstr(ptr);
+            if let Some(key) = doc_url_key(&url) {
+                if let Ok(mut current) = nav_url_start.lock() {
+                    *current = key;
+                }
+            }
+        }
+        Ok(())
+    }));
+    let mut start_token = Default::default();
+    unsafe {
+        let _ = webview.add_NavigationStarting(&start_handler, &mut start_token);
+    }
+
+    let last_checked = Arc::new(Mutex::new(String::new()));
+    let nav_url_response = Arc::clone(&nav_url);
+    let handler = WebResourceResponseReceivedEventHandler::create(Box::new(move |_sender, args| {
+        let Some(args) = args else {
+            return Ok(());
+        };
+        unsafe {
+            let Ok(response) = args.Response() else {
+                return Ok(());
+            };
+            let Ok(headers) = response.Headers() else {
+                return Ok(());
+            };
+            let name: Vec<u16> = "Content-Security-Policy"
+                .encode_utf16()
+                .chain(std::iter::once(0))
+                .collect();
+            let name_ptr = PCWSTR(name.as_ptr());
+            let mut has = wv2win::Win32::Foundation::BOOL::default();
+            if headers.Contains(name_ptr, &mut has).is_err() || !has.as_bool() {
+                return Ok(());
+            }
+            let Ok(request) = args.Request() else {
+                return Ok(());
+            };
+            let mut uptr = PWSTR::null();
+            if request.Uri(&mut uptr).is_err() {
+                return Ok(());
+            }
+            let uri = take_pwstr(uptr);
+            if !(uri.starts_with("http://") || uri.starts_with("https://")) {
+                return Ok(());
+            }
+            let Some(key) = doc_url_key(&uri) else {
+                return Ok(());
+            };
+            let current = nav_url_response
+                .lock()
+                .ok()
+                .map(|value| value.clone())
+                .unwrap_or_default();
+            if current != key {
+                return Ok(());
+            }
+            {
+                let Ok(mut last) = last_checked.lock() else {
+                    return Ok(());
+                };
+                if *last == key {
+                    return Ok(());
+                }
+                *last = key;
+            }
+            let mut vptr = PWSTR::null();
+            if headers.GetHeader(name_ptr, &mut vptr).is_err() {
+                return Ok(());
+            }
+            let csp = take_pwstr(vptr);
+            if app::csp_blocks_translate(&csp) {
+                if let Some(host) = url::Url::parse(&uri)
+                    .ok()
+                    .and_then(|u| u.host_str().map(|h| h.to_lowercase()))
+                {
+                    let _ = proxy.send_event(AppEvent::TranslateUnavailable { host, silent: true });
+                }
+            }
+        }
+        Ok(())
+    }));
+    let mut token = Default::default();
+    unsafe {
+        let _ = wv2.add_WebResourceResponseReceived(&handler, &mut token);
+    }
+}
+
+#[cfg(windows)]
+fn doc_url_key(url: &str) -> Option<String> {
+    let mut parsed = url::Url::parse(url).ok()?;
+    if parsed.scheme() != "http" && parsed.scheme() != "https" {
+        return None;
+    }
+    parsed.set_fragment(None);
+    Some(parsed.to_string())
+}
+
+#[cfg(windows)]
 fn attach_title_handler(
     wv: &WebView,
     proxy: tao::event_loop::EventLoopProxy<AppEvent>,

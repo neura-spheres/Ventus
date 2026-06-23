@@ -65,7 +65,7 @@ const BLACK_PROBE_AFTER: u64 = 3;
 const COVER_MAX_MS: u64 = 1000;
 const APP_PANEL_SLEEP_AFTER: Duration = Duration::from_secs(30);
 const TAB_SLEEP_CHECK_EVERY: Duration = Duration::from_secs(20);
-const SUSPEND_IDLE_MS: i64 = 180_000;
+const TAB_SLEEP_CHECK_FAST: Duration = Duration::from_secs(6);
 // Grace period after media (audio or a large playing video) last stopped before a tab is
 // eligible for sleep again. Gives hysteresis so a transient buffer/ad blip on a backgrounded
 // livestream — where the keep-alive signal can briefly drop — does not get the tab suspended.
@@ -227,7 +227,15 @@ pub fn run() {
     notify::register_aumid(&data_dir);
     let _instance = claim_instance(new_window, cli_url.as_deref(), &data_dir);
 
-    let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+    let worker_threads = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(2)
+        .clamp(1, 4);
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(worker_threads)
+        .enable_all()
+        .build()
+        .expect("tokio runtime");
     let _guard = rt.enter();
 
     encrypt_app_storage(&data_dir);
