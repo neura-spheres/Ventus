@@ -833,3 +833,75 @@ fn attach_accelerators(wv: &WebView, proxy: tao::event_loop::EventLoopProxy<AppE
         let _ = controller.add_AcceleratorKeyPressed(&handler, &mut token);
     }
 }
+
+fn capture_content_blur(wv: &WebView, proxy: tao::event_loop::EventLoopProxy<AppEvent>) {
+    use base64::Engine;
+    use webview2_com::CapturePreviewCompletedHandler;
+    use webview2_com::Microsoft::Web::WebView2::Win32::{
+        ICoreWebView2, COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT_JPEG,
+    };
+    use wv2win::Win32::Foundation::HGLOBAL;
+    use wv2win::Win32::System::Com::StructuredStorage::CreateStreamOnHGlobal;
+    use wv2win::Win32::System::Com::{IStream, STREAM_SEEK_END, STREAM_SEEK_SET};
+
+    let webview: ICoreWebView2 = match unsafe { wv.controller().CoreWebView2() } {
+        Ok(w) => w,
+        Err(_) => return,
+    };
+
+    let stream: IStream =
+        match unsafe { CreateStreamOnHGlobal(HGLOBAL(std::ptr::null_mut()), true) } {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+    let read_stream = stream.clone();
+
+    let handler = CapturePreviewCompletedHandler::create(Box::new(move |err| {
+        if err.is_err() {
+            return Ok(());
+        }
+        let bytes = unsafe {
+            let mut len: u64 = 0;
+            if read_stream
+                .Seek(0, STREAM_SEEK_END, Some(&mut len))
+                .is_err()
+            {
+                return Ok(());
+            }
+            if read_stream.Seek(0, STREAM_SEEK_SET, None).is_err() {
+                return Ok(());
+            }
+            let mut buf = vec![0u8; len as usize];
+            let mut total = 0usize;
+            while total < buf.len() {
+                let mut read = 0u32;
+                let hr = read_stream.Read(
+                    buf.as_mut_ptr().add(total) as *mut _,
+                    (buf.len() - total) as u32,
+                    Some(&mut read),
+                );
+                if hr.is_err() || read == 0 {
+                    break;
+                }
+                total += read as usize;
+            }
+            buf.truncate(total);
+            buf
+        };
+        if bytes.is_empty() {
+            return Ok(());
+        }
+        let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
+        let data_url = format!("data:image/jpeg;base64,{}", encoded);
+        let _ = proxy.send_event(AppEvent::ContentBlurReady(data_url));
+        Ok(())
+    }));
+
+    unsafe {
+        let _ = webview.CapturePreview(
+            COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT_JPEG,
+            &stream,
+            &handler,
+        );
+    }
+}

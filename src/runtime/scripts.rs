@@ -23,6 +23,23 @@ fn content_initialization_script(
     );
     let script = r#"
 (() => {
+  try {
+    if (window.top !== window) return;
+    if (!/^https?:$/.test(location.protocol)) return;
+    const h = location.hostname || '';
+    if (!h) return;
+    const ex = '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/';
+    const del = (d) => { try { document.cookie = 'googtrans' + ex + (d ? (';domain=' + d) : ''); } catch (_) {} };
+    del('');
+    const parts = h.split('.');
+    for (let i = 0; i < parts.length - 1; i++) {
+      const d = parts.slice(i).join('.');
+      del(d);
+      del('.' + d);
+    }
+  } catch (_) {}
+})();
+(() => {
   let isTop = false;
   try { isTop = window.top === window; } catch (_) {}
   if (window.__neuraContentBridgeInstalled) return;

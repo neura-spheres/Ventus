@@ -2074,11 +2074,20 @@ button,input,select,textarea{font-family:var(--font)}
 .ai-hist-empty{padding:34px 18px;text-align:center;color:var(--ai-muted);font-size:12px;line-height:1.6}
 
 /* settings overlay — sits in front of the live content WebView */
+#content-blur{
+  position:absolute;top:0;right:0;bottom:0;
+  left:calc(var(--sidebar-w) + var(--frame-side-w,5px));
+  z-index:9;
+  background-position:center;background-size:cover;background-repeat:no-repeat;
+  opacity:0;display:none;pointer-events:none;
+  transition:opacity .2s ease;
+}
+#content-blur.show{opacity:1}
 #settings-overlay{
   position:fixed;inset:0;
   background:var(--overlay-bg);
-  -webkit-backdrop-filter:blur(16px) saturate(140%);
-  backdrop-filter:blur(16px) saturate(140%);
+  -webkit-backdrop-filter:blur(28px) saturate(150%);
+  backdrop-filter:blur(28px) saturate(150%);
   z-index:200;display:none;align-items:center;justify-content:center;
 }
 #settings-overlay.open{display:flex}
@@ -2091,6 +2100,24 @@ button,input,select,textarea{font-family:var(--font)}
   animation:ventus-scale-in 0.22s cubic-bezier(0.16,1,0.3,1);
 }
 [data-theme="light"] #settings-panel{box-shadow:0 24px 70px rgba(30,40,100,0.18),0 0 0 1px rgba(0,0,0,0.06)}
+.about-card-export{
+  flex-shrink:0;display:flex;align-items:center;position:relative;z-index:1;
+}
+.about-card-export-btn{
+  display:inline-flex;align-items:center;gap:6px;
+  height:30px;padding:0 16px;border-radius:20px;
+  background:rgba(255,255,255,0.07);
+  border:1px solid rgba(255,255,255,0.13);
+  color:var(--text-muted);font-size:12px;font-weight:500;
+  cursor:pointer;transition:all var(--transition);font-family:var(--font);
+  letter-spacing:0.01em;
+}
+.about-card-export-btn:hover{
+  background:rgba(255,255,255,0.13);color:var(--text);
+  border-color:rgba(255,255,255,0.22);
+}
+[data-theme="light"] .about-card-export-btn{background:rgba(0,0,0,0.04);border-color:rgba(0,0,0,0.10)}
+[data-theme="light"] .about-card-export-btn:hover{background:rgba(0,0,0,0.08)}
 .settings-nav{
   width:192px;background:var(--modal-bg-2);
   border-right:1px solid var(--modal-border);
@@ -3618,42 +3645,44 @@ button,input,select,textarea{font-family:var(--font)}
 
 /* ── About section ──────────────────────────────────────────────────────────â”€ */
 .about-identity-card{
-  display:flex;align-items:center;gap:18px;
-  padding:20px 20px 18px;
+  display:flex;flex-direction:row;align-items:center;gap:14px;
+  padding:14px 18px;
   background:var(--modal-bg-2);border:1px solid var(--modal-border);
-  border-radius:16px;margin-top:10px;
+  border-radius:14px;margin-top:10px;
   position:relative;overflow:hidden;
 }
 .about-identity-card::before{
-  content:'';position:absolute;right:-40px;top:-60px;
-  width:200px;height:200px;
-  background:radial-gradient(circle,rgba(99,102,241,0.13),transparent 65%);
+  content:'';position:absolute;right:0;top:0;bottom:0;
+  width:220px;
+  background:radial-gradient(ellipse at 100% 50%,rgba(99,102,241,0.14) 0%,rgba(139,92,246,0.07) 50%,transparent 75%);
   pointer-events:none;
 }
+.about-identity-card::after{content:none}
 .about-identity-logo{
-  width:64px;height:64px;
+  width:46px;height:46px;
   flex-shrink:0;position:relative;z-index:1;
   display:flex;align-items:center;justify-content:center;
+  filter:drop-shadow(0 4px 14px rgba(99,102,241,0.45));
 }
-.about-identity-logo img{width:64px;height:64px;object-fit:contain;border-radius:16px}
+.about-identity-logo img{width:46px;height:46px;object-fit:contain;border-radius:11px}
 .about-identity-body{min-width:0;flex:1;position:relative;z-index:1}
 .about-identity-name{
-  display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;
-  font-size:22px;font-weight:700;color:var(--text);letter-spacing:-0.5px;line-height:1.1;
+  display:flex;align-items:center;justify-content:flex-start;gap:8px;
+  font-size:15px;font-weight:700;color:var(--text);letter-spacing:-0.2px;line-height:1.2;
 }
 .about-identity-ver{
-  font-size:12px;font-weight:500;color:var(--text-muted);letter-spacing:0;
+  font-size:12px;font-weight:500;padding:2px 8px;border-radius:6px;
+  background:rgba(99,102,241,0.13);color:rgba(139,92,246,0.9);
+  letter-spacing:0;border:1px solid rgba(99,102,241,0.2);
 }
-.about-identity-tagline{font-size:12px;color:var(--text-muted);margin-top:4px;line-height:1.4}
-.about-identity-badges{display:flex;flex-wrap:wrap;gap:6px;margin-top:13px}
-.aib{
-  display:inline-flex;align-items:center;gap:5px;
-  padding:3px 10px;border-radius:6px;
-  background:var(--soft-btn-bg);
-  color:var(--text-muted);font-size:11px;font-weight:500;
+.about-identity-tagline{
+  font-size:13px;color:var(--text-muted);margin-top:8px;line-height:1.5;
+  letter-spacing:0.01em;
 }
-.aib-live{background:var(--success-dim);color:var(--success)}
-.aib-live-dot{width:5px;height:5px;border-radius:50%;background:var(--success);flex-shrink:0}
+.about-identity-badges{display:none}
+.aib{display:none}
+.aib-live{display:none}
+.aib-live-dot{display:none}
 
 .about-rows{
   margin-top:12px;
@@ -4550,6 +4579,7 @@ svg{display:block;flex-shrink:0}
   </div>
   <div id="apps-placeholder"></div>
   <div id="content-loading"></div>
+  <div id="content-blur"></div>
 </div>
 
 <!-- ADD APP MODAL -->
@@ -5309,15 +5339,19 @@ svg{display:block;flex-shrink:0}
           <div class="about-identity-body">
             <div class="about-identity-name">
               Ventus
-              <span class="about-identity-ver">v__APP_VERSION__</span>
             </div>
-            <div class="about-identity-tagline">Fast search &middot; Focused workspaces &middot; AI-native</div>
             <div class="about-identity-badges">
               <span class="aib aib-live"><span class="aib-live-dot"></span>Stable</span>
               <span class="aib">Windows</span>
               <span class="aib">AI-native</span>
               <span class="aib">Local-first</span>
             </div>
+          </div>
+          <div class="about-card-export">
+            <button class="about-card-export-btn" onclick="send('ExportSettings')">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Export Settings
+            </button>
           </div>
         </div>
 
@@ -5365,13 +5399,6 @@ svg{display:block;flex-shrink:0}
           <div class="toggle-switch" id="toggle-beta-channel" onclick="toggleSetting('beta_channel')"></div>
         </div>
 
-        <!-- Actions -->
-        <div class="about-actions">
-          <button class="about-act-btn" onclick="send('ExportSettings')">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            Export settings
-          </button>
-        </div>
       </div>
     </div>
   </div>
@@ -5839,6 +5866,25 @@ window.__neura = {
   focusSpotlight() { focusSpotlightSoon(); },
   showPermissionPrompt(id, origin, key) { showPermissionPrompt(id, origin, key); },
   reportSent(ok) { reportSent(!!ok); },
+  setContentBlur(dataUrl) {
+    const el = document.getElementById('content-blur');
+    if (!el || !dataUrl) return;
+    if (!document.getElementById('settings-overlay').classList.contains('open')) return;
+    el.style.backgroundImage = 'url("' + dataUrl + '")';
+    el.style.display = 'block';
+    requestAnimationFrame(() => { el.classList.add('show'); });
+  },
+  clearContentBlur() {
+    const el = document.getElementById('content-blur');
+    if (!el) return;
+    el.classList.remove('show');
+    setTimeout(() => {
+      if (!el.classList.contains('show')) {
+        el.style.display = 'none';
+        el.style.backgroundImage = '';
+      }
+    }, 240);
+  },
   appendAiChunk(text, done) {
     if (aiStreamStopped) {
       if (done) finishAiBusy();
@@ -5969,10 +6015,12 @@ window.__neura = {
   updateDownload(id, received, total, status, speed) {
     const d = (state.downloads || []).find(x => x.id === id);
     if (!d) return;
+    const wasDownloading = d.status === 'downloading';
     d.received_bytes = received;
     if (total != null) d.total_bytes = total;
     d.status = status;
     d.speed_bps = speed;
+    if (status === 'downloading' && wasDownloading && patchDownloadProgress(d)) return;
     refreshDownloadViews();
   },
   onContentPointerDown() { onContentPointerDown(); },
@@ -6006,6 +6054,7 @@ window.__neura = {
       const el = document.getElementById(id);
       if (el) el.classList.remove('open');
     });
+    if (window.__neura && window.__neura.clearContentBlur) window.__neura.clearContentBlur();
     _activeFolderId = null;
     _activeFolderAnchor = null;
     _bmEditId = null;
@@ -12181,6 +12230,7 @@ function populateRegionSettings() {
 // SETTINGS
 // ============================================================
 function openSettings(section='general') {
+  send('CaptureBlurBackdrop');
   send('OpenSettings');
   document.getElementById('settings-overlay').classList.add('open');
   populateSettingsPanel();
@@ -12190,6 +12240,7 @@ function closeSettings() {
   send('CloseSettings');
   closeHistoryClearConfirm();
   document.getElementById('settings-overlay').classList.remove('open');
+  if (window.__neura && window.__neura.clearContentBlur) window.__neura.clearContentBlur();
 }
 function handleSettingsOverlayClick(e) {
   if (e.target.id === 'settings-overlay') closeSettings();
@@ -13989,7 +14040,7 @@ function renderDownloads() {
       subHtml = `<span class="dl-pi-state active">Downloading</span>${metaText ? `<span class="dl-pi-sep"></span><span class="dl-pi-meta">${escHtml(metaText)}</span>` : ''}`;
     }
     const filePath = isDone && d.local_path ? ` data-dl-file-path="${escAttr(d.local_path)}"` : '';
-    return `<div class="dl-panel-item"${filePath}>
+    return `<div class="dl-panel-item" data-dl-id="${escAttr(d.id)}"${filePath}>
       <div class="dl-pi-icon-wrap ${ftClass}">${iconContent}</div>
       <div class="dl-pi-body">
         <div class="dl-pi-name">${escHtml(d.filename)}</div>
@@ -14352,7 +14403,7 @@ function renderDownloadPanel() {
       subHtml = `<span class="dl-pi-state active">Downloading</span>${metaText ? `<span class="dl-pi-sep"></span><span class="dl-pi-meta">${escHtml(metaText)}</span>` : ''}`;
     }
     const filePath = isDone && d.local_path ? ` data-dl-file-path="${escAttr(d.local_path)}"` : '';
-    return `<div class="dl-panel-item"${filePath}>
+    return `<div class="dl-panel-item" data-dl-id="${escAttr(d.id)}"${filePath}>
       <div class="dl-pi-icon-wrap ${ftClass}">${iconContent}</div>
       <div class="dl-pi-body">
         <div class="dl-pi-name">${escHtml(d.filename)}</div>
@@ -15225,6 +15276,29 @@ function dlControlBtns(d) {
   if (dlIsActive(d))
     return `<button class="dl-pi-btn icon" data-dl-pause="${id}" title="Pause">${DL_SVG_PAUSE}</button><button class="dl-pi-btn icon danger" data-dl-cancel="${id}" title="Cancel">${DL_SVG_X}</button>`;
   return '';
+}
+function patchDownloadProgress(d) {
+  const lists = [];
+  const panel = document.getElementById('download-panel');
+  if (panel && panel.classList.contains('open')) lists.push(document.getElementById('dl-panel-list'));
+  const sec = document.getElementById('section-downloads');
+  if (sec && sec.classList.contains('active')) lists.push(document.getElementById('downloads-list'));
+  if (!lists.length) return true;
+  const pct = dlPct(d);
+  const indeterminate = pct === null;
+  let ok = true;
+  for (const list of lists) {
+    if (!list) continue;
+    const item = list.querySelector('[data-dl-id="' + d.id + '"]');
+    if (!item) { ok = false; continue; }
+    const bar = item.querySelector('.dl-pi-bar');
+    const fill = bar ? bar.querySelector('.dl-pi-bar-fill') : null;
+    if (!bar || !fill || bar.classList.contains('indeterminate') !== indeterminate) { ok = false; continue; }
+    if (!indeterminate) fill.style.width = pct + '%';
+    const meta = item.querySelector('.dl-pi-meta');
+    if (meta) meta.textContent = dlMeta(d);
+  }
+  return ok;
 }
 function refreshDownloadViews() {
   const panel = document.getElementById('download-panel');

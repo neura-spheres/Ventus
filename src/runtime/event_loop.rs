@@ -367,6 +367,33 @@
                 }
             }
 
+            Event::UserEvent(AppEvent::CopyImageData { ok, data, src }) => {
+                let proxy_cp = proxy_main.clone();
+                if ok && data.starts_with("data:") {
+                    rt.spawn(async move {
+                        let success = decode_data_url(&data)
+                            .and_then(|b| write_image_to_clipboard(&b))
+                            .is_ok();
+                        let _ = proxy_cp.send_event(AppEvent::CopyImageResult { success });
+                    });
+                } else if src.starts_with("http") {
+                    let referer = state
+                        .tab_manager
+                        .active_tab()
+                        .map(|t| t.url.clone())
+                        .unwrap_or_default();
+                    rt.spawn(async move {
+                        let success = match fetch_image_bytes(&src, &referer).await {
+                            Ok(b) => write_image_to_clipboard(&b).is_ok(),
+                            Err(_) => false,
+                        };
+                        let _ = proxy_cp.send_event(AppEvent::CopyImageResult { success });
+                    });
+                } else {
+                    let _ = proxy_cp.send_event(AppEvent::CopyImageResult { success: false });
+                }
+            }
+
             // F12 / OpenDevtools — open Chrome DevTools for the active content WebView.
             // `open_devtools()` may create a new child HWND inside the main window that
             // initially appears black while loading.  Re-applying the layout immediately
@@ -1558,6 +1585,13 @@
                                 }
                             }
                         }
+                        TabAction::CaptureContentBlur => {
+                            if let Some(id) = &state.tab_manager.active_tab_id {
+                                if let Some(wv) = content_views.get(id) {
+                                    capture_content_blur(wv, proxy_main.clone());
+                                }
+                            }
+                        }
                         TabAction::ContentScriptOnTab { tab_id, js } => {
                             if let Some(wv) = content_views.get(&tab_id) {
                                 let _ = wv.evaluate_script(&js);
@@ -2260,24 +2294,38 @@
                             }
                         }
                         TabAction::CopyImageToClipboard { url } => {
-                            let referer = state
-                                .tab_manager
-                                .active_tab()
-                                .map(|t| t.url.clone())
-                                .unwrap_or_default();
-                            let proxy_cp = proxy_main.clone();
-                            rt.spawn(async move {
-                                let result: anyhow::Result<()> = if url.starts_with("data:") {
-                                    decode_data_url(&url).and_then(|b| write_image_to_clipboard(&b))
-                                } else {
-                                    fetch_image_bytes(&url, &referer)
-                                        .await
+                            if url.starts_with("data:") {
+                                let proxy_cp = proxy_main.clone();
+                                rt.spawn(async move {
+                                    let ok = decode_data_url(&url)
                                         .and_then(|b| write_image_to_clipboard(&b))
-                                };
-                                let _ = proxy_cp.send_event(AppEvent::CopyImageResult {
-                                    success: result.is_ok(),
+                                        .is_ok();
+                                    let _ = proxy_cp
+                                        .send_event(AppEvent::CopyImageResult { success: ok });
                                 });
-                            });
+                            } else if let Some(wv) = state
+                                .tab_manager
+                                .active_tab_id
+                                .as_ref()
+                                .and_then(|id| content_views.get(id))
+                            {
+                                let _ = wv.evaluate_script(&copy_image_fetch_script(&url));
+                            } else {
+                                let referer = state
+                                    .tab_manager
+                                    .active_tab()
+                                    .map(|t| t.url.clone())
+                                    .unwrap_or_default();
+                                let proxy_cp = proxy_main.clone();
+                                rt.spawn(async move {
+                                    let ok = match fetch_image_bytes(&url, &referer).await {
+                                        Ok(b) => write_image_to_clipboard(&b).is_ok(),
+                                        Err(_) => false,
+                                    };
+                                    let _ = proxy_cp
+                                        .send_event(AppEvent::CopyImageResult { success: ok });
+                                });
+                            }
                         }
                         TabAction::SetFullscreen(active) => {
                             let _ = chrome.evaluate_script(&format!(
@@ -2551,7 +2599,12 @@
                 if Instant::now() >= sleep_check_at {
                     let now_ms = chrono::Utc::now().timestamp_millis();
                     let free_mb = available_memory_mb();
-                    let next_check = if free_mb <= 1024 {
+                    let commit_mb = available_commit_mb();
+                    let critical = commit_mb <= CRITICAL_COMMIT_MB;
+                    let pressure_mb = free_mb.min(commit_mb);
+                    let next_check = if critical {
+                        TAB_SLEEP_CHECK_CRITICAL
+                    } else if free_mb <= 1024 {
                         TAB_SLEEP_CHECK_FAST
                     } else {
                         TAB_SLEEP_CHECK_EVERY
@@ -2611,7 +2664,12 @@
                         }
                     }
 
-                    let mut to_discard: Vec<String> = if free_mb <= DISCARD_FREE_MB {
+                    let discard_idle = if critical && free_mb > DISCARD_FREE_MB {
+                        EMERGENCY_DISCARD_IDLE_MS
+                    } else {
+                        threshold_ms
+                    };
+                    let mut to_discard: Vec<String> = if free_mb <= DISCARD_FREE_MB || critical {
                         state
                             .tab_manager
                             .tabs
@@ -2624,15 +2682,15 @@
                                     && t.status != crate::browser::tab::TabStatus::Loading
                                     && !keep_alive(t)
                                     && content_views.contains_key(&t.id)
-                                    && (now_ms - t.last_active_at) >= threshold_ms
+                                    && (now_ms - t.last_active_at) >= discard_idle
                             })
                             .map(|t| t.id.clone())
                             .collect()
                     } else {
                         Vec::new()
                     };
-                    let max_live = if free_mb <= DISCARD_FREE_MB {
-                        max_live_webviews(free_mb)
+                    let max_live = if free_mb <= DISCARD_FREE_MB || critical {
+                        max_live_webviews(pressure_mb)
                     } else {
                         MAX_PRESERVED_WEBVIEWS
                     };
@@ -2661,6 +2719,7 @@
                     }
                     to_discard.sort();
                     to_discard.dedup();
+                    let discard_n = to_discard.len();
                     for id in to_discard {
                         content_views.remove(&id);
                         content_hwnds.remove(&id);
@@ -2674,6 +2733,17 @@
                             free_mb,
                             max_live,
                             threshold_ms / 60_000
+                        );
+                    }
+                    if critical && discard_n > 0 {
+                        trim_working_set();
+                        tracing::warn!(
+                            target: "ventus::perf",
+                            commit_mb,
+                            free_mb,
+                            discarded = discard_n,
+                            live = content_views.len(),
+                            "commit memory critical — shed background tabs to head off a WebView2 OOM crash"
                         );
                     }
                     if tabs_changed {

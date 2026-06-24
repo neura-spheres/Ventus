@@ -66,6 +66,9 @@ const COVER_MAX_MS: u64 = 1000;
 const APP_PANEL_SLEEP_AFTER: Duration = Duration::from_secs(30);
 const TAB_SLEEP_CHECK_EVERY: Duration = Duration::from_secs(20);
 const TAB_SLEEP_CHECK_FAST: Duration = Duration::from_secs(6);
+const TAB_SLEEP_CHECK_CRITICAL: Duration = Duration::from_secs(2);
+const CRITICAL_COMMIT_MB: u64 = 768;
+const EMERGENCY_DISCARD_IDLE_MS: i64 = 10_000;
 // Grace period after media (audio or a large playing video) last stopped before a tab is
 // eligible for sleep again. Gives hysteresis so a transient buffer/ad blip on a backgrounded
 // livestream — where the keep-alive signal can briefly drop — does not get the tab suspended.

@@ -19,6 +19,26 @@ fn available_memory_mb() -> u64 {
 }
 
 #[cfg(windows)]
+fn available_commit_mb() -> u64 {
+    use windows::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
+    let mut ms = MEMORYSTATUSEX {
+        dwLength: std::mem::size_of::<MEMORYSTATUSEX>() as u32,
+        ..Default::default()
+    };
+    unsafe {
+        if GlobalMemoryStatusEx(&mut ms).is_ok() {
+            return ms.ullAvailPageFile / 1024 / 1024;
+        }
+    }
+    u64::MAX
+}
+
+#[cfg(not(windows))]
+fn available_commit_mb() -> u64 {
+    u64::MAX
+}
+
+#[cfg(windows)]
 fn trim_working_set() {
     use windows::Win32::System::Threading::{GetCurrentProcess, SetProcessWorkingSetSize};
     unsafe {
@@ -224,40 +244,58 @@ async fn fetch_image_bytes(url: &str, referer: &str) -> anyhow::Result<Vec<u8>> 
 /// Uses a 24-bit BGR bottom-up DIB which is universally accepted by Win32 apps.
 #[cfg(windows)]
 fn write_image_to_clipboard(bytes: &[u8]) -> anyhow::Result<()> {
-    use windows::Win32::Foundation::HWND;
-    use windows::Win32::System::DataExchange::{CloseClipboard, OpenClipboard};
+    use windows::Win32::System::DataExchange::{
+        CloseClipboard, EmptyClipboard, RegisterClipboardFormatW,
+    };
 
     let img = image::load_from_memory(bytes)?.to_rgba8();
     let width = img.width() as usize;
     let height = img.height() as usize;
     let pixels = img.as_raw();
 
-    // CF_DIB: BITMAPINFOHEADER (40 bytes) + 24bpp BGR rows, bottom-up, 4-byte-aligned stride
+    let mut png: Vec<u8> = Vec::new();
+    {
+        use image::ImageEncoder;
+        image::codecs::png::PngEncoder::new(&mut png).write_image(
+            pixels,
+            img.width(),
+            img.height(),
+            image::ExtendedColorType::Rgba8,
+        )?;
+    }
+
     let stride = (width * 3 + 3) & !3;
     const HDR: usize = 40;
     let total = HDR + stride * height;
     let mut dib = vec![0u8; total];
 
-    dib[0..4].copy_from_slice(&40u32.to_le_bytes()); // biSize
-    dib[4..8].copy_from_slice(&(width as i32).to_le_bytes()); // biWidth
-    dib[8..12].copy_from_slice(&(height as i32).to_le_bytes()); // biHeight (positive = bottom-up)
-    dib[12..14].copy_from_slice(&1u16.to_le_bytes()); // biPlanes
-    dib[14..16].copy_from_slice(&24u16.to_le_bytes()); // biBitCount
-                                                       // biCompression, biSizeImage, biX/YPelsPerMeter, biClrUsed, biClrImportant = 0
+    dib[0..4].copy_from_slice(&40u32.to_le_bytes());
+    dib[4..8].copy_from_slice(&(width as i32).to_le_bytes());
+    dib[8..12].copy_from_slice(&(height as i32).to_le_bytes());
+    dib[12..14].copy_from_slice(&1u16.to_le_bytes());
+    dib[14..16].copy_from_slice(&24u16.to_le_bytes());
 
     for dib_row in 0..height {
-        let img_row = height - 1 - dib_row; // flip: DIB row 0 = bottom of image
+        let img_row = height - 1 - dib_row;
         let dst = HDR + dib_row * stride;
         let src = img_row * width * 4;
         for col in 0..width {
-            dib[dst + col * 3] = pixels[src + col * 4 + 2]; // B
-            dib[dst + col * 3 + 1] = pixels[src + col * 4 + 1]; // G
-            dib[dst + col * 3 + 2] = pixels[src + col * 4]; // R
+            dib[dst + col * 3] = pixels[src + col * 4 + 2];
+            dib[dst + col * 3 + 1] = pixels[src + col * 4 + 1];
+            dib[dst + col * 3 + 2] = pixels[src + col * 4];
         }
     }
 
-    unsafe { OpenClipboard(HWND(0))? };
-    let result = write_dib_to_open_clipboard(&dib);
+    open_clipboard_retry()?;
+    let result = (|| -> anyhow::Result<()> {
+        unsafe { EmptyClipboard()? };
+        set_clipboard_mem(8u32, &dib)?;
+        let png_fmt = unsafe { RegisterClipboardFormatW(windows::core::w!("PNG")) };
+        if png_fmt != 0 {
+            let _ = set_clipboard_mem(png_fmt, &png);
+        }
+        Ok(())
+    })();
     unsafe {
         let _ = CloseClipboard();
     }
@@ -265,21 +303,33 @@ fn write_image_to_clipboard(bytes: &[u8]) -> anyhow::Result<()> {
 }
 
 #[cfg(windows)]
-fn write_dib_to_open_clipboard(dib: &[u8]) -> anyhow::Result<()> {
+fn open_clipboard_retry() -> anyhow::Result<()> {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::System::DataExchange::OpenClipboard;
+    for _ in 0..12 {
+        if unsafe { OpenClipboard(HWND(0)) }.is_ok() {
+            return Ok(());
+        }
+        std::thread::sleep(std::time::Duration::from_millis(15));
+    }
+    Err(anyhow::anyhow!("OpenClipboard busy"))
+}
+
+#[cfg(windows)]
+fn set_clipboard_mem(fmt: u32, data: &[u8]) -> anyhow::Result<()> {
     use windows::Win32::Foundation::HANDLE;
-    use windows::Win32::System::DataExchange::{EmptyClipboard, SetClipboardData};
+    use windows::Win32::System::DataExchange::SetClipboardData;
     use windows::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE};
 
     unsafe {
-        EmptyClipboard()?;
-        let hmem = GlobalAlloc(GMEM_MOVEABLE, dib.len())?;
+        let hmem = GlobalAlloc(GMEM_MOVEABLE, data.len())?;
         let ptr = GlobalLock(hmem) as *mut u8;
         if ptr.is_null() {
             return Err(anyhow::anyhow!("GlobalLock failed"));
         }
-        std::ptr::copy_nonoverlapping(dib.as_ptr(), ptr, dib.len());
+        std::ptr::copy_nonoverlapping(data.as_ptr(), ptr, data.len());
         let _ = GlobalUnlock(hmem);
-        if let Err(e) = SetClipboardData(8u32, HANDLE(hmem.0 as isize)) {
+        if let Err(e) = SetClipboardData(fmt, HANDLE(hmem.0 as isize)) {
             return Err(anyhow::anyhow!("SetClipboardData: {e}"));
         }
         Ok(())
@@ -394,6 +444,31 @@ fn save_image_fetch_script(save_id: &str, url: &str) -> String {
   }}catch(e){{ __post(false,''); }}
 }})()"#,
         id = id_js,
+        url = url_js
+    )
+}
+
+fn copy_image_fetch_script(url: &str) -> String {
+    let url_js = serde_json::to_string(url).unwrap_or_else(|_| "\"\"".into());
+    format!(
+        r#"(function(){{
+  var __u={url};
+  function __post(ok,data){{
+    try{{ window.ipc.postMessage(JSON.stringify({{cmd:'copy_image_data',ok:ok,data:data||'',src:__u}})); }}catch(e){{}}
+  }}
+  try{{
+    fetch(__u,{{credentials:'include'}})
+      .then(function(r){{ if(!r.ok) throw new Error('status'); return r.blob(); }})
+      .then(function(b){{
+        if(!/^image\//.test(b.type||'')) throw new Error('type');
+        var fr=new FileReader();
+        fr.onload=function(){{ __post(true,fr.result); }};
+        fr.onerror=function(){{ __post(false,''); }};
+        fr.readAsDataURL(b);
+      }})
+      .catch(function(){{ __post(false,''); }});
+  }}catch(e){{ __post(false,''); }}
+}})()"#,
         url = url_js
     )
 }

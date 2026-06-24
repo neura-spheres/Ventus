@@ -186,6 +186,7 @@ pub enum ChromeCommand {
     BookmarkNewFolder,
     OpenSettings,
     CloseSettings,
+    CaptureBlurBackdrop,
     BrowseDownloadFolder,
     SaveSettings {
         key: String,
@@ -503,6 +504,7 @@ impl ChromeCommand {
             ChromeCommand::BookmarkNewFolder => Some("bookmark_new_folder"),
             ChromeCommand::OpenSettings => Some("open_settings"),
             ChromeCommand::CloseSettings => Some("close_settings"),
+            ChromeCommand::CaptureBlurBackdrop => Some("capture_blur_backdrop"),
             ChromeCommand::BrowseDownloadFolder => Some("browse_download_folder"),
             ChromeCommand::SaveSettings { .. } => Some("save_settings"),
             ChromeCommand::SetSitePermission { .. } => Some("set_site_permission"),
@@ -712,6 +714,7 @@ pub enum AppEvent {
     AiError {
         message: String,
     },
+    ContentBlurReady(String),
     DownloadStarted {
         id: Option<String>,
         url: String,
@@ -760,6 +763,14 @@ pub enum AppEvent {
     /// Result of a "Copy image" operation (Win32 clipboard write).
     CopyImageResult {
         success: bool,
+    },
+    /// Result of a "Copy image" fetch performed inside the content WebView.
+    /// `data` is a base64 data URL when `ok`; otherwise empty and `src` is the
+    /// original image URL so the main loop can fall back to a server-side fetch.
+    CopyImageData {
+        ok: bool,
+        data: String,
+        src: String,
     },
     /// Result of a "Save image as" fetch performed inside the content WebView.
     /// `data` is a base64 data URL when `ok`; otherwise empty. Matched to the
@@ -869,6 +880,9 @@ pub enum AppEvent {
     ContentProcessFailed {
         tab_id: String,
         fatal: bool,
+    },
+    ContentSubprocessCrashed {
+        tab_id: String,
     },
     /// A sized popup (OAuth, share, payment) was requested. The main loop drains the
     /// pending-popup queue and builds a Ventus-wrapped window for each.

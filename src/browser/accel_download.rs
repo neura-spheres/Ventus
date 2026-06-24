@@ -173,6 +173,7 @@ async fn segment(
         if ctl.cancel.load(Ordering::Relaxed) {
             return false;
         }
+        let attempt_start = pos;
         let mut file = match tokio::fs::OpenOptions::new().write(true).open(&path).await {
             Ok(f) => f,
             Err(_) => return false,
@@ -232,6 +233,10 @@ async fn segment(
         if pos > end {
             return true;
         }
+        if pos > attempt_start {
+            tries = 0;
+            continue;
+        }
         tries += 1;
         if tries > MAX_SEGMENT_RETRIES {
             return false;
@@ -252,6 +257,9 @@ async fn report_progress(
         tokio::time::sleep(PROGRESS_EVERY).await;
         if ctl.cancel.load(Ordering::Relaxed) {
             return;
+        }
+        if ctl.paused.load(Ordering::Relaxed) {
+            continue;
         }
         if last.elapsed() < PROGRESS_EVERY {
             continue;

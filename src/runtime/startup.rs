@@ -666,8 +666,10 @@ fn attach_process_failed_handler(
 ) {
     use webview2_com::{
         Microsoft::Web::WebView2::Win32::{
-            ICoreWebView2, COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_EXITED,
+            ICoreWebView2, COREWEBVIEW2_PROCESS_FAILED_KIND_GPU_PROCESS_EXITED,
+            COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_EXITED,
             COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_UNRESPONSIVE,
+            COREWEBVIEW2_PROCESS_FAILED_KIND_UTILITY_PROCESS_EXITED,
         },
         ProcessFailedEventHandler,
     };
@@ -688,14 +690,18 @@ fn attach_process_failed_handler(
         unsafe {
             let _ = args.ProcessFailedKind(&mut kind);
         }
-        // Only auto-reload on renderer crash/unresponsive. Browser-process failure
-        // is catastrophic (requires environment recreation) and rare; log it instead.
         if kind == COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_EXITED
             || kind == COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_UNRESPONSIVE
         {
             let _ = proxy.send_event(AppEvent::ContentProcessFailed {
                 tab_id: tab_id.clone(),
                 fatal: kind == COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_EXITED,
+            });
+        } else if kind == COREWEBVIEW2_PROCESS_FAILED_KIND_UTILITY_PROCESS_EXITED
+            || kind == COREWEBVIEW2_PROCESS_FAILED_KIND_GPU_PROCESS_EXITED
+        {
+            let _ = proxy.send_event(AppEvent::ContentSubprocessCrashed {
+                tab_id: tab_id.clone(),
             });
         } else {
             tracing::error!(

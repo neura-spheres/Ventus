@@ -293,6 +293,21 @@ fn build_content_webview_once(
                     let _ = proxy_ipc.send_event(AppEvent::SaveImageData { id, ok, data });
                     return;
                 }
+                if value.get("cmd").and_then(|v| v.as_str()) == Some("copy_image_data") {
+                    let ok = value.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
+                    let data = value
+                        .get("data")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default()
+                        .to_string();
+                    let src = value
+                        .get("src")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default()
+                        .to_string();
+                    let _ = proxy_ipc.send_event(AppEvent::CopyImageData { ok, data, src });
+                    return;
+                }
                 if value.get("cmd").and_then(|v| v.as_str()) == Some("pwd_fill_request") {
                     let origin = value
                         .get("origin")
