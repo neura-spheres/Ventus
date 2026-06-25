@@ -62,6 +62,7 @@ const SC_NEXT_TAB: usize = 32;
 const SC_PREV_TAB: usize = 33;
 const LOAD_STALL_AFTER: u64 = 6;
 const BLACK_PROBE_AFTER: u64 = 3;
+const SPA_STALL_AFTER: u64 = 10;
 const COVER_MAX_MS: u64 = 1000;
 const APP_PANEL_SLEEP_AFTER: Duration = Duration::from_secs(30);
 const TAB_SLEEP_CHECK_EVERY: Duration = Duration::from_secs(20);
@@ -76,6 +77,7 @@ const MEDIA_GRACE_MS: i64 = 90_000;
 const DISCARD_FREE_MB: u64 = 512;
 const MAX_PRESERVED_WEBVIEWS: usize = 32;
 const HEAL_CONTENT_EVERY: Duration = Duration::from_millis(750);
+const HEAL_SETTLE_REPEATS: u8 = 6;
 const MAX_DOWNLOAD_RESUMES: u32 = 8;
 const DOWNLOAD_RESUME_DELAY: Duration = Duration::from_secs(2);
 const SESSION_SAVE_DELAY: Duration = Duration::from_secs(3);
@@ -765,6 +767,10 @@ pub fn run() {
     let mut last_active_tab_id: Option<String> = state.tab_manager.active_tab_id.clone();
     let mut sleep_check_at = Instant::now() + TAB_SLEEP_CHECK_EVERY;
     let mut heal_content_at = Instant::now() + HEAL_CONTENT_EVERY;
+    #[cfg(windows)]
+    let mut heal_last_sig: Option<(Option<String>, (i32, i32, u32, u32), bool)> = None;
+    #[cfg(windows)]
+    let mut heal_repeats_left: u8 = HEAL_SETTLE_REPEATS;
     let mut error_report_at = Instant::now();
     let mut freeze_report_at = Instant::now();
     let mut renderer_report_at = Instant::now();

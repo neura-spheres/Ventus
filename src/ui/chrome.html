@@ -5396,7 +5396,7 @@ svg{display:block;flex-shrink:0}
             <div class="toggle-title">Get beta updates</div>
             <div class="toggle-desc">Pre-release builds. Newest features, rougher edges.</div>
           </div>
-          <div class="toggle-switch" id="toggle-beta-channel" onclick="toggleSetting('beta_channel')"></div>
+          <div class="toggle-switch" id="toggle-beta-channel" onclick="toggleBetaChannel()"></div>
         </div>
 
       </div>
@@ -15812,6 +15812,37 @@ function showRestartModal() {
   ov.querySelector('#restart-now-btn').onclick = () => send('RestartForWebSecurity');
   ov.querySelector('#restart-later-btn').onclick = dismiss;
   ov.onclick = (e) => { if (e.target === ov) dismiss(); };
+}
+
+function toggleBetaChannel() {
+  const el = document.getElementById('toggle-beta-channel');
+  const turningOn = el && !el.classList.contains('on');
+  if (!turningOn) { toggleSetting('beta_channel'); return; }
+  showBetaConfirm(() => toggleSetting('beta_channel'));
+}
+
+function showBetaConfirm(onConfirm) {
+  if (document.getElementById('beta-confirm-overlay')) return;
+  const ov = document.createElement('div');
+  ov.id = 'beta-confirm-overlay';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45)';
+  ov.innerHTML = `<div style="width:340px;max-width:90vw;background:var(--modal-bg);border:1px solid var(--modal-border);border-radius:14px;padding:22px;box-shadow:0 24px 70px rgba(0,0,0,.45)">
+    <div style="width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;background:var(--accent-dim);margin-bottom:14px">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6M10 3v6.5L5 18a2 2 0 0 0 1.8 3h10.4A2 2 0 0 0 19 18l-5-8.5V3"/></svg>
+    </div>
+    <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:7px">Join the beta channel?</div>
+    <div style="font-size:13px;color:var(--text-muted);line-height:1.5;margin-bottom:20px">Beta builds get new features first, but they can be rough and may have bugs. You can switch back to stable updates anytime.</div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button id="beta-cancel-btn" style="padding:9px 15px;font-size:13px;font-weight:600;color:var(--text);background:var(--soft-btn-bg);border:1px solid var(--modal-border);border-radius:9px;cursor:pointer;font-family:var(--font)">Not now</button>
+      <button id="beta-join-btn" style="padding:9px 15px;font-size:13px;font-weight:700;color:var(--primary-btn-text);background:var(--primary-btn-bg);border:1px solid var(--primary-btn-border);border-radius:9px;cursor:pointer;font-family:var(--font)">Join beta</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+  setChromeOverlay('beta', {x:0, y:0, width:window.innerWidth, height:window.innerHeight});
+  const close = () => { ov.remove(); clearChromeOverlay('beta'); };
+  ov.querySelector('#beta-join-btn').onclick = () => { close(); onConfirm(); };
+  ov.querySelector('#beta-cancel-btn').onclick = close;
+  ov.onclick = (e) => { if (e.target === ov) close(); };
 }
 
 function openFindBar() {

@@ -1212,7 +1212,9 @@ pub fn handle_chrome_command(
             playing,
             active,
         } => {
+            let mut changed = false;
             if let Some(tab) = state.tab_manager.tabs.iter_mut().find(|t| t.id == tab_id) {
+                changed = tab.is_audio_playing != playing || tab.is_media_active != active;
                 tab.is_audio_playing = playing;
                 tab.is_media_active = active;
                 if active || playing {
@@ -1220,7 +1222,9 @@ pub fn handle_chrome_command(
                     tab.played_media = true;
                 }
             }
-            state.push_state_to_chrome(chrome);
+            if changed {
+                state.push_state_to_chrome(chrome);
+            }
             None
         }
         ChromeCommand::MuteTab { tab_id } => {
@@ -3551,6 +3555,18 @@ pub fn handle_app_event_inner(
         }
         AppEvent::ContentLoadStalled { tab_id, url, .. } => {
             recover_loading_tab(tab_id, url, false, 0, state, chrome)
+        }
+        AppEvent::ContentSpaStalled { tab_id, url, .. } => {
+            let still_loading = state
+                .tab_manager
+                .get_tab(&tab_id)
+                .map(|tab| tab.status == crate::browser::tab::TabStatus::Loading)
+                .unwrap_or(false);
+            if !still_loading || state.native_nav_ids.contains_key(&tab_id) {
+                return None;
+            }
+            let key = load_key(&tab_id, &url);
+            stop_failed_load(state, chrome, &tab_id, &key)
         }
         AppEvent::ContentBlackProbe { tab_id, url, .. } => {
             rebuild_black_tab(tab_id, url, state, chrome)

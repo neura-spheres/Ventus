@@ -1050,6 +1050,13 @@
                     }
                     load_watches.remove(&key);
                 }
+                if let AppEvent::ContentSpaStalled { tab_id, url, watch } = &app_event {
+                    let key = app::load_key(tab_id, url);
+                    if load_watches.get(&key).copied() != Some(*watch) {
+                        return;
+                    }
+                    load_watches.remove(&key);
+                }
                 if let AppEvent::ContentBlackProbe { tab_id, url, watch } = &app_event {
                     // Validate the watch is still current, but DO NOT consume it: if the probe
                     // decides not to act (page committed, or not yet black), the full 6s stall
@@ -1100,6 +1107,15 @@
                 {
                     if *native && !quiet_nav_event {
                         watch_load(
+                            &rt,
+                            &proxy_main,
+                            &mut load_watches,
+                            &mut load_watch_next,
+                            tab_id.clone(),
+                            crate::utils::url::clean_tracking_url(url),
+                        );
+                    } else if !*native && !state.native_nav_ids.contains_key(tab_id) {
+                        watch_spa_load(
                             &rt,
                             &proxy_main,
                             &mut load_watches,
@@ -2593,7 +2609,24 @@
                             &state,
                             &layout_config,
                         );
-                        heal_active_content(&content_views, &content_hwnds, &state, layout);
+                        let sig = (
+                            state.tab_manager.active_tab_id.clone(),
+                            (
+                                layout.content.x,
+                                layout.content.y,
+                                layout.content.width,
+                                layout.content.height,
+                            ),
+                            chrome_needs_top(&state),
+                        );
+                        if heal_last_sig.as_ref() != Some(&sig) {
+                            heal_last_sig = Some(sig);
+                            heal_repeats_left = HEAL_SETTLE_REPEATS;
+                        }
+                        if heal_repeats_left > 0 {
+                            heal_repeats_left -= 1;
+                            heal_active_content(&content_views, &content_hwnds, &state, layout);
+                        }
                     }
                 }
                 if Instant::now() >= sleep_check_at {

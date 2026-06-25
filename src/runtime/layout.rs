@@ -269,6 +269,26 @@ fn watch_load(
     });
 }
 
+fn watch_spa_load(
+    rt: &tokio::runtime::Runtime,
+    proxy: &tao::event_loop::EventLoopProxy<AppEvent>,
+    watches: &mut HashMap<String, u64>,
+    next: &mut u64,
+    tab_id: String,
+    url: String,
+) {
+    let proxy = proxy.clone();
+    let url = crate::utils::url::clean_tracking_url(&url);
+    *next = next.wrapping_add(1).max(1);
+    let watch = *next;
+    clear_load_watches(watches, &tab_id);
+    watches.insert(app::load_key(&tab_id, &url), watch);
+    rt.spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(SPA_STALL_AFTER)).await;
+        let _ = proxy.send_event(AppEvent::ContentSpaStalled { tab_id, url, watch });
+    });
+}
+
 fn arm_cover_watch(
     rt: &tokio::runtime::Runtime,
     proxy: &tao::event_loop::EventLoopProxy<AppEvent>,

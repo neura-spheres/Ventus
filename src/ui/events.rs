@@ -643,6 +643,11 @@ pub enum AppEvent {
         url: String,
         watch: u64,
     },
+    ContentSpaStalled {
+        tab_id: String,
+        url: String,
+        watch: u64,
+    },
     /// Early "is this tab black?" probe, fired sooner than the full stall timeout.
     /// Only rebuilds the controller if the active tab never committed a document
     /// (pure black). A committed-but-slow page is left for the gentle stall path.
