@@ -6045,6 +6045,7 @@ window.__neura = {
     refreshOmnibox();
   },
   clearTransientUi() {
+    if (_activeFolderId) closeFolderModal();
     hideSuggestions();
     closeSiteInfo();
     if (findOpen) closeFindBar(true);
@@ -7337,7 +7338,7 @@ function tabFallbackIcon(loading, hidden) {
     // Same spinner SVG as #active-loading-icon in the address bar
     return `<svg class="tab-favicon tab-loading-spin ${loading}"${style} width="14" height="14" viewBox="0 0 14 14" style="overflow:visible"><circle class="ld-ring" cx="7" cy="7" r="5.5" fill="none" stroke="currentColor" stroke-width="1.4" opacity=".22"/><circle class="ld-arc" cx="7" cy="7" r="5.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="10 24"/><circle class="ld-dot" cx="7" cy="1.5" r="1.3" fill="currentColor"/></svg>`;
   }
-  return `<svg class="tab-favicon ${loading}"${style} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 0 20"/></svg>`;
+  return `<svg class="tab-favicon ${loading}"${style} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`;
 }
 
 function renderAddressBar() {
@@ -14342,6 +14343,7 @@ function flashDownloadStart() {
 // download panel — it's clipped to its own rect, so the page never received the chrome's
 // own document-level click handler that would otherwise dismiss it.
 function onContentPointerDown() {
+  if (_activeFolderId) closeFolderModal();
   closeChromePopovers(null);
 }
 
@@ -14529,7 +14531,7 @@ function renderBookmarksBar() {
   const bMap = new Map(allBms.map(b => [b.id, b]));
   const folderChip = f => {
     const label = f.name.length > 18 ? f.name.slice(0,16)+'...' : f.name;
-    return `<div class="bm-bar-item" draggable="true" data-folder-id="${escAttr(f.id)}" data-label="${escAttr(f.name)}" title="${escAttr(f.name)}" onclick="openFolderModal('${escAttr(f.id)}',this,false,true)" oncontextmenu="bmFolderContextMenu(event,this)">
+    return `<div class="bm-bar-item" draggable="true" data-folder-id="${escAttr(f.id)}" data-label="${escAttr(f.name)}" title="${escAttr(f.name)}" onclick="openFolderModal('${escAttr(f.id)}',this,false,true)" onmouseenter="bmFolderHoverSwitch('${escAttr(f.id)}',this)" oncontextmenu="bmFolderContextMenu(event,this)">
       <span style="display:flex;align-items:center;gap:4px;opacity:0.75">${folderSvg}</span>
       <span class="bm-bar-text">${escHtml(label)}</span>
     </div>`;
@@ -14992,6 +14994,16 @@ function openFolderModalAndRename(folderId, anchor) {
   openFolderModal(folderId, anchor, true);
 }
 
+// Hover-switch: once a folder modal is open (the user clicked a folder), moving the cursor onto
+// another bar folder chip swaps the open folder to that one. The session ends when the modal
+// closes (e.g. clicking outside). Does nothing if no folder modal is currently open.
+function bmFolderHoverSwitch(folderId, el) {
+  if (!_activeFolderId || _activeFolderId === folderId) return;
+  const modal = document.getElementById('folder-modal');
+  if (!modal || !modal.classList.contains('open')) return;
+  openFolderModal(folderId, el, false, false);
+}
+
 function renameBookmarkFolder(folderId) {
   openFolderEdit(folderId);
 }
@@ -15064,6 +15076,23 @@ function _clearFolderTarget() {
   if (_bmFolderDropTimer) { clearTimeout(_bmFolderDropTimer); _bmFolderDropTimer = null; }
   _bmMergeTarget = null;
   _bmMergeArmed = false;
+  const hint = document.getElementById('bm-merge-hint');
+  if (hint) hint.classList.remove('show');
+}
+
+// External drag (link/tab) hovering a folder chip → highlight it as a drop-into-folder target.
+let _externalFolderTarget = null;
+function _setExternalFolderTarget(target) {
+  if (_externalFolderTarget === target) return;
+  _clearExternalFolderTarget();
+  _externalFolderTarget = target;
+  target.classList.add('bm-folder-target');
+  _showMergeHint(target, 'Drop to add to folder');
+}
+function _clearExternalFolderTarget() {
+  if (!_externalFolderTarget) return;
+  _externalFolderTarget.classList.remove('bm-folder-target');
+  _externalFolderTarget = null;
   const hint = document.getElementById('bm-merge-hint');
   if (hint) hint.classList.remove('show');
 }
@@ -16142,6 +16171,7 @@ function clearAllDropFeedback() {
   const bar = document.getElementById('address-bar');
   if (bar) bar.classList.remove('drag-over');
   _clearFolderTarget();
+  _clearExternalFolderTarget();
 }
 document.addEventListener('dragstart', function(e) {
   hideSuggestions();
@@ -16242,6 +16272,24 @@ function setupDropZone(container, cfg) {
         }
       }
       if (cfg.onReorderHover) cfg.onReorderHover(dragId, before ? idOf(before) : null, before, e);
+    } else if (cfg.externalPositional) {
+      e.dataTransfer.dropEffect = 'copy';
+      if (cfg.onReorderClear) cfg.onReorderClear();
+      const folderEl = cfg.externalFolders ? e.target.closest('.bm-bar-item[data-folder-id],.bm-item[data-folder-id]') : null;
+      if (folderEl) {
+        _setExternalFolderTarget(folderEl);
+      } else {
+        _clearExternalFolderTarget();
+        const before = computeBefore(e);
+        if (before) {
+          line = before;
+          line.classList.add('dz-line');
+        } else {
+          const g = groupItems();
+          line = g[g.length - 1] || null;
+          if (line) line.classList.add('dz-line-end');
+        }
+      }
     } else {
       e.dataTransfer.dropEffect = 'copy';
       container.classList.add('dz-save');
@@ -16251,6 +16299,7 @@ function setupDropZone(container, cfg) {
   container.addEventListener('dragleave', function(e) {
     if (!container.contains(e.relatedTarget)) {
       clearLines();
+      _clearExternalFolderTarget();
       if (cfg.onReorderClear) cfg.onReorderClear();
     }
   }, false);
@@ -16267,10 +16316,20 @@ function setupDropZone(container, cfg) {
       clearLines();
       cfg.onReorder(dragId, beforeId);
     } else {
+      const folderTarget = _externalFolderTarget;
       clearLines();
+      _clearExternalFolderTarget();
       if (cfg.onReorderClear) cfg.onReorderClear();
       const url = extractDropUrl(e.dataTransfer);
-      if (url) cfg.onExternal(url);
+      if (!url) return;
+      if (cfg.externalFolders && folderTarget && cfg.onExternalToFolder) {
+        cfg.onExternalToFolder(url, folderTarget.dataset.folderId);
+      } else if (cfg.externalPositional) {
+        const before = computeBefore(e);
+        cfg.onExternal(url, before ? idOf(before) : null);
+      } else {
+        cfg.onExternal(url);
+      }
     }
   }, false);
 }
@@ -16374,7 +16433,10 @@ setupDropZone(document.getElementById('bookmarks-bar'), {
   onBeforeReorder: (id, beforeId) => prepareBookmarkReorderCommit(id, beforeId),
   onReorderClear: () => resetBookmarkDragPreview(),
   onReorder: (id, before) => reorderBarItem(id, dragKind === 'folder', before),
-  onExternal: (url) => send('BookmarkAddUrl', {url, title: dragTitle || ''}),
+  externalPositional: true,
+  externalFolders: true,
+  onExternal: (url, beforeId) => send('BookmarkAddUrl', {url, title: dragTitle || '', before_id: beforeId || null}),
+  onExternalToFolder: (url, folderId) => send('BookmarkAddUrl', {url, title: dragTitle || '', folder_id: folderId}),
   folderDrop: true,
 });
 (function() {

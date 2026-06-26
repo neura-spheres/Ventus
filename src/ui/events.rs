@@ -128,11 +128,17 @@ pub enum ChromeCommand {
         answer: String,
     },
     BookmarkAdd,
-    /// Save a bookmark from a dropped link (drag-to-bookmark).
+    /// Save a bookmark from a dropped link (drag-to-bookmark). `before_id` positions the new
+    /// bar entry ahead of an existing one (None = append). `folder_id` files it inside a folder
+    /// instead of placing it on the bar.
     BookmarkAddUrl {
         url: String,
         #[serde(default)]
         title: String,
+        #[serde(default)]
+        before_id: Option<String>,
+        #[serde(default)]
+        folder_id: Option<String>,
     },
     /// Reorder a bookmark. `before` is the id of the bookmark to insert ahead of, or None for end.
     MoveBookmark {

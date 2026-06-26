@@ -326,6 +326,73 @@ impl AppState {
         ));
     }
 
+    /// Insert a new bar entry (`id`/`is_folder`) ahead of `before_id`, persisting the full bar
+    /// order. Mirrors the JS `computeBarEntries()` fallback so existing items keep their visible
+    /// order even when `bookmark_bar_order` was previously empty or partial.
+    fn insert_bar_entry(&mut self, id: &str, is_folder: bool, before_id: Option<&str>) {
+        use crate::ui::events::BarOrderRef;
+        let folder_ids: std::collections::HashSet<&str> = self
+            .cached_bookmark_folders
+            .iter()
+            .map(|f| f.id.as_str())
+            .collect();
+        let bookmark_ids: std::collections::HashSet<&str> = self
+            .cached_bookmarks
+            .iter()
+            .filter(|b| b.folder_id.is_none())
+            .map(|b| b.id.as_str())
+            .collect();
+
+        let mut order: Vec<BarOrderRef> = Vec::new();
+        let mut seen: std::collections::HashSet<(String, bool)> = std::collections::HashSet::new();
+        let push = |order: &mut Vec<BarOrderRef>,
+                    seen: &mut std::collections::HashSet<(String, bool)>,
+                    rid: &str,
+                    folder: bool| {
+            if rid == id {
+                return;
+            }
+            if seen.insert((rid.to_string(), folder)) {
+                order.push(BarOrderRef {
+                    id: rid.to_string(),
+                    folder,
+                });
+            }
+        };
+        for r in &self.bookmark_bar_order {
+            let valid = if r.folder {
+                folder_ids.contains(r.id.as_str())
+            } else {
+                bookmark_ids.contains(r.id.as_str())
+            };
+            if valid {
+                push(&mut order, &mut seen, &r.id.clone(), r.folder);
+            }
+        }
+        for f in &self.cached_bookmark_folders {
+            push(&mut order, &mut seen, &f.id.clone(), true);
+        }
+        for b in &self.cached_bookmarks {
+            if b.folder_id.is_none() {
+                push(&mut order, &mut seen, &b.id.clone(), false);
+            }
+        }
+
+        let idx = before_id
+            .and_then(|bid| order.iter().position(|r| r.id == bid))
+            .unwrap_or(order.len());
+        order.insert(
+            idx,
+            BarOrderRef {
+                id: id.to_string(),
+                folder: is_folder,
+            },
+        );
+
+        let _ = settings_store::set(&self.conn, "bookmark_bar_order", &order);
+        self.bookmark_bar_order = order;
+    }
+
     pub fn set_content_cover(&mut self, chrome: &WebView, visible: bool) {
         if self.content_cover_open == visible {
             return;
@@ -925,7 +992,12 @@ pub fn handle_chrome_command(
             }
             None
         }
-        ChromeCommand::BookmarkAddUrl { url, title } => {
+        ChromeCommand::BookmarkAddUrl {
+            url,
+            title,
+            before_id,
+            folder_id,
+        } => {
             let url = url.trim().to_string();
             if url.is_empty() || url.starts_with("neura://") {
                 return None;
@@ -947,10 +1019,15 @@ pub fn handle_chrome_command(
                 .filter(|tab| tab.url == url)
                 .and_then(|tab| favicon_for_url(&url, tab.favicon.clone()))
                 .or_else(|| favicon_for_url(&url, None));
-            match repositories::add_bookmark(&state.conn, &url, &title, favicon.as_deref(), None) {
-                Ok(_) => {
+            let folder = folder_id.as_deref().filter(|id| !id.trim().is_empty());
+            match repositories::add_bookmark(&state.conn, &url, &title, favicon.as_deref(), folder)
+            {
+                Ok(bookmark) => {
                     state.cached_bookmarks =
                         repositories::list_bookmarks(&state.conn).unwrap_or_default();
+                    if folder.is_none() {
+                        state.insert_bar_entry(&bookmark.id, false, before_id.as_deref());
+                    }
                     if state
                         .tab_manager
                         .active_tab()
@@ -961,9 +1038,14 @@ pub fn handle_chrome_command(
                             "window.__neura && window.__neura.setBookmarked(true)",
                         );
                     }
-                    let _ = chrome.evaluate_script(
-                        "window.__neura && window.__neura.showSuccess('Bookmark saved')",
-                    );
+                    let toast = if folder.is_some() {
+                        "Added to folder"
+                    } else {
+                        "Bookmark saved"
+                    };
+                    let _ = chrome.evaluate_script(&format!(
+                        "window.__neura && window.__neura.showSuccess('{toast}')"
+                    ));
                     state.push_state_to_chrome(chrome);
                 }
                 Err(e) => tracing::warn!("Bookmark add (drop) failed: {}", e),
@@ -2409,6 +2491,23 @@ fn recover_loading_tab(
         if in_flight {
             if tries < IN_FLIGHT_PATIENT_TRIES {
                 state.load_recoveries.insert(key, tries + 1);
+                // After one full stall cycle (~12 s) with zero bytes committed, the
+                // navigation is very likely stuck in WebView2's internal state rather than
+                // genuinely slow. Issue one soft reload (identical to the user pressing F5)
+                // to clear that state. Only try this once (tries==1); if still stuck after
+                // the reload, fall back to the normal patient-wait ladder.
+                if tries == 1 {
+                    tracing::info!(
+                        target: "ventus::nav",
+                        tab = %tab_id,
+                        url = %recover_url,
+                        "recover: in-flight 12 s with 0 bytes — soft reload to clear stuck WebView2 state"
+                    );
+                    return Some(TabAction::ReloadContent {
+                        tab_id,
+                        url: recover_url,
+                    });
+                }
                 tracing::info!(
                     target: "ventus::nav",
                     tab = %tab_id,

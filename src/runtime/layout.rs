@@ -550,10 +550,7 @@ fn action_content_cover(
             if url.starts_with("neura://") {
                 return false;
             }
-            let Some(id) = state.tab_manager.active_tab_id.as_deref() else {
-                return false;
-            };
-            !content_views.contains_key(id)
+            state.tab_manager.active_tab_id.is_some()
         }
         TabAction::ActivateContent { tab_id, .. } => !content_views.contains_key(tab_id),
         TabAction::ReloadContent { tab_id, .. } => {

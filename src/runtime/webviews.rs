@@ -568,6 +568,7 @@ fn build_content_webview_once(
     {
         attach_process_failed_handler(&wv, proxy.clone(), tab_id.to_string());
         attach_navigation_handler(&wv, proxy.clone(), tab_id.to_string());
+        attach_client_hints_rewrite(&wv);
         if !incognito {
             attach_csp_translate_check(&wv, proxy.clone());
         }

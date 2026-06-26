@@ -241,6 +241,80 @@ fn attach_csp_translate_check(
 }
 
 #[cfg(windows)]
+fn attach_client_hints_rewrite(wv: &WebView) {
+    use webview2_com::Microsoft::Web::WebView2::Win32::{
+        ICoreWebView2, COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL,
+    };
+    use webview2_com::WebResourceRequestedEventHandler;
+    use wv2core::PCWSTR;
+
+    let controller = wv.controller();
+    let webview: ICoreWebView2 = match unsafe { controller.CoreWebView2() } {
+        Ok(w) => w,
+        Err(_) => return,
+    };
+
+    let (_, _, major) = chromium_versions();
+    let sec_ch_ua =
+        format!("\"Not)A;Brand\";v=\"24\", \"Chromium\";v=\"{major}\", \"Ventus\";v=\"{major}\"");
+    let sec_ch_ua_full = format!(
+        "\"Not)A;Brand\";v=\"24.0.0.0\", \"Chromium\";v=\"{major}.0.0.0\", \"Ventus\";v=\"{major}.0.0.0\""
+    );
+
+    let filter: Vec<u16> = "*".encode_utf16().chain(std::iter::once(0)).collect();
+    unsafe {
+        if webview
+            .AddWebResourceRequestedFilter(
+                PCWSTR(filter.as_ptr()),
+                COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL,
+            )
+            .is_err()
+        {
+            return;
+        }
+    }
+
+    let handler = WebResourceRequestedEventHandler::create(Box::new(move |_sender, args| {
+        let Some(args) = args else {
+            return Ok(());
+        };
+        unsafe {
+            let Ok(request) = args.Request() else {
+                return Ok(());
+            };
+            let Ok(headers) = request.Headers() else {
+                return Ok(());
+            };
+            replace_header_if_present(&headers, "Sec-CH-UA", &sec_ch_ua);
+            replace_header_if_present(&headers, "Sec-CH-UA-Full-Version-List", &sec_ch_ua_full);
+        }
+        Ok(())
+    }));
+    let mut token = Default::default();
+    unsafe {
+        let _ = webview.add_WebResourceRequested(&handler, &mut token);
+    }
+}
+
+#[cfg(windows)]
+unsafe fn replace_header_if_present(
+    headers: &webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2HttpRequestHeaders,
+    name: &str,
+    value: &str,
+) {
+    use wv2core::PCWSTR;
+
+    let wname: Vec<u16> = name.encode_utf16().chain(std::iter::once(0)).collect();
+    let name_ptr = PCWSTR(wname.as_ptr());
+    let mut has = wv2win::Win32::Foundation::BOOL::default();
+    if headers.Contains(name_ptr, &mut has).is_err() || !has.as_bool() {
+        return;
+    }
+    let wvalue: Vec<u16> = value.encode_utf16().chain(std::iter::once(0)).collect();
+    let _ = headers.SetHeader(name_ptr, PCWSTR(wvalue.as_ptr()));
+}
+
+#[cfg(windows)]
 fn doc_url_key(url: &str) -> Option<String> {
     let mut parsed = url::Url::parse(url).ok()?;
     if parsed.scheme() != "http" && parsed.scheme() != "https" {
