@@ -133,6 +133,7 @@ pub struct AppState {
     pub session_id: String,
     pub untranslatable_hosts: HashSet<String>,
     pub translatable_hosts: HashSet<String>,
+    pub session_ad_block_exceptions: Vec<String>,
 }
 
 impl AppState {
@@ -238,6 +239,7 @@ impl AppState {
             session_id,
             untranslatable_hosts,
             translatable_hosts: HashSet::new(),
+            session_ad_block_exceptions: Vec::new(),
         }
     }
 
@@ -418,13 +420,34 @@ impl AppState {
         ));
     }
 
+    pub fn ad_blocker_site_excepted(&self, url: &str) -> bool {
+        self.ad_block_engine.is_site_excepted(url)
+            || crate::adblock::is_site_excepted(url, &self.session_ad_block_exceptions)
+    }
+
+    pub fn add_session_ad_block_exception(&mut self, url: &str) -> Option<String> {
+        let parsed = url::Url::parse(url).ok()?;
+        if !matches!(parsed.scheme(), "http" | "https") {
+            return None;
+        }
+        let host = parsed.host_str()?;
+        let host = crate::adblock::normalize_host(host);
+        if host.is_empty() {
+            return None;
+        }
+        if !self.session_ad_block_exceptions.iter().any(|h| h == &host) {
+            self.session_ad_block_exceptions.push(host.clone());
+        }
+        Some(host)
+    }
+
     pub fn chrome_state_json(&self) -> String {
         let active_tab = self.tab_manager.active_tab();
         let workspace_tab_counts = self.tab_manager.workspace_tab_counts();
         let active_url = active_tab.map(|t| t.url.as_str()).unwrap_or("");
         let ad_blocker_active = self.settings.privacy.ad_blocker_enabled;
         let ad_blocker_site_excepted =
-            !active_url.is_empty() && self.ad_block_engine.is_site_excepted(active_url);
+            !active_url.is_empty() && self.ad_blocker_site_excepted(active_url);
         let x_login_compat_active = active_tab
             .map(|tab| self.x_login_compat(&tab.id, &tab.url))
             .unwrap_or(false);
@@ -515,6 +538,10 @@ pub enum TabAction {
     ReadClipboardForOmnibox,
     WriteClipboardText(String),
     ReloadContent {
+        tab_id: String,
+        url: String,
+    },
+    PrepareBlockedProceed {
         tab_id: String,
         url: String,
     },
@@ -625,6 +652,7 @@ pub fn handle_chrome_command(
         ChromeCommand::ContinueHttp { url } => {
             navigate_current_tab_with_policy(url, state, chrome, false)
         }
+        ChromeCommand::ProceedBlockedSite { url } => proceed_blocked_site(url, state, chrome),
         ChromeCommand::NavigateFromOverlay { url } => {
             state.chrome_overlay_open = false;
             state.suggestion_overlay_rects.clear();
@@ -2103,6 +2131,21 @@ fn navigate_current_tab_with_policy(
     }
 }
 
+fn proceed_blocked_site(url: String, state: &mut AppState, chrome: &WebView) -> Option<TabAction> {
+    let tab_id = state.tab_manager.active_tab_id.clone()?;
+    let host = state.add_session_ad_block_exception(&url)?;
+    tracing::info!(target: "ventus::nav", tab = %tab_id, host = %host, "proceeding past strict block for session");
+    let action = navigate_current_tab(url, state, chrome)?;
+    match action {
+        TabAction::ContentNavigate(url)
+        | TabAction::ReloadContent { url, .. }
+        | TabAction::RebuildContent { url, .. } => {
+            Some(TabAction::PrepareBlockedProceed { tab_id, url })
+        }
+        action => Some(action),
+    }
+}
+
 fn is_neura_tab(state: &AppState, tab_id: &str) -> bool {
     state
         .tab_manager
@@ -2134,9 +2177,7 @@ fn commit_stack_nav(
 fn reload_current_tab(state: &mut AppState, chrome: &WebView) -> Option<TabAction> {
     let tab_id = state.tab_manager.active_tab_id.clone()?;
     let current_url = state.tab_manager.get_tab(&tab_id)?.url.clone();
-    let raw_url = error_page_target(&current_url)
-        .map(|(url, _)| url)
-        .unwrap_or(current_url);
+    let raw_url = internal_target_url(&current_url).unwrap_or(current_url);
     let url = secure_nav_url(&raw_url, state);
     track_https_upgrade(state, &tab_id, &raw_url, &url);
     if url.starts_with("neura://") || url.trim().is_empty() {
@@ -2194,6 +2235,40 @@ fn translate_js(lang: &str) -> String {
     let prefix = r#"(function(){var lang="#;
     let suffix = r#";function post(cmd){try{window.ipc.postMessage(JSON.stringify({cmd:cmd,host:location.hostname}));}catch(e){}}function avail(){window.__ventusTransAvailable=true;post('translate_available');}function unavail(){if(window.__ventusTransUnavail)return;window.__ventusTransUnavail=true;post('translate_unavailable');}function drive(){var c=document.querySelector('.goog-te-combo');if(!c)return false;c.value=lang;c.dispatchEvent(new Event('change'));avail();return true;}if(window.__ventusTransReady){if(!drive())unavail();return;}var d=document.getElementById('ventus_gt_element');if(!d){d=document.createElement('div');d.id='ventus_gt_element';d.style.display='none';(document.body||document.documentElement).appendChild(d);}if(!document.getElementById('ventus_gt_style')){var st=document.createElement('style');st.id='ventus_gt_style';st.textContent='.goog-te-banner-frame,.skiptranslate{display:none!important}body{top:0!important}';(document.head||document.documentElement).appendChild(st);}try{document.addEventListener('securitypolicyviolation',function(e){if(e&&(''+e.blockedURI).indexOf('translate.google')>=0)unavail();});}catch(e){}window.googleTranslateElementInit=function(){try{new google.translate.TranslateElement({pageLanguage:'auto',autoDisplay:false},'ventus_gt_element');}catch(e){unavail();return;}window.__ventusTransReady=true;var n=0,t=setInterval(function(){n++;if(drive()){clearInterval(t);return;}if(n>50){clearInterval(t);unavail();}},200);};if(!document.getElementById('ventus_gt_script')){var s=document.createElement('script');s.id='ventus_gt_script';s.onerror=function(){unavail();};s.src='https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit';(document.head||document.documentElement).appendChild(s);}else{var m=0,t2=setInterval(function(){m++;if(drive()){clearInterval(t2);return;}if(m>50){clearInterval(t2);unavail();}},200);}})();"#;
     format!("{prefix}{lang_json}{suffix}")
+}
+
+fn show_blocked_page(
+    tab_id: String,
+    url: String,
+    state: &mut AppState,
+    chrome: &WebView,
+) -> Option<TabAction> {
+    tracing::warn!(
+        target: "ventus::nav",
+        tab = %tab_id,
+        url = %crate::utils::url::log_url(&url),
+        "strict block page shown"
+    );
+    let page = blocked_page_url(&url);
+    state.pending_nav_urls.remove(&tab_id);
+    clear_https_upgrades(state, &tab_id);
+    clear_native_nav(state, &tab_id);
+    clear_tab_recoveries(state, &tab_id);
+    state.load_progress.remove(&tab_id);
+    state.nav_started_at.remove(&tab_id);
+    state.set_content_cover(chrome, false);
+    state
+        .tab_manager
+        .replace_tab_nav(&tab_id, &page, "Blocked by ad blocker");
+    if let Some(tab) = state.tab_manager.get_tab_mut(&tab_id) {
+        tab.favicon = None;
+        tab.status = crate::browser::tab::TabStatus::Error;
+        tab.engine_can_back = None;
+        tab.engine_can_forward = None;
+    }
+    let _ = chrome.evaluate_script("window.__neura && window.__neura.finishLoadProgress()");
+    state.push_state_to_chrome(chrome);
+    Some(TabAction::ShowErrorPage { tab_id })
 }
 
 fn show_error_page(
@@ -2692,6 +2767,22 @@ fn stop_failed_load(
     state.set_content_cover(chrome, false);
     state.push_state_to_chrome(chrome);
     Some(TabAction::SyncViews)
+}
+
+fn should_show_blocked_page(state: &AppState, tab_id: &str, url: &str, status: i32) -> bool {
+    if status != WEB_ERROR_CONNECTION_ABORTED {
+        return false;
+    }
+    if state.tab_manager.active_tab_id.as_deref() != Some(tab_id) {
+        return false;
+    }
+    if !state.settings.privacy.ad_blocker_enabled || state.ad_blocker_site_excepted(url) {
+        return false;
+    }
+    let Ok(parsed) = url::Url::parse(url) else {
+        return false;
+    };
+    matches!(parsed.scheme(), "http" | "https") && parsed.host_str().is_some()
 }
 
 fn drop_failed_load(
@@ -3212,6 +3303,37 @@ fn push_passwords_list(state: &AppState, chrome: &WebView) {
     ));
 }
 
+fn content_css_origin(state: &AppState) -> (f64, f64) {
+    use crate::config::{SidebarMode, TabLayout};
+    const TOOLBAR_H: f64 = 44.0;
+    const BM_BAR_H: f64 = 30.0;
+    const TAB_BAR_H: f64 = 40.0;
+    const SIDEBAR_EXPANDED_W: f64 = 240.0;
+    const SIDEBAR_COLLAPSED_W: f64 = 52.0;
+    const FRAME_SIDE: f64 = 5.0;
+    let is_horizontal = matches!(state.settings.appearance.tab_layout, TabLayout::Horizontal);
+    let is_auto_hide = !is_horizontal
+        && matches!(
+            state.settings.appearance.sidebar_mode,
+            SidebarMode::AutoHide
+        );
+    let x = if is_horizontal || (is_auto_hide && !state.sidebar_pinned) {
+        FRAME_SIDE
+    } else if state.sidebar_collapsed {
+        SIDEBAR_COLLAPSED_W + FRAME_SIDE
+    } else {
+        SIDEBAR_EXPANDED_W + FRAME_SIDE
+    };
+    let y = TOOLBAR_H
+        + if state.settings.appearance.show_bookmarks_bar {
+            BM_BAR_H
+        } else {
+            0.0
+        }
+        + if is_horizontal { TAB_BAR_H } else { 0.0 };
+    (x, y)
+}
+
 pub fn handle_app_event_inner(
     event: AppEvent,
     state: &mut AppState,
@@ -3711,6 +3833,9 @@ pub fn handle_app_event_inner(
                 if crash_aborted_active_load(state, &tab_id, status) {
                     return reload_after_crash(state, chrome, tab_id, clean_url, key);
                 }
+                if should_show_blocked_page(state, &tab_id, &clean_url, status) {
+                    return show_blocked_page(tab_id, clean_url, state, chrome);
+                }
                 return stop_failed_load(state, chrome, &tab_id, &key);
             }
             let action =
@@ -3718,6 +3843,20 @@ pub fn handle_app_event_inner(
             state.native_loads.remove(&tab_id);
             state.native_nav_ids.remove(&tab_id);
             action
+        }
+        AppEvent::UbolReady { tab_id, url } => {
+            if state.tab_manager.active_tab_id.as_deref() != Some(tab_id.as_str()) {
+                return None;
+            }
+            let same = state
+                .tab_manager
+                .get_tab(&tab_id)
+                .map(|tab| same_nav(&tab.url, &url))
+                .unwrap_or(false);
+            if !same || !state.ad_blocker_site_excepted(&url) {
+                return None;
+            }
+            Some(TabAction::ContentNavigate(url))
         }
         AppEvent::HttpsUpgradeFailed {
             tab_id,
@@ -4420,9 +4559,13 @@ pub fn handle_app_event_inner(
             let img_js = serde_json::to_string(&image_src).unwrap_or_default();
             let text_js = serde_json::to_string(&selected_text).unwrap_or_default();
             let page_js = serde_json::to_string(&page_url).unwrap_or_default();
+            let zoom = tab_zoom(state, &tab_id);
+            let (off_x, off_y) = content_css_origin(state);
+            let adj_x = off_x + x * zoom;
+            let adj_y = off_y + y * zoom;
             let _ = chrome.evaluate_script(&format!(
                 "window.__neura && window.__neura.showContextMenu({{x:{:.1},y:{:.1},linkUrl:{},imageSrc:{},selectedText:{},pageUrl:{},canBack:{},canFwd:{}}})",
-                x, y, link_js, img_js, text_js, page_js, can_back, can_fwd
+                adj_x, adj_y, link_js, img_js, text_js, page_js, can_back, can_fwd
             ));
             None
         }
@@ -5355,6 +5498,17 @@ fn error_page_url(url: &str, code: i32) -> String {
     format!("neura://error?url={}&code={}", query_encode(url), code)
 }
 
+fn blocked_page_url(url: &str) -> String {
+    format!("neura://blocked?url={}", query_encode(url))
+}
+
+fn internal_target_url(url: &str) -> Option<String> {
+    if let Some((url, _)) = error_page_target(url) {
+        return Some(url);
+    }
+    blocked_page_target(url)
+}
+
 fn error_page_target(url: &str) -> Option<(String, i32)> {
     let parsed = url::Url::parse(url).ok()?;
     if parsed.scheme() != "neura" || parsed.host_str() != Some("error") {
@@ -5373,6 +5527,23 @@ fn error_page_target(url: &str) -> Option<(String, i32)> {
         return None;
     }
     Some((target, code))
+}
+
+fn blocked_page_target(url: &str) -> Option<String> {
+    let parsed = url::Url::parse(url).ok()?;
+    if parsed.scheme() != "neura" || parsed.host_str() != Some("blocked") {
+        return None;
+    }
+    let mut target = String::new();
+    for (key, value) in parsed.query_pairs() {
+        if key == "url" {
+            target = value.into_owned();
+        }
+    }
+    if target.trim().is_empty() {
+        return None;
+    }
+    Some(target)
 }
 
 fn query_encode(value: &str) -> String {

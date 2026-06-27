@@ -891,7 +891,7 @@ fn webview_args(settings: &config::AppSettings) -> String {
 fn browser_user_agent() -> String {
     let (_, reduced, _) = chromium_versions();
     format!(
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{reduced} Safari/537.36 Ventus/{reduced}"
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; Ventus) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{reduced} Safari/537.36"
     )
 }
 

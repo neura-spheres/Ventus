@@ -4567,12 +4567,12 @@ svg{display:block;flex-shrink:0}
     <div class="error-brand"><img src="__LOGO_URL__" alt=""><span>Ventus</span></div>
     <div class="error-shell">
       <svg class="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19a4.5 4.5 0 0 0 .9-8.9 6 6 0 0 0-11.4-1.6A4 4 0 0 0 6 19"/><path d="M3 3l18 18"/></svg>
-      <h1 class="error-title">Hmm... can't reach this page</h1>
-      <p class="error-copy">The page at <span class="error-url" id="error-url"></span> might be down, or it may have moved to a new address.</p>
-      <p class="error-copy">Check your connection and the address, then try again.</p>
+      <h1 class="error-title" id="error-title">Hmm... can't reach this page</h1>
+      <p class="error-copy"><span id="error-copy-main">The page at </span><span class="error-url" id="error-url"></span><span id="error-copy-tail"> might be down, or it may have moved to a new address.</span></p>
+      <p class="error-copy" id="error-copy-sub">Check your connection and the address, then try again.</p>
       <div class="error-code" id="error-code"></div>
       <div class="error-actions">
-        <button class="error-btn primary" onclick="retryErrorPage()">Try again</button>
+        <button class="error-btn primary" id="error-primary" onclick="errorPrimaryAction()">Try again</button>
         <button class="error-btn" onclick="send('Back')">Go back</button>
       </div>
     </div>
@@ -9114,8 +9114,8 @@ function urlEditReplace(sel, insert) {
 }
 function formatDisplayUrl(url) {
   if (!url || url === 'about:blank') return '';
-  const err = errorPageData(url);
-  if (err) return err.url && !err.url.startsWith('neura://error') ? formatDisplayUrl(err.url) : err.url;
+  const issue = errorPageData(url) || blockedPageData(url);
+  if (issue) return issue.url && !issue.url.startsWith('neura://') ? formatDisplayUrl(issue.url) : issue.url;
   if (url.startsWith('neura://')) return url;
   try {
     const u = new URL(url);
@@ -9129,8 +9129,8 @@ function syncAddressDisplay(url) {
 }
 function formatDisplayUrlHtml(url) {
   const text = formatDisplayUrl(url);
-  const err = errorPageData(url);
-  const realUrl = err ? err.url : url;
+  const issue = errorPageData(url) || blockedPageData(url);
+  const realUrl = issue ? issue.url : url;
   if (!text || !realUrl || realUrl.startsWith('neura://')) return escHtml(text);
   try {
     const u = new URL(realUrl);
@@ -9727,6 +9727,17 @@ function errorPageData(url) {
     return null;
   }
 }
+function blockedPageData(url) {
+  if (!url || !url.startsWith('neura://blocked')) return null;
+  try {
+    const u = new URL(url);
+    const target = u.searchParams.get('url') || '';
+    if (!target) return null;
+    return {url: target};
+  } catch (_) {
+    return null;
+  }
+}
 function errorPageReason(code) {
   switch (Number(code) || 0) {
     case 1: return 'Certificate name mismatch';
@@ -9749,15 +9760,46 @@ function errorPageReason(code) {
 function checkErrorPlaceholder(url) {
   const root = document.getElementById('error-placeholder');
   if (!root) return;
-  const data = errorPageData(url);
+  const blocked = blockedPageData(url);
+  const data = blocked || errorPageData(url);
   root.style.display = data ? 'flex' : 'none';
+  const title = document.getElementById('error-title');
+  const main = document.getElementById('error-copy-main');
+  const tail = document.getElementById('error-copy-tail');
+  const sub = document.getElementById('error-copy-sub');
+  const primary = document.getElementById('error-primary');
   const label = document.getElementById('error-url');
   if (label) label.textContent = data ? data.url : '';
   const code = document.getElementById('error-code');
-  if (code) {
-    const reason = data ? errorPageReason(data.code) : '';
-    code.textContent = data ? ((reason ? reason + ' - ' : '') + 'CODE ' + data.code) : '';
+  if (blocked) {
+    if (title) title.textContent = 'Do you want to proceed?';
+    if (main) main.textContent = 'The ad blocker flagged ';
+    if (tail) tail.textContent = '. You can open it anyway for this session.';
+    if (sub) sub.textContent = 'Proceeding turns off uBlock Origin Lite for this site until you close Ventus.';
+    if (primary) primary.textContent = 'Proceed';
+    if (code) code.textContent = 'Blocked by ad blocker';
+  } else if (data) {
+    if (title) title.textContent = "Hmm... can't reach this page";
+    if (main) main.textContent = 'The page at ';
+    if (tail) tail.textContent = ' might be down, or it may have moved to a new address.';
+    if (sub) sub.textContent = 'Check your connection and the address, then try again.';
+    if (primary) primary.textContent = 'Try again';
+    if (code) {
+      const reason = errorPageReason(data.code);
+      code.textContent = (reason ? reason + ' - ' : '') + 'CODE ' + data.code;
+    }
+  } else {
+    if (code) code.textContent = '';
   }
+}
+function errorPrimaryAction() {
+  const tab = state.tabs && state.tabs.find(t => t.id === state.active_tab_id);
+  const data = blockedPageData(tab ? tab.url : state.active_url);
+  if (data) {
+    send('ProceedBlockedSite', {url: data.url});
+    return;
+  }
+  retryErrorPage();
 }
 function retryErrorPage() {
   send('Reload');
@@ -14104,10 +14146,6 @@ function ctxAction(action) {
 function showBrowserContextMenu(data) {
   __ctxData = data;
   const menu = document.getElementById('context-menu');
-  const style = document.documentElement.style;
-  const sidebarW  = parseFloat(style.getPropertyValue('--sidebar-w'))  || 0;
-  const frameW    = parseFloat(style.getPropertyValue('--frame-side-w')) || 5;
-  const topChromeH = parseFloat(style.getPropertyValue('--top-chrome-h')) || 44;
   const winW = window.innerWidth;
   const winH = window.innerHeight;
 
@@ -14147,9 +14185,8 @@ function showBrowserContextMenu(data) {
 
   menu.innerHTML = rows.join('');
 
-  // Position: offset content viewport coords to chrome window coords
-  let x = sidebarW + frameW + data.x;
-  let y = topChromeH + data.y;
+  let x = data.x;
+  let y = data.y;
   menu.style.visibility = 'hidden';
   menu.style.left = x + 'px';
   menu.style.top  = y + 'px';
@@ -14913,7 +14950,7 @@ function closeBmEdit() {
   _folderEditId = null;
   document.getElementById('bm-edit-backdrop').classList.remove('open');
   document.getElementById('bm-edit-modal').classList.remove('open');
-  if (_activeFolderId) syncFolderModalClip();
+  if (_activeFolderId) setChromeOverlay('bookmark-folder', {x:0, y:0, width:window.innerWidth, height:window.innerHeight});
   clearChromeOverlay('bookmark-edit');
 }
 
@@ -14969,7 +15006,6 @@ function placeFolderModal(anchor) {
   modal.style.left = left + 'px';
   modal.style.top = top + 'px';
   modal.style.visibility = '';
-  syncFolderModalClip();
 }
 
 function openFolderModal(folderId, anchor, rename, toggle) {
@@ -15755,7 +15791,7 @@ function _hideCtxMenu() {
     setChromeOverlay('workspace-switcher', {x:0, y:0, width:window.innerWidth, height:window.innerHeight});
     return;
   }
-  if (_activeFolderId) { syncFolderModalClip(); return; }
+  if (_activeFolderId) { setChromeOverlay('bookmark-folder', {x:0, y:0, width:window.innerWidth, height:window.innerHeight}); return; }
   const panel = activeSuggestionTarget
     ? document.getElementById(activeSuggestionTarget === 'newtab' ? 'newtab-suggestions' : 'url-suggestions')
     : null;

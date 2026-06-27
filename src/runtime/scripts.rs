@@ -956,11 +956,13 @@ fn privacy_initialization_script(
     const brands = [
       {brand: 'Not)A;Brand', version: '24'},
       {brand: 'Chromium', version: major},
+      {brand: 'Google Chrome', version: major},
       {brand: 'Ventus', version: major}
     ];
     const fullVersionList = [
       {brand: 'Not)A;Brand', version: '24.0.0.0'},
       {brand: 'Chromium', version: major + '.0.0.0'},
+      {brand: 'Google Chrome', version: major + '.0.0.0'},
       {brand: 'Ventus', version: major + '.0.0.0'}
     ];
     const ghev = function getHighEntropyValues(hints) {

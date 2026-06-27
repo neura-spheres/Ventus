@@ -255,10 +255,11 @@ fn attach_client_hints_rewrite(wv: &WebView) {
     };
 
     let (_, _, major) = chromium_versions();
-    let sec_ch_ua =
-        format!("\"Not)A;Brand\";v=\"24\", \"Chromium\";v=\"{major}\", \"Ventus\";v=\"{major}\"");
+    let sec_ch_ua = format!(
+        "\"Not)A;Brand\";v=\"24\", \"Chromium\";v=\"{major}\", \"Google Chrome\";v=\"{major}\""
+    );
     let sec_ch_ua_full = format!(
-        "\"Not)A;Brand\";v=\"24.0.0.0\", \"Chromium\";v=\"{major}.0.0.0\", \"Ventus\";v=\"{major}.0.0.0\""
+        "\"Not)A;Brand\";v=\"24.0.0.0\", \"Chromium\";v=\"{major}.0.0.0\", \"Google Chrome\";v=\"{major}.0.0.0\""
     );
 
     let filter: Vec<u16> = "*".encode_utf16().chain(std::iter::once(0)).collect();

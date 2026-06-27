@@ -397,7 +397,10 @@ fn active_ubol_enabled(state: &AppState) -> bool {
     let Some(tab) = state.tab_manager.get_tab(id) else {
         return false;
     };
-    !state.ad_block_engine.is_site_excepted(&tab.url) && !state.x_login_compat(id, &tab.url)
+    if !tab.url.starts_with("http://") && !tab.url.starts_with("https://") {
+        return false;
+    }
+    !state.ad_blocker_site_excepted(&tab.url) && !state.x_login_compat(id, &tab.url)
 }
 
 fn sync_active_ubol(

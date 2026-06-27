@@ -38,17 +38,21 @@ impl AdBlockEngine {
     }
 
     pub fn is_site_excepted(&self, url: &str) -> bool {
-        let Ok(u) = url::Url::parse(url) else {
-            return false;
-        };
-        let Some(host) = u.host_str() else {
-            return false;
-        };
-        host_matches_list(host, &self.exceptions)
+        is_site_excepted(url, &self.exceptions)
     }
 }
 
-fn normalize_host(host: &str) -> String {
+pub fn is_site_excepted(url: &str, exceptions: &[String]) -> bool {
+    let Ok(u) = url::Url::parse(url) else {
+        return false;
+    };
+    let Some(host) = u.host_str() else {
+        return false;
+    };
+    host_matches_list(host, exceptions)
+}
+
+pub fn normalize_host(host: &str) -> String {
     if let Ok(url) = url::Url::parse(host) {
         if let Some(host) = url.host_str() {
             return host.to_lowercase().trim_start_matches("www.").to_string();
@@ -62,7 +66,7 @@ fn normalize_host(host: &str) -> String {
         .to_string()
 }
 
-fn host_matches_list<S: AsRef<str>>(host: &str, list: &[S]) -> bool {
+pub fn host_matches_list<S: AsRef<str>>(host: &str, list: &[S]) -> bool {
     let host = normalize_host(host);
     let parts: Vec<&str> = host.split('.').collect();
     for i in 0..parts.len().saturating_sub(1) {

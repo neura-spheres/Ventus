@@ -2098,6 +2098,90 @@
                                 Err(e) => tracing::error!("rebuild content view: {}", e),
                             }
                         }
+                        TabAction::PrepareBlockedProceed { tab_id, url } => {
+                            content_views.remove(&tab_id);
+                            content_hwnds.remove(&tab_id);
+                            suspended_tabs.remove(&tab_id);
+                            clear_load_watches(&mut load_watches, &tab_id);
+                            let is_incog = state.tab_manager.tab_is_incognito(&tab_id);
+                            let ctx = if is_incog {
+                                incognito_web_context.as_mut().unwrap()
+                            } else {
+                                content_web_context.as_mut().unwrap()
+                            };
+                            let ad_script = state.ad_block_engine.init_script().to_string();
+                            match build_content_webview(
+                                &window,
+                                &tab_id,
+                                &url,
+                                layout.content,
+                                proxy_main.clone(),
+                                ctx,
+                                is_incog,
+                                std::sync::Arc::clone(&shared_dl_dir),
+                                tab_zoom(&state, &tab_id),
+                                &browser_args,
+                                webview_theme(&state.settings.appearance.theme),
+                                ad_script,
+                                state.settings.privacy.fingerprint_protection,
+                                state.fingerprint_seed(is_incog).to_string(),
+                                state.x_login_compat(&tab_id, &url),
+                                state.settings.privacy.strict_permissions,
+                                state.settings.privacy.site_permissions.clone(),
+                                state.settings.privacy.default_permissions.clone(),
+                                state.settings.privacy.https_only,
+                                false,
+                            ) {
+                                Ok(wv) => {
+                                    #[cfg(windows)]
+                                    let hwnd = webview_hwnd(&wv);
+                                    restore_startup_cookies(
+                                        &wv,
+                                        is_incog,
+                                        &startup_cookies,
+                                        &mut cookies_restored,
+                                    );
+                                    content_views.insert(tab_id.clone(), wv);
+                                    #[cfg(windows)]
+                                    track_content_hwnd(hwnd, &tab_id, &mut content_hwnds);
+                                    apply_layout(
+                                        &chrome,
+                                        chrome_hwnd,
+                                        &content_views,
+                                        &state,
+                                        &layout_config,
+                                        &window,
+                                    );
+                                    if let Some(wv) = content_views.get(&tab_id) {
+                                        let ready_tab = tab_id.clone();
+                                        let ready_url = url.clone();
+                                        if let Some(dir) = ubol_dir.as_deref() {
+                                            let proxy = proxy_main.clone();
+                                            browser::extensions::sync_ubol_with_done(
+                                                wv,
+                                                dir,
+                                                false,
+                                                move || {
+                                                    let _ = proxy.send_event(AppEvent::UbolReady {
+                                                        tab_id: ready_tab,
+                                                        url: ready_url,
+                                                    });
+                                                },
+                                            );
+                                            ubol_done = true;
+                                            ubol_enabled = Some(false);
+                                            ubol_tab = Some(tab_id.clone());
+                                        } else {
+                                            let _ = proxy_main.send_event(AppEvent::UbolReady {
+                                                tab_id: ready_tab,
+                                                url: ready_url,
+                                            });
+                                        }
+                                    }
+                                }
+                                Err(e) => tracing::error!("prepare blocked page proceed: {}", e),
+                            }
+                        }
                         TabAction::ApplyWebSecurity => {
                             // DoH / third-party-cookie blocking are baked into the WebView2
                             // environment's browser args, fixed when the environment is created.

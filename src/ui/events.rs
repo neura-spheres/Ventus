@@ -30,6 +30,9 @@ pub enum ChromeCommand {
     ContinueHttp {
         url: String,
     },
+    ProceedBlockedSite {
+        url: String,
+    },
     Back,
     Forward,
     Reload,
@@ -458,6 +461,7 @@ impl ChromeCommand {
             ChromeCommand::Navigate { .. } => Some("navigate"),
             ChromeCommand::NavigateFromOverlay { .. } => Some("navigate_overlay"),
             ChromeCommand::ContinueHttp { .. } => Some("continue_http"),
+            ChromeCommand::ProceedBlockedSite { .. } => Some("proceed_blocked_site"),
             ChromeCommand::Back => Some("back"),
             ChromeCommand::Forward => Some("forward"),
             ChromeCommand::Reload => Some("reload"),
@@ -667,6 +671,10 @@ pub enum AppEvent {
         url: String,
         status: i32,
         nav_id: u64,
+    },
+    UbolReady {
+        tab_id: String,
+        url: String,
     },
     HttpsUpgradeFailed {
         tab_id: String,
