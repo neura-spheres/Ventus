@@ -51,22 +51,22 @@ fn trim_working_set() {}
 
 fn sleep_threshold_ms(free_mb: u64) -> u64 {
     match free_mb {
-        m if m > 8192 => 4 * 60 * 60 * 1000,
-        m if m > 4096 => 2 * 60 * 60 * 1000,
-        m if m > 2048 => 30 * 60 * 1000,
-        m if m > 1024 => 10 * 60 * 1000,
-        m if m > 512 => 4 * 60 * 1000,
-        _ => 90 * 1000,
+        m if m > 8192 => 15 * 60 * 1000,
+        m if m > 4096 => 10 * 60 * 1000,
+        m if m > 2048 => 6 * 60 * 1000,
+        m if m > 1024 => 3 * 60 * 1000,
+        m if m > 512 => 90 * 1000,
+        _ => 30 * 1000,
     }
 }
 
 fn max_live_webviews(free_mb: u64) -> usize {
     match free_mb {
-        m if m > 8192 => 24,
-        m if m > 4096 => 16,
-        m if m > 2048 => 10,
-        m if m > 1024 => 6,
-        _ => 4,
+        m if m > 8192 => 10,
+        m if m > 4096 => 8,
+        m if m > 2048 => 6,
+        m if m > 1024 => 4,
+        _ => 3,
     }
 }
 

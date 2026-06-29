@@ -40,8 +40,7 @@ fn open_log_file() -> Option<std::fs::File> {
     }
     std::fs::OpenOptions::new()
         .create(true)
-        .write(true)
-        .truncate(true)
+        .append(true)
         .open(path)
         .ok()
 }

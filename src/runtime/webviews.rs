@@ -584,6 +584,7 @@ fn build_content_webview_once(
 }
 
 fn wake_content_webview(wv: &WebView) {
+    let _ = wv.set_visible(true);
     resume_content_webview(wv);
     let _ = wv.evaluate_script(
         "try{window.focus();window.dispatchEvent(new Event('focus'));window.dispatchEvent(new Event('resize'));document.dispatchEvent(new Event('visibilitychange'));}catch(_){ }",
@@ -649,6 +650,205 @@ fn sleep_content_webview(wv: &WebView) -> bool {
 #[cfg(not(windows))]
 fn sleep_content_webview(_wv: &WebView) -> bool {
     false
+}
+
+struct TabTrim {
+    changed: bool,
+    discarded: usize,
+    critical: bool,
+    max_live: usize,
+}
+
+fn trim_tab_memory(
+    content_views: &mut HashMap<String, WebView>,
+    content_hwnds: &mut HashMap<String, isize>,
+    suspended_tabs: &mut HashSet<String>,
+    load_watches: &mut HashMap<String, u64>,
+    state: &mut AppState,
+    free_mb: u64,
+    commit_mb: u64,
+    allow_idle: bool,
+) -> TabTrim {
+    let now_ms = chrono::Utc::now().timestamp_millis();
+    let critical = commit_mb <= CRITICAL_COMMIT_MB;
+    let pressure_mb = free_mb.min(commit_mb);
+    let max_live = max_live_webviews(pressure_mb);
+    let active = state.tab_manager.active_tab_id.clone().unwrap_or_default();
+    let mut changed = false;
+
+    for tab in state.tab_manager.tabs.iter_mut() {
+        if tab.native_audio || tab.is_media_active {
+            tab.last_media_active_at = now_ms;
+        }
+    }
+
+    let media_keep = |tab: &crate::browser::tab::Tab| {
+        tab.native_audio
+            || tab.is_media_active
+            || (now_ms - tab.last_media_active_at) < MEDIA_GRACE_MS
+    };
+    let keep_alive = |tab: &crate::browser::tab::Tab| {
+        media_keep(tab)
+            || is_comm_app(&tab.url)
+            || tab_notifications_allowed(&tab.url, &state.settings)
+    };
+
+    if allow_idle {
+        let to_sleep: Vec<String> = state
+            .tab_manager
+            .tabs
+            .iter()
+            .filter(|tab| {
+                tab.id != active
+                    && !tab.is_neura_page()
+                    && tab.status != crate::browser::tab::TabStatus::Loading
+                    && !keep_alive(tab)
+                    && content_views.contains_key(&tab.id)
+                    && !tab.sleeping
+                    && !suspended_tabs.contains(&tab.id)
+                    && (now_ms - tab.last_active_at) >= suspend_idle_ms(free_mb)
+            })
+            .map(|tab| tab.id.clone())
+            .collect();
+        for id in to_sleep {
+            if let Some(wv) = content_views.get(&id) {
+                if sleep_content_webview(wv) {
+                    suspended_tabs.insert(id.clone());
+                    state.tab_manager.sleep_tab(&id);
+                    changed = true;
+                }
+            }
+        }
+    }
+
+    let discard_idle = if critical && free_mb > DISCARD_FREE_MB {
+        EMERGENCY_DISCARD_IDLE_MS
+    } else {
+        sleep_threshold_ms(free_mb) as i64
+    };
+    let mut to_discard: Vec<String> = if allow_idle {
+        state
+            .tab_manager
+            .tabs
+            .iter()
+            .filter(|tab| {
+                tab.id != active
+                    && !tab.is_neura_page()
+                    && !tab.pinned
+                    && !tab.is_essential
+                    && (critical || tab.status != crate::browser::tab::TabStatus::Loading)
+                    && !keep_alive(tab)
+                    && content_views.contains_key(&tab.id)
+                    && (now_ms - tab.last_active_at) >= discard_idle
+            })
+            .map(|tab| tab.id.clone())
+            .collect()
+    } else {
+        Vec::new()
+    };
+
+    let live_after_idle = content_views.len().saturating_sub(to_discard.len());
+    if live_after_idle > max_live {
+        let need = live_after_idle - max_live;
+        let mut extra: Vec<(String, bool, bool, bool, i64)> = state
+            .tab_manager
+            .tabs
+            .iter()
+            .filter(|tab| {
+                tab.id != active
+                    && !tab.is_neura_page()
+                    && (critical || tab.status != crate::browser::tab::TabStatus::Loading)
+                    && !keep_alive(tab)
+                    && content_views.contains_key(&tab.id)
+                    && !to_discard.iter().any(|id| id == &tab.id)
+            })
+            .map(|tab| {
+                let protected = tab.pinned || tab.is_essential;
+                let loading = tab.status == crate::browser::tab::TabStatus::Loading;
+                let awake = !suspended_tabs.contains(&tab.id);
+                (
+                    tab.id.clone(),
+                    protected,
+                    loading,
+                    awake,
+                    tab.last_active_at,
+                )
+            })
+            .collect();
+        extra.sort_by(|a, b| {
+            a.1.cmp(&b.1)
+                .then(a.2.cmp(&b.2))
+                .then(a.3.cmp(&b.3))
+                .then(a.4.cmp(&b.4))
+        });
+        to_discard.extend(
+            extra
+                .into_iter()
+                .take(need)
+                .map(|(id, _, _, _, _)| id),
+        );
+    }
+
+    to_discard.sort();
+    to_discard.dedup();
+    let discarded = to_discard.len();
+    for id in to_discard {
+        discard_content_view(
+            &id,
+            content_views,
+            content_hwnds,
+            suspended_tabs,
+            load_watches,
+            state,
+        );
+        changed = true;
+    }
+    if discarded > 0 {
+        trim_working_set();
+        tracing::info!(
+            target: "ventus::perf",
+            discarded,
+            live = content_views.len(),
+            max_live,
+            free_mb = if free_mb == u64::MAX { 0 } else { free_mb },
+            commit_mb = if commit_mb == u64::MAX { 0 } else { commit_mb },
+            critical,
+            "tab memory trim discarded background content views"
+        );
+    }
+    TabTrim {
+        changed,
+        discarded,
+        critical,
+        max_live,
+    }
+}
+
+fn discard_content_view(
+    id: &str,
+    content_views: &mut HashMap<String, WebView>,
+    content_hwnds: &mut HashMap<String, isize>,
+    suspended_tabs: &mut HashSet<String>,
+    load_watches: &mut HashMap<String, u64>,
+    state: &mut AppState,
+) {
+    content_views.remove(id);
+    content_hwnds.remove(id);
+    suspended_tabs.remove(id);
+    clear_load_watches(load_watches, id);
+    state.pending_nav_urls.remove(id);
+    state.native_loads.remove(id);
+    state.native_nav_ids.remove(id);
+    state.load_progress.remove(id);
+    state.nav_started_at.remove(id);
+    let prefix = format!("{}\n", id);
+    state
+        .load_recoveries
+        .retain(|key, _| !key.starts_with(&prefix));
+    state
+        .https_upgrades
+        .retain(|key, _| !key.starts_with(&prefix));
+    state.tab_manager.discard_tab(id);
 }
 
 fn app_panel_id(url: &str) -> String {

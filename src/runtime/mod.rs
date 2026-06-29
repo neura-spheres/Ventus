@@ -65,7 +65,7 @@ const BLACK_PROBE_AFTER: u64 = 3;
 const SPA_STALL_AFTER: u64 = 10;
 const COVER_MAX_MS: u64 = 1000;
 const APP_PANEL_SLEEP_AFTER: Duration = Duration::from_secs(30);
-const TAB_SLEEP_CHECK_EVERY: Duration = Duration::from_secs(20);
+const TAB_SLEEP_CHECK_EVERY: Duration = Duration::from_secs(5);
 const TAB_SLEEP_CHECK_FAST: Duration = Duration::from_secs(6);
 const TAB_SLEEP_CHECK_CRITICAL: Duration = Duration::from_secs(2);
 const CRITICAL_COMMIT_MB: u64 = 768;
@@ -75,7 +75,6 @@ const EMERGENCY_DISCARD_IDLE_MS: i64 = 10_000;
 // livestream — where the keep-alive signal can briefly drop — does not get the tab suspended.
 const MEDIA_GRACE_MS: i64 = 90_000;
 const DISCARD_FREE_MB: u64 = 512;
-const MAX_PRESERVED_WEBVIEWS: usize = 32;
 const HEAL_CONTENT_EVERY: Duration = Duration::from_millis(750);
 const HEAL_SETTLE_REPEATS: u8 = 6;
 const MAX_DOWNLOAD_RESUMES: u32 = 8;

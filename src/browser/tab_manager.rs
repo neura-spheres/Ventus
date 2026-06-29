@@ -212,6 +212,10 @@ impl TabManager {
         if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == id) {
             tab.sleeping = true;
             tab.discarded = true;
+            tab.status = crate::browser::tab::TabStatus::Complete;
+            tab.is_audio_playing = false;
+            tab.is_media_active = false;
+            tab.native_audio = false;
         }
     }
 
@@ -364,6 +368,26 @@ mod tests {
 
     fn active_id(tabs: &TabManager) -> String {
         tabs.active_tab_id.clone().unwrap()
+    }
+
+    #[test]
+    fn discard_tab_clears_live_flags() {
+        let mut tabs = TabManager::new();
+        let id = active_id(&tabs);
+        tabs.set_tab_loading(&id, true);
+        if let Some(tab) = tabs.get_tab_mut(&id) {
+            tab.is_audio_playing = true;
+            tab.is_media_active = true;
+            tab.native_audio = true;
+        }
+        tabs.discard_tab(&id);
+        let tab = tabs.get_tab(&id).unwrap();
+        assert!(tab.sleeping);
+        assert!(tab.discarded);
+        assert_eq!(tab.status, crate::browser::tab::TabStatus::Complete);
+        assert!(!tab.is_audio_playing);
+        assert!(!tab.is_media_active);
+        assert!(!tab.native_audio);
     }
 
     #[test]

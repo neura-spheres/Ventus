@@ -4396,6 +4396,7 @@ dependencies = [
  "keyring",
  "pdf-extract",
  "rand 0.8.6",
+ "regex",
  "reqwest",
  "rfd",
  "roxmltree",

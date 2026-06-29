@@ -2551,26 +2551,33 @@ fn recover_loading_tab(
         // NavigationStarting and NavigationCompleted/Failed.
         let in_flight = state.native_nav_ids.contains_key(&tab_id);
 
-        // In flight => the connection is ALIVE. Rebuilding here would abort it (WebView2
-        // reports WebErrorStatus::ConnectionAborted, status 9) and restart from scratch — on
-        // a 6 s timer that is exactly what churned YouTube into a permanent "loading… failed,
-        // try again" loop on slow machines (each rebuild aborts the slow load before it can
-        // commit, then the next one aborts again). So while a nav is in flight we NEVER
-        // rebuild: we only keep the connection and re-arm the watchdog. WebView2 will itself
-        // fire NavigationCompleted (success) or NavigationFailed (a real error, which routes
-        // through the `failed` retry ladder) — both clear `native_nav_ids` — so this waiting
-        // resolves on its own. Only if it blows past a generous ceiling do we stop the
-        // spinner, and even then we leave the live connection untouched (it commits when the
-        // response finally arrives, or WebView2 shows its own timeout page — never a void we
-        // created by aborting it ourselves).
         if in_flight {
+            if active {
+                state.load_recoveries.insert(key.clone(), tries + 1);
+                if tries == 0 {
+                    return Some(TabAction::NudgeContent {
+                        tab_id,
+                        url: recover_url,
+                    });
+                }
+                if tries == 1 {
+                    state.load_progress.insert(tab_id.clone(), 0.0);
+                    return Some(TabAction::ReloadContent {
+                        tab_id,
+                        url: recover_url,
+                    });
+                }
+                if tries == 2 {
+                    state.load_progress.insert(tab_id.clone(), 0.0);
+                    return Some(TabAction::RebuildContent {
+                        tab_id,
+                        url: recover_url,
+                    });
+                }
+                return stop_failed_load(state, chrome, &tab_id, &key);
+            }
             if tries < IN_FLIGHT_PATIENT_TRIES {
                 state.load_recoveries.insert(key, tries + 1);
-                // After one full stall cycle (~12 s) with zero bytes committed, the
-                // navigation is very likely stuck in WebView2's internal state rather than
-                // genuinely slow. Issue one soft reload (identical to the user pressing F5)
-                // to clear that state. Only try this once (tries==1); if still stuck after
-                // the reload, fall back to the normal patient-wait ladder.
                 if tries == 1 {
                     tracing::info!(
                         target: "ventus::nav",
@@ -2779,10 +2786,7 @@ fn should_show_blocked_page(state: &AppState, tab_id: &str, url: &str, status: i
     if !state.settings.privacy.ad_blocker_enabled || state.ad_blocker_site_excepted(url) {
         return false;
     }
-    let Ok(parsed) = url::Url::parse(url) else {
-        return false;
-    };
-    matches!(parsed.scheme(), "http" | "https") && parsed.host_str().is_some()
+    crate::browser::strictblock::matches(url)
 }
 
 fn drop_failed_load(
@@ -2871,6 +2875,58 @@ fn reload_after_crash(
     }
     state.push_state_to_chrome(chrome);
     Some(TabAction::ReloadContent { tab_id, url })
+}
+
+fn rebuild_canceled_zero_commit(
+    state: &mut AppState,
+    chrome: &WebView,
+    tab_id: String,
+    url: String,
+    key: String,
+    status: i32,
+) -> Option<TabAction> {
+    if status != WEB_ERROR_CONNECTION_ABORTED {
+        return None;
+    }
+    if state.tab_manager.active_tab_id.as_deref() != Some(tab_id.as_str()) {
+        return None;
+    }
+    let loading = state
+        .tab_manager
+        .get_tab(&tab_id)
+        .map(|tab| tab.status == crate::browser::tab::TabStatus::Loading)
+        .unwrap_or(false);
+    if !loading {
+        return None;
+    }
+    let pct = state.load_progress.get(&tab_id).copied().unwrap_or(0.0);
+    if pct > 0.0 {
+        return None;
+    }
+    let tries = state.load_recoveries.get(&key).copied().unwrap_or(0);
+    if tries >= UNCOMMITTED_PATIENT_TRIES {
+        return stop_failed_load(state, chrome, &tab_id, &key);
+    }
+    state.load_recoveries.insert(key, tries + 1);
+    state.native_loads.remove(&tab_id);
+    state.native_nav_ids.remove(&tab_id);
+    state.load_progress.insert(tab_id.clone(), 0.0);
+    state
+        .nav_started_at
+        .insert(tab_id.clone(), std::time::Instant::now());
+    state.pending_nav_urls.insert(tab_id.clone(), url.clone());
+    state.tab_manager.set_tab_loading(&tab_id, true);
+    tracing::warn!(
+        target: "ventus::nav",
+        tab = %tab_id,
+        url = %crate::utils::url::log_url(&url),
+        tries,
+        "active load canceled before commit - rebuilding content controller"
+    );
+    state.set_content_cover(chrome, true);
+    let _ = chrome.evaluate_script("window.__neura && window.__neura.startLoadProgress()");
+    state.push_state_to_chrome(chrome);
+    Some(TabAction::RebuildContent { tab_id, url })
 }
 
 fn web_security_signature(
@@ -3835,6 +3891,16 @@ pub fn handle_app_event_inner(
                 }
                 if should_show_blocked_page(state, &tab_id, &clean_url, status) {
                     return show_blocked_page(tab_id, clean_url, state, chrome);
+                }
+                if let Some(action) = rebuild_canceled_zero_commit(
+                    state,
+                    chrome,
+                    tab_id.clone(),
+                    clean_url.clone(),
+                    key.clone(),
+                    status,
+                ) {
+                    return Some(action);
                 }
                 return stop_failed_load(state, chrome, &tab_id, &key);
             }

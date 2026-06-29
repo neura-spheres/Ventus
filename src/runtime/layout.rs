@@ -1025,8 +1025,7 @@ fn sync_content_views(
     if !active_is_neura_page {
         if let Some(wv) = content_views.get(active_id) {
             set_content_bounds(wv, layout.content);
-            set_content_memory_normal(wv);
-            let _ = wv.set_visible(true);
+            wake_content_webview(wv);
             let _ = wv.evaluate_script(&format!(
                 "window.__neuraContentFullscreen={};{}",
                 state.content_fullscreen, left_edge_js
@@ -1574,7 +1573,7 @@ fn heal_active_content(
         return;
     };
     set_content_bounds(wv, layout.content);
-    let _ = wv.set_visible(true);
+    wake_content_webview(wv);
     let hwnd = content_hwnds.get(id).copied().or_else(|| webview_hwnd(wv));
     let Some(hwnd) = hwnd else {
         return;
