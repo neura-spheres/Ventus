@@ -44,6 +44,8 @@ pub struct Suggestion {
     pub title: String,
     pub kind: String,
     pub score: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub favicon: Option<String>,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub sub: String,
     /// True when the site is user-pinned (always shown at the top of recommendations).
@@ -404,12 +406,13 @@ pub fn suggest(
 ) -> Vec<Suggestion> {
     let q = raw_q.trim().to_lowercase();
     let prefs = load_prefs(conn);
+    let icons = load_favicons(conn);
 
     // Empty query = the "Recommendations for you" list. Rank purely by frecency so the
     // genuinely most-visited sites win, drop auth/utility hosts and blocked sites, and
     // float pinned sites to the very top.
     if q.is_empty() {
-        return recommend(conn, &prefs, limit);
+        return recommend(conn, &prefs, &icons, limit);
     }
 
     let assoc = load_assoc(conn);
@@ -448,6 +451,7 @@ pub fn suggest(
                 title: c.title.clone(),
                 kind: c.kind.to_string(),
                 score: (base + trend_boost(&q, c, now)).min(0.999),
+                favicon: cand_favicon(c, &icons),
                 sub: c.sub.clone(),
                 pinned,
                 blocked,
@@ -465,7 +469,12 @@ pub fn suggest(
 /// Frecency-forward recommendation list for the empty omnibox. Total visit count is the
 /// dominant signal (so the most-visited site wins), softened by recency and learned
 /// host affinity. Pinned sites sort first; blocked + auth/utility hosts are dropped.
-fn recommend(conn: &Connection, prefs: &Prefs, limit: usize) -> Vec<Suggestion> {
+fn recommend(
+    conn: &Connection,
+    prefs: &Prefs,
+    icons: &HashMap<String, String>,
+    limit: usize,
+) -> Vec<Suggestion> {
     let now = now_ms();
     let learned = digest(&load_assoc(conn), "");
     let mut cands = history_site_cands(conn, "");
@@ -496,6 +505,7 @@ fn recommend(conn: &Connection, prefs: &Prefs, limit: usize) -> Vec<Suggestion> 
                 title: c.title.clone(),
                 kind: c.kind.to_string(),
                 score,
+                favicon: cand_favicon(c, icons),
                 sub: c.sub.clone(),
                 pinned,
                 blocked: false,
@@ -520,6 +530,22 @@ fn rec_score(c: &Cand, now: i64, learned: &Learned) -> f64 {
         0.0
     };
     visits * (0.6 + 0.4 * recency) + affinity * 3.0
+}
+
+fn load_favicons(conn: &Connection) -> HashMap<String, String> {
+    repositories::all_favicons(conn).unwrap_or_default()
+}
+
+fn cand_favicon(c: &Cand, icons: &HashMap<String, String>) -> Option<String> {
+    favicon_for_site(&c.url, icons)
+}
+
+fn favicon_for_site(url: &str, icons: &HashMap<String, String>) -> Option<String> {
+    let (_, _, host) = site_parts(url)?;
+    icons
+        .get(&host)
+        .cloned()
+        .or_else(|| icons.get(&format!("www.{host}")).cloned())
 }
 
 pub fn learn(conn: &Connection, model: &mut Model, raw_q: &str, chosen: &str, shown: &[String]) {
@@ -1165,6 +1191,11 @@ mod tests {
                 pinned INTEGER NOT NULL DEFAULT 0,
                 blocked INTEGER NOT NULL DEFAULT 0,
                 updated_at INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE favicons (
+                domain TEXT PRIMARY KEY,
+                favicon_url TEXT NOT NULL,
+                updated_at INTEGER NOT NULL
             );",
         )
         .unwrap();
@@ -1240,5 +1271,32 @@ mod tests {
         set_pref(&conn, "https://youtube.com/", None, Some(true));
         let items = suggest(&conn, &Model::default(), "", &[], 8);
         assert!(!items.iter().any(|s| s.url == "https://youtube.com/"));
+    }
+
+    #[test]
+    fn recommendations_include_saved_favicon() {
+        let conn = prefs_conn();
+        let now = now_ms();
+        conn.execute(
+            "INSERT INTO history(url, title, workspace_id, visited_at) VALUES(?1, ?2, NULL, ?3)",
+            params!["https://www.youtube.com/watch?v=abc", "YouTube", now],
+        )
+        .unwrap();
+        repositories::set_favicon(
+            &conn,
+            "www.youtube.com",
+            "https://www.youtube.com/s/desktop/favicon.ico",
+        )
+        .unwrap();
+
+        let items = suggest(&conn, &Model::default(), "", &[], 8);
+        assert_eq!(
+            items.first().map(|s| s.url.as_str()),
+            Some("https://youtube.com/")
+        );
+        assert_eq!(
+            items.first().and_then(|s| s.favicon.as_deref()),
+            Some("https://www.youtube.com/s/desktop/favicon.ico")
+        );
     }
 }

@@ -25,10 +25,6 @@ pub const SHORTCUTS: &[Shortcut] = &[
         description: "Toggle AI sidebar",
     },
     Shortcut {
-        key: "Ctrl+B",
-        description: "Toggle sidebar",
-    },
-    Shortcut {
         key: "Ctrl+,",
         description: "Settings",
     },

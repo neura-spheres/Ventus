@@ -44,7 +44,6 @@ const SC_HISTORY: usize = 7;
 const SC_DOWNLOADS: usize = 8;
 const SC_BOOKMARK: usize = 9;
 const SC_AI: usize = 10;
-const SC_SIDEBAR: usize = 11;
 const SC_SETTINGS: usize = 12;
 const SC_RELOAD: usize = 13;
 const SC_ZOOM_IN: usize = 14;
@@ -780,7 +779,8 @@ pub fn run() {
     let mut save_id = 0u64;
     let mut sync_id = 0u64;
     let mut sync_dirty = (false, false, false);
-    let ubol_dir = ubol_dir();
+    let ubol_dir = ubol_dir(&data_dir);
+    let mut incognito_ubol = UbolGate::default();
     let mut ubol_done = false;
     let mut ubol_enabled: Option<bool> = None;
     let mut ubol_tab: Option<String> = None;
@@ -851,6 +851,7 @@ pub fn run() {
                     &mut ubol_done,
                     &mut ubol_enabled,
                     &mut ubol_tab,
+                    &mut incognito_ubol,
                 );
             }
             Err(e) => {
@@ -878,17 +879,22 @@ pub fn run() {
         &window,
     );
     if let Some((tab_id, url)) = first_load_after_layout.take() {
-        if let Some(wv) = content_views.get(&tab_id) {
-            let _ = wv.load_url(&url);
-            watch_load(
-                &rt,
-                &proxy,
-                &mut load_watches,
-                &mut load_watch_next,
-                tab_id,
-                url,
-            );
-        }
+        load_url_or_gate_incognito_ubol(
+            &content_views,
+            &tab_id,
+            &url,
+            &state,
+            &mut incognito_ubol,
+            ubol_dir.as_deref(),
+            &window,
+            &proxy,
+            &rt,
+            &mut incognito_web_context,
+            &shared_dl_dir,
+            &browser_args,
+            &mut load_watches,
+            &mut load_watch_next,
+        );
     }
     // Apply screenshot protection immediately if the initial workspace is incognito.
     #[cfg(windows)]

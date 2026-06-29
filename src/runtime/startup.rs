@@ -658,6 +658,12 @@ fn shutdown_webview2(
     }
 }
 
+fn clear_incognito_dir(dir: &std::path::Path) {
+    if dir.exists() {
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}
+
 #[cfg(windows)]
 fn attach_process_failed_handler(
     wv: &WebView,
@@ -717,4 +723,3 @@ fn attach_process_failed_handler(
         let _ = webview.add_ProcessFailed(&handler, &mut token);
     }
 }
-

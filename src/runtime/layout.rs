@@ -34,6 +34,8 @@ struct AppLayout {
     content: Rect,
 }
 
+const INCOGNITO_UBOL_SYNC_TIMEOUT_MS: u64 = 5000;
+
 impl AppLayout {
     fn calculate(
         size: tao::dpi::PhysicalSize<u32>,
@@ -366,7 +368,26 @@ fn webview_cookie_db_exists(data_dir: &std::path::Path) -> bool {
     .any(|path| path.is_file())
 }
 
-fn ubol_dir() -> Option<std::path::PathBuf> {
+#[derive(Default)]
+struct UbolGate {
+    generation: u64,
+    running: bool,
+    enabled: Option<bool>,
+    reloads: HashMap<String, String>,
+}
+
+fn ubol_dir(data_dir: &std::path::Path) -> Option<std::path::PathBuf> {
+    let source = bundled_ubol_dir()?;
+    match runtime_ubol_dir(data_dir, &source) {
+        Ok(dir) => Some(dir),
+        Err(err) => {
+            tracing::warn!("ubol: runtime copy failed: {}", err);
+            Some(source)
+        }
+    }
+}
+
+fn bundled_ubol_dir() -> Option<std::path::PathBuf> {
     let mut dirs = Vec::new();
     if let Ok(exe) = std::env::current_exe() {
         if let Some(base) = exe.parent() {
@@ -387,6 +408,61 @@ fn ubol_dir() -> Option<std::path::PathBuf> {
         .find(|dir| dir.join("manifest.json").exists())
 }
 
+fn runtime_ubol_dir(
+    data_dir: &std::path::Path,
+    source: &std::path::Path,
+) -> anyhow::Result<std::path::PathBuf> {
+    let dest = data_dir.join("extensions").join("ubol");
+    if ubol_manifests_match(source, &dest) {
+        return Ok(dest);
+    }
+    let parent = dest
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("missing extension parent"))?;
+    std::fs::create_dir_all(parent)?;
+    let tmp = parent.join("ubol_tmp");
+    let _ = std::fs::remove_dir_all(&tmp);
+    copy_dir(source, &tmp)?;
+    let _ = std::fs::remove_dir_all(&dest);
+    match std::fs::rename(&tmp, &dest) {
+        Ok(()) => Ok(dest),
+        Err(err) => {
+            let _ = std::fs::remove_dir_all(&dest);
+            copy_dir(&tmp, &dest)?;
+            let _ = std::fs::remove_dir_all(&tmp);
+            if !dest.join("manifest.json").exists() {
+                return Err(err.into());
+            }
+            Ok(dest)
+        }
+    }
+}
+
+fn ubol_manifests_match(source: &std::path::Path, dest: &std::path::Path) -> bool {
+    let src = source.join("manifest.json");
+    let dst = dest.join("manifest.json");
+    if !dst.exists() {
+        return false;
+    }
+    std::fs::read(src).ok() == std::fs::read(dst).ok()
+}
+
+fn copy_dir(source: &std::path::Path, dest: &std::path::Path) -> anyhow::Result<()> {
+    std::fs::create_dir_all(dest)?;
+    for entry in std::fs::read_dir(source)? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        let from = entry.path();
+        let to = dest.join(entry.file_name());
+        if ty.is_dir() {
+            copy_dir(&from, &to)?;
+        } else if ty.is_file() {
+            std::fs::copy(from, to)?;
+        }
+    }
+    Ok(())
+}
+
 fn active_ubol_enabled(state: &AppState) -> bool {
     if !state.settings.privacy.ad_blocker_enabled {
         return false;
@@ -403,6 +479,173 @@ fn active_ubol_enabled(state: &AppState) -> bool {
     !state.ad_blocker_site_excepted(&tab.url) && !state.x_login_compat(id, &tab.url)
 }
 
+fn incognito_ubol_enabled_for_url(state: &AppState, tab_id: &str, url: &str) -> bool {
+    if !state.tab_manager.tab_is_incognito(tab_id) {
+        return false;
+    }
+    if !state.settings.privacy.ad_blocker_enabled {
+        return false;
+    }
+    if !url.starts_with("http://") && !url.starts_with("https://") {
+        return false;
+    }
+    !state.ad_blocker_site_excepted(url) && !state.x_login_compat(tab_id, url)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn ensure_incognito_ubol_ready(
+    gate: &mut UbolGate,
+    views: &HashMap<String, WebView>,
+    tab_id: &str,
+    dir: Option<&std::path::Path>,
+    proxy: &tao::event_loop::EventLoopProxy<AppEvent>,
+    rt: &tokio::runtime::Runtime,
+) -> bool {
+    let Some(dir) = dir else {
+        return false;
+    };
+    if gate.running || gate.enabled == Some(true) {
+        return true;
+    }
+    let Some(wv) = views.get(tab_id) else {
+        return false;
+    };
+    gate.generation = gate.generation.wrapping_add(1).max(1);
+    let generation = gate.generation;
+    gate.running = true;
+    tracing::info!(target: "ventus::ubol", generation, tab = %tab_id, "ubol: incognito sync started");
+    let proxy_done = proxy.clone();
+    browser::extensions::sync_ubol_with_done(wv, dir, true, move || {
+        let _ = proxy_done.send_event(AppEvent::UbolSyncComplete { generation });
+    });
+    let proxy_timeout = proxy.clone();
+    rt.spawn(async move {
+        tokio::time::sleep(Duration::from_millis(INCOGNITO_UBOL_SYNC_TIMEOUT_MS)).await;
+        let _ = proxy_timeout.send_event(AppEvent::UbolSyncTimeout { generation });
+    });
+    true
+}
+
+fn finish_incognito_ubol_sync(gate: &mut UbolGate, generation: u64, timeout: bool) -> bool {
+    if !gate.running || gate.generation != generation {
+        return false;
+    }
+    gate.running = false;
+    if timeout {
+        gate.enabled = None;
+        tracing::warn!(target: "ventus::ubol", generation, "ubol: incognito sync timed out");
+    } else {
+        gate.enabled = Some(true);
+        tracing::info!(target: "ventus::ubol", generation, "ubol: incognito sync completed");
+    }
+    true
+}
+
+fn incognito_ubol_reload_after_sync(url: &str) -> bool {
+    let Ok(url) = url::Url::parse(url) else {
+        return false;
+    };
+    matches!(
+        url.host_str().unwrap_or_default(),
+        "youtube.com" | "www.youtube.com" | "m.youtube.com" | "music.youtube.com"
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn load_url_and_watch(
+    views: &HashMap<String, WebView>,
+    tab_id: &str,
+    url: &str,
+    rt: &tokio::runtime::Runtime,
+    proxy: &tao::event_loop::EventLoopProxy<AppEvent>,
+    watches: &mut HashMap<String, u64>,
+    next: &mut u64,
+) -> bool {
+    let Some(wv) = views.get(tab_id) else {
+        return false;
+    };
+    let _ = wv.load_url(url);
+    watch_load(
+        rt,
+        proxy,
+        watches,
+        next,
+        tab_id.to_string(),
+        url.to_string(),
+    );
+    true
+}
+
+#[allow(clippy::too_many_arguments)]
+fn load_url_or_gate_incognito_ubol(
+    views: &HashMap<String, WebView>,
+    tab_id: &str,
+    url: &str,
+    state: &AppState,
+    gate: &mut UbolGate,
+    dir: Option<&std::path::Path>,
+    window: &tao::window::Window,
+    proxy: &tao::event_loop::EventLoopProxy<AppEvent>,
+    rt: &tokio::runtime::Runtime,
+    incognito_web_context: &mut Option<wry::WebContext>,
+    shared_dl_dir: &std::sync::Arc<std::sync::Mutex<DownloadPrefs>>,
+    browser_args: &str,
+    watches: &mut HashMap<String, u64>,
+    next: &mut u64,
+) {
+    if incognito_ubol_enabled_for_url(state, tab_id, url)
+        && gate.enabled != Some(true)
+        && dir.is_some()
+    {
+        if incognito_ubol_reload_after_sync(url) {
+            gate.reloads.insert(tab_id.to_string(), url.to_string());
+        }
+        let sync_started = ensure_incognito_ubol_ready(gate, views, tab_id, dir, proxy, rt);
+        if sync_started {
+            tracing::info!(target: "ventus::ubol", tab = %tab_id, url = %url, "ubol: incognito sync pending; loading immediately");
+        } else {
+            tracing::warn!(target: "ventus::ubol", tab = %tab_id, url = %url, "ubol: incognito sync unavailable; loading immediately");
+        }
+    }
+    let _ = (
+        window,
+        incognito_web_context,
+        shared_dl_dir,
+        browser_args,
+    );
+    let _ = load_url_and_watch(views, tab_id, url, rt, proxy, watches, next);
+}
+
+fn reload_incognito_ubol_pages(
+    gate: &mut UbolGate,
+    views: &HashMap<String, WebView>,
+    state: &AppState,
+    rt: &tokio::runtime::Runtime,
+    proxy: &tao::event_loop::EventLoopProxy<AppEvent>,
+    watches: &mut HashMap<String, u64>,
+    next: &mut u64,
+) {
+    let reloads = std::mem::take(&mut gate.reloads);
+    for (tab_id, url) in reloads {
+        let same_tab = state
+            .tab_manager
+            .get_tab(&tab_id)
+            .map(|tab| app::same_nav(&tab.url, &url))
+            .unwrap_or(false);
+        let same_pending = state
+            .pending_nav_urls
+            .get(&tab_id)
+            .map(|pending| app::same_nav(pending, &url))
+            .unwrap_or(false);
+        if !same_tab && !same_pending {
+            continue;
+        }
+        if load_url_and_watch(views, &tab_id, &url, rt, proxy, watches, next) {
+            tracing::info!(target: "ventus::ubol", tab = %tab_id, url = %url, "ubol: reloaded incognito page after sync");
+        }
+    }
+}
+
 fn sync_active_ubol(
     views: &HashMap<String, WebView>,
     state: &AppState,
@@ -410,6 +653,7 @@ fn sync_active_ubol(
     done: &mut bool,
     last: &mut Option<bool>,
     last_id: &mut Option<String>,
+    gate: &mut UbolGate,
 ) {
     let Some(dir) = dir else {
         return;
@@ -421,6 +665,15 @@ fn sync_active_ubol(
         return;
     };
     let enabled = active_ubol_enabled(state);
+    if state.tab_manager.tab_is_incognito(id) {
+        if gate.running {
+            return;
+        }
+        if enabled {
+            return;
+        }
+        gate.enabled = Some(false);
+    }
     if *done && *last == Some(enabled) && last_id.as_deref() == Some(id.as_str()) {
         return;
     }
@@ -661,6 +914,18 @@ fn msg_shortcut(vk: u32, mods: usize, repeat: bool) -> usize {
     if alt && !ctrl {
         return SC_NONE;
     }
+    if ctrl && matches!(vk, 0x42 | 0x49 | 0x55) {
+        return SC_NONE;
+    }
+    if ctrl
+        && shift
+        && matches!(
+            vk,
+            0xbb | 0xbc | 0xbe | 0xe2 | 0xba | 0xdb | 0xdd | 0xbd
+        )
+    {
+        return SC_NONE;
+    }
     if ctrl {
         return match vk {
             0x09 if shift => SC_PREV_TAB,
@@ -677,11 +942,12 @@ fn msg_shortcut(vk: u32, mods: usize, repeat: bool) -> usize {
             0x4a if !shift => SC_DOWNLOADS,
             0x44 => SC_BOOKMARK,
             0x41 if shift => SC_AI,
-            0x42 => SC_SIDEBAR,
-            0xbc => SC_SETTINGS,
+            0xbc if !shift => SC_SETTINGS,
             0x52 => SC_RELOAD,
-            0xbb | 0x6b => SC_ZOOM_IN,
-            0xbd | 0x6d => SC_ZOOM_OUT,
+            0xbb if !shift => SC_ZOOM_IN,
+            0x6b if !shift => SC_ZOOM_IN,
+            0xbd if !shift => SC_ZOOM_OUT,
+            0x6d if !shift => SC_ZOOM_OUT,
             0x30 | 0x60 => SC_ZOOM_RESET,
             n @ 0x31..=0x39 if !shift => SC_TAB_1 + (n as usize - 0x31),
             n @ 0x61..=0x69 if !shift => SC_TAB_1 + (n as usize - 0x61),
@@ -693,6 +959,32 @@ fn msg_shortcut(vk: u32, mods: usize, repeat: bool) -> usize {
         0x7a => SC_FULLSCREEN,
         0x7b => SC_DEVTOOLS,
         _ => SC_NONE,
+    }
+}
+
+#[cfg(test)]
+mod layout_shortcut_tests {
+    use super::*;
+
+    #[test]
+    fn text_editing_shortcuts_pass_through() {
+        assert_eq!(msg_shortcut(0x42, MOD_CTRL, false), SC_NONE);
+        assert_eq!(msg_shortcut(0x49, MOD_CTRL, false), SC_NONE);
+        assert_eq!(msg_shortcut(0x55, MOD_CTRL, false), SC_NONE);
+        assert_eq!(msg_shortcut(0xbc, MOD_CTRL | MOD_SHIFT, false), SC_NONE);
+        assert_eq!(msg_shortcut(0xbe, MOD_CTRL | MOD_SHIFT, false), SC_NONE);
+        assert_eq!(msg_shortcut(0xbb, MOD_CTRL | MOD_SHIFT, false), SC_NONE);
+        assert_eq!(msg_shortcut(0xe2, MOD_CTRL | MOD_SHIFT, false), SC_NONE);
+        assert_eq!(msg_shortcut(0x6b, MOD_CTRL | MOD_SHIFT, false), SC_NONE);
+    }
+
+    #[test]
+    fn settings_and_zoom_keep_non_editing_shortcuts() {
+        assert_eq!(msg_shortcut(0xbc, MOD_CTRL, false), SC_SETTINGS);
+        assert_eq!(msg_shortcut(0xbb, MOD_CTRL, false), SC_ZOOM_IN);
+        assert_eq!(msg_shortcut(0x6b, MOD_CTRL, false), SC_ZOOM_IN);
+        assert_eq!(msg_shortcut(0xbd, MOD_CTRL, false), SC_ZOOM_OUT);
+        assert_eq!(msg_shortcut(0x6d, MOD_CTRL, false), SC_ZOOM_OUT);
     }
 }
 
@@ -715,7 +1007,6 @@ fn run_shortcut(code: usize, proxy: &tao::event_loop::EventLoopProxy<AppEvent>, 
         SC_DOWNLOADS => Some(ChromeCommand::OpenDownloadsPanel),
         SC_BOOKMARK => bookmark_shortcut(state),
         SC_AI => Some(ChromeCommand::ToggleAiSidebar),
-        SC_SIDEBAR => Some(ChromeCommand::SidebarToggle),
         SC_SETTINGS => Some(ChromeCommand::OpenSettings),
         SC_RELOAD => Some(ChromeCommand::Reload),
         SC_ZOOM_IN => Some(ChromeCommand::ZoomDelta { delta: 0.1 }),

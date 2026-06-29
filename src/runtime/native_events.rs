@@ -642,7 +642,7 @@ fn build_popup_content_webview(
     window: &tao::window::Window,
     rect: Rect,
     web_context: &mut wry::WebContext,
-    incognito: bool,
+    _incognito: bool,
     browser_args: &str,
     theme: WebViewTheme,
 ) -> Option<WebView> {
@@ -652,7 +652,7 @@ fn build_popup_content_webview(
     let builder = WebViewBuilder::new_as_child(window)
         .with_bounds(rect)
         .with_background_color(CONTENT_BG)
-        .with_incognito(incognito)
+        .with_incognito(false)
         .with_browser_accelerator_keys(false)
         .with_theme(theme)
         .with_additional_browser_args(browser_args.to_string());

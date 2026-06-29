@@ -676,6 +676,12 @@ pub enum AppEvent {
         tab_id: String,
         url: String,
     },
+    UbolSyncComplete {
+        generation: u64,
+    },
+    UbolSyncTimeout {
+        generation: u64,
+    },
     HttpsUpgradeFailed {
         tab_id: String,
         https_url: String,

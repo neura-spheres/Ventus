@@ -111,7 +111,7 @@ fn build_content_webview_once(
     let builder = WebViewBuilder::new_as_child(window)
         .with_bounds(rect)
         .with_background_color(CONTENT_BG)
-        .with_incognito(incognito)
+        .with_incognito(false)
         .with_user_agent(&browser_user_agent())
         .with_initialization_script(&content_initialization_script(
             global_zoom,
@@ -963,6 +963,8 @@ fn build_woken_content_tab(
     incognito_web_context: &mut Option<wry::WebContext>,
     shared_dl_dir: &std::sync::Arc<std::sync::Mutex<DownloadPrefs>>,
     browser_args: &str,
+    ubol_dir: Option<&std::path::Path>,
+    incognito_ubol: &mut UbolGate,
     startup_cookies: &[cookie_store::CookieRecord],
     cookies_restored: &mut bool,
     load_watches: &mut HashMap<String, u64>,
@@ -1029,7 +1031,6 @@ fn build_woken_content_tab(
             );
             if let Some(wv) = content_views.get(tab_id) {
                 let _ = wv.focus();
-                let _ = wv.load_url(url);
             }
             tracing::info!(
                 target: "ventus::session",
@@ -1037,13 +1038,21 @@ fn build_woken_content_tab(
                 url = %url,
                 "[SESSION] woke sleeping/restored tab: content WebView built OK (deferred)"
             );
-            watch_load(
-                rt,
+            load_url_or_gate_incognito_ubol(
+                content_views,
+                tab_id,
+                url,
+                state,
+                incognito_ubol,
+                ubol_dir,
+                window,
                 proxy_main,
+                rt,
+                incognito_web_context,
+                shared_dl_dir,
+                browser_args,
                 load_watches,
                 load_watch_next,
-                tab_id.to_string(),
-                url.to_string(),
             );
         }
         Err(e) => tracing::error!(

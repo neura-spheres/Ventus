@@ -470,6 +470,7 @@
                     &mut content_web_context,
                     &mut incognito_web_context,
                 );
+                clear_incognito_dir(&incognito_data_dir);
                 if new_window {
                     std::fs::remove_dir_all(&webview_data_dir).ok();
                 }
@@ -800,16 +801,21 @@
                             &layout_config,
                             &window,
                         );
-                        if let Some(wv) = content_views.get(&tab_id) {
-                            let _ = wv.load_url(&url);
-                        }
-                        watch_load(
-                            &rt,
+                        load_url_or_gate_incognito_ubol(
+                            &content_views,
+                            &tab_id,
+                            &url,
+                            &state,
+                            &mut incognito_ubol,
+                            ubol_dir.as_deref(),
+                            &window,
                             &proxy_main,
+                            &rt,
+                            &mut incognito_web_context,
+                            &shared_dl_dir,
+                            &browser_args,
                             &mut load_watches,
                             &mut load_watch_next,
-                            tab_id.clone(),
-                            url,
                         );
                     }
                     Err(e) => tracing::error!("recover content process: {}", e),
@@ -1029,6 +1035,32 @@
                 }
             }
             Event::UserEvent(app_event) => {
+                if let AppEvent::UbolSyncComplete { generation } = &app_event {
+                    if finish_incognito_ubol_sync(&mut incognito_ubol, *generation, false) {
+                        reload_incognito_ubol_pages(
+                            &mut incognito_ubol,
+                            &content_views,
+                            &state,
+                            &rt,
+                            &proxy_main,
+                            &mut load_watches,
+                            &mut load_watch_next,
+                        );
+                    }
+                    return;
+                }
+                if let AppEvent::UbolSyncTimeout { generation } = &app_event {
+                    if finish_incognito_ubol_sync(&mut incognito_ubol, *generation, true) {
+                        incognito_ubol.reloads.clear();
+                        incognito_ubol.enabled = Some(false);
+                    }
+                    return;
+                }
+                if let AppEvent::UbolReady { tab_id, .. } = &app_event {
+                    if state.tab_manager.tab_is_incognito(tab_id) {
+                        incognito_ubol.enabled = Some(false);
+                    }
+                }
                 if matches!(
                     &app_event,
                     AppEvent::Chrome(ChromeCommand::ToggleFullscreen)
@@ -1304,6 +1336,7 @@
                         &mut ubol_done,
                         &mut ubol_enabled,
                         &mut ubol_tab,
+                        &mut incognito_ubol,
                     );
                     if persist_session {
                         if defer_session {
@@ -1434,16 +1467,21 @@
                                             &layout_config,
                                             &window,
                                         );
-                                        if let Some(wv) = content_views.get(&tab_id) {
-                                            let _ = wv.load_url(&url);
-                                        }
-                                        watch_load(
-                                            &rt,
+                                        load_url_or_gate_incognito_ubol(
+                                            &content_views,
+                                            &tab_id,
+                                            &url,
+                                            &state,
+                                            &mut incognito_ubol,
+                                            ubol_dir.as_deref(),
+                                            &window,
                                             &proxy_main,
+                                            &rt,
+                                            &mut incognito_web_context,
+                                            &shared_dl_dir,
+                                            &browser_args,
                                             &mut load_watches,
                                             &mut load_watch_next,
-                                            tab_id.clone(),
-                                            url.clone(),
                                         );
                                     }
                                     Err(e) => tracing::error!("create content view: {}", e),
@@ -1560,16 +1598,21 @@
                                                     &layout_config,
                                                     &window,
                                                 );
-                                                if let Some(wv) = content_views.get(&active_id) {
-                                                    let _ = wv.load_url(&url);
-                                                }
-                                                watch_load(
-                                                    &rt,
+                                                load_url_or_gate_incognito_ubol(
+                                                    &content_views,
+                                                    &active_id,
+                                                    &url,
+                                                    &state,
+                                                    &mut incognito_ubol,
+                                                    ubol_dir.as_deref(),
+                                                    &window,
                                                     &proxy_main,
+                                                    &rt,
+                                                    &mut incognito_web_context,
+                                                    &shared_dl_dir,
+                                                    &browser_args,
                                                     &mut load_watches,
                                                     &mut load_watch_next,
-                                                    active_id.clone(),
-                                                    url.clone(),
                                                 );
                                             }
                                         }
@@ -1709,19 +1752,6 @@
                             }
                         }
                         TabAction::ContentNavigate(url) => {
-                            let watch_tab_id = state.tab_manager.active_tab_id.clone();
-                            if let Some(id) = watch_tab_id.clone() {
-                                if !url.starts_with("neura://") {
-                                    watch_load(
-                                        &rt,
-                                        &proxy_main,
-                                        &mut load_watches,
-                                        &mut load_watch_next,
-                                        id,
-                                        url.clone(),
-                                    );
-                                }
-                            }
                             apply_layout(
                                 &chrome,
                                 chrome_hwnd,
@@ -1741,8 +1771,23 @@
                                         &layout_config,
                                         &window,
                                     );
-                                } else if let Some(wv) = content_views.get(id) {
-                                    let _ = wv.load_url(&url);
+                                } else if content_views.contains_key(id) {
+                                    load_url_or_gate_incognito_ubol(
+                                        &content_views,
+                                        id,
+                                        &url,
+                                        &state,
+                                        &mut incognito_ubol,
+                                        ubol_dir.as_deref(),
+                                        &window,
+                                        &proxy_main,
+                                        &rt,
+                                        &mut incognito_web_context,
+                                        &shared_dl_dir,
+                                        &browser_args,
+                                        &mut load_watches,
+                                        &mut load_watch_next,
+                                    );
                                 } else {
                                     let is_incog = state.tab_manager.tab_is_incognito(id);
                                     let ctx = if is_incog {
@@ -1793,16 +1838,21 @@
                                                 &layout_config,
                                                 &window,
                                             );
-                                            if let Some(wv) = content_views.get(id) {
-                                                let _ = wv.load_url(&url);
-                                            }
-                                            watch_load(
-                                                &rt,
+                                            load_url_or_gate_incognito_ubol(
+                                                &content_views,
+                                                id,
+                                                &url,
+                                                &state,
+                                                &mut incognito_ubol,
+                                                ubol_dir.as_deref(),
+                                                &window,
                                                 &proxy_main,
+                                                &rt,
+                                                &mut incognito_web_context,
+                                                &shared_dl_dir,
+                                                &browser_args,
                                                 &mut load_watches,
                                                 &mut load_watch_next,
-                                                id.clone(),
-                                                url.clone(),
                                             );
                                         }
                                         Err(e) => tracing::error!(
@@ -1876,14 +1926,21 @@
                                     .pending_nav_urls
                                     .insert(tab_id.clone(), url.clone());
                                 wake_content_webview(wv);
-                                let _ = wv.load_url(&url);
-                                watch_load(
-                                    &rt,
+                                load_url_or_gate_incognito_ubol(
+                                    &content_views,
+                                    &tab_id,
+                                    &url,
+                                    &state,
+                                    &mut incognito_ubol,
+                                    ubol_dir.as_deref(),
+                                    &window,
                                     &proxy_main,
+                                    &rt,
+                                    &mut incognito_web_context,
+                                    &shared_dl_dir,
+                                    &browser_args,
                                     &mut load_watches,
                                     &mut load_watch_next,
-                                    tab_id.clone(),
-                                    url.clone(),
                                 );
                                 apply_layout(
                                     &chrome,
@@ -1943,16 +2000,21 @@
                                             &layout_config,
                                             &window,
                                         );
-                                        if let Some(wv) = content_views.get(&tab_id) {
-                                            let _ = wv.load_url(&url);
-                                        }
-                                        watch_load(
-                                            &rt,
+                                        load_url_or_gate_incognito_ubol(
+                                            &content_views,
+                                            &tab_id,
+                                            &url,
+                                            &state,
+                                            &mut incognito_ubol,
+                                            ubol_dir.as_deref(),
+                                            &window,
                                             &proxy_main,
+                                            &rt,
+                                            &mut incognito_web_context,
+                                            &shared_dl_dir,
+                                            &browser_args,
                                             &mut load_watches,
                                             &mut load_watch_next,
-                                            tab_id.clone(),
-                                            url.clone(),
                                         );
                                     }
                                     Err(e) => tracing::error!("reload content view: {}", e),
@@ -2001,14 +2063,21 @@
                                     begin_native_load(&mut state, &chrome, &tab_id);
                                     state.push_state_to_chrome(&chrome);
                                     wake_content_webview(wv);
-                                    let _ = wv.load_url(&url);
-                                    watch_load(
-                                        &rt,
+                                    load_url_or_gate_incognito_ubol(
+                                        &content_views,
+                                        &tab_id,
+                                        &url,
+                                        &state,
+                                        &mut incognito_ubol,
+                                        ubol_dir.as_deref(),
+                                        &window,
                                         &proxy_main,
+                                        &rt,
+                                        &mut incognito_web_context,
+                                        &shared_dl_dir,
+                                        &browser_args,
                                         &mut load_watches,
                                         &mut load_watch_next,
-                                        tab_id.clone(),
-                                        url.clone(),
                                     );
                                 } else if is_loading {
                                     state.load_recoveries.remove(&app::load_key(&tab_id, &url));
@@ -2101,16 +2170,21 @@
                                         &layout_config,
                                         &window,
                                     );
-                                    if let Some(wv) = content_views.get(&tab_id) {
-                                        let _ = wv.load_url(&url);
-                                    }
-                                    watch_load(
-                                        &rt,
+                                    load_url_or_gate_incognito_ubol(
+                                        &content_views,
+                                        &tab_id,
+                                        &url,
+                                        &state,
+                                        &mut incognito_ubol,
+                                        ubol_dir.as_deref(),
+                                        &window,
                                         &proxy_main,
+                                        &rt,
+                                        &mut incognito_web_context,
+                                        &shared_dl_dir,
+                                        &browser_args,
                                         &mut load_watches,
                                         &mut load_watch_next,
-                                        tab_id.clone(),
-                                        url.clone(),
                                     );
                                 }
                                 Err(e) => tracing::error!("rebuild content view: {}", e),
@@ -2234,6 +2308,7 @@
                                     &mut content_web_context,
                                     &mut incognito_web_context,
                                 );
+                                clear_incognito_dir(&incognito_data_dir);
                                 *control_flow = ControlFlow::Exit;
                             }
                         }
@@ -2305,6 +2380,7 @@
                                 &mut content_web_context,
                                 &mut incognito_web_context,
                             );
+                            clear_incognito_dir(&incognito_data_dir);
                             if new_window {
                                 std::fs::remove_dir_all(&webview_data_dir).ok();
                             }
@@ -2616,6 +2692,7 @@
                     &mut ubol_done,
                     &mut ubol_enabled,
                     &mut ubol_tab,
+                    &mut incognito_ubol,
                 );
             }
 
@@ -2644,6 +2721,8 @@
                             &mut incognito_web_context,
                             &shared_dl_dir,
                             &browser_args,
+                            ubol_dir.as_deref(),
+                            &mut incognito_ubol,
                             &startup_cookies,
                             &mut cookies_restored,
                             &mut load_watches,
@@ -3006,6 +3085,7 @@
                     &mut content_web_context,
                     &mut incognito_web_context,
                 );
+                clear_incognito_dir(&incognito_data_dir);
                 if new_window {
                     std::fs::remove_dir_all(&webview_data_dir).ok();
                 }

@@ -608,9 +608,7 @@ fn content_initialization_script(
     }
   }, {passive: true, capture: true});
 
-  let __neuraSiteCtx = false;
   document.addEventListener('mousedown', function(e) {
-    if (e.button !== 2) __neuraSiteCtx = false;
     if (__resizeEdge && e.button === 0) {
       try { post({cmd: 'begin_resize', edge: __resizeEdge}); } catch(_) {}
       // Don't preventDefault — let the page also handle it normally
@@ -621,10 +619,6 @@ fn content_initialization_script(
     try { post({cmd: 'content_pointer_down'}); } catch(_) {}
   }, {capture: true});
 
-  window.addEventListener('blur', function() { __neuraSiteCtx = false; }, true);
-  document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') __neuraSiteCtx = false;
-  }, true);
   const __neuraPostContextMenu = function(e) {
     const target = e.target;
     const el = target && target.nodeType === 1 ? target : (target && target.parentElement ? target.parentElement : null);
@@ -650,19 +644,8 @@ fn content_initialization_script(
     });
   };
   document.addEventListener('contextmenu', function(e) {
-    if (__neuraSiteCtx) {
-      __neuraSiteCtx = false;
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      __neuraPostContextMenu(e);
-      return;
-    }
     setTimeout(function() {
-      if (e.defaultPrevented) {
-        __neuraSiteCtx = true;
-        return;
-      }
-      __neuraSiteCtx = false;
+      if (e.defaultPrevented) return;
       __neuraPostContextMenu(e);
     }, 0);
   }, true);
@@ -1025,11 +1008,13 @@ mod content_menu_tests {
     }
 
     #[test]
-    fn content_context_menu_allows_page_first() {
+    fn content_context_menu_respects_page_prevent_default() {
         let script = script();
-        assert!(script.contains("if (e.defaultPrevented) {\n        __neuraSiteCtx = true;"));
-        assert!(script.contains("e.stopImmediatePropagation();\n      __neuraPostContextMenu(e);"));
         assert!(script.contains("setTimeout(function() {"));
+        assert!(script.contains("if (e.defaultPrevented) return;"));
+        assert!(script.contains("__neuraPostContextMenu(e);"));
+        assert!(!script.contains("__neuraSiteCtx"));
+        assert!(!script.contains("e.stopImmediatePropagation();\n      __neuraPostContextMenu(e);"));
         assert!(!script.contains("e.preventDefault();\n    e.stopPropagation();\n    const target = e.target;"));
     }
 }

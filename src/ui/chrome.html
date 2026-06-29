@@ -896,6 +896,8 @@ button,input,select,textarea{font-family:var(--font)}
   background:var(--bg);
   flex-shrink:0;
 }
+.suggestion-item-icon.has-favicon{background:transparent}
+.suggestion-item-icon.has-favicon img{width:18px;height:18px;border-radius:4px;object-fit:contain;display:block}
 .suggestion-item-info{min-width:0;flex:1}
 .suggestion-item-title{
   font-size:12px;
@@ -5339,10 +5341,6 @@ svg{display:block;flex-shrink:0}
           <div style="padding:8px;border-radius:var(--radius-sm);background:var(--bg)">
             <div style="font-size:11px;color:var(--text-muted)">Reload</div>
             <div style="font-size:12px;font-weight:600;color:var(--text)">F5 / Ctrl+R</div>
-          </div>
-          <div style="padding:8px;border-radius:var(--radius-sm);background:var(--bg)">
-            <div style="font-size:11px;color:var(--text-muted)">Toggle sidebar</div>
-            <div style="font-size:12px;font-weight:600;color:var(--text)">Ctrl+B</div>
           </div>
           <div style="padding:8px;border-radius:var(--radius-sm);background:var(--bg)">
             <div style="font-size:11px;color:var(--text-muted)">Fullscreen</div>
@@ -10903,6 +10901,7 @@ function buildSuggestions(query) {
       sub: p.sub || (isSearch || isTrend ? (defaultEngine ? `Search ${defaultEngine.name}` : 'Search the web') : siteDomain(p.url)),
       url: p.url,
       icon: isSearch || isTrend ? 'search' : 'globe',
+      favicon: isSearch || isTrend ? '' : bookmarkIconUrl(p.url, p.favicon),
       predicted: true,
       pinned: !!p.pinned,
       blocked: !!p.blocked,
@@ -11002,9 +11001,10 @@ function renderSuggestionGroups(items, target) {
     const drag = allowDrag && item.url && item.icon === 'globe'
       ? ` draggable="true" data-nav-url="${escAttr(item.url)}"`
       : '';
+    const iconClass = item.favicon ? 'suggestion-item-icon has-favicon' : 'suggestion-item-icon';
     return `${groupHtml}
       <div class="suggestion-item${item.pinned ? ' suggestion-pinned' : ''}" data-index="${index}"${drag}>
-        <div class="suggestion-item-icon">${suggestionIconSvg(item.icon)}</div>
+        <div class="${iconClass}">${suggestionIconHtml(item)}</div>
         <div class="suggestion-item-info">
           <div class="suggestion-item-title">${escHtml(item.title)}</div>
           <div class="suggestion-item-sub">${escHtml(item.sub || '')}</div>
@@ -11104,6 +11104,12 @@ function suggestionIconSvg(icon) {
   if (icon === 'clock') return clockIconSvg();
   if (icon === 'globe') return globeIconSvg();
   return searchIconSvg();
+}
+
+function suggestionIconHtml(item) {
+  const src = item && item.favicon ? String(item.favicon).trim() : '';
+  if (!src) return suggestionIconSvg(item ? item.icon : '');
+  return `<img src="${escAttr(src)}" alt="" onerror="this.parentElement.classList.remove('has-favicon');this.parentElement.innerHTML=globeIconSvg()">`;
 }
 
 // ============================================================
@@ -16100,12 +16106,11 @@ document.addEventListener('keydown', e => {
   else if (ctrl && key === 'j') { e.preventDefault(); openSettings('downloads'); }
   else if (ctrl && key === 'd') { e.preventDefault(); toggleBookmark(); }
   else if (ctrl && e.shiftKey && e.key === 'A') { e.preventDefault(); toggleAi(); }
-  else if (ctrl && key === 'b') { e.preventDefault(); toggleSidebar(); }
-  else if (ctrl && e.key === ',') { e.preventDefault(); openSettings('general'); }
+  else if (ctrl && !e.shiftKey && e.key === ',') { e.preventDefault(); openSettings('general'); }
   else if (ctrl && key === 'r') { e.preventDefault(); nav('Reload'); }
   else if (e.key === 'F5') { e.preventDefault(); nav('Reload'); }
-  else if (ctrl && (e.key === '+' || e.key === '=')) { e.preventDefault(); zoomIn(); }
-  else if (ctrl && e.key === '-') { e.preventDefault(); zoomOut(); }
+  else if (ctrl && !e.shiftKey && (e.key === '+' || e.key === '=')) { e.preventDefault(); zoomIn(); }
+  else if (ctrl && !e.shiftKey && e.key === '-') { e.preventDefault(); zoomOut(); }
   else if (ctrl && e.key === '0') { e.preventDefault(); zoomReset(); }
   else if (e.key === 'Escape') {
     if (_bmEditId || _folderEditId) closeBmEdit();
