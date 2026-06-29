@@ -694,6 +694,11 @@ pub enum AppEvent {
         favicon: Option<String>,
         replace: bool,
     },
+    FaviconCached {
+        domain: String,
+        favicon_url: String,
+        data_uri: String,
+    },
     ContentTitle {
         tab_id: String,
         title: String,

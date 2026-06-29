@@ -600,6 +600,11 @@ pub enum TabAction {
         engine: String,
         region: String,
     },
+    CacheFavicon {
+        domain: String,
+        favicon_url: String,
+        page_url: String,
+    },
     ResolvePermission {
         origin: String,
         key: String,
@@ -4052,6 +4057,7 @@ pub fn handle_app_event_inner(
             // history row on the first metadata event for each navigation and update
             // the title if a better one arrives on a subsequent event for the same URL.
             let in_incognito = state.tab_manager.tab_is_incognito(&tab_id);
+            let mut cache_icon = None;
             if !state.settings.privacy.disable_history
                 && !clean_url.starts_with("neura://")
                 && !clean_url.starts_with("about:")
@@ -4060,6 +4066,11 @@ pub fn handle_app_event_inner(
                 if let Some(ic) = icon_for_store.as_deref() {
                     let domain = crate::utils::url::extract_domain(&clean_url);
                     let _ = repositories::set_favicon(&state.conn, &domain, ic);
+                    let cached =
+                        repositories::favicon_cached(&state.conn, &domain, ic).unwrap_or(false);
+                    if !cached && ic.starts_with("http") {
+                        cache_icon = Some((domain, ic.to_string(), clean_url.clone()));
+                    }
                 }
                 let last = state.history_last_saved.get(&tab_id).cloned();
                 let is_url_fallback = |t: &str, u: &str| {
@@ -4142,6 +4153,21 @@ pub fn handle_app_event_inner(
             }
             // ── End history recording ────────────────────────────────────────────
             state.push_state_to_chrome(chrome);
+            cache_icon.map(|(domain, favicon_url, page_url)| TabAction::CacheFavicon {
+                domain,
+                favicon_url,
+                page_url,
+            })
+        }
+        AppEvent::FaviconCached {
+            domain,
+            favicon_url,
+            data_uri,
+        } => {
+            let _ = repositories::set_favicon_data(&state.conn, &domain, &favicon_url, &data_uri);
+            let _ = chrome.evaluate_script(
+                "window.__neura && window.__neura.refreshOmnibox && window.__neura.refreshOmnibox()",
+            );
             None
         }
         AppEvent::ContentTitle { tab_id, title } => {
@@ -5357,6 +5383,26 @@ fn handle_save_settings(
         "new_tab_font_color" => {
             if let Some(v) = value.as_str() {
                 state.settings.new_tab.font_color = v.to_string();
+            }
+        }
+        "new_tab_quick_links" => {
+            if let Some(arr) = value.as_array() {
+                let links: Vec<crate::config::QuickLink> = arr
+                    .iter()
+                    .filter_map(|item| {
+                        let name = item.get("name").and_then(|v| v.as_str()).unwrap_or("").trim();
+                        let url = item.get("url").and_then(|v| v.as_str()).unwrap_or("").trim();
+                        if name.is_empty() || url.is_empty() {
+                            return None;
+                        }
+                        Some(crate::config::QuickLink {
+                            name: name.to_string(),
+                            url: url.to_string(),
+                        })
+                    })
+                    .take(8)
+                    .collect();
+                state.settings.new_tab.quick_links = links;
             }
         }
         "region" => {

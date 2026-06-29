@@ -1395,6 +1395,32 @@
                     match action {
                         TabAction::SyncClipOnly | TabAction::SyncSidebarClip => unreachable!(),
                         TabAction::FetchSearchSuggestions { .. } => unreachable!(),
+                        TabAction::CacheFavicon {
+                            domain,
+                            favicon_url,
+                            page_url,
+                        } => {
+                            let proxy = proxy_main.clone();
+                            rt.spawn(async move {
+                                match browser::omnibox::fetch_favicon_data_uri(
+                                    &favicon_url,
+                                    &page_url,
+                                )
+                                .await
+                                {
+                                    Ok(data_uri) => {
+                                        let _ = proxy.send_event(AppEvent::FaviconCached {
+                                            domain,
+                                            favicon_url,
+                                            data_uri,
+                                        });
+                                    }
+                                    Err(e) => {
+                                        tracing::debug!(target: "ventus::favicon", error = %e, "favicon cache failed");
+                                    }
+                                }
+                            });
+                        }
                         TabAction::ResolvePermission { origin, key, allow } => {
                             #[cfg(windows)]
                             resolve_permission(&origin, &key, allow);

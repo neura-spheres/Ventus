@@ -1,4 +1,5 @@
 use anyhow::Result;
+use base64::{engine::general_purpose::STANDARD, Engine as _};
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -261,6 +262,68 @@ pub async fn fetch_queries(
         .json::<serde_json::Value>()
         .await?;
     Ok(parse_queries(&json, q))
+}
+
+pub async fn fetch_favicon_data_uri(raw: &str, page_url: &str) -> Result<String> {
+    let url = url::Url::parse(raw)?;
+    if url.scheme() != "http" && url.scheme() != "https" {
+        return Err(anyhow::anyhow!("bad scheme"));
+    }
+    let client = reqwest::Client::builder()
+        .user_agent(crate::version::USER_AGENT)
+        .timeout(std::time::Duration::from_secs(8))
+        .build()?;
+    let mut req = client.get(url);
+    if page_url.starts_with("http") {
+        req = req.header(reqwest::header::REFERER, page_url);
+    }
+    let resp = req.send().await?;
+    if !resp.status().is_success() {
+        return Err(anyhow::anyhow!("http {}", resp.status().as_u16()));
+    }
+    let ct = resp
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    let bytes = resp.bytes().await?;
+    if bytes.is_empty() || bytes.len() > 262_144 {
+        return Err(anyhow::anyhow!("bad size"));
+    }
+    let mime = favicon_mime(&bytes, &ct)?;
+    Ok(format!("data:{};base64,{}", mime, STANDARD.encode(&bytes)))
+}
+
+fn favicon_mime(bytes: &[u8], content_type: &str) -> Result<&'static str> {
+    let ct = content_type
+        .split(';')
+        .next()
+        .unwrap_or("")
+        .trim()
+        .to_ascii_lowercase();
+    match ct.as_str() {
+        "image/png" => return Ok("image/png"),
+        "image/jpeg" | "image/jpg" => return Ok("image/jpeg"),
+        "image/gif" => return Ok("image/gif"),
+        "image/webp" => return Ok("image/webp"),
+        "image/x-icon" | "image/vnd.microsoft.icon" => return Ok("image/x-icon"),
+        "image/svg+xml" if looks_like_svg(bytes) => return Ok("image/svg+xml"),
+        _ => {}
+    }
+    match image::guess_format(bytes)? {
+        image::ImageFormat::Png => Ok("image/png"),
+        image::ImageFormat::Jpeg => Ok("image/jpeg"),
+        image::ImageFormat::Gif => Ok("image/gif"),
+        image::ImageFormat::WebP => Ok("image/webp"),
+        image::ImageFormat::Ico => Ok("image/x-icon"),
+        _ => Err(anyhow::anyhow!("bad image")),
+    }
+}
+
+fn looks_like_svg(bytes: &[u8]) -> bool {
+    let prefix = String::from_utf8_lossy(&bytes[..bytes.len().min(256)]).to_ascii_lowercase();
+    prefix.contains("<svg")
 }
 
 fn query_url(q: &str, region: &str) -> Result<url::Url> {
@@ -1195,6 +1258,7 @@ mod tests {
             CREATE TABLE favicons (
                 domain TEXT PRIMARY KEY,
                 favicon_url TEXT NOT NULL,
+                data_uri TEXT,
                 updated_at INTEGER NOT NULL
             );",
         )
@@ -1288,6 +1352,13 @@ mod tests {
             "https://www.youtube.com/s/desktop/favicon.ico",
         )
         .unwrap();
+        repositories::set_favicon_data(
+            &conn,
+            "www.youtube.com",
+            "https://www.youtube.com/s/desktop/favicon.ico",
+            "data:image/png;base64,abc",
+        )
+        .unwrap();
 
         let items = suggest(&conn, &Model::default(), "", &[], 8);
         assert_eq!(
@@ -1296,7 +1367,7 @@ mod tests {
         );
         assert_eq!(
             items.first().and_then(|s| s.favicon.as_deref()),
-            Some("https://www.youtube.com/s/desktop/favicon.ico")
+            Some("data:image/png;base64,abc")
         );
     }
 }

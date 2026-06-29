@@ -1302,6 +1302,10 @@ button,input,select,textarea{font-family:var(--font)}
 #toolbar-incognito-badge{display:none;align-items:center;gap:5px;font-size:10.5px;font-weight:600;color:#e5e7eb;background:#3f3f46;border:1px solid rgba(255,255,255,0.14);border-radius:6px;padding:2px 7px 2px 6px;flex-shrink:0;cursor:default;white-space:nowrap;letter-spacing:0.01em}
 #toolbar-incognito-badge.visible{display:flex}
 #toolbar-incognito-badge svg{flex-shrink:0}
+#toolbar-incognito-badge{transition:padding .22s cubic-bezier(.4,0,.2,1)}
+#toolbar-incognito-label{display:inline-block;max-width:80px;overflow:hidden;white-space:nowrap;opacity:1;transition:max-width .22s cubic-bezier(.4,0,.2,1),opacity .14s ease,margin-left .22s cubic-bezier(.4,0,.2,1)}
+#toolbar-incognito-badge.compact{padding-left:5px;padding-right:5px}
+#toolbar-incognito-badge.compact #toolbar-incognito-label{max-width:0;opacity:0;margin-left:-5px}
 
 #ws-switcher-modal{
   display:none;position:fixed;inset:0;z-index:285;
@@ -2242,6 +2246,21 @@ button,input,select,textarea{font-family:var(--font)}
 }
 .settings-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-dim)}
 .settings-input::placeholder{color:var(--text-dim)}
+.nt-links-count{color:var(--text-muted);font-weight:500;font-size:11px;margin-left:6px}
+.nt-links-list{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.nt-links-empty{color:var(--text-muted);font-size:12px;padding:10px 0}
+.nt-link-row{display:flex;align-items:center;gap:10px;padding:7px 10px;background:var(--modal-bg-2);border:1px solid var(--modal-border);border-radius:10px}
+.nt-link-row-icon{width:18px;height:18px;border-radius:4px;flex-shrink:0;object-fit:contain;background:var(--modal-bg)}
+.nt-link-row-text{flex:1;min-width:0}
+.nt-link-row-name{font-size:13px;color:var(--text);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nt-link-row-url{font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nt-link-remove{flex-shrink:0;width:28px;height:28px;display:flex;align-items:center;justify-content:center;border:none;background:transparent;color:var(--text-muted);border-radius:8px;cursor:pointer;transition:background var(--transition),color var(--transition)}
+.nt-link-remove:hover{background:var(--danger-dim,rgba(239,68,68,0.15));color:var(--danger,#ef4444)}
+.nt-link-add{display:flex;gap:8px;margin-top:10px}
+.nt-link-input-name{flex:0 0 34%;min-width:0}
+.nt-link-input-url{flex:1;min-width:0}
+.nt-link-add-btn{flex-shrink:0;border:1px solid var(--accent);background:var(--accent);color:#fff;border-radius:10px;padding:0 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font);transition:filter var(--transition)}
+.nt-link-add-btn:hover{filter:brightness(1.08)}
 .settings-path-row{display:flex;gap:8px;align-items:center}
 .settings-path-row .settings-input{flex:1;min-width:0}
 .settings-btn{
@@ -2620,15 +2639,23 @@ button,input,select,textarea{font-family:var(--font)}
 }
 .newtab-greeting{font-size:15px;line-height:1.3;font-weight:500;color:var(--nt-hero-soft);text-align:center;letter-spacing:0;max-width:calc(100% - 48px);text-shadow:none;overflow-wrap:anywhere}
 .newtab-sub{display:none}
-.newtab-shortcuts{display:grid;grid-template-columns:repeat(8,minmax(56px,1fr));gap:12px;width:min(650px,100%);margin:2px auto 0}
+.newtab-shortcuts{display:flex;flex-wrap:wrap;justify-content:center;gap:12px;width:min(650px,100%);margin:2px auto 0}
 .newtab-shortcut{
   display:flex;flex-direction:column;align-items:center;gap:7px;
   padding:8px 6px 9px;border-radius:18px;background:transparent;
-  border:none;cursor:pointer;min-width:0;
+  border:none;cursor:pointer;width:68px;box-sizing:border-box;
   color:#fff;font-family:var(--font);
   transition:transform var(--transition),background var(--transition);text-decoration:none;
   box-shadow:none;
 }
+.newtab-shortcut-add .newtab-shortcut-icon{
+  background:var(--nt-shortcut-icon-bg);
+  border:1.5px dashed var(--nt-shortcut-add-border,rgba(255,255,255,0.45));
+  color:var(--nt-hero-text);opacity:.7;
+}
+.newtab-shortcut-add{opacity:.8}
+.newtab-shortcut-add:hover{opacity:1}
+.newtab-shortcut-add:hover .newtab-shortcut-icon{opacity:1}
 .newtab-shortcut:hover{background:var(--nt-shortcut-hover-bg);transform:translateY(-2px)}
 .newtab-shortcut-icon{
   width:38px;height:38px;border-radius:13px;
@@ -4095,7 +4122,7 @@ svg{display:block;flex-shrink:0}
   <div id="address-bar" onclick="focusUrl()">
     <span id="toolbar-incognito-badge" onclick="event.stopPropagation()" title="Incognito workspace - history not saved">
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12.5h18"/><path d="M6 12.5l1.2-4.6A2 2 0 0 1 9.1 6.5h5.8a2 2 0 0 1 1.9 1.4l1.2 4.6"/><circle cx="8" cy="16" r="2.4"/><circle cx="16" cy="16" r="2.4"/><path d="M10.4 16h3.2"/></svg>
-      Incognito
+      <span id="toolbar-incognito-label">Incognito</span>
     </span>
     <img id="active-favicon" class="favicon" style="display:none" src="" alt="" draggable="true" title="Drag to bookmark or open in new tab" onerror="activeFaviconError(this)">
     <span id="active-loading-icon" class="favicon" style="display:none">
@@ -5067,6 +5094,16 @@ svg{display:block;flex-shrink:0}
             <div class="toggle-desc">Show shortcut tiles for frequent sites and search engines</div>
           </div>
           <div class="toggle-switch" id="toggle-new-tab-show-quick-links" onclick="toggleSetting('new_tab_show_quick_links')"></div>
+        </div>
+        <div class="settings-group" id="newtab-links-group">
+          <label>Quick link shortcuts <span id="newtab-links-count" class="nt-links-count"></span></label>
+          <div class="hint">Shown as tiles on the new tab page. Up to 8.</div>
+          <div id="newtab-links-list" class="nt-links-list"></div>
+          <div class="nt-link-add" id="newtab-link-add-row">
+            <input class="settings-input nt-link-input-name" id="newtab-link-name" placeholder="Name" maxlength="24" onkeydown="if(event.key==='Enter')addNewtabLink()">
+            <input class="settings-input nt-link-input-url" id="newtab-link-url" placeholder="https://example.com" onkeydown="if(event.key==='Enter')addNewtabLink()">
+            <button class="nt-link-add-btn" id="newtab-link-add-btn" onclick="addNewtabLink()">Add</button>
+          </div>
         </div>
       </div>
 
@@ -7398,6 +7435,76 @@ function renderSearchSettings() {
   select.onchange = () => send('SaveSettings', {key: 'default_engine', value: select.value});
 }
 
+const NEWTAB_DEFAULT_LINKS = [
+  {name: 'GitHub', url: 'https://github.com'},
+  {name: 'ChatGPT', url: 'https://chatgpt.com'},
+  {name: 'YouTube', url: 'https://youtube.com'},
+  {name: 'Gmail', url: 'https://mail.google.com'},
+  {name: 'Google', url: 'https://www.google.com'},
+  {name: 'Perplexity', url: 'https://www.perplexity.ai'},
+  {name: 'Brave', url: 'https://search.brave.com'},
+];
+function newtabQuickLinks() {
+  const nt = newtabSettings();
+  if (Array.isArray(nt.quick_links)) return nt.quick_links.map(l => ({name: l.name, url: l.url})).slice(0, 8);
+  return NEWTAB_DEFAULT_LINKS.map(l => ({name: l.name, url: l.url}));
+}
+function saveNewtabLinks(links) {
+  const clean = links.filter(l => l && l.name && l.url).slice(0, 8);
+  if (!state.settings) state.settings = {};
+  if (!state.settings.new_tab) state.settings.new_tab = {};
+  state.settings.new_tab.quick_links = clean;
+  send('SaveSettings', {key: 'new_tab_quick_links', value: clean});
+  renderNewtabShortcuts();
+  renderNewtabLinksEditor();
+}
+function addNewtabLink() {
+  const nameEl = document.getElementById('newtab-link-name');
+  const urlEl = document.getElementById('newtab-link-url');
+  if (!nameEl || !urlEl) return;
+  let name = nameEl.value.trim();
+  let url = urlEl.value.trim();
+  if (!url) return;
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(url)) url = 'https://' + url;
+  if (!name) { try { name = new URL(url).hostname.replace(/^www\./, ''); } catch (_) { name = url; } }
+  const links = newtabQuickLinks();
+  if (links.length >= 8) return;
+  links.push({name, url});
+  nameEl.value = '';
+  urlEl.value = '';
+  saveNewtabLinks(links);
+}
+function removeNewtabLink(index) {
+  const links = newtabQuickLinks();
+  if (index < 0 || index >= links.length) return;
+  links.splice(index, 1);
+  saveNewtabLinks(links);
+}
+function renderNewtabLinksEditor() {
+  const list = document.getElementById('newtab-links-list');
+  if (!list) return;
+  const links = newtabQuickLinks();
+  const countEl = document.getElementById('newtab-links-count');
+  if (countEl) countEl.textContent = links.length + '/8';
+  const addRow = document.getElementById('newtab-link-add-row');
+  if (addRow) addRow.style.display = links.length >= 8 ? 'none' : 'flex';
+  if (!links.length) {
+    list.innerHTML = '<div class="nt-links-empty">No quick links yet. Add one below.</div>';
+    return;
+  }
+  list.innerHTML = links.map((item, i) => `
+    <div class="nt-link-row">
+      <img class="nt-link-row-icon" src="${escAttr(shortcutIconUrl(item.url))}" alt="">
+      <div class="nt-link-row-text">
+        <div class="nt-link-row-name">${escHtml(item.name || item.url)}</div>
+        <div class="nt-link-row-url">${escHtml(item.url)}</div>
+      </div>
+      <button class="nt-link-remove" onclick="removeNewtabLink(${i})" title="Remove">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+  `).join('');
+}
 function renderNewtabShortcuts() {
   const list = document.getElementById('newtab-shortcuts');
   if (!list) return;
@@ -7406,38 +7513,21 @@ function renderNewtabShortcuts() {
     list.innerHTML = '';
     return;
   }
-  const engines = state.search_engines || [];
-  const defaults = [
-    {id: 'github-home', name: 'GitHub', url: 'https://github.com', domain: 'github.com'},
-    {id: 'chatgpt-home', name: 'ChatGPT', url: 'https://chatgpt.com', domain: 'chatgpt.com'},
-    {id: 'youtube-home', name: 'YouTube', url: 'https://youtube.com', domain: 'youtube.com'},
-    {id: 'gmail-home', name: 'Gmail', url: 'https://mail.google.com', domain: 'mail.google.com'},
-    {id: 'neurafeed-home', name: 'Neura Feed', url: 'https://feed.neuraspheres.com', domain: 'feed.neuraspheres.com'},
-  ];
-  const preferred = ['google', 'perplexity', 'brave'];
-  const picked = preferred.map(id => engines.find(e => e.id === id)).filter(Boolean).map(e => ({
-    id: e.id,
-    name: e.name,
-    url: e.url_template.replace('{query}', ''),
-    domain: shortcutDomain(e.url_template),
-  }));
-  const seen = new Set();
-  const shortcuts = [...defaults, ...picked].filter(item => {
-    const key = item.url.replace(/\/$/, '');
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  }).slice(0, 8);
-  if (!shortcuts.length) {
-    list.innerHTML = '';
-    return;
-  }
-  list.innerHTML = shortcuts.map(item => `
+  const links = newtabQuickLinks().filter(item => item && item.url);
+  let html = links.map(item => `
     <button class="newtab-shortcut" draggable="true" data-nav-url="${escAttr(item.url)}">
-      <div class="newtab-shortcut-icon"><img src="${escAttr(shortcutIconUrl(item.domain || item.url))}" alt=""></div>
-      <span class="newtab-shortcut-label">${escHtml(item.name)}</span>
+      <div class="newtab-shortcut-icon"><img src="${escAttr(shortcutIconUrl(item.url))}" alt=""></div>
+      <span class="newtab-shortcut-label">${escHtml(item.name || item.url)}</span>
     </button>
   `).join('');
+  if (links.length < 8) {
+    html += `
+      <button class="newtab-shortcut newtab-shortcut-add" onclick="openSettings('newtab')" title="Add a quick link">
+        <div class="newtab-shortcut-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></div>
+        <span class="newtab-shortcut-label">Add</span>
+      </button>`;
+  }
+  list.innerHTML = html;
 }
 
 function newtabSettings() {
@@ -8694,6 +8784,7 @@ function syncNewtabSettingsUI() {
   const autoColor = defaultNewtabFontColor();
   if (fcInput) fcInput.value = fc || autoColor;
   if (fcLabel) fcLabel.textContent = fc || `Auto (${autoColor})`;
+  renderNewtabLinksEditor();
 }
 
 function setSelectValue(id, value) {
@@ -9231,6 +9322,7 @@ function bookmarkLabel(url, title) {
 }
 function bookmarkIconUrl(url, favicon) {
   const saved = String(favicon || '').trim();
+  if (/^data:image\//i.test(saved)) return saved;
   if (/^https?:\/\//i.test(saved)) return saved;
   const target = String(url || '').trim();
   if (!target || target.startsWith('neura://')) return '';
@@ -9733,6 +9825,8 @@ function updateLockIcon(url) {
 function checkNewtabPlaceholder(url) {
   const show = !url || url === 'neura://newtab' || url === 'about:blank';
   document.getElementById('newtab-placeholder').style.display = show ? 'flex' : 'none';
+  const incognitoBadge = document.getElementById('toolbar-incognito-badge');
+  if (incognitoBadge) incognitoBadge.classList.toggle('compact', !show);
   if (show) {
     updateGreeting();
     updateNewtabDate();
@@ -14190,7 +14284,7 @@ function ctxAction(action) {
     case 'forward': send('Forward'); break;
     case 'reload':  send('Reload'); break;
     case 'copy_page_url': copyToClipboard(d.pageUrl); break;
-    case 'view_source': send('OpenInNewTab', {url: 'view-source:' + d.pageUrl}); break;
+    case 'view_source': send('OpenDevtools'); break;
   }
 }
 

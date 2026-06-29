@@ -1,0 +1,102 @@
+- generic [ref=e2]:
+  - generic [ref=e4]:
+    - generic [ref=e5]:
+      - button "Toggle sidebar" [ref=e6] [cursor=pointer]:
+        - img [ref=e7]
+      - button "Back (Alt+Left)" [disabled]:
+        - img
+      - button "Forward (Alt+Right)" [disabled]:
+        - img
+      - button "Reload (F5)" [ref=e10] [cursor=pointer]:
+        - img [ref=e11]
+    - generic:
+      - generic:
+        - button "Site info" [ref=e14] [cursor=pointer]:
+          - img [ref=e16]
+        - generic [ref=e18]:
+          - textbox "Search or enter a URL" [ref=e20]
+          - button "Bookmark (Ctrl+D)" [ref=e21] [cursor=pointer]:
+            - img [ref=e22]
+          - button "Ad blocker" [ref=e24] [cursor=pointer]:
+            - img [ref=e25]
+    - generic [ref=e27]:
+      - generic [ref=e28]:
+        - button "AI sidebar (Ctrl+Shift+A)" [ref=e29] [cursor=pointer]:
+          - img [ref=e30]
+        - button "Apps" [ref=e34] [cursor=pointer]:
+          - img [ref=e35]
+        - button "Downloads (Ctrl+J)" [ref=e40] [cursor=pointer]:
+          - img [ref=e41]
+        - button "History (Ctrl+H)" [ref=e44] [cursor=pointer]:
+          - img [ref=e45]
+        - button "Bookmarks" [ref=e48] [cursor=pointer]:
+          - img [ref=e49]
+        - button "Settings (Ctrl+,)" [ref=e51] [cursor=pointer]:
+          - img [ref=e52]
+      - button "More options" [ref=e55] [cursor=pointer]:
+        - img [ref=e57]
+      - generic [ref=e62]:
+        - button "Minimize" [ref=e63]:
+          - img [ref=e64]
+        - button "Maximize" [ref=e66]:
+          - img [ref=e67]
+        - button "Close" [ref=e69]:
+          - img [ref=e70]
+  - generic:
+    - generic: 100%
+  - generic [ref=e73]:
+    - generic [ref=e74]:
+      - generic "New tab" [ref=e75] [cursor=pointer]:
+        - img "Ventus" [ref=e76]
+      - button "New tab (Ctrl+T)" [ref=e77] [cursor=pointer]:
+        - img [ref=e78]
+    - generic [ref=e82]:
+      - button "History" [ref=e83] [cursor=pointer]:
+        - img [ref=e84]
+      - generic [ref=e87]:
+        - button "Previous workspace":
+          - img
+        - button "Next workspace":
+          - img
+      - button "New workspace" [ref=e88] [cursor=pointer]:
+        - img [ref=e89]
+  - generic [ref=e98]:
+    - generic [ref=e99]:
+      - generic [ref=e101]: Ventus
+      - generic [ref=e102]:
+        - generic [ref=e103]: Monday, June 29
+        - button "Apps" [ref=e104] [cursor=pointer]:
+          - img [ref=e105]
+        - button "New tab settings" [ref=e110] [cursor=pointer]:
+          - img [ref=e111]
+    - generic [ref=e114]:
+      - generic [ref=e115]: 12:00
+      - generic [ref=e116]: Good evening
+      - generic [ref=e118]:
+        - img [ref=e119]
+        - textbox "Search the web" [ref=e122]
+    - generic [ref=e124]:
+      - generic [ref=e125]: Latest from Neura Feed
+      - generic [ref=e126]:
+        - button "See more" [ref=e127] [cursor=pointer]
+        - button "Refresh" [ref=e128] [cursor=pointer]
+  - generic:
+    - generic:
+      - generic:
+        - generic:
+          - generic: Select model
+          - generic: "Current: Smart"
+        - button "✕"
+      - generic:
+        - generic:
+          - textbox "Custom model ID..."
+          - button "Use"
+  - text: ✓ ✓
+  - generic:
+    - generic:
+      - img
+    - generic:
+      - generic: Update available
+    - generic:
+      - button "Later"
+      - button "Update"

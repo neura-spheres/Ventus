@@ -5,7 +5,7 @@ use crate::browser::{
     workspace::Workspace,
 };
 use anyhow::Result;
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -649,17 +649,59 @@ pub fn set_favicon(conn: &Connection, domain: &str, favicon_url: &str) -> Result
     }
     let now = chrono::Utc::now().timestamp_millis();
     conn.execute(
-        "INSERT INTO favicons(domain, favicon_url, updated_at) VALUES(?1,?2,?3)
-         ON CONFLICT(domain) DO UPDATE SET favicon_url=?2, updated_at=?3",
+        "INSERT INTO favicons(domain, favicon_url, data_uri, updated_at) VALUES(?1,?2,NULL,?3)
+         ON CONFLICT(domain) DO UPDATE SET
+            data_uri = CASE WHEN favicon_url = ?2 THEN data_uri ELSE NULL END,
+            favicon_url=?2,
+            updated_at=?3",
         params![domain, favicon_url, now],
     )?;
     Ok(())
 }
 
+pub fn set_favicon_data(
+    conn: &Connection,
+    domain: &str,
+    favicon_url: &str,
+    data_uri: &str,
+) -> Result<()> {
+    if domain.is_empty() || favicon_url.is_empty() || !data_uri.starts_with("data:image/") {
+        return Ok(());
+    }
+    let now = chrono::Utc::now().timestamp_millis();
+    conn.execute(
+        "INSERT INTO favicons(domain, favicon_url, data_uri, updated_at) VALUES(?1,?2,?3,?4)
+         ON CONFLICT(domain) DO UPDATE SET
+            data_uri = CASE WHEN favicon_url = ?2 THEN ?3 ELSE data_uri END,
+            updated_at = CASE WHEN favicon_url = ?2 THEN ?4 ELSE updated_at END",
+        params![domain, favicon_url, data_uri, now],
+    )?;
+    Ok(())
+}
+
+pub fn favicon_cached(conn: &Connection, domain: &str, favicon_url: &str) -> Result<bool> {
+    if domain.is_empty() || favicon_url.is_empty() {
+        return Ok(false);
+    }
+    let mut stmt = conn
+        .prepare("SELECT data_uri FROM favicons WHERE domain = ?1 AND favicon_url = ?2 LIMIT 1")?;
+    let data: Option<String> = stmt
+        .query_row(params![domain, favicon_url], |row| row.get(0))
+        .optional()?
+        .flatten();
+    Ok(data
+        .as_deref()
+        .map(|v| v.starts_with("data:image/"))
+        .unwrap_or(false))
+}
+
 pub fn all_favicons(conn: &Connection) -> Result<std::collections::HashMap<String, String>> {
-    let mut stmt = conn.prepare("SELECT domain, favicon_url FROM favicons")?;
+    let mut stmt = conn.prepare("SELECT domain, favicon_url, data_uri FROM favicons")?;
     let rows = stmt.query_map([], |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        let url: String = row.get(1)?;
+        let data: Option<String> = row.get(2)?;
+        let icon = data.filter(|v| v.starts_with("data:image/")).unwrap_or(url);
+        Ok((row.get::<_, String>(0)?, icon))
     })?;
     let mut map = std::collections::HashMap::new();
     for r in rows {
@@ -1127,6 +1169,38 @@ mod tests {
         assert_eq!(
             updated[0].favicon.as_deref(),
             Some("https://www.gstatic.com/images/branding/product/1x/gmail_2020q4_32dp.png")
+        );
+    }
+
+    #[test]
+    fn favicon_cache_prefers_data_and_resets_on_url_change() {
+        let conn = database::in_memory().unwrap();
+        migrations::run(&conn).unwrap();
+
+        set_favicon(&conn, "youtube.com", "https://youtube.com/favicon.ico").unwrap();
+        assert!(!favicon_cached(&conn, "youtube.com", "https://youtube.com/favicon.ico").unwrap());
+        set_favicon_data(
+            &conn,
+            "youtube.com",
+            "https://youtube.com/favicon.ico",
+            "data:image/png;base64,abc",
+        )
+        .unwrap();
+        assert!(favicon_cached(&conn, "youtube.com", "https://youtube.com/favicon.ico").unwrap());
+        assert_eq!(
+            all_favicons(&conn)
+                .unwrap()
+                .get("youtube.com")
+                .map(String::as_str),
+            Some("data:image/png;base64,abc")
+        );
+        set_favicon(&conn, "youtube.com", "https://youtube.com/new.ico").unwrap();
+        assert_eq!(
+            all_favicons(&conn)
+                .unwrap()
+                .get("youtube.com")
+                .map(String::as_str),
+            Some("https://youtube.com/new.ico")
         );
     }
 }

@@ -714,7 +714,12 @@ fn attach_popup_content_handlers(
     let src = SourceChangedEventHandler::create(Box::new(move |sender, _args| {
         if let Some(sender) = sender {
             let url = unsafe { webview_source(&sender) };
-            let _ = proxy_src.send_event(AppEvent::PopupUrlChanged { id, url });
+            if !url.starts_with("chrome-error:")
+                && !url.starts_with("chrome://")
+                && !url.starts_with("edge://")
+            {
+                let _ = proxy_src.send_event(AppEvent::PopupUrlChanged { id, url });
+            }
         }
         Ok(())
     }));

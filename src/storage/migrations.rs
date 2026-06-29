@@ -10,6 +10,7 @@ pub fn run(conn: &Connection) -> Result<()> {
     let _ = conn
         .execute_batch("ALTER TABLE bookmarks ADD COLUMN icon_only INTEGER NOT NULL DEFAULT 0;");
     let _ = conn.execute_batch("ALTER TABLE bookmarks ADD COLUMN favicon TEXT;");
+    let _ = conn.execute_batch("ALTER TABLE favicons ADD COLUMN data_uri TEXT;");
     let _ = conn.execute_batch(
         "ALTER TABLE ai_chat_messages ADD COLUMN attachments_json TEXT NOT NULL DEFAULT '[]';",
     );
@@ -78,6 +79,7 @@ CREATE INDEX IF NOT EXISTS idx_history_visited ON history(visited_at DESC);
 CREATE TABLE IF NOT EXISTS favicons (
     domain TEXT PRIMARY KEY NOT NULL,
     favicon_url TEXT NOT NULL,
+    data_uri TEXT,
     updated_at INTEGER NOT NULL
 );
 

@@ -1,3 +1,8 @@
+fn is_internal_error_url(url: &str) -> bool {
+    let u = url.trim_start();
+    u.starts_with("chrome-error:") || u.starts_with("chrome://") || u.starts_with("edge://")
+}
+
 /// Create a content WebView, retrying briefly when WebView2 reports the user-data profile
 /// is locked / in use (HRESULT 0x800700AA, ERROR_BUSY).
 
@@ -207,7 +212,10 @@ fn build_content_webview_once(
                         .and_then(|v| v.as_str())
                         .unwrap_or_default()
                         .to_string();
-                    if !url.trim().is_empty() && url != "about:blank" {
+                    if !url.trim().is_empty()
+                        && url != "about:blank"
+                        && !is_internal_error_url(&url)
+                    {
                         let _ = proxy_ipc.send_event(AppEvent::ContentLoadStart {
                             tab_id: tab_id_ipc.clone(),
                             url,
@@ -228,6 +236,9 @@ fn build_content_webview_once(
                         .and_then(|v| v.as_str())
                         .unwrap_or_default()
                         .to_string();
+                    if is_internal_error_url(&url) {
+                        return;
+                    }
                     let _ = proxy_ipc.send_event(AppEvent::ContentLoadProgress {
                         tab_id: tab_id_ipc.clone(),
                         url,
@@ -241,6 +252,9 @@ fn build_content_webview_once(
                         .and_then(|v| v.as_str())
                         .unwrap_or_default()
                         .to_string();
+                    if is_internal_error_url(&url) {
+                        return;
+                    }
                     let title = value
                         .get("title")
                         .and_then(|v| v.as_str())

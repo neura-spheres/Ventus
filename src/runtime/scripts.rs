@@ -277,8 +277,13 @@ fn content_initialization_script(
     return {run, clear};
   })();
   window.__neuraFind = findApi;
+  const isErrorDoc = () => {
+    let h = '';
+    try { h = location.href || ''; } catch (_) {}
+    return h.indexOf('chrome-error:') === 0 || h.indexOf('chrome://') === 0 || h.indexOf('edge://') === 0;
+  };
   const sendProgress = (progress) => {
-    if (isTop) post({cmd:'content_progress', progress, url: location.href});
+    if (isTop && !isErrorDoc()) post({cmd:'content_progress', progress, url: location.href});
   };
   const faviconHref = () => {
     const root = document.head || document.documentElement;
@@ -294,7 +299,7 @@ fn content_initialization_script(
   let lastMeta = '';
   let metaTimer = 0;
   const sendMetadata = (replace = false) => {
-    if (!isTop) return;
+    if (!isTop || isErrorDoc()) return;
     const favicon = faviconHref();
     const title = document.title || location.href;
     const key = location.href + '\n' + title + '\n' + favicon + '\n' + replace;
@@ -313,7 +318,7 @@ fn content_initialization_script(
     metaTimer = setTimeout(() => sendMetadata(replace), wait);
   };
   const sendLocationChange = (replace = false) => {
-    if (!isTop) return;
+    if (!isTop || isErrorDoc()) return;
     const href = location.href;
     if (href === lastHref) {
       setTimeout(() => {

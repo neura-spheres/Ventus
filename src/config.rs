@@ -230,6 +230,30 @@ fn default_wallpaper_color() -> String {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuickLink {
+    pub name: String,
+    pub url: String,
+}
+
+fn default_quick_links() -> Vec<QuickLink> {
+    [
+        ("GitHub", "https://github.com"),
+        ("ChatGPT", "https://chatgpt.com"),
+        ("YouTube", "https://youtube.com"),
+        ("Gmail", "https://mail.google.com"),
+        ("Google", "https://www.google.com"),
+        ("Perplexity", "https://www.perplexity.ai"),
+        ("Brave", "https://search.brave.com"),
+    ]
+    .iter()
+    .map(|(name, url)| QuickLink {
+        name: name.to_string(),
+        url: url.to_string(),
+    })
+    .collect()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct NewTabSettings {
     #[serde(default = "default_true")]
@@ -260,6 +284,8 @@ pub struct NewTabSettings {
     /// Custom font color hex override (empty = use theme default)
     #[serde(default)]
     pub font_color: String,
+    #[serde(default = "default_quick_links")]
+    pub quick_links: Vec<QuickLink>,
 }
 
 impl Default for NewTabSettings {
@@ -276,6 +302,7 @@ impl Default for NewTabSettings {
             wallpaper_color: default_wallpaper_color(),
             wallpaper_data: String::new(),
             font_color: String::new(),
+            quick_links: default_quick_links(),
         }
     }
 }
