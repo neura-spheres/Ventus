@@ -3791,6 +3791,29 @@ button,input,select,textarea{font-family:var(--font)}
 @keyframes ventus-slide-in-right{from{transform:translateX(8px);opacity:0}to{transform:translateX(0);opacity:1}}
 @keyframes ventus-scale-in{from{transform:scale(0.96);opacity:0}to{transform:scale(1);opacity:1}}
 
+html.reduce-motion *,
+html.reduce-motion *::before,
+html.reduce-motion *::after{
+  transition-duration:0.01ms!important;
+  transition-delay:0s!important;
+  animation-duration:0.01ms!important;
+  animation-delay:0s!important;
+  animation-iteration-count:1!important;
+  scroll-behavior:auto!important;
+}
+html.reduce-motion #address-bar.loading::before{animation:address-load-orbit 2.9s linear infinite!important}
+html.reduce-motion .ld-ring{animation:ld-pulse 1.6s ease-in-out infinite!important}
+html.reduce-motion .ld-arc{animation:ld-spin .9s linear infinite!important}
+html.reduce-motion .ld-dot{animation:ld-orbit .9s linear infinite!important}
+html.reduce-motion .ai-tool-icon{animation:spin 1.2s linear infinite!important}
+html.reduce-motion .dl-spin{animation:spin 0.7s linear infinite!important}
+html.reduce-motion .update-spin{animation:spin 1s linear infinite!important}
+html.reduce-motion .dl-pi-bar.indeterminate .dl-pi-bar-fill{animation:dl-indeterminate 1.1s ease-in-out infinite!important}
+html.reduce-motion .ai-dot{animation:bounce 1.4s ease-in-out infinite!important}
+html.reduce-motion .tsp-ai-dots span{animation:tspdot 1.2s infinite!important}
+html.reduce-motion .ai-thinking-summary.streaming.raw .ai-thinking-title,
+html.reduce-motion .ai-thinking-summary.streaming.gpt .ai-thinking-title{animation:ai-thinking-shimmer 4.6s linear infinite!important}
+
 /* collapsed sidebar */
 #app.sidebar-collapsed .sb-bottom{display:none}
 .sb-bottom-compact{display:none}
@@ -4879,6 +4902,13 @@ svg{display:block;flex-shrink:0}
             <div class="toggle-desc">Display the URL below tab titles in the vertical list</div>
           </div>
           <div class="toggle-switch" id="toggle-show-url" onclick="toggleSetting('show_tab_url')"></div>
+        </div>
+        <div class="settings-toggle">
+          <div class="settings-toggle-info">
+            <div class="toggle-title">Minimize animations</div>
+            <div class="toggle-desc">Disable most transitions and animations across the app</div>
+          </div>
+          <div class="toggle-switch" id="toggle-reduce-motion" onclick="toggleSetting('reduce_motion')"></div>
         </div>
         <div class="settings-group">
           <label style="display:flex;align-items:center;justify-content:space-between">
@@ -6768,7 +6798,7 @@ function renderTabs() {
       ? `<button class="tab-audio-btn" onclick="muteTab(event,'${tab.id}')" title="${audioTitle}">${audioSvg}</button>`
       : '';
     const sleepIcon = tab.discarded
-      ? `<svg class="tab-sleep-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" title="Tab is sleeping — click to wake"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`
+      ? `<svg class="tab-sleep-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" title="Tab is sleeping, click to wake"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`
       : '';
     return `<div class="tab-item ${active} ${loading} ${pinned} ${audioPlaying} ${tabMuted} ${sleeping} ${entering}" draggable="true" data-reorder-id="${escAttr(tab.id)}" data-nav-url="${escAttr(tab.url)}" onclick="switchTab('${tab.id}')" oncontextmenu="tabContextMenu(event,'${tab.id}')">
       ${faviconEl}
@@ -7037,7 +7067,7 @@ function finishTabSettle() {
   endTabDrag(true);
   const list = document.getElementById(pending.listId);
   if (!list) return false;
-  const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const reduceMotion = motionReduced();
   tabListItems(list).forEach(tab => {
     const id = tab.dataset.reorderId;
     if (id === pending.sourceId) return;
@@ -7262,7 +7292,7 @@ function finishBookmarkSettle(listId) {
   endBookmarkDrag(true);
   const list = document.getElementById(listId);
   if (!list) return false;
-  const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const reduceMotion = motionReduced();
   bookmarkListItems(list).forEach(item => {
     const id = bookmarkItemId(item);
     if (id === pending.sourceId) return;
@@ -7611,6 +7641,14 @@ function clearAutoNewtabFontColorOverride() {
 
 function applyTheme() {
   document.documentElement.setAttribute('data-theme', effectiveTheme());
+  const ap = (state.settings && state.settings.appearance) || {};
+  document.documentElement.classList.toggle('reduce-motion', !!ap.reduce_motion);
+}
+
+function motionReduced() {
+  const ap = (state.settings && state.settings.appearance) || {};
+  if (ap.reduce_motion) return true;
+  return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 }
 
 function applyFontFamily() {
@@ -8583,6 +8621,7 @@ function populateSettingsPanel() {
   setSelectValue('set-font-family', fontFamilyKey(app.font_family || 'system'));
   setToggleEl('toggle-show-bookmarks-bar', !!app.show_bookmarks_bar);
   setToggleEl('toggle-show-url', app.show_tab_url !== false);
+  setToggleEl('toggle-reduce-motion', !!app.reduce_motion);
   setToggleEl('toggle-compact-tabs', !!(s.tabs && s.tabs.compact_tabs));
   renderToolbarButtonSettings();
   renderSidebarAppsSettings();
@@ -12537,6 +12576,12 @@ function toggleSetting(key) {
     state.settings.appearance.show_bookmarks_bar = val;
     applySidebarMode();
   }
+  if (key === 'reduce_motion') {
+    if (!state.settings) state.settings = {};
+    if (!state.settings.appearance) state.settings.appearance = {};
+    state.settings.appearance.reduce_motion = val;
+    document.documentElement.classList.toggle('reduce-motion', !!val);
+  }
   if (key === 'search_suggestions') {
     if (!state.settings) state.settings = {};
     if (!state.settings.search) state.settings.search = {};
@@ -15525,7 +15570,7 @@ function obPopulateRegionSelect(current) {
   const sel = document.getElementById('ob-region-select');
   if (!sel) return;
   const sorted = Object.entries(_COUNTRY_DATA).sort((a,b) => a[1].name.localeCompare(b[1].name));
-  sel.innerHTML = '<option value="">— Not set —</option>' +
+  sel.innerHTML = '<option value="">Not set</option>' +
     sorted.map(([code, c]) =>
       `<option value="${escAttr(code)}"${code === current ? ' selected' : ''}>${countryFlag(code)} ${escHtml(c.name)}</option>`
     ).join('');

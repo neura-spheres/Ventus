@@ -126,6 +126,8 @@ pub struct AppearanceSettings {
     pub show_home_button: bool,
     pub show_bookmarks_button: bool,
     pub show_bookmarks_bar: bool,
+    #[serde(default)]
+    pub reduce_motion: bool,
     pub corner_radius: String,
     pub font_size: String,
     #[serde(default = "default_font_family")]
@@ -151,6 +153,7 @@ impl Default for AppearanceSettings {
             show_home_button: true,
             show_bookmarks_button: true,
             show_bookmarks_bar: false,
+            reduce_motion: false,
             corner_radius: "soft".to_string(),
             font_size: "medium".to_string(),
             font_family: default_font_family(),

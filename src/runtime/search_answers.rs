@@ -830,7 +830,7 @@ async fn fetch_wikipedia_search(query: &str) -> Vec<String> {
             if clean.is_empty() {
                 return None;
             }
-            Some(format!("**{}** — {}", title, clean))
+            Some(format!("**{}**: {}", title, clean))
         })
         .collect()
 }

@@ -2759,7 +2759,6 @@ fn stop_failed_load(
         state.push_state_to_chrome(chrome);
         return None;
     }
-    clear_transient_chrome(state, chrome);
     let active = state
         .tab_manager
         .active_tab()
@@ -2804,7 +2803,6 @@ fn drop_failed_load(
     clear_https_upgrades(state, &tab_id);
     state.tab_manager.set_tab_loading(&tab_id, false);
     if state.tab_manager.active_tab_id.as_deref() == Some(tab_id.as_str()) {
-        clear_transient_chrome(state, chrome);
         let active = state
             .tab_manager
             .active_tab()
@@ -5263,6 +5261,11 @@ fn handle_save_settings(
         "show_bookmarks_bar" => {
             if let Some(v) = value.as_bool() {
                 state.settings.appearance.show_bookmarks_bar = v;
+            }
+        }
+        "reduce_motion" => {
+            if let Some(v) = value.as_bool() {
+                state.settings.appearance.reduce_motion = v;
             }
         }
         "font_family" => {

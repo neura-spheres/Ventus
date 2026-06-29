@@ -1248,7 +1248,7 @@ fn handle_ai_message(
             "ai max steps"
         );
         let _ = proxy_agent.send_event(AppEvent::AiError {
-            message: "Agent reached maximum steps — please try a simpler request.".into(),
+            message: "Agent reached maximum steps. Please try a simpler request.".into(),
         });
     });
     Ok(())

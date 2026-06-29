@@ -561,6 +561,8 @@ fn build_content_webview_once(
     let _ = wv.set_background_color(CONTENT_BG);
     let _ = wv.zoom(global_zoom);
     #[cfg(windows)]
+    disable_default_content_context_menu(&wv);
+    #[cfg(windows)]
     attach_accelerators(&wv, proxy.clone());
     #[cfg(windows)]
     attach_fullscreen_handler(&wv, proxy.clone());
@@ -581,6 +583,30 @@ fn build_content_webview_once(
 
     tracing::info!(target: "ventus::nav", tab = %tab_id, url = %url, load_now, incognito, "content WebView built");
     Ok(wv)
+}
+
+#[cfg(windows)]
+fn disable_default_content_context_menu(wv: &WebView) {
+    use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2;
+
+    let controller = wv.controller();
+    let core: ICoreWebView2 = match unsafe { controller.CoreWebView2() } {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!(target: "ventus::context", error = %e, "could not read WebView2 core");
+            return;
+        }
+    };
+    let settings = match unsafe { core.Settings() } {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::warn!(target: "ventus::context", error = %e, "could not read WebView2 settings");
+            return;
+        }
+    };
+    if let Err(e) = unsafe { settings.SetAreDefaultContextMenusEnabled(false) } {
+        tracing::warn!(target: "ventus::context", error = %e, "could not disable WebView2 context menu");
+    }
 }
 
 fn wake_content_webview(wv: &WebView) {
@@ -672,7 +698,12 @@ fn trim_tab_memory(
     let now_ms = chrono::Utc::now().timestamp_millis();
     let critical = commit_mb <= CRITICAL_COMMIT_MB;
     let pressure_mb = free_mb.min(commit_mb);
-    let max_live = max_live_webviews(pressure_mb);
+    let under_pressure = critical || free_mb <= DISCARD_FREE_MB;
+    let max_live = if under_pressure {
+        max_live_webviews(pressure_mb)
+    } else {
+        MAX_PRESERVED_WEBVIEWS
+    };
     let active = state.tab_manager.active_tab_id.clone().unwrap_or_default();
     let mut changed = false;
 
@@ -726,7 +757,7 @@ fn trim_tab_memory(
     } else {
         sleep_threshold_ms(free_mb) as i64
     };
-    let mut to_discard: Vec<String> = if allow_idle {
+    let mut to_discard: Vec<String> = if allow_idle && under_pressure {
         state
             .tab_manager
             .tabs

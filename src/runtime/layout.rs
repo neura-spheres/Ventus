@@ -1025,7 +1025,8 @@ fn sync_content_views(
     if !active_is_neura_page {
         if let Some(wv) = content_views.get(active_id) {
             set_content_bounds(wv, layout.content);
-            wake_content_webview(wv);
+            set_content_memory_normal(wv);
+            let _ = wv.set_visible(true);
             let _ = wv.evaluate_script(&format!(
                 "window.__neuraContentFullscreen={};{}",
                 state.content_fullscreen, left_edge_js
@@ -1540,6 +1541,9 @@ fn nudge_active_content(
     state: &AppState,
     layout: AppLayout,
 ) {
+    if chrome_needs_top(state) {
+        return;
+    }
     let Some(id) = state.tab_manager.active_tab_id.as_deref() else {
         return;
     };

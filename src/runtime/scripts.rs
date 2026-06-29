@@ -608,7 +608,9 @@ fn content_initialization_script(
     }
   }, {passive: true, capture: true});
 
+  let __neuraSiteCtx = false;
   document.addEventListener('mousedown', function(e) {
+    if (e.button !== 2) __neuraSiteCtx = false;
     if (__resizeEdge && e.button === 0) {
       try { post({cmd: 'begin_resize', edge: __resizeEdge}); } catch(_) {}
       // Don't preventDefault — let the page also handle it normally
@@ -619,19 +621,21 @@ fn content_initialization_script(
     try { post({cmd: 'content_pointer_down'}); } catch(_) {}
   }, {capture: true});
 
-  // Context menu: intercept right-clicks and relay target info to Rust so the
-  // chrome overlay can render a custom browser context menu.
-  document.addEventListener('contextmenu', function(e) {
-    e.preventDefault();
-    e.stopPropagation();
+  window.addEventListener('blur', function() { __neuraSiteCtx = false; }, true);
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') __neuraSiteCtx = false;
+  }, true);
+  const __neuraPostContextMenu = function(e) {
     const target = e.target;
-    const linkEl = target.closest ? target.closest('a[href]') : null;
+    const el = target && target.nodeType === 1 ? target : (target && target.parentElement ? target.parentElement : null);
+    const linkEl = el && el.closest ? el.closest('a[href]') : null;
     const linkUrl = linkEl ? (linkEl.href || '') : '';
     let imageSrc = '';
-    if (target.tagName === 'IMG') {
-      imageSrc = target.src || target.currentSrc || '';
-    } else if (target.tagName === 'VIDEO' || target.tagName === 'AUDIO') {
-      imageSrc = target.src || target.currentSrc || '';
+    const tag = el && el.tagName;
+    if (tag === 'IMG') {
+      imageSrc = el.src || el.currentSrc || '';
+    } else if (tag === 'VIDEO' || tag === 'AUDIO') {
+      imageSrc = el.src || el.currentSrc || '';
     }
     const sel = window.getSelection ? window.getSelection().toString().trim() : '';
     post({
@@ -644,6 +648,23 @@ fn content_initialization_script(
       page_url: location.href,
       can_back: history.length > 1
     });
+  };
+  document.addEventListener('contextmenu', function(e) {
+    if (__neuraSiteCtx) {
+      __neuraSiteCtx = false;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      __neuraPostContextMenu(e);
+      return;
+    }
+    setTimeout(function() {
+      if (e.defaultPrevented) {
+        __neuraSiteCtx = true;
+        return;
+      }
+      __neuraSiteCtx = false;
+      __neuraPostContextMenu(e);
+    }, 0);
   }, true);
 
   // Relay native fullscreen changes (e.g. YouTube player fullscreen button)
@@ -991,4 +1012,24 @@ fn privacy_initialization_script(
 })();
 "#;
     format!("{ua_data_script}{fingerprint_script}{strict_script}")
+}
+
+#[cfg(test)]
+mod content_menu_tests {
+    use super::*;
+
+    fn script() -> String {
+        let sites = config::SitePermissionMap::new();
+        let defaults = config::SitePermissions::default();
+        content_initialization_script(1.0, "", false, "test-seed", false, false, &sites, &defaults)
+    }
+
+    #[test]
+    fn content_context_menu_allows_page_first() {
+        let script = script();
+        assert!(script.contains("if (e.defaultPrevented) {\n        __neuraSiteCtx = true;"));
+        assert!(script.contains("e.stopImmediatePropagation();\n      __neuraPostContextMenu(e);"));
+        assert!(script.contains("setTimeout(function() {"));
+        assert!(!script.contains("e.preventDefault();\n    e.stopPropagation();\n    const target = e.target;"));
+    }
 }

@@ -75,6 +75,7 @@ const EMERGENCY_DISCARD_IDLE_MS: i64 = 10_000;
 // livestream — where the keep-alive signal can briefly drop — does not get the tab suspended.
 const MEDIA_GRACE_MS: i64 = 90_000;
 const DISCARD_FREE_MB: u64 = 512;
+const MAX_PRESERVED_WEBVIEWS: usize = 32;
 const HEAL_CONTENT_EVERY: Duration = Duration::from_millis(750);
 const HEAL_SETTLE_REPEATS: u8 = 6;
 const MAX_DOWNLOAD_RESUMES: u32 = 8;
