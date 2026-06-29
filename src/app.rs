@@ -5390,8 +5390,16 @@ fn handle_save_settings(
                 let links: Vec<crate::config::QuickLink> = arr
                     .iter()
                     .filter_map(|item| {
-                        let name = item.get("name").and_then(|v| v.as_str()).unwrap_or("").trim();
-                        let url = item.get("url").and_then(|v| v.as_str()).unwrap_or("").trim();
+                        let name = item
+                            .get("name")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .trim();
+                        let url = item
+                            .get("url")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .trim();
                         if name.is_empty() || url.is_empty() {
                             return None;
                         }
