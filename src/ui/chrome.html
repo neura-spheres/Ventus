@@ -2367,113 +2367,132 @@ button,input,select,textarea{font-family:var(--font)}
 
 /* onboarding ──────────────────────────────────────────────────────────────â”€ */
 #onboarding-overlay{
-  position:fixed;inset:0;background:rgba(0,0,0,0.72);
-  -webkit-backdrop-filter:blur(20px) saturate(160%);
-  backdrop-filter:blur(20px) saturate(160%);
+  position:fixed;inset:0;background:rgba(0,0,0,0.55);
+  -webkit-backdrop-filter:blur(28px) saturate(150%);
+  backdrop-filter:blur(28px) saturate(150%);
   z-index:300;display:none;align-items:center;justify-content:center;
 }
 #onboarding-overlay.open{display:flex}
 #onboarding-modal{
   background:var(--modal-bg);border:1px solid var(--modal-border);
-  border-radius:24px;width:min(580px,calc(100vw - 32px));
-  box-shadow:0 40px 120px rgba(0,0,0,0.55),0 0 0 1px rgba(255,255,255,0.05);
+  border-radius:26px;width:min(440px,calc(100vw - 32px));
+  box-shadow:0 24px 80px rgba(0,0,0,0.45);
   position:relative;overflow:hidden;
-  animation:ventus-scale-in 0.28s cubic-bezier(0.16,1,0.3,1);
+  animation:ventus-scale-in 0.3s cubic-bezier(0.16,1,0.3,1);
 }
 [data-theme="light"] #onboarding-modal{
-  box-shadow:0 40px 100px rgba(20,30,80,0.18),0 0 0 1px rgba(0,0,0,0.07);
+  box-shadow:0 24px 70px rgba(20,30,80,0.14);
 }
-.ob-bar-track{height:2px;background:var(--modal-border);width:100%}
-.ob-bar-fill{height:2px;background:var(--accent-gradient);transition:width 0.4s cubic-bezier(0.4,0,0.2,1)}
-.ob-step-counter{
-  font-size:11px;font-weight:600;color:var(--text-dim);letter-spacing:0.07em;
-  text-transform:uppercase;text-align:right;padding:14px 44px 0;min-height:32px;
-}
-.ob-inner{padding:28px 44px 40px}
-.ob-mark{
-  width:48px;height:48px;border-radius:14px;
-  display:flex;align-items:center;justify-content:center;
-  flex-shrink:0;margin-bottom:18px;
-}
-.ob-mark-accent{background:var(--accent-gradient);box-shadow:0 8px 24px var(--accent-glow)}
+.ob-inner{padding:38px 34px 24px}
 .ob-step{display:none}
 .ob-step.active{display:block}
-@keyframes ob-slide-r{from{opacity:0;transform:translateX(28px)} to{opacity:1;transform:translateX(0)}}
-@keyframes ob-slide-l{from{opacity:0;transform:translateX(-28px)} to{opacity:1;transform:translateX(0)}}
-.ob-step.slide-r{animation:ob-slide-r 0.22s cubic-bezier(0.4,0,0.2,1)}
-.ob-step.slide-l{animation:ob-slide-l 0.22s cubic-bezier(0.4,0,0.2,1)}
-.ob-title{font-size:26px;font-weight:700;color:var(--text);letter-spacing:-0.5px;line-height:1.2;margin-bottom:8px}
-.ob-sub{font-size:13px;color:var(--text-muted);line-height:1.65;margin-bottom:22px}
-.ob-section-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-muted);margin-bottom:8px;margin-top:18px}
+@keyframes ob-slide-r{from{opacity:0;transform:translateX(20px)} to{opacity:1;transform:translateX(0)}}
+@keyframes ob-slide-l{from{opacity:0;transform:translateX(-20px)} to{opacity:1;transform:translateX(0)}}
+.ob-step.slide-r{animation:ob-slide-r 0.26s cubic-bezier(0.16,1,0.3,1)}
+.ob-step.slide-l{animation:ob-slide-l 0.26s cubic-bezier(0.16,1,0.3,1)}
+.ob-title{font-size:25px;font-weight:600;color:var(--text);letter-spacing:-0.02em;line-height:1.15;margin-bottom:9px;text-align:center}
+.ob-sub{font-size:14px;color:var(--text-muted);line-height:1.5;margin:0 auto 26px;text-align:center;max-width:340px}
+.ob-section-lbl{font-size:12px;font-weight:600;letter-spacing:-0.01em;color:var(--text-muted);margin-bottom:9px;margin-top:20px}
 .ob-section-lbl:first-child{margin-top:0}
-.ob-actions{
-  display:flex;justify-content:space-between;align-items:center;
-  margin-top:26px;padding-top:22px;border-top:1px solid var(--modal-border);
-}
+.ob-actions{display:flex;flex-direction:column-reverse;gap:4px;align-items:stretch;margin-top:28px}
 .ob-btn-primary{
-  padding:11px 26px;border-radius:12px;
+  width:100%;justify-content:center;padding:13px 20px;border-radius:14px;
   background:var(--primary-btn-bg);color:var(--primary-btn-text);border:1px solid var(--primary-btn-border);
-  font-size:13.5px;font-weight:600;cursor:pointer;letter-spacing:0.01em;
-  transition:background 0.15s,border-color 0.15s,opacity 0.15s;
-  box-shadow:none;font-family:var(--font);
-  display:flex;align-items:center;gap:8px;
+  font-size:14.5px;font-weight:600;cursor:pointer;letter-spacing:-0.01em;
+  transition:background 0.15s,opacity 0.15s;font-family:var(--font);
+  display:flex;align-items:center;
 }
-.ob-btn-primary:hover{background:var(--primary-btn-bg-hover);border-color:var(--primary-btn-border)}
-.ob-btn-primary:active{background:var(--primary-btn-bg-active)}
+.ob-btn-primary svg{display:none}
+.ob-btn-primary:hover{background:var(--primary-btn-bg-hover)}
+.ob-btn-primary:active{opacity:0.85}
 .ob-btn-danger{background:var(--danger);border-color:var(--danger);color:var(--danger-btn-text)}
-.ob-btn-danger:hover{background:color-mix(in srgb,var(--danger) 88%,white);border-color:color-mix(in srgb,var(--danger) 88%,white)}
 .ob-btn-secondary{
-  background:none;border:none;color:var(--text-muted);
-  font-size:12.5px;cursor:pointer;transition:color 0.15s;
-  font-family:var(--font);padding:8px 4px;
+  align-self:center;background:none;border:none;color:var(--text-muted);
+  font-size:13px;font-weight:500;cursor:pointer;transition:color 0.15s;
+  font-family:var(--font);padding:9px;
 }
 .ob-btn-secondary:hover{color:var(--text)}
-.ob-theme-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:4px}
-.ob-sidebar-chips{display:flex;gap:8px;flex-wrap:wrap}
+.ob-theme-row{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
+.ob-sidebar-chips{display:flex;gap:4px;padding:4px;background:var(--modal-bg-2);border:1px solid var(--modal-border);border-radius:13px}
 .ob-sidebar-chip{
-  padding:8px 16px;border-radius:20px;border:1.5px solid var(--modal-border);
-  background:var(--modal-bg-2);color:var(--text-muted);cursor:pointer;
-  font-size:12px;font-weight:500;transition:all 0.15s;font-family:var(--font);
+  flex:1;padding:8px 6px;border-radius:9px;border:none;
+  background:transparent;color:var(--text-muted);cursor:pointer;
+  font-size:12.5px;font-weight:500;transition:all 0.15s;font-family:var(--font);
 }
-.ob-sidebar-chip:hover{border-color:var(--text-dim);color:var(--text)}
-.ob-sidebar-chip.selected{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
+.ob-sidebar-chip:hover{color:var(--text)}
+.ob-sidebar-chip.selected{background:var(--modal-bg);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,0.18)}
 .ob-detect-banner{
   display:flex;align-items:center;gap:12px;
-  background:color-mix(in srgb,var(--accent) 10%,var(--modal-bg-2));
-  border:1px solid color-mix(in srgb,var(--accent) 25%,var(--border));
-  border-radius:12px;padding:12px 16px;margin-bottom:10px;
+  background:var(--modal-bg-2);
+  border:1px solid var(--modal-border);
+  border-radius:14px;padding:12px 14px;margin-bottom:10px;
 }
-.ob-detect-flag{font-size:26px;line-height:1;flex-shrink:0}
-.ob-detect-body{flex:1;min-width:0}
-.ob-detect-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--accent);margin-bottom:2px}
+.ob-detect-flag{font-size:24px;line-height:1;flex-shrink:0}
+.ob-detect-body{flex:1;min-width:0;text-align:left}
+.ob-detect-label{font-size:10.5px;font-weight:600;letter-spacing:-0.01em;color:var(--accent);margin-bottom:2px}
 .ob-detect-name{font-size:13.5px;font-weight:600;color:var(--text)}
-.ob-engine-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:4px}
+.ob-engine-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .ob-engine-btn{
-  padding:12px 14px;border-radius:12px;border:1.5px solid var(--modal-border);
+  padding:13px 14px;border-radius:13px;border:1px solid var(--modal-border);
   background:var(--modal-bg-2);color:var(--text-muted);cursor:pointer;
   transition:all 0.15s;text-align:left;font-size:12.5px;
   display:flex;align-items:center;gap:9px;font-family:var(--font);font-weight:500;
 }
 .ob-engine-btn:hover{border-color:var(--text-dim);color:var(--text)}
-.ob-engine-btn.selected{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
-.ob-api-row{display:flex;flex-direction:column;gap:5px;margin-bottom:11px}
-.ob-api-row label{font-size:10.5px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em}
+.ob-engine-btn.selected{border-color:var(--accent);color:var(--text);background:var(--accent-dim)}
+.ob-api-row{display:flex;flex-direction:column;gap:6px;margin-bottom:12px;text-align:left}
+.ob-api-row label{font-size:11.5px;font-weight:600;color:var(--text-muted);letter-spacing:-0.01em}
 .ob-api-input{
   background:var(--modal-bg-2);border:1px solid var(--modal-border);
-  color:var(--text);border-radius:10px;padding:10px 12px;font-size:12px;
+  color:var(--text);border-radius:11px;padding:11px 13px;font-size:12.5px;
   outline:none;width:100%;box-sizing:border-box;
   transition:border-color 0.15s,box-shadow 0.15s;font-family:monospace;
 }
 .ob-api-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-dim)}
 .ob-api-input::placeholder{color:var(--text-dim)}
 .ob-done-ring{
-  width:76px;height:76px;border-radius:50%;
+  width:72px;height:72px;border-radius:50%;
   background:linear-gradient(135deg,#34d399,#059669);
   display:flex;align-items:center;justify-content:center;
-  margin:8px auto 22px;box-shadow:0 12px 32px rgba(52,211,153,0.35);
+  margin:6px auto 22px;box-shadow:0 10px 28px rgba(52,211,153,0.3);
   animation:ob-pop 0.4s cubic-bezier(0.34,1.56,0.64,1) 0.1s both;
 }
 @keyframes ob-pop{from{transform:scale(0.6);opacity:0} to{transform:scale(1);opacity:1}}
+.ob-dots{display:flex;justify-content:center;gap:7px;padding:16px 0 6px}
+.ob-dot{width:6px;height:6px;border-radius:50%;background:var(--modal-border);transition:all 0.25s cubic-bezier(0.16,1,0.3,1)}
+.ob-dot.active{background:var(--accent);width:18px;border-radius:3px}
+.ob-logo{width:64px;height:64px;border-radius:18px;display:block;margin:0 auto 22px;object-fit:contain}
+.ob-region-search{
+  width:100%;box-sizing:border-box;background:var(--modal-bg-2);
+  border:1px solid var(--modal-border);color:var(--text);
+  border-radius:11px;padding:11px 13px;font-size:13px;outline:none;
+  font-family:var(--font);transition:border-color 0.15s,box-shadow 0.15s;
+}
+.ob-region-search:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-dim)}
+.ob-region-search::placeholder{color:var(--text-dim)}
+.ob-region-list{
+  margin-top:8px;max-height:208px;overflow-y:auto;
+  border:1px solid var(--modal-border);border-radius:12px;
+}
+.ob-region-row{
+  display:flex;align-items:center;gap:10px;padding:10px 13px;cursor:pointer;
+  font-size:13px;color:var(--text);border-bottom:1px solid var(--modal-border);
+  transition:background 0.12s;text-align:left;
+}
+.ob-region-row:last-child{border-bottom:none}
+.ob-region-row:hover{background:var(--modal-bg-2)}
+.ob-region-row.selected{color:var(--accent);font-weight:600;background:var(--accent-dim)}
+.ob-region-flag{font-size:18px;line-height:1;flex-shrink:0}
+.ob-keys{display:flex;flex-direction:column;border:1px solid var(--modal-border);border-radius:14px;overflow:hidden}
+.ob-key-row{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border-bottom:1px solid var(--modal-border)}
+.ob-key-row:last-child{border-bottom:none}
+.ob-key-label{font-size:13px;color:var(--text);text-align:left}
+.ob-combo{display:flex;gap:4px}
+.ob-combo kbd{
+  font-family:var(--font);font-size:11px;font-weight:600;color:var(--text-muted);
+  background:var(--modal-bg-2);border:1px solid var(--modal-border);border-radius:6px;
+  padding:3px 7px;min-width:13px;text-align:center;line-height:1.4;
+}
 
 /* toast */
 #toast-container{
@@ -3672,7 +3691,30 @@ button,input,select,textarea{font-family:var(--font)}
 
 .dl-panel-item[data-dl-file-path]{cursor:pointer}
 
-/* ── About section ──────────────────────────────────────────────────────────â”€ */
+/* Developer section */
+.dev-warn{
+  display:flex;align-items:flex-start;gap:9px;
+  margin-top:10px;padding:11px 14px;
+  font-size:12px;line-height:1.5;color:var(--text-muted);
+  background:var(--modal-bg-2);border:1px solid var(--modal-border);border-radius:11px;
+}
+.dev-warn svg{flex-shrink:0;margin-top:1px;color:var(--accent)}
+.dev-group-title{
+  font-size:12px;font-weight:600;color:var(--text-muted);
+  text-transform:uppercase;letter-spacing:0.04em;
+  margin:22px 0 10px;
+}
+.dev-actions-row{display:flex;flex-wrap:wrap;gap:8px}
+.dev-action-btn{
+  padding:9px 14px;font-size:12px;font-weight:600;font-family:var(--font);
+  color:var(--text);background:var(--soft-btn-bg);
+  border:1px solid var(--modal-border);border-radius:9px;cursor:pointer;
+}
+.dev-action-btn:hover{background:var(--modal-bg-2)}
+.dev-action-danger{color:#ef4444;border-color:rgba(239,68,68,0.3)}
+.dev-action-danger:hover{background:rgba(239,68,68,0.1)}
+
+/* About section */
 .about-identity-card{
   display:flex;flex-direction:row;align-items:center;gap:14px;
   padding:14px 18px;
@@ -4794,6 +4836,7 @@ svg{display:block;flex-shrink:0}
       <div class="settings-nav-item" data-section="report" onclick="switchSettings('report')">Report a problem</div>
       <div class="settings-nav-item" data-section="keyboard" onclick="switchSettings('keyboard')">Keyboard</div>
       <div class="settings-nav-item" data-section="about" onclick="switchSettings('about')">About</div>
+      <div class="settings-nav-item" id="nav-developer" data-section="developer" onclick="switchSettings('developer')" style="display:none">Developer</div>
     </nav>
     <div class="settings-content" style="position:relative">
       <button class="settings-close" onclick="closeSettings()">
@@ -5464,6 +5507,59 @@ svg{display:block;flex-shrink:0}
           <div class="toggle-switch" id="toggle-beta-channel" onclick="toggleBetaChannel()"></div>
         </div>
 
+        <div class="settings-toggle" id="dev-activate-row">
+          <div class="settings-toggle-info">
+            <div class="toggle-title">Developer mode</div>
+            <div class="toggle-desc" id="dev-activate-desc">Hidden tools for building and debugging Ventus. For developers only.</div>
+          </div>
+          <div class="toggle-switch" id="toggle-dev-mode" onclick="toggleDevMode()"></div>
+        </div>
+
+      </div>
+
+      <div class="settings-section" id="section-developer">
+        <h2>Developer</h2>
+        <p class="subtitle">Tools to help build and debug Ventus. Off by default for everyone else.</p>
+
+        <div class="dev-warn">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          These options can change how Ventus behaves. If something acts up, turn developer mode off.
+        </div>
+
+        <h3 class="dev-group-title">Experiments</h3>
+        <div class="settings-toggle">
+          <div class="settings-toggle-info">
+            <div class="toggle-title">Allow screenshots in incognito</div>
+            <div class="toggle-desc">Incognito windows are normally hidden from screen capture. Turn this on to grab screenshots.</div>
+          </div>
+          <div class="toggle-switch" id="toggle-dev-allow-incognito-screenshot" onclick="toggleSetting('dev_allow_incognito_screenshot')"></div>
+        </div>
+        <div class="settings-toggle">
+          <div class="settings-toggle-info">
+            <div class="toggle-title">Verbose logging</div>
+            <div class="toggle-desc">Write full trace logs to ventus.log. Needs a restart to take effect.</div>
+          </div>
+          <div class="toggle-switch" id="toggle-dev-verbose-logging" onclick="toggleDevVerboseLogging()"></div>
+        </div>
+
+        <h3 class="dev-group-title">Onboarding</h3>
+        <div class="dev-actions-row">
+          <button class="dev-action-btn" onclick="window.__neura.showOnboarding()">Open onboarding now</button>
+          <button class="dev-action-btn" onclick="send('DevResetOnboarding')">Show on next launch</button>
+        </div>
+
+        <h3 class="dev-group-title">Diagnostics</h3>
+        <div class="dev-actions-row">
+          <button class="dev-action-btn" onclick="send('OpenDevtools')">Open DevTools</button>
+          <button class="dev-action-btn" onclick="send('DevOpenDataFolder')">Open data folder</button>
+          <button class="dev-action-btn" onclick="send('DevCopyDiagnostics')">Copy diagnostics</button>
+          <button class="dev-action-btn" onclick="send('DevTestReport')">Send test report</button>
+        </div>
+
+        <h3 class="dev-group-title">Danger zone</h3>
+        <div class="dev-actions-row">
+          <button class="dev-action-btn dev-action-danger" onclick="confirmDevCrash()">Force a test crash</button>
+        </div>
       </div>
     </div>
   </div>
@@ -5472,19 +5568,15 @@ svg{display:block;flex-shrink:0}
 <!-- ONBOARDING -->
 <div id="onboarding-overlay">
   <div id="onboarding-modal">
-    <div class="ob-bar-track"><div class="ob-bar-fill" id="ob-bar-fill" style="width:0%"></div></div>
-    <div id="ob-step-counter" class="ob-step-counter"></div>
     <div class="ob-inner">
 
       <div class="ob-step active" id="ob-step-0">
-        <div class="ob-mark ob-mark-accent">
-          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/><path d="M11 8v6m-3-3h6"/></svg>
-        </div>
+        <img class="ob-logo" src="__LOGO_URL__" alt="">
         <h2 class="ob-title">Welcome to Ventus</h2>
         <p class="ob-sub">A fast, AI-powered browser built for people who like getting things done. Takes about 2 minutes to set up.</p>
         <div class="ob-actions">
-          <button class="ob-btn-secondary" onclick="finishOnboarding()">Skip</button>
-          <button class="ob-btn-primary" onclick="obNext()">Get started <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></button>
+          <button class="ob-btn-secondary" onclick="finishOnboarding()">Skip for now</button>
+          <button class="ob-btn-primary" onclick="obNext()">Get Started</button>
         </div>
       </div>
 
@@ -5514,27 +5606,28 @@ svg{display:block;flex-shrink:0}
         </div>
         <div class="ob-actions">
           <button class="ob-btn-secondary" onclick="obPrev()">Back</button>
-          <button class="ob-btn-primary" onclick="obNext()">Next <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></button>
+          <button class="ob-btn-primary" onclick="obNext()">Continue</button>
         </div>
       </div>
 
       <div class="ob-step" id="ob-step-2">
         <h2 class="ob-title">Your Region</h2>
-        <p class="ob-sub">Adjusts unit and currency suggestions in Spotlight to your local standards.</p>
+        <p class="ob-sub">Sets unit and currency suggestions in Spotlight to your local standards.</p>
         <div id="ob-detect-banner" class="ob-detect-banner" style="display:none">
           <div class="ob-detect-flag" id="ob-detect-flag"></div>
           <div class="ob-detect-body">
-            <div class="ob-detect-label">Auto-detected</div>
+            <div class="ob-detect-label" id="ob-detect-label">Auto-detected</div>
             <div class="ob-detect-name" id="ob-detect-name"></div>
           </div>
-          <button class="ob-btn-secondary" style="margin:0;padding:4px 10px;font-size:11px" onclick="obClearDetect()">Change</button>
+          <button class="ob-btn-secondary" style="margin:0;padding:6px 12px;font-size:12px" onclick="obClearDetect()">Change</button>
         </div>
-        <select id="ob-region-select" class="settings-select" style="width:100%;margin-top:6px" onchange="obSelectRegion(this.value)">
-          <option value="">Not set</option>
-        </select>
+        <div id="ob-region-picker" style="display:none">
+          <input id="ob-region-search" class="ob-region-search" placeholder="Search your country" oninput="obFilterRegions(this.value)" autocomplete="off">
+          <div class="ob-region-list" id="ob-region-list"></div>
+        </div>
         <div class="ob-actions">
+          <button class="ob-btn-primary" onclick="obNext()">Continue</button>
           <button class="ob-btn-secondary" onclick="obPrev()">Back</button>
-          <button class="ob-btn-primary" onclick="obNext()">Next <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></button>
         </div>
       </div>
 
@@ -5561,7 +5654,24 @@ svg{display:block;flex-shrink:0}
         </div>
         <div class="ob-actions">
           <button class="ob-btn-secondary" onclick="obPrev()">Back</button>
-          <button class="ob-btn-primary" onclick="obNext()">Next <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></button>
+          <button class="ob-btn-primary" onclick="obNext()">Continue</button>
+        </div>
+      </div>
+
+      <div class="ob-step" id="ob-step-shortcuts">
+        <h2 class="ob-title">Handy shortcuts</h2>
+        <p class="ob-sub">A few worth knowing. The full list lives in Settings.</p>
+        <div class="ob-keys">
+          <div class="ob-key-row"><span class="ob-key-label">New tab</span><span class="ob-combo"><kbd>Ctrl</kbd><kbd>T</kbd></span></div>
+          <div class="ob-key-row"><span class="ob-key-label">Close tab</span><span class="ob-combo"><kbd>Ctrl</kbd><kbd>W</kbd></span></div>
+          <div class="ob-key-row"><span class="ob-key-label">Reopen closed tab</span><span class="ob-combo"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>T</kbd></span></div>
+          <div class="ob-key-row"><span class="ob-key-label">Search your tabs</span><span class="ob-combo"><kbd>Ctrl</kbd><kbd>K</kbd></span></div>
+          <div class="ob-key-row"><span class="ob-key-label">Focus address bar</span><span class="ob-combo"><kbd>Ctrl</kbd><kbd>L</kbd></span></div>
+          <div class="ob-key-row"><span class="ob-key-label">AI sidebar</span><span class="ob-combo"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>A</kbd></span></div>
+        </div>
+        <div class="ob-actions">
+          <button class="ob-btn-primary" onclick="obNext()">Continue</button>
+          <button class="ob-btn-secondary" onclick="obPrev()">Back</button>
         </div>
       </div>
 
@@ -5582,7 +5692,7 @@ svg{display:block;flex-shrink:0}
         </div>
         <div class="ob-actions">
           <button class="ob-btn-secondary" onclick="obPrev()">Back</button>
-          <button class="ob-btn-primary" onclick="obSaveAndFinish()">Finish setup <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></button>
+          <button class="ob-btn-primary" onclick="obSaveAndFinish()">Finish Setup</button>
         </div>
       </div>
 
@@ -5592,11 +5702,12 @@ svg{display:block;flex-shrink:0}
         </div>
         <h2 class="ob-title" style="text-align:center">You're all set</h2>
         <p class="ob-sub" style="text-align:center">Ventus is ready. Use Ctrl+T for new tabs, Ctrl+Shift+A for AI, and Ctrl+K to search your tabs.</p>
-        <div class="ob-actions" style="justify-content:center;border-top:none;padding-top:0">
-          <button class="ob-btn-primary" onclick="finishOnboarding()">Start browsing <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></button>
+        <div class="ob-actions">
+          <button class="ob-btn-primary" onclick="finishOnboarding()">Start Browsing</button>
         </div>
       </div>
 
+      <div class="ob-dots" id="ob-dots"></div>
     </div>
   </div>
 </div>
@@ -5775,7 +5886,7 @@ let bookmarkDropPending = false;
 let bookmarkDropFallbackTimer = 0;
 let bookmarkRenderPending = false;
 let obStep = 0;
-const OB_STEPS = 6;
+const OB_STEPS = 7;
 let obTheme = 'dark';
 let obEngine = 'google';
 let obSidebarMode = 'auto_hide';
@@ -8723,6 +8834,7 @@ function populateSettingsPanel() {
   setToggleEl('toggle-strict-permissions', priv.strict_permissions !== false);
   setToggleEl('toggle-auto-crash-report', priv.auto_crash_report !== false);
   setToggleEl('toggle-beta-channel', !!s.beta_channel);
+  applyDevMode();
   renderDefaultPermissions();
   setToggleEl('toggle-secure-dns-enabled', !!priv.secure_dns_enabled);
   setSelectValue('set-secure-dns-provider', priv.secure_dns_provider || 'cloudflare');
@@ -12713,6 +12825,11 @@ function toggleSetting(key) {
     state.settings.beta_channel = val;
     if (val) checkForUpdate();
   }
+  if (key.startsWith('dev_')) {
+    if (!state.settings) state.settings = {};
+    if (!state.settings.dev) state.settings.dev = {};
+    state.settings.dev[key.replace('dev_', '')] = val;
+  }
 }
 function setTheme(t) {
   obTheme = t;
@@ -15628,89 +15745,54 @@ function handleDelegatedListClick(e) {
 // ============================================================
 // ONBOARDING
 // ============================================================
-function obDetectCountry() {
-  try {
-    const parts = (navigator.language || '').split('-');
-    if (parts.length >= 2) {
-      const code = parts[parts.length - 1].toUpperCase();
-      if (_COUNTRY_DATA[code]) return code;
-    }
-  } catch(e) {}
-  try {
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    const TZ_MAP = {
-      'Asia/Jakarta':'ID','Asia/Makassar':'ID','Asia/Jayapura':'ID',
-      'America/New_York':'US','America/Chicago':'US','America/Denver':'US','America/Los_Angeles':'US',
-      'America/Phoenix':'US','America/Anchorage':'US','Pacific/Honolulu':'US',
-      'Europe/London':'GB','Europe/Paris':'FR','Europe/Berlin':'DE','Europe/Rome':'IT',
-      'Europe/Madrid':'ES','Europe/Amsterdam':'NL','Europe/Brussels':'BE','Europe/Lisbon':'PT',
-      'Europe/Warsaw':'PL','Europe/Vienna':'AT','Europe/Stockholm':'SE','Europe/Oslo':'NO',
-      'Europe/Copenhagen':'DK','Europe/Helsinki':'FI','Europe/Zurich':'CH','Europe/Prague':'CZ',
-      'Europe/Budapest':'HU','Europe/Bucharest':'RO','Europe/Sofia':'BG','Europe/Athens':'GR',
-      'Europe/Kiev':'UA','Europe/Moscow':'RU','Europe/Istanbul':'TR',
-      'Asia/Tokyo':'JP','Asia/Seoul':'KR','Asia/Shanghai':'CN','Asia/Hong_Kong':'HK',
-      'Asia/Singapore':'SG','Asia/Bangkok':'TH','Asia/Ho_Chi_Minh':'VN','Asia/Manila':'PH',
-      'Asia/Kuala_Lumpur':'MY','Asia/Kolkata':'IN','Asia/Karachi':'PK','Asia/Dhaka':'BD',
-      'Asia/Colombo':'LK','Asia/Riyadh':'SA','Asia/Dubai':'AE','Asia/Tehran':'IR',
-      'Asia/Baghdad':'IQ','Asia/Beirut':'LB','Asia/Amman':'JO','Asia/Kuwait':'KW',
-      'Africa/Cairo':'EG','Africa/Lagos':'NG','Africa/Nairobi':'KE','Africa/Johannesburg':'ZA',
-      'Africa/Accra':'GH','Africa/Casablanca':'MA','Africa/Tunis':'TN','Africa/Addis_Ababa':'ET',
-      'America/Sao_Paulo':'BR','America/Argentina/Buenos_Aires':'AR','America/Bogota':'CO',
-      'America/Lima':'PE','America/Santiago':'CL','America/Mexico_City':'MX',
-      'America/Caracas':'VE','America/Montevideo':'UY',
-      'America/Toronto':'CA','America/Vancouver':'CA',
-      'Australia/Sydney':'AU','Australia/Melbourne':'AU','Australia/Brisbane':'AU',
-      'Australia/Perth':'AU','Pacific/Auckland':'NZ',
-    };
-    if (TZ_MAP[tz]) return TZ_MAP[tz];
-  } catch(e) {}
-  return null;
-}
-function obPopulateRegionSelect(current) {
-  const sel = document.getElementById('ob-region-select');
-  if (!sel) return;
+function obPopulateRegionList() {
+  const list = document.getElementById('ob-region-list');
+  if (!list) return;
   const sorted = Object.entries(_COUNTRY_DATA).sort((a,b) => a[1].name.localeCompare(b[1].name));
-  sel.innerHTML = '<option value="">Not set</option>' +
-    sorted.map(([code, c]) =>
-      `<option value="${escAttr(code)}"${code === current ? ' selected' : ''}>${countryFlag(code)} ${escHtml(c.name)}</option>`
-    ).join('');
+  list.innerHTML = sorted.map(([code, c]) =>
+    `<div class="ob-region-row${code === obRegion ? ' selected' : ''}" data-name="${escAttr(c.name.toLowerCase())}" onclick="obPickRegion('${escAttr(code)}')">
+      <span class="ob-region-flag">${countryFlag(code)}</span><span>${escHtml(c.name)}</span>
+    </div>`).join('');
 }
-function obShowDetectBanner(code) {
+function obFilterRegions(q) {
+  const query = (q || '').trim().toLowerCase();
+  document.querySelectorAll('#ob-region-list .ob-region-row').forEach(row => {
+    row.style.display = !query || (row.dataset.name || '').includes(query) ? 'flex' : 'none';
+  });
+}
+function obShowRegionCard(code, label) {
   const c = _COUNTRY_DATA[code];
   if (!c) return;
+  obRegion = code;
   const banner = document.getElementById('ob-detect-banner');
+  const picker = document.getElementById('ob-region-picker');
   const flagEl = document.getElementById('ob-detect-flag');
   const nameEl = document.getElementById('ob-detect-name');
-  const sel    = document.getElementById('ob-region-select');
-  if (banner) banner.style.display = 'flex';
+  const labelEl = document.getElementById('ob-detect-label');
   if (flagEl) flagEl.textContent = countryFlag(code);
   if (nameEl) nameEl.textContent = c.name;
-  if (sel)    sel.style.display = 'none';
-  obRegion = code;
+  if (labelEl) labelEl.textContent = label;
+  if (banner) banner.style.display = 'flex';
+  if (picker) picker.style.display = 'none';
 }
-function obClearDetect() {
+function obShowPicker() {
   const banner = document.getElementById('ob-detect-banner');
-  const sel    = document.getElementById('ob-region-select');
+  const picker = document.getElementById('ob-region-picker');
+  const search = document.getElementById('ob-region-search');
   if (banner) banner.style.display = 'none';
-  if (sel)    sel.style.display = '';
-  obPopulateRegionSelect('');
-  obRegion = '';
+  if (picker) picker.style.display = '';
+  obPopulateRegionList();
+  if (search) { search.value = ''; obFilterRegions(''); }
+  setTimeout(() => { const s = document.getElementById('ob-region-search'); if (s) s.focus(); }, 60);
 }
-function obSelectRegion(code) { obRegion = code; }
+function obPickRegion(code) { obShowRegionCard(code, 'Selected'); }
+function obClearDetect() { obShowPicker(); }
 function openOnboarding() {
   document.getElementById('onboarding-overlay').classList.add('open');
   obStep = 0;
   obDirection = 1;
-  const detected = obDetectCountry();
-  obPopulateRegionSelect(detected || '');
-  if (detected) {
-    obShowDetectBanner(detected);
-  } else {
-    const banner = document.getElementById('ob-detect-banner');
-    const sel    = document.getElementById('ob-region-select');
-    if (banner) banner.style.display = 'none';
-    if (sel)    sel.style.display = '';
-  }
+  obRegion = '';
+  obShowPicker();
   renderObStep();
 }
 function finishOnboarding() {
@@ -15738,11 +15820,23 @@ function renderObStep() {
   if (fill)    fill.style.width = pct + '%';
   if (counter) counter.textContent = (obStep > 0 && obStep < OB_STEPS - 1)
     ? `Step ${obStep} of ${totalContent}` : '';
+  renderObDots();
   const cls = obDirection >= 0 ? 'slide-r' : 'slide-l';
   document.querySelectorAll('.ob-step').forEach((el, i) => {
     el.classList.remove('active', 'slide-r', 'slide-l');
     if (i === obStep) el.classList.add('active', cls);
   });
+}
+function renderObDots() {
+  const wrap = document.getElementById('ob-dots');
+  if (!wrap) return;
+  if (obStep >= OB_STEPS - 1) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'flex';
+  let html = '';
+  for (let i = 0; i < OB_STEPS - 1; i++) {
+    html += `<div class="ob-dot${i === obStep ? ' active' : ''}"></div>`;
+  }
+  wrap.innerHTML = html;
 }
 function obSelectTheme(t) {
   obTheme = t;
@@ -16053,6 +16147,121 @@ function showBetaConfirm(onConfirm) {
   ov.querySelector('#beta-join-btn').onclick = () => { close(); onConfirm(); };
   ov.querySelector('#beta-cancel-btn').onclick = close;
   ov.onclick = (e) => { if (e.target === ov) close(); };
+}
+
+function devConfirm(opts, onConfirm) {
+  if (document.getElementById('dev-confirm-overlay')) return;
+  const ov = document.createElement('div');
+  ov.id = 'dev-confirm-overlay';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45)';
+  const okColor = opts.danger
+    ? 'color:#fff;background:#ef4444;border:1px solid #ef4444'
+    : 'color:var(--primary-btn-text);background:var(--primary-btn-bg);border:1px solid var(--primary-btn-border)';
+  ov.innerHTML = `<div style="width:360px;max-width:90vw;background:var(--modal-bg);border:1px solid var(--modal-border);border-radius:14px;padding:22px;box-shadow:0 24px 70px rgba(0,0,0,.45)">
+    <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:7px">${escHtml(opts.title)}</div>
+    <div style="font-size:13px;color:var(--text-muted);line-height:1.5;margin-bottom:20px">${escHtml(opts.body)}</div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button id="dev-confirm-cancel" style="padding:9px 15px;font-size:13px;font-weight:600;color:var(--text);background:var(--soft-btn-bg);border:1px solid var(--modal-border);border-radius:9px;cursor:pointer;font-family:var(--font)">${escHtml(opts.cancel || 'Cancel')}</button>
+      <button id="dev-confirm-ok" style="padding:9px 15px;font-size:13px;font-weight:700;${okColor};border-radius:9px;cursor:pointer;font-family:var(--font)">${escHtml(opts.ok || 'Confirm')}</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+  setChromeOverlay('devconfirm', {x:0, y:0, width:window.innerWidth, height:window.innerHeight});
+  const close = () => { ov.remove(); clearChromeOverlay('devconfirm'); };
+  ov.querySelector('#dev-confirm-ok').onclick = () => { close(); onConfirm(); };
+  ov.querySelector('#dev-confirm-cancel').onclick = close;
+  ov.onclick = (e) => { if (e.target === ov) close(); };
+}
+
+function devSet(key, on) {
+  if (!state.settings) state.settings = {};
+  if (!state.settings.dev) state.settings.dev = {};
+  state.settings.dev[key] = on;
+}
+
+function toggleDevMode() {
+  const on = !!(state.settings && state.settings.dev && state.settings.dev.enabled);
+  if (on) {
+    devConfirm({
+      title: 'Turn off developer mode?',
+      body: 'This hides the developer tools and switches every experiment back to normal.',
+      ok: 'Turn off',
+    }, () => {
+      devSet('enabled', false);
+      devSet('allow_incognito_screenshot', false);
+      devSet('verbose_logging', false);
+      send('SaveSettings', {key: 'dev_enabled', value: false});
+      applyDevMode();
+      switchSettings('about');
+    });
+    return;
+  }
+  devConfirm({
+    title: 'Turn on developer mode?',
+    body: 'Adds a hidden Developer section with tools for building and debugging Ventus. Leave it off if you are not developing Ventus.',
+    ok: 'Turn on',
+  }, () => {
+    devSet('enabled', true);
+    send('SaveSettings', {key: 'dev_enabled', value: true});
+    applyDevMode();
+    switchSettings('developer');
+  });
+}
+
+function applyDevMode() {
+  const on = !!(state.settings && state.settings.dev && state.settings.dev.enabled);
+  const nav = document.getElementById('nav-developer');
+  if (nav) nav.style.display = on ? '' : 'none';
+  setToggleEl('toggle-dev-mode', on);
+  const desc = document.getElementById('dev-activate-desc');
+  if (desc) desc.textContent = on
+    ? 'On. Developer tools are in the Developer section.'
+    : 'Hidden tools for building and debugging Ventus. For developers only.';
+  if (!on) {
+    const sec = document.getElementById('section-developer');
+    if (sec && sec.classList.contains('active')) switchSettings('about');
+  }
+  const dev = (state.settings && state.settings.dev) || {};
+  setToggleEl('toggle-dev-allow-incognito-screenshot', !!dev.allow_incognito_screenshot);
+  setToggleEl('toggle-dev-verbose-logging', !!dev.verbose_logging);
+}
+
+function toggleDevVerboseLogging() {
+  const el = document.getElementById('toggle-dev-verbose-logging');
+  const on = el && !el.classList.contains('on');
+  toggleSetting('dev_verbose_logging');
+  devSet('verbose_logging', on);
+  showDevRestartModal('Verbose logging needs a restart to start or stop. Restart now, or keep browsing and apply later.');
+}
+
+function showDevRestartModal(msg) {
+  if (document.getElementById('dev-restart-overlay')) return;
+  const ov = document.createElement('div');
+  ov.id = 'dev-restart-overlay';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45)';
+  ov.innerHTML = `<div style="width:360px;max-width:90vw;background:var(--modal-bg);border:1px solid var(--modal-border);border-radius:14px;padding:22px;box-shadow:0 24px 70px rgba(0,0,0,.45)">
+    <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:7px">Restart to apply</div>
+    <div style="font-size:13px;color:var(--text-muted);line-height:1.5;margin-bottom:20px">${escHtml(msg)}</div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button id="dev-restart-later" style="padding:9px 15px;font-size:13px;font-weight:600;color:var(--text);background:var(--soft-btn-bg);border:1px solid var(--modal-border);border-radius:9px;cursor:pointer;font-family:var(--font)">Later</button>
+      <button id="dev-restart-now" style="padding:9px 15px;font-size:13px;font-weight:700;color:var(--primary-btn-text);background:var(--primary-btn-bg);border:1px solid var(--primary-btn-border);border-radius:9px;cursor:pointer;font-family:var(--font)">Restart now</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+  setChromeOverlay('devrestart', {x:0, y:0, width:window.innerWidth, height:window.innerHeight});
+  const close = () => { ov.remove(); clearChromeOverlay('devrestart'); };
+  ov.querySelector('#dev-restart-now').onclick = () => send('DevRestart');
+  ov.querySelector('#dev-restart-later').onclick = close;
+  ov.onclick = (e) => { if (e.target === ov) close(); };
+}
+
+function confirmDevCrash() {
+  devConfirm({
+    title: 'Force a test crash?',
+    body: 'Ventus will crash on purpose so you can check the crash report pipeline. The report uploads on the next launch. Save anything important first.',
+    ok: 'Crash now',
+    danger: true,
+  }, () => send('DevTestCrash'));
 }
 
 function openFindBar() {

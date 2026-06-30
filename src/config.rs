@@ -658,6 +658,24 @@ pub struct CustomApp {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DevSettings {
+    pub enabled: bool,
+    pub allow_incognito_screenshot: bool,
+    pub verbose_logging: bool,
+}
+
+impl Default for DevSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            allow_incognito_screenshot: false,
+            verbose_logging: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderConfig {
     pub id: String,
     pub enabled: bool,
@@ -693,6 +711,8 @@ pub struct AppSettings {
     pub settings_rev: i64,
     #[serde(default)]
     pub beta_channel: bool,
+    #[serde(default)]
+    pub dev: DevSettings,
 }
 
 impl Default for AppSettings {
@@ -716,6 +736,7 @@ impl Default for AppSettings {
             custom_apps: Vec::new(),
             settings_rev: 0,
             beta_channel: false,
+            dev: DevSettings::default(),
         }
     }
 }

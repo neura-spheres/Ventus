@@ -1244,8 +1244,10 @@ pub fn handle_chrome_command(
         }
         ChromeCommand::SaveSettings { key, value } => {
             let should_close_overlay = key == "onboarding_done";
-            let needs_layout =
-                key == "tab_layout" || key == "sidebar_mode" || key == "show_bookmarks_bar";
+            let needs_layout = key == "tab_layout"
+                || key == "sidebar_mode"
+                || key == "show_bookmarks_bar"
+                || key == "dev_allow_incognito_screenshot";
             let ad_blocker_toggled = key == "ad_blocker_enabled";
             let security_changed = key.starts_with("secure_dns_")
                 || matches!(
@@ -1520,6 +1522,54 @@ pub fn handle_chrome_command(
         // the active content WebView). Nothing to do here at the app-state level.
         ChromeCommand::OpenDevtools => None,
         ChromeCommand::RestartForWebSecurity => Some(TabAction::ApplyWebSecurity),
+        ChromeCommand::DevRestart => Some(TabAction::ApplyWebSecurity),
+        ChromeCommand::DevOpenDataFolder => {
+            let dir = crate::utils::platform::data_dir();
+            #[cfg(windows)]
+            {
+                let path = dir.to_string_lossy().replace('/', "\\");
+                let _ = std::process::Command::new("explorer.exe").arg(path).spawn();
+            }
+            #[cfg(target_os = "macos")]
+            let _ = std::process::Command::new("open").arg(&dir).spawn();
+            #[cfg(target_os = "linux")]
+            let _ = std::process::Command::new("xdg-open").arg(&dir).spawn();
+            None
+        }
+        ChromeCommand::DevCopyDiagnostics => {
+            let text = dev_diagnostics(state);
+            let _ = chrome.evaluate_script(
+                "window.__neura && window.__neura.showSuccess('Diagnostics copied')",
+            );
+            Some(TabAction::WriteClipboardText(text))
+        }
+        ChromeCommand::DevResetOnboarding => {
+            let _ = settings_store::set(&state.conn, "onboarding_done", &false);
+            let _ = chrome.evaluate_script(
+                "window.__neura && window.__neura.showSuccess('Onboarding will show on next launch')",
+            );
+            None
+        }
+        ChromeCommand::DevTestReport => {
+            if !crate::cloud::config::is_configured() {
+                let _ = chrome.evaluate_script(
+                    "window.__neura && window.__neura.showError('Cloud reporting not configured')",
+                );
+                return None;
+            }
+            let report = build_report(
+                state,
+                "error",
+                "Test error report from developer settings".to_string(),
+                String::new(),
+            );
+            let _ = chrome
+                .evaluate_script("window.__neura && window.__neura.showSuccess('Test report sent')");
+            Some(TabAction::SendReport(Box::new(report)))
+        }
+        ChromeCommand::DevTestCrash => {
+            panic!("test crash triggered from developer settings");
+        }
         ChromeCommand::PwdSaveConfirm => {
             if let Some((origin, username, password)) = state.pending_pwd_save.take() {
                 let _ = passwords::save(&state.conn, &state.pwd_key, &origin, &username, &password);
@@ -3074,6 +3124,26 @@ pub fn build_report(
         system: crate::utils::sysinfo::summary_json(),
         logs: crate::utils::log_buffer::snapshot(crate::cloud::report::MAX_LOGS),
     }
+}
+
+fn dev_diagnostics(state: &AppState) -> String {
+    let (uid, email) = state
+        .auth
+        .as_ref()
+        .map(|a| (a.uid.clone(), a.email.clone()))
+        .unwrap_or_default();
+    format!(
+        "Ventus diagnostics\nVersion: {}\nOS: {} {}\nDevice: {}\nSession: {}\nAccount: {} {}\nSystem: {}\nContext: {}",
+        crate::version::APP_VERSION,
+        std::env::consts::OS,
+        std::env::consts::ARCH,
+        state.device_id,
+        state.session_id,
+        if uid.is_empty() { "(signed out)" } else { "signed in" },
+        email,
+        crate::utils::sysinfo::summary_json(),
+        report_context(state),
+    )
 }
 
 fn log_feature_command(cmd: &ChromeCommand, state: &AppState) {
@@ -5436,6 +5506,32 @@ fn handle_save_settings(
         "beta_channel" => {
             if let Some(v) = value.as_bool() {
                 state.settings.beta_channel = v;
+            }
+        }
+        "dev_enabled" => {
+            if let Some(v) = value.as_bool() {
+                state.settings.dev.enabled = v;
+                if !v {
+                    state.settings.dev.allow_incognito_screenshot = false;
+                    state.settings.dev.verbose_logging = false;
+                    let _ = std::fs::remove_file(crate::utils::logging::verbose_marker_path());
+                }
+            }
+        }
+        "dev_allow_incognito_screenshot" => {
+            if let Some(v) = value.as_bool() {
+                state.settings.dev.allow_incognito_screenshot = v;
+            }
+        }
+        "dev_verbose_logging" => {
+            if let Some(v) = value.as_bool() {
+                state.settings.dev.verbose_logging = v;
+                let marker = crate::utils::logging::verbose_marker_path();
+                if v {
+                    let _ = std::fs::write(&marker, b"");
+                } else {
+                    let _ = std::fs::remove_file(&marker);
+                }
             }
         }
         "compact_tabs" => {
