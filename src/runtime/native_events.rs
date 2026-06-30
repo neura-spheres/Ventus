@@ -8,6 +8,7 @@ fn attach_navigation_handler(
         NavigationStartingEventHandler,
     };
     use wv2core::PWSTR;
+    use wv2win::Win32::Foundation::BOOL;
 
     let controller = wv.controller();
     let webview: ICoreWebView2 = unsafe {
@@ -31,6 +32,23 @@ fn attach_navigation_handler(
             let mut ptr = PWSTR::null();
             args.Uri(&mut ptr)?;
             let url = take_pwstr(ptr);
+            if is_ubol_strictblock(&url) {
+                // uBlock Origin Lite strict-blocks an ad/page by redirecting the tab to its
+                // own chrome-extension://<id>/strictblock.html#<real-url>. WebView2 can't render
+                // an extension page as a top-level document, so it ends as "can't reach this
+                // page". Cancel it and show Ventus's own branded blocked page for the real URL.
+                let real = url
+                    .split_once('#')
+                    .map(|(_, frag)| frag.to_string())
+                    .unwrap_or_default();
+                let _ = args.SetCancel(BOOL::from(true));
+                tracing::info!(target: "ventus::nav", tab = %tab_start, url = %crate::utils::url::log_url(&real), "ubol strictblock redirect intercepted — showing blocked page");
+                let _ = proxy_start.send_event(AppEvent::ContentStrictBlocked {
+                    tab_id: tab_start.clone(),
+                    url: real,
+                });
+                return Ok(());
+            }
             if id == 0 || !is_recoverable_nav_url(&url) {
                 return Ok(());
             }
@@ -816,6 +834,10 @@ unsafe fn webview_title(
 
 fn is_recoverable_nav_url(url: &str) -> bool {
     url.starts_with("http://") || url.starts_with("https://") || url.starts_with("file://")
+}
+
+fn is_ubol_strictblock(url: &str) -> bool {
+    url.starts_with("chrome-extension://") && url.contains("/strictblock.html")
 }
 
 fn canceled_web_error_status(status: i32) -> bool {

@@ -1051,8 +1051,18 @@
                 }
                 if let AppEvent::UbolSyncTimeout { generation } = &app_event {
                     if finish_incognito_ubol_sync(&mut incognito_ubol, *generation, true) {
-                        incognito_ubol.reloads.clear();
                         incognito_ubol.enabled = Some(false);
+                        // Load any deferred pages even though the sync timed out — better to show
+                        // the page (possibly with ads) than leave it blank waiting forever.
+                        reload_incognito_ubol_pages(
+                            &mut incognito_ubol,
+                            &content_views,
+                            &state,
+                            &rt,
+                            &proxy_main,
+                            &mut load_watches,
+                            &mut load_watch_next,
+                        );
                     }
                     return;
                 }

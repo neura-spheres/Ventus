@@ -597,10 +597,19 @@ fn load_url_or_gate_incognito_ubol(
         && gate.enabled != Some(true)
         && dir.is_some()
     {
-        if incognito_ubol_reload_after_sync(url) {
+        let defer = incognito_ubol_reload_after_sync(url);
+        if defer {
             gate.reloads.insert(tab_id.to_string(), url.to_string());
         }
         let sync_started = ensure_incognito_ubol_ready(gate, views, tab_id, dir, proxy, rt);
+        if defer && sync_started {
+            // Ad-heavy sites (YouTube) would otherwise load with ads during the one-time
+            // incognito uBOL install (~3-4 s), then reload ad-free — a visible ad flash. Hold
+            // the load until the sync finishes so it loads clean once. UbolSyncComplete (or the
+            // UbolSyncTimeout backstop) loads it via reload_incognito_ubol_pages.
+            tracing::info!(target: "ventus::ubol", tab = %tab_id, url = %url, "ubol: incognito load deferred until uBOL ready (no ad flash)");
+            return;
+        }
         if sync_started {
             tracing::info!(target: "ventus::ubol", tab = %tab_id, url = %url, "ubol: incognito sync pending; loading immediately");
         } else {

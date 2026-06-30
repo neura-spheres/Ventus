@@ -451,6 +451,12 @@ impl AppState {
         let x_login_compat_active = active_tab
             .map(|tab| self.x_login_compat(&tab.id, &tab.url))
             .unwrap_or(false);
+        let tab_views: Vec<TabView> = self
+            .tab_manager
+            .active_workspace_tabs()
+            .into_iter()
+            .map(TabView::from)
+            .collect();
         let mut settings_value = serde_json::to_value(&self.settings).unwrap_or_default();
         if let Some(nt) = settings_value
             .get_mut("new_tab")
@@ -462,7 +468,7 @@ impl AppState {
             );
         }
         serde_json::to_string(&serde_json::json!({
-            "tabs": self.tab_manager.active_workspace_tabs(),
+            "tabs": tab_views,
             "workspaces": &self.tab_manager.workspaces,
             "workspace_tab_counts": workspace_tab_counts,
             "active_tab_id": self.tab_manager.active_tab_id,
@@ -510,6 +516,37 @@ pub enum DownloadCtl {
     Pause,
     Resume,
     Cancel,
+}
+
+#[derive(serde::Serialize)]
+struct TabView<'a> {
+    id: &'a str,
+    workspace_id: &'a str,
+    url: &'a str,
+    title: &'a str,
+    favicon: Option<&'a str>,
+    status: &'a crate::browser::tab::TabStatus,
+    pinned: bool,
+    is_audio_playing: bool,
+    is_muted: bool,
+    discarded: bool,
+}
+
+impl<'a> From<&'a crate::browser::tab::Tab> for TabView<'a> {
+    fn from(t: &'a crate::browser::tab::Tab) -> Self {
+        Self {
+            id: &t.id,
+            workspace_id: &t.workspace_id,
+            url: &t.url,
+            title: &t.title,
+            favicon: t.favicon.as_deref(),
+            status: &t.status,
+            pinned: t.pinned,
+            is_audio_playing: t.is_audio_playing,
+            is_muted: t.is_muted,
+            discarded: t.discarded,
+        }
+    }
 }
 
 pub enum TabAction {
@@ -1563,8 +1600,9 @@ pub fn handle_chrome_command(
                 "Test error report from developer settings".to_string(),
                 String::new(),
             );
-            let _ = chrome
-                .evaluate_script("window.__neura && window.__neura.showSuccess('Test report sent')");
+            let _ = chrome.evaluate_script(
+                "window.__neura && window.__neura.showSuccess('Test report sent')",
+            );
             Some(TabAction::SendReport(Box::new(report)))
         }
         ChromeCommand::DevTestCrash => {
@@ -2622,9 +2660,21 @@ fn recover_loading_tab(
                         url: recover_url,
                     });
                 }
-                if tries == 2 {
-                    state.load_progress.insert(tab_id.clone(), 0.0);
-                    return Some(TabAction::RebuildContent {
+                // Still no commit, but WebView2 reports the navigation is in flight — the
+                // connection is alive, just slow (heavy site, cold network, many tabs competing
+                // for CPU/RAM). Rebuilding here would abort that live load and is exactly what
+                // makes pages "stick" under many open tabs. Stay patient like the background
+                // path; WebView2 fires Completed/Failed on its own. Give up only after the
+                // patience ceiling, and even then keep the live connection (no rebuild).
+                if tries < IN_FLIGHT_PATIENT_TRIES {
+                    tracing::info!(
+                        target: "ventus::nav",
+                        tab = %tab_id,
+                        url = %recover_url,
+                        tries,
+                        "recover: active uncommitted but still in-flight — staying patient (NOT rebuilding a live connection)"
+                    );
+                    return Some(TabAction::ExtendLoadWatch {
                         tab_id,
                         url: recover_url,
                     });
@@ -2928,58 +2978,6 @@ fn reload_after_crash(
     }
     state.push_state_to_chrome(chrome);
     Some(TabAction::ReloadContent { tab_id, url })
-}
-
-fn rebuild_canceled_zero_commit(
-    state: &mut AppState,
-    chrome: &WebView,
-    tab_id: String,
-    url: String,
-    key: String,
-    status: i32,
-) -> Option<TabAction> {
-    if status != WEB_ERROR_CONNECTION_ABORTED {
-        return None;
-    }
-    if state.tab_manager.active_tab_id.as_deref() != Some(tab_id.as_str()) {
-        return None;
-    }
-    let loading = state
-        .tab_manager
-        .get_tab(&tab_id)
-        .map(|tab| tab.status == crate::browser::tab::TabStatus::Loading)
-        .unwrap_or(false);
-    if !loading {
-        return None;
-    }
-    let pct = state.load_progress.get(&tab_id).copied().unwrap_or(0.0);
-    if pct > 0.0 {
-        return None;
-    }
-    let tries = state.load_recoveries.get(&key).copied().unwrap_or(0);
-    if tries >= UNCOMMITTED_PATIENT_TRIES {
-        return stop_failed_load(state, chrome, &tab_id, &key);
-    }
-    state.load_recoveries.insert(key, tries + 1);
-    state.native_loads.remove(&tab_id);
-    state.native_nav_ids.remove(&tab_id);
-    state.load_progress.insert(tab_id.clone(), 0.0);
-    state
-        .nav_started_at
-        .insert(tab_id.clone(), std::time::Instant::now());
-    state.pending_nav_urls.insert(tab_id.clone(), url.clone());
-    state.tab_manager.set_tab_loading(&tab_id, true);
-    tracing::warn!(
-        target: "ventus::nav",
-        tab = %tab_id,
-        url = %crate::utils::url::log_url(&url),
-        tries,
-        "active load canceled before commit - rebuilding content controller"
-    );
-    state.set_content_cover(chrome, true);
-    let _ = chrome.evaluate_script("window.__neura && window.__neura.startLoadProgress()");
-    state.push_state_to_chrome(chrome);
-    Some(TabAction::RebuildContent { tab_id, url })
 }
 
 fn web_security_signature(
@@ -3965,16 +3963,13 @@ pub fn handle_app_event_inner(
                 if should_show_blocked_page(state, &tab_id, &clean_url, status) {
                     return show_blocked_page(tab_id, clean_url, state, chrome);
                 }
-                if let Some(action) = rebuild_canceled_zero_commit(
-                    state,
-                    chrome,
-                    tab_id.clone(),
-                    clean_url.clone(),
-                    key.clone(),
-                    status,
-                ) {
-                    return Some(action);
-                }
+                // An explicit abort (ERR_ABORTED / canceled) of an uncommitted load is almost
+                // always the site superseding its own navigation — an SPA/redirect handoff
+                // (YouTube, OAuth, SSO). Do NOT rebuild the controller here: tearing the
+                // WebView down mid-handoff aborts the replacement nav too, which loops and the
+                // page never settles. Just stop the spinner and leave the live WebView alone so
+                // its follow-up navigation lands. A genuinely wedged controller (no nav in
+                // flight at all) is still recovered by the recover_loading_tab watchdog.
                 return stop_failed_load(state, chrome, &tab_id, &key);
             }
             let action =
@@ -3982,6 +3977,10 @@ pub fn handle_app_event_inner(
             state.native_loads.remove(&tab_id);
             state.native_nav_ids.remove(&tab_id);
             action
+        }
+        AppEvent::ContentStrictBlocked { tab_id, url } => {
+            let clean_url = crate::utils::url::clean_tracking_url(&url);
+            show_blocked_page(tab_id, clean_url, state, chrome)
         }
         AppEvent::UbolReady { tab_id, url } => {
             if state.tab_manager.active_tab_id.as_deref() != Some(tab_id.as_str()) {

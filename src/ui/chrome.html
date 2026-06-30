@@ -1299,13 +1299,14 @@ button,input,select,textarea{font-family:var(--font)}
   font-size:10px;font-weight:700;color:#fff;flex-shrink:0;
   text-transform:uppercase;letter-spacing:0.02em;
 }
-#toolbar-incognito-badge{display:none;align-items:center;gap:5px;font-size:10.5px;font-weight:600;color:#e5e7eb;background:#3f3f46;border:1px solid rgba(255,255,255,0.14);border-radius:6px;padding:2px 7px 2px 6px;flex-shrink:0;cursor:default;white-space:nowrap;letter-spacing:0.01em}
+#toolbar-incognito-badge{display:none;align-items:center;gap:5px;font-size:10.5px;font-weight:600;color:#e5e7eb;background:#3f3f46;border:1px solid rgba(255,255,255,0.14);border-radius:999px;padding:3px 9px 3px 8px;flex-shrink:0;cursor:default;white-space:nowrap;letter-spacing:0.01em}
 #toolbar-incognito-badge.visible{display:flex}
 #toolbar-incognito-badge svg{flex-shrink:0}
 #toolbar-incognito-badge{transition:padding .22s cubic-bezier(.4,0,.2,1)}
 #toolbar-incognito-label{display:inline-block;max-width:80px;overflow:hidden;white-space:nowrap;opacity:1;transition:max-width .22s cubic-bezier(.4,0,.2,1),opacity .14s ease,margin-left .22s cubic-bezier(.4,0,.2,1)}
 #toolbar-incognito-badge.compact{padding-left:5px;padding-right:5px}
 #toolbar-incognito-badge.compact #toolbar-incognito-label{max-width:0;opacity:0;margin-left:-5px}
+#address-bar:has(#toolbar-incognito-badge.visible){padding-left:5px}
 
 #ws-switcher-modal{
   display:none;position:fixed;inset:0;z-index:285;
@@ -5875,6 +5876,8 @@ let hTabIds = [];
 let hTabWorkspace = '';
 let hTabsReady = false;
 let lastTabsHtml = null;
+let lastRenderedIds = [];
+let lastRowSig = {};
 let tabDrag = null;
 let tabSettle = null;
 let tabDropPending = false;
@@ -6888,6 +6891,53 @@ function showWsPopDelete() {
   if (wsId) deleteWorkspace(null, wsId);
 }
 
+function tabRowHtml(tab, activeId, entering) {
+  const active = tab.id === activeId ? 'active' : '';
+  const loading = tab.status === 'loading' ? 'loading' : '';
+  const pinned = tab.pinned ? 'pinned' : '';
+  const audioPlaying = tab.is_audio_playing ? 'audio-playing' : '';
+  const tabMuted = tab.is_muted ? 'tab-muted' : '';
+  const sleeping = tab.discarded ? 'sleeping' : '';
+  const ent = entering ? 'tab-enter' : '';
+  const iconCands = tabFaviconCandidates(tab);
+  const icon = iconCands.shift() || '';
+  const fallback = tabFallbackIcon(loading, !!icon);
+  const faviconEl = icon
+    ? `<img class="tab-favicon ${loading}" src="${escAttr(icon)}" data-fbs="${escAttr(iconCands.join('|'))}" alt="" onerror="tabFaviconError(this)">${fallback}`
+    : fallback;
+  const showAudioBtn = tab.is_media_active || tab.is_audio_playing || tab.is_muted;
+  const audioTitle = tab.is_muted ? 'Unmute tab' : 'Mute tab';
+  const audioSvg = tab.is_muted
+    ? `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>`
+    : `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>`;
+  const audioBtn = showAudioBtn
+    ? `<button class="tab-audio-btn" onclick="muteTab(event,'${tab.id}')" title="${audioTitle}">${audioSvg}</button>`
+    : '';
+  const sleepIcon = tab.discarded
+    ? `<svg class="tab-sleep-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" title="Tab is sleeping, click to wake"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`
+    : '';
+  return `<div class="tab-item ${active} ${loading} ${pinned} ${audioPlaying} ${tabMuted} ${sleeping} ${ent}" draggable="true" data-reorder-id="${escAttr(tab.id)}" data-nav-url="${escAttr(tab.url)}" onclick="switchTab('${tab.id}')" oncontextmenu="tabContextMenu(event,'${tab.id}')">
+      ${faviconEl}
+      <div class="tab-info">
+        <div class="tab-title">${escHtml(tab.title || 'New Tab')}</div>
+        <div class="tab-url">${escHtml(formatDisplayUrl(tab.url))}</div>
+      </div>
+      ${tab.discarded ? sleepIcon : audioBtn}
+      <button class="tab-close" onclick="closeTab(event,'${tab.id}')" title="Close tab">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>`;
+}
+function tabIdsEqual(a, b) {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+function replaceTabRow(container, id, html) {
+  if (!container) return;
+  const el = container.querySelector('[data-reorder-id="' + id + '"]');
+  if (el) el.outerHTML = html;
+}
 function renderTabs() {
   if (tabDrag && !tabDropPending) {
     tabRenderPending = true;
@@ -6912,6 +6962,8 @@ function renderTabs() {
   hTabsReady = true;
   if (tabs.length === 0) {
     lastTabsHtml = null;
+    lastRenderedIds = [];
+    lastRowSig = {};
     list.innerHTML = '<div style="text-align:center;padding:20px 8px;color:var(--text-dim);font-size:11px">No tabs open</div>';
     if (horizontalList) horizontalList.innerHTML = H_TAB_ADD;
     __animateSbPageEntry(list);
@@ -6921,45 +6973,32 @@ function renderTabs() {
     });
     return;
   }
-  const html = tabs.map(tab => {
-    const active = tab.id === state.active_tab_id ? 'active' : '';
-    const loading = tab.status === 'loading' ? 'loading' : '';
-    const pinned = tab.pinned ? 'pinned' : '';
-    const audioPlaying = tab.is_audio_playing ? 'audio-playing' : '';
-    const tabMuted = tab.is_muted ? 'tab-muted' : '';
-    const sleeping = tab.discarded ? 'sleeping' : '';
-    const entering = enteringIds.has(tab.id) ? 'tab-enter' : '';
-    const iconCands = tabFaviconCandidates(tab);
-    const icon = iconCands.shift() || '';
-    const fallback = tabFallbackIcon(loading, !!icon);
-    const faviconEl = icon
-      ? `<img class="tab-favicon ${loading}" src="${escAttr(icon)}" data-fbs="${escAttr(iconCands.join('|'))}" alt="" onerror="tabFaviconError(this)">${fallback}`
-      : fallback;
-    const showAudioBtn = tab.is_media_active || tab.is_audio_playing || tab.is_muted;
-    const audioTitle = tab.is_muted ? 'Unmute tab' : 'Mute tab';
-    const audioSvg = tab.is_muted
-      ? `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>`
-      : `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>`;
-    const audioBtn = showAudioBtn
-      ? `<button class="tab-audio-btn" onclick="muteTab(event,'${tab.id}')" title="${audioTitle}">${audioSvg}</button>`
-      : '';
-    const sleepIcon = tab.discarded
-      ? `<svg class="tab-sleep-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" title="Tab is sleeping, click to wake"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`
-      : '';
-    return `<div class="tab-item ${active} ${loading} ${pinned} ${audioPlaying} ${tabMuted} ${sleeping} ${entering}" draggable="true" data-reorder-id="${escAttr(tab.id)}" data-nav-url="${escAttr(tab.url)}" onclick="switchTab('${tab.id}')" oncontextmenu="tabContextMenu(event,'${tab.id}')">
-      ${faviconEl}
-      <div class="tab-info">
-        <div class="tab-title">${escHtml(tab.title || 'New Tab')}</div>
-        <div class="tab-url">${escHtml(formatDisplayUrl(tab.url))}</div>
-      </div>
-      ${tab.discarded ? sleepIcon : audioBtn}
-      <button class="tab-close" onclick="closeTab(event,'${tab.id}')" title="Close tab">
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-      </button>
-    </div>`;
-  }).join('');
+  const rows = tabs.map(tab => tabRowHtml(tab, state.active_tab_id, enteringIds.has(tab.id)));
+  const html = rows.join('');
   if (html === lastTabsHtml) return;
+
+  const structural = tabDropPending || !sameWorkspace || !tabIdsEqual(nextIds, lastRenderedIds);
+  if (!structural) {
+    for (let i = 0; i < tabs.length; i++) {
+      const id = tabs[i].id;
+      if (rows[i] === lastRowSig[id]) continue;
+      lastRowSig[id] = rows[i];
+      replaceTabRow(list, id, rows[i]);
+      replaceTabRow(horizontalList, id, rows[i]);
+    }
+    lastTabsHtml = html;
+    if (horizontalScroll) horizontalScroll.scrollLeft = horizontalLeft;
+    requestAnimationFrame(() => {
+      sizeHorizontalTabs();
+      scrollHorizontalActiveTab();
+    });
+    return;
+  }
+
   lastTabsHtml = html;
+  lastRenderedIds = nextIds.slice();
+  lastRowSig = {};
+  for (let i = 0; i < tabs.length; i++) lastRowSig[tabs[i].id] = rows[i];
   list.innerHTML = html;
   if (horizontalList) horizontalList.innerHTML = html + H_TAB_ADD;
   if (horizontalScroll) horizontalScroll.scrollLeft = horizontalLeft;

@@ -9,8 +9,8 @@ pub fn init() {
     } else {
         "ventus=debug,neura_browser=debug,wry=warn,tao=warn"
     };
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new(default_directive));
+    let filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_directive));
 
     // Mirror logs to a file in the data dir so they can be inspected even in release
     // builds (which have no console because of `windows_subsystem = "windows"`).

@@ -904,8 +904,7 @@ pub fn run() {
             .active_workspace()
             .map(|w| w.is_incognito)
             .unwrap_or(false);
-        let allow_ss =
-            state.settings.dev.enabled && state.settings.dev.allow_incognito_screenshot;
+        let allow_ss = state.settings.dev.enabled && state.settings.dev.allow_incognito_screenshot;
         set_screenshot_protection(window.hwnd() as isize, is_incog && !allow_ss);
     }
 

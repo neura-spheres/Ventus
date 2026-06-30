@@ -684,6 +684,10 @@ pub enum AppEvent {
         status: i32,
         nav_id: u64,
     },
+    ContentStrictBlocked {
+        tab_id: String,
+        url: String,
+    },
     UbolReady {
         tab_id: String,
         url: String,
