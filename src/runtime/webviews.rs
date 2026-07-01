@@ -849,7 +849,6 @@ fn trim_tab_memory(
         changed = true;
     }
     if discarded > 0 {
-        trim_working_set();
         tracing::info!(
             target: "ventus::perf",
             discarded,

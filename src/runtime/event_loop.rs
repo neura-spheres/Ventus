@@ -450,6 +450,7 @@
 
             Event::UserEvent(AppEvent::Chrome(ChromeCommand::WindowClose)) => {
                 tracing::info!(target: "ventus::window", action = "close", "window action");
+                let _ = window.set_visible(false);
                 if !new_window {
                     save_window_size(&window, &mut state, custom_maximized);
                     save_session(&state);
@@ -470,7 +471,7 @@
                     &mut content_web_context,
                     &mut incognito_web_context,
                 );
-                clear_incognito_dir(&incognito_data_dir);
+                trash_incognito_dir(&incognito_data_dir);
                 if new_window {
                     std::fs::remove_dir_all(&webview_data_dir).ok();
                 }
@@ -2349,7 +2350,7 @@
                                     &mut content_web_context,
                                     &mut incognito_web_context,
                                 );
-                                clear_incognito_dir(&incognito_data_dir);
+                                trash_incognito_dir(&incognito_data_dir);
                                 *control_flow = ControlFlow::Exit;
                             }
                         }
@@ -2421,7 +2422,7 @@
                                 &mut content_web_context,
                                 &mut incognito_web_context,
                             );
-                            clear_incognito_dir(&incognito_data_dir);
+                            trash_incognito_dir(&incognito_data_dir);
                             if new_window {
                                 std::fs::remove_dir_all(&webview_data_dir).ok();
                             }
@@ -3106,6 +3107,7 @@
                 event: WindowEvent::CloseRequested,
                 ..
             } => {
+                let _ = window.set_visible(false);
                 if !new_window {
                     save_window_size(&window, &mut state, custom_maximized);
                     save_session(&state);
@@ -3126,7 +3128,7 @@
                     &mut content_web_context,
                     &mut incognito_web_context,
                 );
-                clear_incognito_dir(&incognito_data_dir);
+                trash_incognito_dir(&incognito_data_dir);
                 if new_window {
                     std::fs::remove_dir_all(&webview_data_dir).ok();
                 }

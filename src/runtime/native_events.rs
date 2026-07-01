@@ -261,7 +261,9 @@ fn attach_csp_translate_check(
 #[cfg(windows)]
 fn attach_client_hints_rewrite(wv: &WebView) {
     use webview2_com::Microsoft::Web::WebView2::Win32::{
-        ICoreWebView2, COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL,
+        ICoreWebView2, COREWEBVIEW2_WEB_RESOURCE_CONTEXT_DOCUMENT,
+        COREWEBVIEW2_WEB_RESOURCE_CONTEXT_FETCH,
+        COREWEBVIEW2_WEB_RESOURCE_CONTEXT_XML_HTTP_REQUEST,
     };
     use webview2_com::WebResourceRequestedEventHandler;
     use wv2core::PCWSTR;
@@ -281,16 +283,25 @@ fn attach_client_hints_rewrite(wv: &WebView) {
     );
 
     let filter: Vec<u16> = "*".encode_utf16().chain(std::iter::once(0)).collect();
-    unsafe {
-        if webview
-            .AddWebResourceRequestedFilter(
-                PCWSTR(filter.as_ptr()),
-                COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL,
-            )
-            .is_err()
-        {
-            return;
+    let filter_ptr = PCWSTR(filter.as_ptr());
+    let contexts = [
+        COREWEBVIEW2_WEB_RESOURCE_CONTEXT_DOCUMENT,
+        COREWEBVIEW2_WEB_RESOURCE_CONTEXT_XML_HTTP_REQUEST,
+        COREWEBVIEW2_WEB_RESOURCE_CONTEXT_FETCH,
+    ];
+    let mut registered = false;
+    for context in contexts {
+        unsafe {
+            if webview
+                .AddWebResourceRequestedFilter(filter_ptr, context)
+                .is_ok()
+            {
+                registered = true;
+            }
         }
+    }
+    if !registered {
+        return;
     }
 
     let handler = WebResourceRequestedEventHandler::create(Box::new(move |_sender, args| {

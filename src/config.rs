@@ -663,6 +663,8 @@ pub struct DevSettings {
     pub enabled: bool,
     pub allow_incognito_screenshot: bool,
     pub verbose_logging: bool,
+    #[serde(default)]
+    pub opaque_chrome: bool,
 }
 
 impl Default for DevSettings {
@@ -671,6 +673,7 @@ impl Default for DevSettings {
             enabled: false,
             allow_incognito_screenshot: false,
             verbose_logging: false,
+            opaque_chrome: false,
         }
     }
 }

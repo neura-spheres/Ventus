@@ -656,6 +656,7 @@ pub fn run() {
             attempt += 1;
             let proxy_chrome = proxy.clone();
             let proxy_chrome_load = proxy.clone();
+            let opaque_chrome = state.settings.dev.opaque_chrome;
             let builder = WebViewBuilder::new_as_child(&window)
                 .with_bounds(Rect {
                     x: 0,
@@ -663,7 +664,12 @@ pub fn run() {
                     width: win_size.width,
                     height: win_size.height,
                 })
-                .with_transparent(true);
+                .with_transparent(!opaque_chrome);
+            let builder = if opaque_chrome {
+                builder.with_background_color((20, 20, 20, 255))
+            } else {
+                builder
+            };
             #[cfg(windows)]
             let builder = builder
                 .with_browser_accelerator_keys(false)
@@ -738,7 +744,8 @@ pub fn run() {
     } else {
         data_dir.join("incognito_session")
     };
-    std::fs::remove_dir_all(&incognito_data_dir).ok();
+    trash_incognito_dir(&incognito_data_dir);
+    sweep_incognito_trash(&data_dir);
     std::fs::create_dir_all(&incognito_data_dir).ok();
     encrypt_app_storage(&incognito_data_dir);
     #[cfg(windows)]

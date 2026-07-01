@@ -625,7 +625,6 @@ fn shutdown_webview2(
     let wait_start = Instant::now();
     #[cfg(windows)]
     let free = if crash_sentinel.is_some() {
-        drain_message_queue_ms(300);
         wait_for_webview_profiles_released(profile_roots, WEBVIEW_PROFILE_RELEASE_TIMEOUT)
     } else {
         true
@@ -658,10 +657,38 @@ fn shutdown_webview2(
     }
 }
 
-fn clear_incognito_dir(dir: &std::path::Path) {
-    if dir.exists() {
+fn trash_incognito_dir(dir: &std::path::Path) {
+    if !dir.exists() {
+        return;
+    }
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let name = dir
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("incognito_session");
+    let trash = dir.with_file_name(format!("{name}.trash.{nanos}"));
+    if std::fs::rename(dir, &trash).is_err() {
         let _ = std::fs::remove_dir_all(dir);
     }
+}
+
+fn sweep_incognito_trash(data_dir: &std::path::Path) {
+    let data_dir = data_dir.to_path_buf();
+    std::thread::spawn(move || {
+        let Ok(entries) = std::fs::read_dir(&data_dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if name.starts_with("incognito_session") && name.contains(".trash") {
+                let _ = std::fs::remove_dir_all(entry.path());
+            }
+        }
+    });
 }
 
 #[cfg(windows)]

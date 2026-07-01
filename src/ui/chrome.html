@@ -5542,6 +5542,13 @@ svg{display:block;flex-shrink:0}
           </div>
           <div class="toggle-switch" id="toggle-dev-verbose-logging" onclick="toggleDevVerboseLogging()"></div>
         </div>
+        <div class="settings-toggle">
+          <div class="settings-toggle-info">
+            <div class="toggle-title">Opaque chrome (GPU test)</div>
+            <div class="toggle-desc">Builds the UI layer opaque instead of transparent. Use to compare GPU usage on video. Soft shadows and corners over the page are lost while on. Needs a restart to take effect.</div>
+          </div>
+          <div class="toggle-switch" id="toggle-dev-opaque-chrome" onclick="toggleSetting('dev_opaque_chrome')"></div>
+        </div>
 
         <h3 class="dev-group-title">Onboarding</h3>
         <div class="dev-actions-row">
@@ -16229,6 +16236,7 @@ function toggleDevMode() {
       devSet('enabled', false);
       devSet('allow_incognito_screenshot', false);
       devSet('verbose_logging', false);
+      devSet('opaque_chrome', false);
       send('SaveSettings', {key: 'dev_enabled', value: false});
       applyDevMode();
       switchSettings('about');
@@ -16263,6 +16271,7 @@ function applyDevMode() {
   const dev = (state.settings && state.settings.dev) || {};
   setToggleEl('toggle-dev-allow-incognito-screenshot', !!dev.allow_incognito_screenshot);
   setToggleEl('toggle-dev-verbose-logging', !!dev.verbose_logging);
+  setToggleEl('toggle-dev-opaque-chrome', !!dev.opaque_chrome);
 }
 
 function toggleDevVerboseLogging() {

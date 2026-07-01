@@ -5513,6 +5513,7 @@ fn handle_save_settings(
                 if !v {
                     state.settings.dev.allow_incognito_screenshot = false;
                     state.settings.dev.verbose_logging = false;
+                    state.settings.dev.opaque_chrome = false;
                     let _ = std::fs::remove_file(crate::utils::logging::verbose_marker_path());
                 }
             }
@@ -5531,6 +5532,11 @@ fn handle_save_settings(
                 } else {
                     let _ = std::fs::remove_file(&marker);
                 }
+            }
+        }
+        "dev_opaque_chrome" => {
+            if let Some(v) = value.as_bool() {
+                state.settings.dev.opaque_chrome = v;
             }
         }
         "compact_tabs" => {
