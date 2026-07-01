@@ -295,14 +295,16 @@ impl InnerWebView {
       arguments
     });
     let additional_browser_args = encode_wide(additional_browser_args);
-    let additional_browser_args = PCWSTR::from_raw(additional_browser_args.as_ptr());
-
     let data_directory = data_directory.map(encode_wide);
-    let data_directory = data_directory.map(|d| PCWSTR::from_raw(d.as_ptr()));
 
     let (tx, rx) = mpsc::channel();
     CreateCoreWebView2EnvironmentCompletedHandler::wait_for_async_operation(
       Box::new(move |environmentcreatedhandler| unsafe {
+        let additional_browser_args = PCWSTR::from_raw(additional_browser_args.as_ptr());
+        let data_directory = data_directory
+          .as_ref()
+          .map(|d| PCWSTR::from_raw(d.as_ptr()))
+          .unwrap_or_else(PCWSTR::null);
         let options: ICoreWebView2EnvironmentOptions =
           CoreWebView2EnvironmentOptions::default().into();
 
@@ -322,7 +324,7 @@ impl InnerWebView {
 
         CreateCoreWebView2EnvironmentWithOptions(
           PCWSTR::null(),
-          data_directory.unwrap_or_else(PCWSTR::null),
+          data_directory,
           &options,
           &environmentcreatedhandler,
         )

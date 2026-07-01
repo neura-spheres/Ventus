@@ -1308,6 +1308,13 @@ fn sync_content_views(
     state: &AppState,
     layout: AppLayout,
 ) {
+    if state.minimized {
+        for wv in content_views.values() {
+            let _ = wv.set_visible(false);
+            set_content_memory_low(wv);
+        }
+        return;
+    }
     let active_id = state.tab_manager.active_tab_id.as_deref().unwrap_or("");
     let active_is_neura_page = state
         .tab_manager

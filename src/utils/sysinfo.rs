@@ -286,3 +286,19 @@ fn reg_read_u32(
         Some(data)
     }
 }
+
+#[cfg(windows)]
+pub fn os_prefers_dark() -> bool {
+    reg_read_u32(
+        windows::Win32::System::Registry::HKEY_CURRENT_USER,
+        "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+        "AppsUseLightTheme",
+    )
+    .map(|v| v == 0)
+    .unwrap_or(false)
+}
+
+#[cfg(not(windows))]
+pub fn os_prefers_dark() -> bool {
+    false
+}

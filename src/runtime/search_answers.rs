@@ -284,9 +284,20 @@ mod webview_arg_tests {
         );
         assert!(!script.contains("__ventusIdentity"));
         assert!(script.contains("userAgentData"));
-        assert!(script.contains("Ventus"));
-        assert!(script.contains("Chromium"));
-        assert!(script.contains("Not)A;Brand"));
+        assert!(script.contains("{brand: 'Ventus'"));
+        assert!(script.contains("{brand: 'Chromium'"));
+        assert!(script.contains("{brand: 'Google Chrome'"));
+        assert!(!script.contains("Microsoft Edge"));
+    }
+
+    #[test]
+    fn browser_user_agent_keeps_chromium_and_ventus() {
+        let ua = browser_user_agent();
+        assert!(ua.contains("Win64; x64; Ventus"));
+        assert!(ua.contains("Chrome/"));
+        assert!(ua.contains("Safari/"));
+        assert!(!ua.contains("Edg/"));
+        assert!(!ua.contains("Microsoft Edge"));
     }
 
     #[test]

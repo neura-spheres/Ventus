@@ -733,12 +733,15 @@ fn attach_process_failed_handler(
         } else if kind == COREWEBVIEW2_PROCESS_FAILED_KIND_UTILITY_PROCESS_EXITED
             || kind == COREWEBVIEW2_PROCESS_FAILED_KIND_GPU_PROCESS_EXITED
         {
-            let _ = proxy.send_event(AppEvent::ContentSubprocessCrashed {
-                tab_id: tab_id.clone(),
-            });
+            tracing::warn!(
+                target: "ventus::content",
+                tab = %tab_id,
+                kind = kind.0,
+                "WebView2 subprocess exited; leaving the page in place"
+            );
         } else {
             tracing::error!(
-                "WebView2 browser process failed (kind={}) — restart required",
+                "WebView2 browser process failed (kind={}) - restart required",
                 kind.0
             );
         }

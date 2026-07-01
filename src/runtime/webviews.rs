@@ -115,7 +115,7 @@ fn build_content_webview_once(
 
     let builder = WebViewBuilder::new_as_child(window)
         .with_bounds(rect)
-        .with_background_color(CONTENT_BG)
+        .with_background_color(content_bg_for_theme(theme))
         .with_incognito(false)
         .with_user_agent(&browser_user_agent())
         .with_initialization_script(&content_initialization_script(
@@ -572,7 +572,7 @@ fn build_content_webview_once(
     } else {
         builder.with_web_context(web_context).build()?
     };
-    let _ = wv.set_background_color(CONTENT_BG);
+    let _ = wv.set_background_color(content_bg_for_theme(theme));
     let _ = wv.zoom(global_zoom);
     #[cfg(windows)]
     disable_default_content_context_menu(&wv);
@@ -629,6 +629,22 @@ fn wake_content_webview(wv: &WebView) {
     let _ = wv.evaluate_script(
         "try{window.focus();window.dispatchEvent(new Event('focus'));window.dispatchEvent(new Event('resize'));document.dispatchEvent(new Event('visibilitychange'));}catch(_){ }",
     );
+}
+
+fn suspend_all_for_minimize(
+    chrome: &WebView,
+    content_views: &HashMap<String, WebView>,
+    app_panel_views: &HashMap<String, WebView>,
+) {
+    let _ = chrome.set_visible(false);
+    for wv in content_views.values() {
+        let _ = wv.set_visible(false);
+        set_content_memory_low(wv);
+    }
+    for wv in app_panel_views.values() {
+        let _ = wv.set_visible(false);
+        set_content_memory_low(wv);
+    }
 }
 
 #[cfg(windows)]

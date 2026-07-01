@@ -83,6 +83,7 @@ const SESSION_SAVE_DELAY: Duration = Duration::from_secs(3);
 const WEBVIEW_PROFILE_RELEASE_TIMEOUT: Duration = Duration::from_secs(12);
 const WEBVIEW_PROFILE_RELEASE_POLL: u64 = 50;
 const CONTENT_BG: (u8, u8, u8, u8) = (255, 255, 255, 255);
+const CONTENT_BG_DARK: (u8, u8, u8, u8) = (26, 26, 26, 255);
 #[cfg(windows)]
 const APP_ID: &str = "NeuraSpheres.Ventus";
 const COOKIE_SAVE_EVERY: Duration = Duration::from_secs(5 * 60);
@@ -99,6 +100,19 @@ fn webview_theme(theme: &config::Theme) -> WebViewTheme {
         config::Theme::Dark => WebViewTheme::Dark,
         config::Theme::Light => WebViewTheme::Light,
         config::Theme::System => WebViewTheme::Auto,
+    }
+}
+
+fn content_bg_for_theme(theme: WebViewTheme) -> (u8, u8, u8, u8) {
+    let dark = match theme {
+        WebViewTheme::Dark => true,
+        WebViewTheme::Light => false,
+        _ => crate::utils::sysinfo::os_prefers_dark(),
+    };
+    if dark {
+        CONTENT_BG_DARK
+    } else {
+        CONTENT_BG
     }
 }
 
@@ -141,7 +155,7 @@ fn event_label(ev: &Event<AppEvent>) -> &'static str {
         Event::RedrawEventsCleared => "redraw_cleared",
         Event::LoopDestroyed => "loop_destroyed",
         Event::UserEvent(AppEvent::Chrome(cmd)) => cmd.report_name().unwrap_or("chrome_cmd"),
-        Event::UserEvent(_) => "user_event",
+        Event::UserEvent(ev) => ev.label(),
         Event::WindowEvent { event, .. } => match event {
             W::CloseRequested => "win:close",
             W::Resized(_) => "win:resized",
@@ -249,19 +263,24 @@ pub fn run() {
     repositories::seed_search_engines(&conn).expect("seed engines");
 
     let profile_cookie_db_found = webview_cookie_db_exists(&data_dir);
-    let startup_cookies: Vec<cookie_store::CookieRecord> = match cookie_store::open(&data_dir) {
-        Ok(cs_conn) => {
-            let cookies = cookie_store::load_all(&cs_conn).unwrap_or_default();
-            tracing::info!(
-                "cookie_store: loaded {} backup cookies for startup heal (profile_db_found={})",
-                cookies.len(),
-                profile_cookie_db_found
-            );
-            cookies
-        }
-        Err(e) => {
-            tracing::warn!("cookie_store: failed to open for startup read: {}", e);
-            vec![]
+    let startup_cookies: Vec<cookie_store::CookieRecord> = if profile_cookie_db_found {
+        tracing::info!("cookie_store: profile cookie DB found, skipping backup cookie heal");
+        vec![]
+    } else {
+        match cookie_store::open(&data_dir) {
+            Ok(cs_conn) => {
+                let cookies = cookie_store::load_all(&cs_conn).unwrap_or_default();
+                tracing::info!(
+                    "cookie_store: loaded {} backup cookies for startup heal (profile_db_found={})",
+                    cookies.len(),
+                    profile_cookie_db_found
+                );
+                cookies
+            }
+            Err(e) => {
+                tracing::warn!("cookie_store: failed to open for startup read: {}", e);
+                vec![]
+            }
         }
     };
 
@@ -624,9 +643,15 @@ pub fn run() {
         tracing::info!(
             target: "ventus::startup",
             content_profile_free = content_free,
-            orphan_msedgewebview2 = count_msedgewebview2_processes(),
             "[STARTUP] WebView2 profile lock state just before building WebViews"
         );
+        std::thread::spawn(|| {
+            tracing::info!(
+                target: "ventus::startup",
+                orphan_msedgewebview2 = count_msedgewebview2_processes(),
+                "[STARTUP] orphan msedgewebview2.exe count"
+            );
+        });
     }
 
     let browser_args = webview_args(&state.settings);
@@ -656,7 +681,7 @@ pub fn run() {
             attempt += 1;
             let proxy_chrome = proxy.clone();
             let proxy_chrome_load = proxy.clone();
-            let opaque_chrome = state.settings.dev.opaque_chrome;
+            let opaque_chrome = cfg!(debug_assertions) && state.settings.dev.opaque_chrome;
             let builder = WebViewBuilder::new_as_child(&window)
                 .with_bounds(Rect {
                     x: 0,

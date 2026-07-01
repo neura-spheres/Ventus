@@ -39,9 +39,6 @@ const UNCOMMITTED_PATIENT_TRIES: u8 = 3;
 // ceiling only bites when the response is genuinely just very slow.
 const IN_FLIGHT_PATIENT_TRIES: u8 = 12;
 
-const CRASH_RELOAD_WINDOW: std::time::Duration = std::time::Duration::from_secs(5);
-const CRASH_RELOAD_MAX: u8 = 2;
-
 #[derive(Debug, Clone, Copy)]
 pub struct ChromeClipRect {
     pub x: f64,
@@ -72,6 +69,7 @@ pub struct AppState {
     pub sidebar_clip_w_override: Option<f64>,
     pub suggestion_overlay_rects: HashMap<String, ChromeClipRect>,
     pub content_cover_open: bool,
+    pub minimized: bool,
     pub pending_update_url: Option<String>,
     pub pending_update_version: Option<String>,
     pub pending_update_notes: Option<String>,
@@ -86,7 +84,6 @@ pub struct AppState {
     /// just slow to fire its final load event (heavy page on a slow device).
     pub load_progress: HashMap<String, f64>,
     pub nav_started_at: HashMap<String, std::time::Instant>,
-    pub last_subprocess_crash_at: Option<std::time::Instant>,
     pub spotlight_open: bool,
     pub zoom_levels: HashMap<String, f64>,
     /// Pending AI page-tool channels — keyed by call_id.
@@ -198,6 +195,7 @@ impl AppState {
             sidebar_clip_w_override: None,
             suggestion_overlay_rects: HashMap::new(),
             content_cover_open: false,
+            minimized: false,
             pending_update_url: None,
             pending_update_version: None,
             pending_update_notes: None,
@@ -209,7 +207,6 @@ impl AppState {
             load_recoveries: HashMap::new(),
             load_progress: HashMap::new(),
             nav_started_at: HashMap::new(),
-            last_subprocess_crash_at: None,
             spotlight_open: false,
             zoom_levels: HashMap::new(),
             ai_pending_tools: Arc::new(Mutex::new(HashMap::new())),
@@ -2932,54 +2929,6 @@ fn canceled_nav_status(status: i32) -> bool {
     )
 }
 
-fn crash_aborted_active_load(state: &AppState, tab_id: &str, status: i32) -> bool {
-    if status != WEB_ERROR_CONNECTION_ABORTED {
-        return false;
-    }
-    if state.tab_manager.active_tab_id.as_deref() != Some(tab_id) {
-        return false;
-    }
-    state
-        .last_subprocess_crash_at
-        .map(|t| t.elapsed() <= CRASH_RELOAD_WINDOW)
-        .unwrap_or(false)
-}
-
-fn reload_after_crash(
-    state: &mut AppState,
-    chrome: &WebView,
-    tab_id: String,
-    url: String,
-    key: String,
-) -> Option<TabAction> {
-    let tries = state.load_recoveries.get(&key).copied().unwrap_or(0);
-    if tries >= CRASH_RELOAD_MAX {
-        return stop_failed_load(state, chrome, &tab_id, &key);
-    }
-    state.load_recoveries.insert(key, tries + 1);
-    state.native_loads.remove(&tab_id);
-    state.native_nav_ids.remove(&tab_id);
-    state.load_progress.insert(tab_id.clone(), 0.0);
-    state
-        .nav_started_at
-        .insert(tab_id.clone(), std::time::Instant::now());
-    state.pending_nav_urls.insert(tab_id.clone(), url.clone());
-    state.tab_manager.set_tab_loading(&tab_id, true);
-    tracing::info!(
-        target: "ventus::nav",
-        tab = %tab_id,
-        url = %crate::utils::url::log_url(&url),
-        tries,
-        "reload_after_crash: re-issuing load aborted by a subprocess crash"
-    );
-    if state.tab_manager.active_tab_id.as_deref() == Some(tab_id.as_str()) {
-        state.set_content_cover(chrome, true);
-        let _ = chrome.evaluate_script("window.__neura && window.__neura.startLoadProgress()");
-    }
-    state.push_state_to_chrome(chrome);
-    Some(TabAction::ReloadContent { tab_id, url })
-}
-
 fn web_security_signature(
     settings: &AppSettings,
 ) -> (Option<String>, SecureDnsMode, bool, bool, bool, bool, bool) {
@@ -3919,21 +3868,6 @@ pub fn handle_app_event_inner(
         AppEvent::ContentBlackProbe { tab_id, url, .. } => {
             rebuild_black_tab(tab_id, url, state, chrome)
         }
-        AppEvent::ContentSubprocessCrashed { tab_id } => {
-            let fresh = state
-                .last_subprocess_crash_at
-                .map(|t| t.elapsed() > CRASH_RELOAD_WINDOW)
-                .unwrap_or(true);
-            state.last_subprocess_crash_at = Some(std::time::Instant::now());
-            if fresh {
-                tracing::warn!(
-                    target: "ventus::nav",
-                    tab = %tab_id,
-                    "shared WebView2 subprocess crashed — aborted loads will auto-reload"
-                );
-            }
-            None
-        }
         AppEvent::ContentNavigationFailed {
             tab_id,
             url,
@@ -3957,9 +3891,6 @@ pub fn handle_app_event_inner(
                 return None;
             }
             if canceled_nav_status(status) {
-                if crash_aborted_active_load(state, &tab_id, status) {
-                    return reload_after_crash(state, chrome, tab_id, clean_url, key);
-                }
                 if should_show_blocked_page(state, &tab_id, &clean_url, status) {
                     return show_blocked_page(tab_id, clean_url, state, chrome);
                 }

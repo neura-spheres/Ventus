@@ -3031,9 +3031,21 @@
             }
 
             Event::WindowEvent {
-                event: WindowEvent::Resized(_),
+                event: WindowEvent::Resized(size),
                 ..
             } => {
+                if size.width == 0 || size.height == 0 || window.is_minimized() {
+                    if !state.minimized {
+                        state.minimized = true;
+                        suspend_all_for_minimize(&chrome, &content_views, &app_panel_views);
+                        trim_working_set();
+                    }
+                    return;
+                }
+                if state.minimized {
+                    state.minimized = false;
+                    let _ = chrome.set_visible(true);
+                }
                 custom_maximized = window.is_maximized();
                 sync_window_maximized(&chrome, custom_maximized);
                 if state.content_fullscreen {

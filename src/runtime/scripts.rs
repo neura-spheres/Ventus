@@ -954,7 +954,12 @@ fn privacy_initialization_script(
     } else {
         String::new()
     };
-    let ua_data_script = r#"
+    let ua_data_script = ua_data_initialization_script();
+    format!("{ua_data_script}{fingerprint_script}{strict_script}")
+}
+
+fn ua_data_initialization_script() -> String {
+    r#"
 (() => {
   if (window.__neuraUAData) return;
   window.__neuraUAData = true;
@@ -998,8 +1003,8 @@ fn privacy_initialization_script(
     } catch (_) {}
   } catch (_) {}
 })();
-"#;
-    format!("{ua_data_script}{fingerprint_script}{strict_script}")
+"#
+    .to_string()
 }
 
 #[cfg(test)]

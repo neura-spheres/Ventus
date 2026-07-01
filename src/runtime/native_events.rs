@@ -275,9 +275,8 @@ fn attach_client_hints_rewrite(wv: &WebView) {
     };
 
     let (_, _, major) = chromium_versions();
-    let sec_ch_ua = format!(
-        "\"Not)A;Brand\";v=\"24\", \"Chromium\";v=\"{major}\", \"Google Chrome\";v=\"{major}\""
-    );
+    let sec_ch_ua =
+        format!("\"Not)A;Brand\";v=\"24\", \"Chromium\";v=\"{major}\", \"Google Chrome\";v=\"{major}\"");
     let sec_ch_ua_full = format!(
         "\"Not)A;Brand\";v=\"24.0.0.0\", \"Chromium\";v=\"{major}.0.0.0\", \"Google Chrome\";v=\"{major}.0.0.0\""
     );
@@ -315,8 +314,8 @@ fn attach_client_hints_rewrite(wv: &WebView) {
             let Ok(headers) = request.Headers() else {
                 return Ok(());
             };
-            replace_header_if_present(&headers, "Sec-CH-UA", &sec_ch_ua);
-            replace_header_if_present(&headers, "Sec-CH-UA-Full-Version-List", &sec_ch_ua_full);
+            set_header_if_present(&headers, "Sec-CH-UA", &sec_ch_ua);
+            set_header_if_present(&headers, "Sec-CH-UA-Full-Version-List", &sec_ch_ua_full);
         }
         Ok(())
     }));
@@ -327,7 +326,7 @@ fn attach_client_hints_rewrite(wv: &WebView) {
 }
 
 #[cfg(windows)]
-unsafe fn replace_header_if_present(
+unsafe fn set_header_if_present(
     headers: &webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2HttpRequestHeaders,
     name: &str,
     value: &str,
