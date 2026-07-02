@@ -1541,8 +1541,16 @@ fn sync_content_clip(
         return;
     };
     let cut = content_cut_w(state, layout);
-    set_content_clip_region(hwnd, layout.content.width, layout.content.height, cut);
+    let radius = if state.content_fullscreen {
+        0
+    } else {
+        logical_to_physical(CONTENT_CORNER_LOGICAL, layout.scale_factor)
+    };
+    set_content_clip_region(hwnd, layout.content.width, layout.content.height, cut, radius);
 }
+
+#[cfg(windows)]
+const CONTENT_CORNER_LOGICAL: f64 = 8.0;
 
 #[cfg(windows)]
 fn content_cut_w(state: &AppState, layout: AppLayout) -> u32 {
@@ -1797,22 +1805,35 @@ fn set_chrome_clip_region(
 }
 
 #[cfg(windows)]
-fn set_content_clip_region(hwnd: isize, width: u32, height: u32, cut_w: u32) {
+fn set_content_clip_region(hwnd: isize, width: u32, height: u32, cut_w: u32, radius: u32) {
     use windows::Win32::{
         Foundation::HWND,
-        Graphics::Gdi::{CombineRgn, CreateRectRgn, DeleteObject, SetWindowRgn, HRGN, RGN_DIFF},
+        Graphics::Gdi::{
+            CombineRgn, CreateRectRgn, CreateRoundRectRgn, DeleteObject, SetWindowRgn, HRGN,
+            RGN_DIFF,
+        },
     };
 
     unsafe {
-        if cut_w == 0 {
+        if cut_w == 0 && radius == 0 {
             let _ = SetWindowRgn(HWND(hwnd), HRGN(0), false);
             return;
         }
-        let full = CreateRectRgn(0, 0, width.max(1) as i32, height.max(1) as i32);
-        let cut = CreateRectRgn(0, 0, cut_w.min(width).max(1) as i32, height.max(1) as i32);
-        let _ = CombineRgn(full, full, cut, RGN_DIFF);
-        let _ = DeleteObject(cut);
-        let _ = SetWindowRgn(HWND(hwnd), full, false);
+        let w = width.max(1) as i32;
+        let h = height.max(1) as i32;
+        let r = radius.min(width / 2).min(height / 2) as i32;
+        let base = if r > 0 {
+            let d = r * 2 + 1;
+            CreateRoundRectRgn(0, 0, w + 1, h + 1, d, d)
+        } else {
+            CreateRectRgn(0, 0, w, h)
+        };
+        if cut_w > 0 {
+            let cut = CreateRectRgn(0, 0, cut_w.min(width).max(1) as i32, h);
+            let _ = CombineRgn(base, base, cut, RGN_DIFF);
+            let _ = DeleteObject(cut);
+        }
+        let _ = SetWindowRgn(HWND(hwnd), base, false);
     }
 }
 
