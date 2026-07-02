@@ -731,7 +731,7 @@ fn spawn_auth_window(
         .build(elwt)
         .ok()?;
     center_popup(&window, main_window, w, h);
-    set_window_background_dark(&window);
+    set_window_background(&window, window_backing_colorref(WebViewTheme::Auto));
 
     let size = window.inner_size();
     let rect = Rect {

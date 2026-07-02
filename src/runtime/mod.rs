@@ -116,6 +116,19 @@ fn content_bg_for_theme(theme: WebViewTheme) -> (u8, u8, u8, u8) {
     }
 }
 
+fn window_backing_colorref(theme: WebViewTheme) -> u32 {
+    let dark = match theme {
+        WebViewTheme::Dark => true,
+        WebViewTheme::Light => false,
+        _ => crate::utils::sysinfo::os_prefers_dark(),
+    };
+    if dark {
+        0x0014_1414
+    } else {
+        0x00f7_f3f2
+    }
+}
+
 static WORST_FREEZE: std::sync::Mutex<Option<(u64, &'static str)>> = std::sync::Mutex::new(None);
 
 struct MainEventTimer {
@@ -458,7 +471,10 @@ pub fn run() {
     main_hwnd.store(window.hwnd() as isize, Ordering::SeqCst);
     keep_frameless(&window);
     set_square_corners(&window);
-    set_window_background_dark(&window);
+    set_window_background(
+        &window,
+        window_backing_colorref(webview_theme(&settings.appearance.theme)),
+    );
     clamp_window_to_work_area(&window);
 
     let layout_config = LayoutConfig {

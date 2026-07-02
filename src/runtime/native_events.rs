@@ -599,7 +599,7 @@ fn spawn_popup_window(
         .ok()?;
     center_popup(&window, main_window, w, total_h);
     set_square_corners(&window);
-    set_window_background_dark(&window);
+    set_window_background(&window, window_backing_colorref(theme));
 
     let size = window.inner_size();
     let scale = window.scale_factor();

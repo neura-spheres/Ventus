@@ -785,11 +785,11 @@ button,input,select,textarea{font-family:var(--font)}
 
 #site-info-popover{
   position:fixed;display:none;flex-direction:column;
-  width:320px;max-width:calc(100vw - 16px);
+  width:296px;max-width:calc(100vw - 16px);
   background:var(--bg-elevated);
-  border:1px solid var(--border);
-  border-radius:10px;
-  box-shadow:0 14px 30px rgba(0,0,0,0.36),0 0 0 0.5px rgba(255,255,255,0.04);
+  border:1px solid var(--border-subtle);
+  border-radius:14px;
+  box-shadow:0 12px 30px rgba(0,0,0,0.30),0 0 0 0.5px rgba(0,0,0,0.06);
   z-index:290;
   overflow:hidden;
   color:var(--text);
@@ -816,30 +816,30 @@ button,input,select,textarea{font-family:var(--font)}
 .perm-prompt-btn:hover{background:var(--bg-active)}
 .perm-prompt-btn.primary{background:var(--primary-btn-bg);color:var(--primary-btn-text);border-color:var(--primary-btn-border)}
 .perm-prompt-btn.primary:hover{background:var(--primary-btn-bg-hover);border-color:var(--primary-btn-border)}
-.site-pop-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 12px 10px;border-bottom:1px solid var(--border-subtle)}
-.site-pop-title{font-size:13px;font-weight:650;line-height:1.2;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.site-pop-section{display:flex;flex-direction:column;padding:6px 0}
-.site-pop-row{display:grid;grid-template-columns:22px minmax(0,1fr) auto;align-items:center;gap:10px;padding:8px 12px;min-height:38px}
-.site-pop-icon{width:22px;height:22px;border-radius:999px;display:flex;align-items:center;justify-content:center;color:var(--text-muted)}
-.site-pop-icon.secure{color:var(--success);background:var(--success-dim)}
-.site-pop-icon.warn{color:var(--warning);background:var(--warning-dim)}
-.site-pop-icon.info{color:var(--accent);background:var(--accent-dim)}
-.site-pop-main{display:flex;flex-direction:column;gap:2px;min-width:0}
-.site-pop-label{font-size:12px;font-weight:620;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.site-pop-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 15px 4px}
+.site-pop-title{font-size:12.5px;font-weight:600;letter-spacing:-0.01em;line-height:1.2;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.site-pop-section{display:flex;flex-direction:column;padding:2px 0}
+.site-pop-row{display:grid;grid-template-columns:18px minmax(0,1fr) auto;align-items:center;gap:11px;padding:6px 15px;min-height:32px}
+.site-pop-icon{width:18px;height:18px;display:flex;align-items:center;justify-content:center;color:var(--text-muted)}
+.site-pop-icon.secure{color:var(--success)}
+.site-pop-icon.warn{color:var(--warning)}
+.site-pop-icon.info{color:var(--accent)}
+.site-pop-main{display:flex;flex-direction:column;gap:1px;min-width:0}
+.site-pop-label{font-size:12.5px;font-weight:550;letter-spacing:-0.01em;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .site-pop-sub{font-size:11px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.site-pop-divider{height:1px;background:var(--border-subtle);margin:0}
+.site-pop-divider{height:1px;background:var(--border-subtle);margin:2px 0}
 .site-perm-select{
-  min-width:86px;height:28px;border-radius:7px;
-  border:1px solid var(--border);
+  min-width:78px;height:26px;border-radius:6px;
+  border:1px solid var(--border-subtle);
   background:var(--bg-card);
   color:var(--text);
-  font-size:12px;
+  font-size:11.5px;font-weight:500;
   outline:none;
-  padding:0 8px;
+  padding:0 7px;
 }
 .site-perm-select:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-dim)}
-.site-pop-action{border:none;background:transparent;color:var(--text-muted);font-size:12px;cursor:pointer;padding:6px 8px;border-radius:7px}
-.site-pop-action:hover{background:var(--bg-hover);color:var(--text)}
+.site-pop-action{border:none;background:transparent;color:var(--accent);font-size:12px;font-weight:500;cursor:pointer;padding:5px 8px;border-radius:6px;white-space:nowrap}
+.site-pop-action:hover{background:var(--bg-hover)}
 .default-perms{margin:0 0 12px;padding:10px 12px;background:var(--bg);border-radius:var(--radius-sm);border:1px solid var(--border-subtle)}
 .default-perms-head{margin:0 0 8px}
 .default-perm-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid var(--border-subtle)}
@@ -2472,6 +2472,47 @@ button,input,select,textarea{font-family:var(--font)}
 .ob-dots{display:flex;justify-content:center;gap:7px;padding:16px 0 6px}
 .ob-dot{width:6px;height:6px;border-radius:50%;background:var(--modal-border);transition:all 0.25s cubic-bezier(0.16,1,0.3,1)}
 .ob-dot.active{background:var(--accent);width:18px;border-radius:3px}
+.ob-acct-google{
+  width:100%;display:flex;align-items:center;justify-content:center;gap:10px;
+  padding:12px 16px;border-radius:13px;
+  border:1px solid var(--modal-border);background:var(--modal-bg-2);
+  color:var(--text);font-size:14px;font-weight:600;letter-spacing:-0.01em;
+  cursor:pointer;font-family:var(--font);transition:background 0.15s,border-color 0.15s;
+}
+.ob-acct-google:hover{background:var(--modal-bg);border-color:var(--text-dim)}
+.ob-acct-google:disabled{opacity:0.5;cursor:default}
+.ob-acct-google svg{flex-shrink:0}
+.ob-acct-divider{display:flex;align-items:center;gap:12px;margin:16px 0;color:var(--text-dim)}
+.ob-acct-divider::before,.ob-acct-divider::after{content:'';flex:1;height:1px;background:var(--modal-border)}
+.ob-acct-divider span{font-size:11.5px;font-weight:500}
+.ob-acct-seg{display:flex;gap:4px;padding:4px;background:var(--modal-bg-2);border:1px solid var(--modal-border);border-radius:12px;margin-bottom:12px}
+.ob-acct-seg-btn{flex:1;padding:8px 6px;border-radius:9px;border:none;background:transparent;color:var(--text-muted);cursor:pointer;font-size:12.5px;font-weight:550;letter-spacing:-0.01em;transition:all 0.15s;font-family:var(--font)}
+.ob-acct-seg-btn:hover{color:var(--text)}
+.ob-acct-seg-btn.active{background:var(--modal-bg);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,0.18)}
+.ob-acct-form{display:flex;flex-direction:column;gap:9px}
+.ob-acct-input{
+  width:100%;box-sizing:border-box;background:var(--modal-bg-2);
+  border:1px solid var(--modal-border);color:var(--text);
+  border-radius:11px;padding:12px 13px;font-size:13.5px;outline:none;
+  font-family:var(--font);transition:border-color 0.15s,box-shadow 0.15s;
+}
+.ob-acct-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-dim)}
+.ob-acct-input::placeholder{color:var(--text-dim)}
+.ob-acct-submit{margin-top:3px}
+.ob-acct-skiprow{display:flex;justify-content:center;align-items:center;gap:20px;margin-top:18px}
+.ob-acct-skiprow .ob-btn-secondary{padding:6px 4px}
+.ob-acct-card{
+  display:flex;align-items:center;gap:13px;
+  background:var(--modal-bg-2);border:1px solid var(--modal-border);
+  border-radius:16px;padding:15px 16px;margin-bottom:6px;
+}
+.ob-acct-avatar{width:46px;height:46px;flex-shrink:0}
+.ob-acct-avatar-img{width:46px;height:46px;border-radius:50%;object-fit:cover}
+.ob-acct-avatar-ph{width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--accent),color-mix(in srgb,var(--accent) 55%,#000));color:#fff;font-size:19px;font-weight:600}
+.ob-acct-card-info{flex:1;min-width:0;text-align:left}
+.ob-acct-card-name{font-size:14px;font-weight:600;color:var(--text);letter-spacing:-0.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ob-acct-card-email{font-size:12px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}
+.ob-acct-check{width:26px;height:26px;flex-shrink:0;border-radius:50%;background:linear-gradient(135deg,#34d399,#059669);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(52,211,153,0.3)}
 .ob-logo{width:64px;height:64px;border-radius:18px;display:block;margin:0 auto 22px;object-fit:contain}
 .ob-region-search{
   width:100%;box-sizing:border-box;background:var(--modal-bg-2);
@@ -5710,8 +5751,14 @@ svg{display:block;flex-shrink:0}
         </div>
         <div class="ob-actions">
           <button class="ob-btn-secondary" onclick="obPrev()">Back</button>
-          <button class="ob-btn-primary" onclick="obSaveAndFinish()">Finish Setup</button>
+          <button class="ob-btn-primary" onclick="obNext()">Continue</button>
         </div>
+      </div>
+
+      <div class="ob-step" id="ob-step-account">
+        <h2 class="ob-title" id="ob-account-title">Sign in to Ventus</h2>
+        <p class="ob-sub" id="ob-account-sub">Keep your bookmarks, history, and settings in sync across all your devices. You can skip this.</p>
+        <div id="ob-account-body"></div>
       </div>
 
       <div class="ob-step" id="ob-step-5">
@@ -5906,12 +5953,13 @@ let bookmarkDropPending = false;
 let bookmarkDropFallbackTimer = 0;
 let bookmarkRenderPending = false;
 let obStep = 0;
-const OB_STEPS = 7;
+const OB_STEPS = 8;
 let obTheme = 'dark';
 let obEngine = 'google';
 let obSidebarMode = 'auto_hide';
 let obRegion = '';
 let obDirection = 1;
+let obAccountMode = 'signin';
 let aiStreaming = false;
 let currentStreamEl = null;
 let currentThinkingEl = null;
@@ -6132,11 +6180,12 @@ window.__neura = {
     accountPending = false;
     renderAccountPanel();
     updateMoreButtonAvatar();
+    if (isOnboardingOpen()) renderObAccountStep();
   },
-  authPending() { accountPending = true; renderAccountPanel(); },
-  authSuccess(msg) { accountPending = false; toast(msg, 'success'); renderAccountPanel(); },
-  authError(msg) { accountPending = false; toast(msg, 'error'); renderAccountPanel(); },
-  authIdle() { accountPending = false; renderAccountPanel(); },
+  authPending() { accountPending = true; renderAccountPanel(); if (isOnboardingOpen()) renderObAccountStep(); },
+  authSuccess(msg) { accountPending = false; toast(msg, 'success'); renderAccountPanel(); if (isOnboardingOpen()) renderObAccountStep(); },
+  authError(msg) { accountPending = false; toast(msg, 'error'); renderAccountPanel(); if (isOnboardingOpen()) renderObAccountStep(); },
+  authIdle() { accountPending = false; renderAccountPanel(); if (isOnboardingOpen()) renderObAccountStep(); },
   setBookmarked(v) {
     state.is_bookmarked = v;
     renderBookmarkIcon();
@@ -15859,13 +15908,122 @@ function obShowPicker() {
 }
 function obPickRegion(code) { obShowRegionCard(code, 'Selected'); }
 function obClearDetect() { obShowPicker(); }
+function isOnboardingOpen() {
+  const o = document.getElementById('onboarding-overlay');
+  return !!(o && o.classList.contains('open'));
+}
+function hideSettingsForOnboarding() {
+  const overlay = document.getElementById('settings-overlay');
+  if (!overlay || !overlay.classList.contains('open')) return;
+  closeHistoryClearConfirm();
+  overlay.classList.remove('open');
+  if (window.__neura && window.__neura.clearContentBlur) window.__neura.clearContentBlur();
+}
 function openOnboarding() {
+  hideSettingsForOnboarding();
+  send('OpenSettings');
   document.getElementById('onboarding-overlay').classList.add('open');
   obStep = 0;
   obDirection = 1;
-  obRegion = '';
-  obShowPicker();
+  const s = state.settings || {};
+  const ap = s.appearance || {};
+  obTheme = ['dark', 'light', 'system'].includes(ap.theme) ? ap.theme : 'dark';
+  obSidebarMode = ['auto_hide', 'expanded', 'compact'].includes(ap.sidebar_mode) ? ap.sidebar_mode : 'auto_hide';
+  obEngine = (s.search && s.search.default_engine) || 'google';
+  obRegion = s.region || '';
+  obSyncSelections();
+  if (obRegion && _COUNTRY_DATA[obRegion]) obShowRegionCard(obRegion, 'Selected');
+  else obShowPicker();
+  renderObAccountStep();
   renderObStep();
+}
+function obSyncSelections() {
+  document.querySelectorAll('[id^="ob-theme-"]').forEach(el => el.classList.remove('selected'));
+  const th = document.getElementById('ob-theme-' + obTheme);
+  if (th) th.classList.add('selected');
+  document.querySelectorAll('.ob-sidebar-chip').forEach(b => b.classList.remove('selected'));
+  const sb = document.getElementById('ob-sb-' + obSidebarMode);
+  if (sb) sb.classList.add('selected');
+  document.querySelectorAll('.ob-engine-btn').forEach(b => b.classList.remove('selected'));
+  const en = document.getElementById('ob-engine-' + obEngine);
+  if (en) en.classList.add('selected');
+}
+const OB_GOOGLE_SVG = '<svg width="17" height="17" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.6 6.1 29.6 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.3-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.6 6.1 29.6 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.5 0 10.5-2.1 14.3-5.6l-6.6-5.6C29.6 34.6 26.9 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.6 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.2 4.2-4 5.6l6.6 5.6C41.4 36.3 44 30.7 44 24c0-1.3-.1-2.3-.4-3.5z"/></svg>';
+function renderObAccountStep() {
+  const body = document.getElementById('ob-account-body');
+  const titleEl = document.getElementById('ob-account-title');
+  const subEl = document.getElementById('ob-account-sub');
+  if (!body) return;
+  const a = state.account || {};
+  const dis = accountPending ? 'disabled' : '';
+  if (!a.configured) {
+    if (titleEl) titleEl.textContent = 'Almost done';
+    if (subEl) subEl.textContent = 'Cloud sync is not available in this build, but everything else is ready to go.';
+    body.innerHTML = `<div class="ob-actions">
+      <button class="ob-btn-primary" onclick="obSaveAndFinish()">Finish setup</button>
+      <button class="ob-btn-secondary" onclick="obPrev()">Back</button>
+    </div>`;
+    return;
+  }
+  if (a.signed_in) {
+    const p = a.profile || {};
+    const email = p.email || '';
+    const name = p.full_name || p.username || 'Your account';
+    const initial = (name || email || '?').trim().charAt(0).toUpperCase() || '?';
+    const avatar = p.photo_url
+      ? `<img src="${escAttr(p.photo_url)}" class="ob-acct-avatar-img" onerror="this.style.display='none'">`
+      : `<div class="ob-acct-avatar-ph">${escHtml(initial)}</div>`;
+    if (titleEl) titleEl.textContent = "You're signed in";
+    if (subEl) subEl.textContent = 'Cloud sync is on. Your bookmarks and settings will follow you everywhere.';
+    body.innerHTML = `
+      <div class="ob-acct-card">
+        <div class="ob-acct-avatar">${avatar}</div>
+        <div class="ob-acct-card-info">
+          <div class="ob-acct-card-name">${escHtml(name)}</div>
+          <div class="ob-acct-card-email">${escHtml(email)}</div>
+        </div>
+        <div class="ob-acct-check"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
+      </div>
+      <div class="ob-actions">
+        <button class="ob-btn-primary" onclick="obSaveAndFinish()">Finish setup</button>
+        <button class="ob-btn-secondary" onclick="obPrev()">Back</button>
+      </div>`;
+    return;
+  }
+  const isSignup = obAccountMode === 'signup';
+  if (titleEl) titleEl.textContent = 'Sign in to Ventus';
+  if (subEl) subEl.textContent = 'Keep your bookmarks, history, and settings in sync across devices. You can skip this.';
+  body.innerHTML = `
+    <button class="ob-acct-google" ${dis} onclick="obAccountGoogle()">${OB_GOOGLE_SVG}<span>Continue with Google</span></button>
+    <div class="ob-acct-divider"><span>or</span></div>
+    <div class="ob-acct-seg">
+      <button class="ob-acct-seg-btn ${!isSignup ? 'active' : ''}" ${dis} onclick="obAccountSetMode('signin')">Sign in</button>
+      <button class="ob-acct-seg-btn ${isSignup ? 'active' : ''}" ${dis} onclick="obAccountSetMode('signup')">Create account</button>
+    </div>
+    <form class="ob-acct-form" onsubmit="event.preventDefault();obAccountSubmit()">
+      <input class="ob-acct-input" id="ob-acct-email" type="email" autocomplete="username" placeholder="you@example.com" value="${escAttr(accountLastEmail || '')}" ${dis}>
+      <input class="ob-acct-input" id="ob-acct-password" type="password" autocomplete="${isSignup ? 'new-password' : 'current-password'}" placeholder="${isSignup ? 'Create a password (6+ characters)' : 'Password'}" ${dis}>
+      <button class="ob-btn-primary ob-acct-submit" type="submit" ${dis}>${accountPending ? 'Please wait…' : (isSignup ? 'Create account' : 'Sign in')}</button>
+    </form>
+    <div class="ob-acct-skiprow">
+      <button class="ob-btn-secondary" onclick="obPrev()">Back</button>
+      <button class="ob-btn-secondary" onclick="obSaveAndFinish()">Skip for now</button>
+    </div>`;
+}
+function obAccountSetMode(m) { obAccountMode = m; renderObAccountStep(); }
+function obAccountSubmit() {
+  const email = ((document.getElementById('ob-acct-email') || {}).value || '').trim();
+  const password = (document.getElementById('ob-acct-password') || {}).value || '';
+  if (!email || !password) { toast('Enter your email and password', 'error'); return; }
+  accountLastEmail = email;
+  accountPending = true;
+  renderObAccountStep();
+  send(obAccountMode === 'signup' ? 'AuthSignUp' : 'AuthSignIn', { email, password });
+}
+function obAccountGoogle() {
+  accountPending = true;
+  renderObAccountStep();
+  send('AuthSignInGoogle');
 }
 function finishOnboarding() {
   document.getElementById('onboarding-overlay').classList.remove('open');

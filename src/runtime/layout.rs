@@ -1193,21 +1193,22 @@ fn set_square_corners(window: &tao::window::Window) {
 fn set_square_corners(_window: &tao::window::Window) {}
 
 #[cfg(windows)]
-fn set_window_background_dark(window: &tao::window::Window) {
+fn set_window_background(window: &tao::window::Window, color: u32) {
     use windows::Win32::{
         Foundation::{COLORREF, HWND},
-        Graphics::Gdi::CreateSolidBrush,
+        Graphics::Gdi::{CreateSolidBrush, InvalidateRect},
         UI::WindowsAndMessaging::{SetClassLongPtrW, GET_CLASS_LONG_INDEX},
     };
     unsafe {
         let hwnd = HWND(window.hwnd());
-        let brush = CreateSolidBrush(COLORREF(0x00090706));
+        let brush = CreateSolidBrush(COLORREF(color));
         SetClassLongPtrW(hwnd, GET_CLASS_LONG_INDEX(-10i32), brush.0 as isize);
+        let _ = InvalidateRect(hwnd, None, true);
     }
 }
 
 #[cfg(not(windows))]
-fn set_window_background_dark(_window: &tao::window::Window) {}
+fn set_window_background(_window: &tao::window::Window, _color: u32) {}
 
 /// Prevent the window from appearing in screenshots/screen-recordings when in incognito mode.
 /// Uses WDA_EXCLUDEFROMCAPTURE (Windows 10 2004+). Silently no-ops on older builds.

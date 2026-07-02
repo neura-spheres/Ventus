@@ -1241,6 +1241,8 @@
                     for popup in popups.values() {
                         let _ = popup.content.set_theme(theme);
                     }
+                    #[cfg(windows)]
+                    set_window_background(&window, window_backing_colorref(theme));
                 }
                 #[cfg(not(windows))]
                 let _ = theme_changed;
