@@ -460,10 +460,8 @@ fn attach_new_window_handler(
                 return Ok(());
             }
 
-            // blob:/data:/filesystem: content is bound to the opener's renderer, so a fresh
-            // tab can't reopen it by url. Hand the new WebView over (SetNewWindow) into a real
-            // tab instead of letting WebView2 spawn its own bare popup window.
-            if needs_window_handoff(&url) {
+            let real_url = url.starts_with("http://") || url.starts_with("https://");
+            if needs_window_handoff(&url) || real_url {
                 if let Ok(deferral) = args.GetDeferral() {
                     PENDING_TAB_HANDOFFS.with(|q| {
                         q.borrow_mut().push(PendingTabHandoff {
@@ -477,16 +475,6 @@ fn attach_new_window_handler(
                 }
                 return Ok(());
             }
-
-            // Blank/about:blank with no url → "open blank then set location" pattern: leave it
-            // as a native popup so the opener keeps a real window reference.
-            let real_url = url.starts_with("http://") || url.starts_with("https://");
-            if !real_url {
-                return Ok(());
-            }
-
-            args.SetHandled(true)?;
-            let _ = proxy.send_event(AppEvent::Chrome(ChromeCommand::OpenInNewTab { url }));
         }
         Ok(())
     }));

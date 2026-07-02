@@ -446,7 +446,6 @@ button,input,select,textarea{font-family:var(--font)}
   gap:4px;
   padding:0 8px;
   background:var(--chrome-bg);
-  border-bottom:1px solid var(--chrome-border);
   height:var(--toolbar-h);
   flex:0 0 var(--toolbar-h);
   z-index:101;
@@ -3926,7 +3925,7 @@ html.reduce-motion .ai-thinking-summary.streaming.gpt .ai-thinking-title{animati
   width:var(--frame-side-w,5px);
   height:calc(100vh - var(--top-chrome-h) - var(--frame-bottom-h,5px));
   z-index:155;cursor:default;
-  background:var(--bg);
+  background:var(--chrome-bg);
   overflow:visible;
 }
 #app.tabs-horizontal #sidebar-float-trigger{left:0;pointer-events:none}
@@ -3937,14 +3936,14 @@ html.reduce-motion .ai-thinking-summary.streaming.gpt .ai-thinking-title{animati
   width:var(--frame-side-w,5px);
   height:calc(100vh - var(--top-chrome-h) - var(--frame-bottom-h,5px));
   z-index:155;
-  background:var(--bg);
+  background:var(--chrome-bg);
 }
 #frame-bottom{
   display:block;position:fixed;
   bottom:0;left:0;right:0;
   height:var(--frame-bottom-h,5px);
   z-index:155;
-  background:var(--bg);
+  background:var(--chrome-bg);
 }
 #app.content-fullscreen #sidebar-float-trigger,
 #app.content-fullscreen #frame-right,
