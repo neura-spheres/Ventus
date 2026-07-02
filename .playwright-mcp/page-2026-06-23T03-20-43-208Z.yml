@@ -1,0 +1,452 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - generic [ref=e4]:
+      - link "Savvy Time Savvy Time World Clock" [ref=e6] [cursor=pointer]:
+        - /url: /
+        - img "Savvy Time" [ref=e8]
+        - heading "Savvy Time World Clock" [level=5] [ref=e9]:
+          - text: Savvy Time
+          - generic [ref=e10]: World Clock
+      - navigation [ref=e14]:
+        - list:
+          - listitem [ref=e15]:
+            - link "Home" [ref=e16] [cursor=pointer]:
+              - /url: /
+          - listitem [ref=e17]:
+            - link "Converter" [ref=e18] [cursor=pointer]:
+              - /url: /converter
+          - listitem [ref=e19]:
+            - link "Local Time" [ref=e20] [cursor=pointer]:
+              - /url: /local
+          - listitem [ref=e21]:
+            - link "Timers" [ref=e22] [cursor=pointer]:
+              - /url: /timers
+          - listitem [ref=e23]:
+            - link "Calendar" [ref=e24] [cursor=pointer]:
+              - /url: /calendars
+          - listitem [ref=e25]:
+            - link "Mobile" [ref=e26] [cursor=pointer]:
+              - /url: /mobile
+  - generic [ref=e28]:
+    - list [ref=e29]:
+      - listitem [ref=e30]:
+        - link "Home" [ref=e31] [cursor=pointer]:
+          - /url: /
+      - listitem [ref=e32]:
+        - text: /
+        - link "Converter" [ref=e33] [cursor=pointer]:
+          - /url: /converter
+      - listitem [ref=e34]: / New Delhi, India to WIB
+    - generic [ref=e35]:
+      - button "Switch to 12-hour time format" [pressed]: "12"
+      - text: "|"
+      - button "Switch to 24-hour time format" [ref=e36] [cursor=pointer]: "24"
+  - main [ref=e37]:
+    - generic [ref=e38]:
+      - heading "New Delhi, India to WIB" [level=1] [ref=e41]
+      - navigation [ref=e42]:
+        - list [ref=e44]:
+          - listitem [ref=e45]:
+            - link "Converter" [ref=e46] [cursor=pointer]:
+              - /url: "#converter"
+          - listitem [ref=e47]:
+            - link "Time Difference" [ref=e48] [cursor=pointer]:
+              - /url: "#time-diff"
+          - listitem [ref=e49]:
+            - link "Table" [ref=e50] [cursor=pointer]:
+              - /url: "#table-view"
+          - listitem [ref=e51]:
+            - link "New Delhi, India" [ref=e52] [cursor=pointer]:
+              - /url: "#india-new-delhi"
+          - listitem [ref=e53]:
+            - link "WIB" [ref=e54] [cursor=pointer]:
+              - /url: "#wib"
+    - generic [ref=e56]:
+      - generic [ref=e57]:
+        - generic [ref=e58]:
+          - generic [ref=e60]:
+            - search [ref=e61]:
+              - generic [ref=e63]:
+                - combobox "Add time zone, city, or town" [ref=e64]
+                - button "Search time zones and cities" [ref=e65] [cursor=pointer]:
+                  - img [ref=e66]
+            - generic [ref=e69]:
+              - generic [ref=e71]:
+                - textbox "Conversion date" [ref=e72]: Jun 23, 2026
+                - button "Open calendar" [ref=e74] [cursor=pointer]:
+                  - img [ref=e75]
+              - generic [ref=e79]:
+                - button "Reset to current time":
+                  - img
+                - button "Converter settings" [ref=e81] [cursor=pointer]:
+                  - img [ref=e82]
+          - generic [ref=e85]:
+            - generic [ref=e86]:
+              - generic [ref=e87]:
+                - button "Reorder India" [ref=e88]
+                - link "New Delhi" [ref=e92] [cursor=pointer]:
+                  - /url: /local/india-new-delhi
+                - combobox "India time, 12-hour format" [ref=e97]: 8 50 am
+                - generic [ref=e99]:
+                  - generic [ref=e101]: India
+                  - generic [ref=e103]:
+                    - generic "India Standard Time (GMT +5:30)" [ref=e105]: IST
+                    - generic [ref=e107]: Tue, Jun 23
+                - generic [ref=e111]:
+                  - slider "Converter time slider" [ref=e112]
+                  - generic [ref=e113]:
+                    - generic [ref=e114]: 12am
+                    - generic [ref=e118]: 3am
+                    - generic [ref=e122]: 6am
+                    - generic [ref=e126]: 9am
+                    - generic [ref=e130]: 12pm
+                    - generic [ref=e134]: 3pm
+                    - generic [ref=e138]: 6pm
+                    - generic [ref=e142]: 9pm
+                - button "Remove India" [ref=e145] [cursor=pointer]:
+                  - img [ref=e146]
+              - generic [ref=e148]:
+                - button "Reorder Western Indonesian Time" [ref=e149]
+                - generic [ref=e153]: WIB
+                - combobox "Western Indonesian Time time, 12-hour format" [ref=e158]: 10 20 am
+                - generic [ref=e160]:
+                  - generic [ref=e162]: Western Indonesian Time
+                  - generic [ref=e164]:
+                    - generic "GMT +7" [ref=e166]
+                    - generic [ref=e168]: Tue, Jun 23
+                - generic [ref=e172]:
+                  - slider "Converter time slider" [ref=e173]
+                  - generic [ref=e174]:
+                    - generic [ref=e175]: 12am
+                    - generic [ref=e179]: 3am
+                    - generic [ref=e183]: 6am
+                    - generic [ref=e187]: 9am
+                    - generic [ref=e191]: 12pm
+                    - generic [ref=e195]: 3pm
+                    - generic [ref=e199]: 6pm
+                    - generic [ref=e203]: 9pm
+                - button "Remove Western Indonesian Time" [ref=e206] [cursor=pointer]:
+                  - img [ref=e207]
+            - complementary "Advertisement" [ref=e209]
+        - region "New Delhi, India to WIB overview" [ref=e211]:
+          - paragraph [ref=e212]: Compare New Delhi time with WIB time, including current local time, UTC offsets, time difference, daylight saving changes, working hours, and shareable meeting times.
+        - generic [ref=e213]:
+          - heading "Time Difference" [level=2] [ref=e214]
+          - paragraph [ref=e215]:
+            - strong [ref=e216]: IST (India Standard Time) is 1 hour and 30 minutes behind Western Indonesian Time
+            - text: 8:50 am in New Delhi, India is 10:20 am in WIB
+          - paragraph [ref=e217]:
+            - strong [ref=e218]: New Delhi to WIB call time
+            - text: Best time for a conference call or a meeting is between 9am-3:30pm in New Delhi which corresponds to 10:30am-5pm in WIB
+          - paragraph [ref=e219]:
+            - text: 8:50 am IST (India Standard Time) (New Delhi, India). Offset UTC +5:30 hours
+            - text: 10:20 am Western Indonesian Time (WIB). Offset UTC +7:00 hours
+          - paragraph [ref=e220]: 8:50 am New Delhi, India / 10:20 am WIB
+        - region "Time comparison table" [ref=e221]:
+          - table [ref=e222]:
+            - rowgroup [ref=e223]:
+              - row "New Delhi, India WIB" [ref=e224]:
+                - columnheader "New Delhi, India" [ref=e225]
+                - columnheader "WIB" [ref=e226]
+            - rowgroup [ref=e227]:
+              - row "12:00am 1:30am" [ref=e228]:
+                - cell "12:00am" [ref=e229]
+                - cell "1:30am" [ref=e230]
+              - row "1:00am 2:30am" [ref=e231]:
+                - cell "1:00am" [ref=e232]
+                - cell "2:30am" [ref=e233]
+              - row "2:00am 3:30am" [ref=e234]:
+                - cell "2:00am" [ref=e235]
+                - cell "3:30am" [ref=e236]
+              - row "3:00am 4:30am" [ref=e237]:
+                - cell "3:00am" [ref=e238]
+                - cell "4:30am" [ref=e239]
+              - row "4:00am 5:30am" [ref=e240]:
+                - cell "4:00am" [ref=e241]
+                - cell "5:30am" [ref=e242]
+              - row "5:00am 6:30am" [ref=e243]:
+                - cell "5:00am" [ref=e244]
+                - cell "6:30am" [ref=e245]
+              - row "6:00am 7:30am" [ref=e246]:
+                - cell "6:00am" [ref=e247]
+                - cell "7:30am" [ref=e248]
+              - row "7:00am 8:30am" [ref=e249]:
+                - cell "7:00am" [ref=e250]
+                - cell "8:30am" [ref=e251]
+              - row "8:00am 9:30am" [ref=e252]:
+                - cell "8:00am" [ref=e253]
+                - cell "9:30am" [ref=e254]
+              - row "9:00am 10:30am" [ref=e255]:
+                - cell "9:00am" [ref=e256]
+                - cell "10:30am" [ref=e257]
+              - row "10:00am 11:30am" [ref=e258]:
+                - cell "10:00am" [ref=e259]
+                - cell "11:30am" [ref=e260]
+              - row "11:00am 12:30pm" [ref=e261]:
+                - cell "11:00am" [ref=e262]
+                - cell "12:30pm" [ref=e263]
+              - row "12:00pm 1:30pm" [ref=e264]:
+                - cell "12:00pm" [ref=e265]
+                - cell "1:30pm" [ref=e266]
+              - row "1:00pm 2:30pm" [ref=e267]:
+                - cell "1:00pm" [ref=e268]
+                - cell "2:30pm" [ref=e269]
+              - row "2:00pm 3:30pm" [ref=e270]:
+                - cell "2:00pm" [ref=e271]
+                - cell "3:30pm" [ref=e272]
+              - row "3:00pm 4:30pm" [ref=e273]:
+                - cell "3:00pm" [ref=e274]
+                - cell "4:30pm" [ref=e275]
+              - row "4:00pm 5:30pm" [ref=e276]:
+                - cell "4:00pm" [ref=e277]
+                - cell "5:30pm" [ref=e278]
+              - row "5:00pm 6:30pm" [ref=e279]:
+                - cell "5:00pm" [ref=e280]
+                - cell "6:30pm" [ref=e281]
+              - row "6:00pm 7:30pm" [ref=e282]:
+                - cell "6:00pm" [ref=e283]
+                - cell "7:30pm" [ref=e284]
+              - row "7:00pm 8:30pm" [ref=e285]:
+                - cell "7:00pm" [ref=e286]
+                - cell "8:30pm" [ref=e287]
+              - row "8:00pm 9:30pm" [ref=e288]:
+                - cell "8:00pm" [ref=e289]
+                - cell "9:30pm" [ref=e290]
+              - row "9:00pm 10:30pm" [ref=e291]:
+                - cell "9:00pm" [ref=e292]
+                - cell "10:30pm" [ref=e293]
+              - row "10:00pm 11:30pm" [ref=e294]:
+                - cell "10:00pm" [ref=e295]
+                - cell "11:30pm" [ref=e296]
+              - row "11:00pm 12:30am" [ref=e297]:
+                - cell "11:00pm" [ref=e298]
+                - cell "12:30am" [ref=e299]
+        - generic [ref=e300]:
+          - heading "New Delhi Information" [level=2] [ref=e304]
+          - generic [ref=e307]:
+            - heading "Time Zone" [level=4] [ref=e308]
+            - generic [ref=e309]:
+              - strong [ref=e311]: Abbreviation / Name
+              - generic [ref=e312]: IST - India Standard Time
+            - generic [ref=e313]:
+              - strong [ref=e315]: UTC / GMT Offset
+              - generic [ref=e316]: +5:30 hours during India Standard Time, currently in use.
+            - heading "New Delhi Facts" [level=4] [ref=e317]
+            - generic [ref=e318]:
+              - strong [ref=e320]: Country
+              - generic [ref=e321]: India
+            - generic [ref=e322]:
+              - strong [ref=e324]: Alternative Names
+              - generic [ref=e325]: Dellium Novum, Dilli, Dillí, N'ju-Deli, Neo Delchi, Neu-Delhi, Nev Deli, New Delhi, New Dilli, Nju Delkhi, Nov-Delhio, Nova Delhi, Nova Deli, Nova Deli - na'i dilli, Nova Deli - नई दिल्ली, Nova-Delhi, Nove Dilli, Nové Dillí, Nueba Deli, Nueva Delhi, Nuova Delhi, Nyja Deli, Nyu Deli, Nòva Delhi, Nýja Delí, Yeni Delhi, dlhy aljdydt, na'i dilli, naya dilli, niu-deli, niwde li, nyudelli, nyuderi, nyw dlhy, nywdlhy, putu tilli, xin de li, Νέο Δελχί, Њу Делхи, Нев Дели, Нью-Дели, Նյու Դելի, ניו דלהי, دلهي الجديدة, نيودلهي, नई दिल्ली, নয়া দিল্লী, புது தில்லி, นิวเดลี, ནེའུ་དིལ་ལིའི, ნიუ-დელი, ኒው ዴሊ, ニューデリー, 新德里, 뉴델리
+            - generic [ref=e326]:
+              - strong [ref=e328]: Population
+              - generic [ref=e329]: 317,797
+            - generic [ref=e330]:
+              - strong [ref=e332]: Currency
+              - generic [ref=e333]: Rupee (INR)
+            - generic [ref=e334]:
+              - strong [ref=e336]: Geographic Coordinates
+              - generic [ref=e337]: 28° 38' N Latitude / 77° 13' E Longitude
+            - generic [ref=e338]:
+              - strong [ref=e340]: International Dialing Code
+              - generic [ref=e341]: "+91"
+        - generic [ref=e342]:
+          - heading "Western Indonesian Time" [level=2] [ref=e343]
+          - generic [ref=e344]:
+            - generic [ref=e345]:
+              - paragraph [ref=e346]:
+                - strong [ref=e347]: "Offset:"
+                - text: WIB is 7 hours ahead Greenwich Mean Time (GMT) and is used in Asia
+              - paragraph [ref=e348]:
+                - strong [ref=e349]: "Countries using this time zone:"
+                - text: Indonesia
+              - paragraph [ref=e350]:
+                - strong [ref=e351]: "Principal Cities:"
+                - text: The largest city in the WIB time zone is Jakarta in Indonesia, with about 8.54 million people. Other major cities in this time zone include Surabaya, Medan, Bandung, Bekasi.
+              - paragraph [ref=e352]:
+                - strong [ref=e353]: "Daylight Saving:"
+                - text: Clocks in Western Indonesian Time (WIB) do not change for daylight saving time, so WIB stays the same throughout the year. Other time zones may set clocks forward in summer and back in winter.
+            - figure "WIB timezone map" [ref=e355]:
+              - img "WIB Time Zone Geo Map" [ref=e356]
+              - generic [ref=e357]: WIB timezone map
+          - heading "WIB representations, usage and related time zones" [level=3] [ref=e360]
+          - generic [ref=e361]:
+            - generic [ref=e362]:
+              - strong [ref=e363]: "W3C/ISO-8601:"
+              - text: International standard covering representation and exchange of dates and time-related data
+              - list [ref=e364]:
+                - listitem [ref=e365]: +07 - basic short
+                - listitem [ref=e366]: +0700 - basic
+                - listitem [ref=e367]: +07:00 - extended
+            - generic [ref=e368]:
+              - generic [ref=e369]:
+                - strong [ref=e370]: "Email/RFC-2822:"
+                - text: Internet Message Format Date Standard, typically used for timestamps in email headers
+              - list [ref=e371]:
+                - listitem [ref=e372]: +0700 - sign character (+) followed by a four digit time providing hours (07) and minutes (00) of the offset. Indicates an offset of seven hours to the east of the zero meridian.
+            - generic [ref=e373]:
+              - generic [ref=e374]:
+                - strong [ref=e375]: "Military/NATO:"
+                - text: Used by the U.S. military, Chinese military and others
+              - list [ref=e376]:
+                - listitem [ref=e377]: Golf - Military abbreviation for WIB
+                - listitem [ref=e378]: G - short form of 'Golf'
+            - generic [ref=e379]:
+              - generic [ref=e380]:
+                - strong [ref=e381]: "IANA/Olson:"
+                - text: Reflects WIB time zone boundaries defined by political bodies, primarily intended for use with computer programs and operating systems
+              - list [ref=e382]:
+                - listitem [ref=e383]: Asia/Jakarta
+                - listitem [ref=e384]: Asia/Pontianak
+            - generic [ref=e385]:
+              - strong [ref=e386]: "Time zones with the GMT +7 offset:"
+              - list [ref=e387]:
+                - listitem [ref=e388]: CXT - Christmas Island Time
+                - listitem [ref=e389]: DAVT - Davis Time
+                - listitem [ref=e390]: G - Golf Time Zone
+                - listitem [ref=e391]: HOVT - Hovd Time
+                - listitem [ref=e392]: ICT - Indochina Time
+                - listitem [ref=e393]: KRAT - Krasnoyarsk Time
+                - listitem [ref=e394]: NOVST - Novosibirsk Summer Time
+                - listitem [ref=e395]: NOVT - Novosibirsk Time
+                - listitem [ref=e396]: OMSST - Omsk Summer Time
+                - listitem [ref=e397]: WIB - Western Indonesian Time
+      - generic [ref=e398]:
+        - complementary [ref=e399]
+        - complementary [ref=e401]:
+          - heading "Mobile Apps" [level=3] [ref=e403]
+          - generic [ref=e404]:
+            - link "Savvy time App iOS" [ref=e405] [cursor=pointer]:
+              - /url: https://apps.apple.com/sa/app/savvy-time/id1604337442
+              - img "Savvy time App iOS" [ref=e406]
+            - link "Savvy time App Android" [ref=e407] [cursor=pointer]:
+              - /url: https://play.google.com/store/apps/details?id=com.savvytime.mobile
+              - img "Savvy time App Android" [ref=e408]
+          - heading "Chrome Extension" [level=3] [ref=e410]
+          - link "Google Chrome Savvy time time zone converter Savvy Time Converter at Google Chrome Store" [ref=e411] [cursor=pointer]:
+            - /url: https://chromewebstore.google.com/detail/time-zone-converter-savvy/plhnjpnbkmdmooideifhkonobdkgbbof
+            - img "Google Chrome Savvy time time zone converter" [ref=e412]
+            - generic [ref=e413]: Savvy Time Converter at Google Chrome Store
+        - complementary [ref=e414]:
+          - heading "Related Converters" [level=3] [ref=e416]
+          - list [ref=e417]:
+            - listitem [ref=e418]:
+              - link "UTC to WIB" [ref=e419] [cursor=pointer]:
+                - /url: /converter/utc-to-wib
+            - listitem [ref=e420]:
+              - link "Kuala Lumpur, Malaysia to New Delhi, India" [ref=e421] [cursor=pointer]:
+                - /url: /converter/malaysia-kuala-lumpur-to-india-new-delhi
+            - listitem [ref=e422]:
+              - link "EST to WIB" [ref=e423] [cursor=pointer]:
+                - /url: /converter/est-to-wib
+            - listitem [ref=e424]:
+              - link "Singapore, Singapore to New Delhi, India" [ref=e425] [cursor=pointer]:
+                - /url: /converter/singapore-singapore-to-india-new-delhi
+            - listitem [ref=e426]:
+              - link "New Delhi, India to London, United Kingdom" [ref=e427] [cursor=pointer]:
+                - /url: /converter/india-new-delhi-to-united-kingdom-london
+            - listitem [ref=e428]:
+              - link "London, United Kingdom to New Delhi, India" [ref=e429] [cursor=pointer]:
+                - /url: /converter/united-kingdom-london-to-india-new-delhi
+            - listitem [ref=e430]:
+              - link "PT to WIB" [ref=e431] [cursor=pointer]:
+                - /url: /converter/pt-to-wib
+            - listitem [ref=e432]:
+              - link "CCT to WIB" [ref=e433] [cursor=pointer]:
+                - /url: /converter/cct-to-wib
+            - listitem [ref=e434]:
+              - link "WIB to CCT" [ref=e435] [cursor=pointer]:
+                - /url: /converter/wib-to-cct
+            - listitem [ref=e436]:
+              - link "MMT to WIB" [ref=e437] [cursor=pointer]:
+                - /url: /converter/mmt-to-wib
+        - complementary [ref=e438]:
+          - heading "Popular Time Zone Converters" [level=3] [ref=e440]
+          - list [ref=e441]:
+            - listitem [ref=e442]:
+              - link "EST to IST" [ref=e443] [cursor=pointer]:
+                - /url: /converter/est-to-ist
+            - listitem [ref=e444]:
+              - link "PST to IST" [ref=e445] [cursor=pointer]:
+                - /url: /converter/pst-to-ist
+            - listitem [ref=e446]:
+              - link "UTC to IST" [ref=e447] [cursor=pointer]:
+                - /url: /converter/utc-to-ist
+            - listitem [ref=e448]:
+              - link "CST to IST" [ref=e449] [cursor=pointer]:
+                - /url: /converter/cst-to-ist
+            - listitem [ref=e450]:
+              - link "CET to IST" [ref=e451] [cursor=pointer]:
+                - /url: /converter/cet-to-ist
+            - listitem [ref=e452]:
+              - link "PST to EST" [ref=e453] [cursor=pointer]:
+                - /url: /converter/pst-to-est
+            - listitem [ref=e454]:
+              - link "UTC to PST" [ref=e455] [cursor=pointer]:
+                - /url: /converter/utc-to-pst
+            - listitem [ref=e456]:
+              - link "UTC to EST" [ref=e457] [cursor=pointer]:
+                - /url: /converter/utc-to-est
+            - listitem [ref=e458]:
+              - link "GMT to IST" [ref=e459] [cursor=pointer]:
+                - /url: /converter/gmt-to-ist
+            - listitem [ref=e460]:
+              - link "EST to PST" [ref=e461] [cursor=pointer]:
+                - /url: /converter/est-to-pst
+        - complementary [ref=e462]:
+          - heading "Popular New Delhi Converters" [level=3] [ref=e464]
+          - list [ref=e465]:
+            - listitem [ref=e466]:
+              - link "New Delhi to EST" [ref=e467] [cursor=pointer]:
+                - /url: /converter/india-new-delhi-to-est
+            - listitem [ref=e468]:
+              - link "New Delhi to GMT" [ref=e469] [cursor=pointer]:
+                - /url: /converter/india-new-delhi-to-gmt
+            - listitem [ref=e470]:
+              - link "New Delhi to PST" [ref=e471] [cursor=pointer]:
+                - /url: /converter/india-new-delhi-to-pst
+            - listitem [ref=e472]:
+              - link "New Delhi to CET" [ref=e473] [cursor=pointer]:
+                - /url: /converter/india-new-delhi-to-cet
+            - listitem [ref=e474]:
+              - link "New Delhi to IST" [ref=e475] [cursor=pointer]:
+                - /url: /converter/india-new-delhi-to-ist
+            - listitem [ref=e476]:
+              - link "New Delhi to Mumbai" [ref=e477] [cursor=pointer]:
+                - /url: /converter/india-new-delhi-to-india-mumbai
+            - listitem [ref=e478]:
+              - link "New Delhi to Delhi" [ref=e479] [cursor=pointer]:
+                - /url: /converter/india-new-delhi-to-india-delhi
+            - listitem [ref=e480]:
+              - link "New Delhi to Bengaluru" [ref=e481] [cursor=pointer]:
+                - /url: /converter/india-new-delhi-to-india-bengaluru
+            - listitem [ref=e482]:
+              - link "New Delhi to Kolkata" [ref=e483] [cursor=pointer]:
+                - /url: /converter/india-new-delhi-to-india-kolkata
+            - listitem [ref=e484]:
+              - link "New Delhi to Chennai" [ref=e485] [cursor=pointer]:
+                - /url: /converter/india-new-delhi-to-india-chennai
+    - generic [ref=e486]:
+      - separator [ref=e487]
+      - link "EST to IST" [ref=e488] [cursor=pointer]:
+        - /url: /converter/est-to-ist
+      - link "GMT to EST" [ref=e489] [cursor=pointer]:
+        - /url: /converter/gmt-to-est
+      - link "PST to EST" [ref=e490] [cursor=pointer]:
+        - /url: /converter/pst-to-est
+      - link "EST to GMT" [ref=e491] [cursor=pointer]:
+        - /url: /converter/est-to-gmt
+      - link "PST to GMT" [ref=e492] [cursor=pointer]:
+        - /url: /converter/pst-to-gmt
+  - contentinfo [ref=e493]:
+    - generic [ref=e494]:
+      - link "Contact Us" [ref=e495] [cursor=pointer]:
+        - /url: /contact
+      - link "Privacy Policy" [ref=e496] [cursor=pointer]:
+        - /url: /privacy
+      - link "Disclaimer" [ref=e497] [cursor=pointer]:
+        - /url: /disclaimer
+      - link "App Store" [ref=e498] [cursor=pointer]:
+        - /url: https://apps.apple.com/sa/app/savvy-time/id1604337442
+      - link "Play Store" [ref=e499] [cursor=pointer]:
+        - /url: https://play.google.com/store/apps/details?id=com.savvytime.mobile

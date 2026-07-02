@@ -1,0 +1,1447 @@
+- generic [ref=e3]:
+  - generic [ref=e6]:
+    - button "Auto Theme" [ref=e10] [cursor=pointer]:
+      - generic [ref=e11]:
+        - img
+      - generic [ref=e12]: Auto
+      - img
+    - link "TL.net" [ref=e13] [cursor=pointer]:
+      - /url: https://tl.net
+  - banner [ref=e14]:
+    - generic [ref=e15]:
+      - img "Liquipedia logo" [ref=e17]
+      - heading "Your home for esports." [level=1] [ref=e22]
+      - generic [ref=e24]:
+        - generic [ref=e25]:
+          - combobox "Select a wiki to search" [ref=e26] [cursor=pointer]:
+            - option "Age of Empires"
+            - option "Apex Legends"
+            - option "Arena FPS"
+            - option "Artifact"
+            - option "Auto Chess"
+            - option "Battalion 1944"
+            - option "Battlerite"
+            - option "Brawl Stars"
+            - option "Brawlhalla"
+            - option "Call of Duty"
+            - option "Chess"
+            - option "Clash of Clans"
+            - option "Clash Royale"
+            - option "Commons"
+            - option "Counter-Strike"
+            - option "Critical Ops"
+            - option "CrossFire"
+            - option "Deadlock"
+            - option "Delta Force"
+            - option "Dota 2" [selected]
+            - option "Dota 2 (Game archive)"
+            - option "Dota Underlords"
+            - option "EA SPORTS FC"
+            - 'option "Escape from Tarkov: Arena"'
+            - option "Esports"
+            - option "Esports Virtual Arenas"
+            - option "Fighting Games"
+            - option "Formula 1"
+            - option "Fortnite"
+            - option "Free Fire"
+            - option "GeoGuessr"
+            - option "GOALS"
+            - option "Halo"
+            - option "Hearthstone"
+            - option "Heroes of the Storm"
+            - option "Honor of Kings"
+            - option "Hub"
+            - option "Identity V"
+            - option "Illuvium"
+            - option "Lab"
+            - option "League of Legends"
+            - option "Legends of Runeterra"
+            - 'option "Magic: The Gathering"'
+            - option "Marvel Rivals"
+            - 'option "Mobile Legends: Bang Bang"'
+            - option "Naraka"
+            - option "Omega Strikers"
+            - option "osu"
+            - option "Overwatch"
+            - option "Paladins"
+            - option "Pokémon"
+            - option "PUBG Mobile"
+            - 'option "PUBG: Battlegrounds"'
+            - option "Rainbow Six"
+            - option "Rematch"
+            - option "Rocket League"
+            - option "Rocket League Sideswipe"
+            - option "Sim Racing"
+            - option "Smash"
+            - option "SMITE"
+            - option "Splatoon"
+            - option "Splitgate"
+            - 'option "Star Wars: Squadrons"'
+            - option "StarCraft"
+            - option "StarCraft 2"
+            - option "Stormgate"
+            - option "Team Fortress"
+            - option "Teamfight Tactics"
+            - option "Tetris"
+            - option "The Finals"
+            - option "TrackMania"
+            - option "VALORANT"
+            - option "War Thunder"
+            - option "Warcraft"
+            - option "Wild Rift"
+            - option "Wildcard"
+            - option "World of Tanks"
+            - option "World of Warcraft"
+            - option "Zula"
+          - img [ref=e28]
+        - searchbox "Search for a term" [ref=e30]
+        - button "Search" [ref=e31] [cursor=pointer]:
+          - text: Search
+          - img
+  - main [ref=e32]:
+    - generic [ref=e35]:
+      - generic [ref=e36]:
+        - heading "Dota 2" [level=2] [ref=e37]:
+          - link "Dota 2" [ref=e38] [cursor=pointer]:
+            - /url: /dota2/Main_Page
+        - generic [ref=e41]: 
+        - list [ref=e43]:
+          - listitem [ref=e44]:
+            - link "TI2026 EU CQ" [ref=e45] [cursor=pointer]:
+              - /url: /dota2/The_International/2026/Europe
+          - listitem [ref=e46]:
+            - link "The International 2026" [ref=e47] [cursor=pointer]:
+              - /url: /dota2/The_International/2026
+          - listitem [ref=e48]:
+            - link "TI2026 SEA CQ" [ref=e49] [cursor=pointer]:
+              - /url: /dota2/The_International/2026/Southeast_Asia
+          - listitem [ref=e50]:
+            - link "Nigma Galaxy" [ref=e51] [cursor=pointer]:
+              - /url: /dota2/Nigma_Galaxy
+          - listitem [ref=e52]:
+            - link "TI2026 NA CQ" [ref=e53] [cursor=pointer]:
+              - /url: /dota2/The_International/2026/North_America
+      - generic [ref=e54]:
+        - heading "Counter-Strike" [level=2] [ref=e55]:
+          - link "Counter-Strike" [ref=e56] [cursor=pointer]:
+            - /url: /counterstrike/Main_Page
+        - generic [ref=e59]: 
+        - list [ref=e61]:
+          - listitem [ref=e62]:
+            - link "IEM Cologne Major 2026" [ref=e63] [cursor=pointer]:
+              - /url: /counterstrike/Intel_Extreme_Masters/2026/Cologne
+          - listitem [ref=e64]:
+            - link "Super DraculaN Season 1" [ref=e65] [cursor=pointer]:
+              - /url: /counterstrike/Super_DraculaN/Season_1
+          - listitem [ref=e66]:
+            - link "Team Falcons" [ref=e67] [cursor=pointer]:
+              - /url: /counterstrike/Team_Falcons
+          - listitem [ref=e68]:
+            - link "XSE Pro League 2026" [ref=e69] [cursor=pointer]:
+              - /url: /counterstrike/XSE_Pro_League/2026
+          - listitem [ref=e70]:
+            - link "HLTV" [ref=e71] [cursor=pointer]:
+              - /url: /counterstrike/HLTV
+      - generic [ref=e72]:
+        - heading "VALORANT" [level=2] [ref=e73]:
+          - link "VALORANT" [ref=e74] [cursor=pointer]:
+            - /url: /valorant/Main_Page
+        - generic [ref=e77]: 
+        - list [ref=e79]:
+          - listitem [ref=e80]:
+            - link "Esports Nations Cup 2026" [ref=e81] [cursor=pointer]:
+              - /url: /valorant/Esports_Nations_Cup/2026
+          - listitem [ref=e82]:
+            - link "VALORANT Masters London 2026" [ref=e83] [cursor=pointer]:
+              - /url: /valorant/VCT/2026/Stage_2/Masters
+          - listitem [ref=e84]:
+            - 'link "VCL Japan: Split 2" [ref=e85] [cursor=pointer]':
+              - /url: /valorant/VCL/2026/Japan/Split_2
+          - listitem [ref=e86]:
+            - link "VALORANT at Esports World Cup 2026" [ref=e87] [cursor=pointer]:
+              - /url: /valorant/Esports_World_Cup/2026
+          - listitem [ref=e88]:
+            - 'link "ENC 2026: Asia Qualifier" [ref=e89] [cursor=pointer]':
+              - /url: /valorant/Esports_Nations_Cup/2026/Asia
+      - generic [ref=e90]:
+        - 'heading "Mobile Legends: Bang Bang" [level=2] [ref=e91]':
+          - 'link "Mobile Legends: Bang Bang" [ref=e92] [cursor=pointer]':
+            - /url: /mobilelegends/Main_Page
+        - generic [ref=e95]: 
+        - list [ref=e97]:
+          - listitem [ref=e98]:
+            - link "AFK Masters Cup Season 1" [ref=e99] [cursor=pointer]:
+              - /url: /mobilelegends/AFK_Masters_Cup/Season_1
+          - listitem [ref=e100]:
+            - link "Cyberhero x Donatov.net AFK Masters Cup Season 1 - Playoffs" [ref=e101] [cursor=pointer]:
+              - /url: /mobilelegends/AFK_Masters_Cup/Season_1/Playoffs
+          - listitem [ref=e102]:
+            - link "MLBB Mid Season Cup 2026" [ref=e103] [cursor=pointer]:
+              - /url: /mobilelegends/MSC/2026
+          - listitem [ref=e104]:
+            - link "2026 Asian Games - SEA Qualifiers" [ref=e105] [cursor=pointer]:
+              - /url: /mobilelegends/Asian_Games/2026/Qualifier/Southeast_Asia
+          - listitem [ref=e106]:
+            - link "Alter Ego" [ref=e107] [cursor=pointer]:
+              - /url: /mobilelegends/Alter_Ego
+      - generic [ref=e108]:
+        - heading "League of Legends" [level=2] [ref=e109]:
+          - link "League of Legends" [ref=e110] [cursor=pointer]:
+            - /url: /leagueoflegends/Main_Page
+        - generic [ref=e113]: 
+        - list [ref=e115]:
+          - listitem [ref=e116]:
+            - link "2026 Mid-Season Invitational" [ref=e117] [cursor=pointer]:
+              - /url: /leagueoflegends/Mid-Season_Invitational/2026
+          - listitem [ref=e118]:
+            - link "2026 Mid-Season Invitational - Play-In Stage" [ref=e119] [cursor=pointer]:
+              - /url: /leagueoflegends/Mid-Season_Invitational/2026/Play-In_Stage
+          - listitem [ref=e120]:
+            - link "EWC 2026" [ref=e121] [cursor=pointer]:
+              - /url: /leagueoflegends/Esports_World_Cup/2026
+          - listitem [ref=e122]:
+            - link "Esports Nations Cup 2026" [ref=e123] [cursor=pointer]:
+              - /url: /leagueoflegends/Esports_Nations_Cup/2026
+          - listitem [ref=e124]:
+            - link "LCK 2026 Season" [ref=e125] [cursor=pointer]:
+              - /url: /leagueoflegends/LCK/2026
+      - generic [ref=e126]:
+        - heading "Rocket League" [level=2] [ref=e127]:
+          - link "Rocket League" [ref=e128] [cursor=pointer]:
+            - /url: /rocketleague/Main_Page
+        - generic [ref=e131]: 
+        - list [ref=e133]:
+          - listitem [ref=e134]:
+            - 'link "RLCS 2026 1v1: MENA Open" [ref=e135] [cursor=pointer]':
+              - /url: /rocketleague/Rocket_League_Championship_Series/2026/1v1/Middle_East_and_North_Africa
+          - listitem [ref=e136]:
+            - 'link "RLCS 2026 1v1: Europe Open" [ref=e137] [cursor=pointer]':
+              - /url: /rocketleague/Rocket_League_Championship_Series/2026/1v1/Europe
+          - listitem [ref=e138]:
+            - link "RLCS 2026 - Worlds" [ref=e139] [cursor=pointer]:
+              - /url: /rocketleague/Rocket_League_Championship_Series/2026
+          - listitem [ref=e140]:
+            - 'link "RLCS 2026 1v1: North America Open" [ref=e141] [cursor=pointer]':
+              - /url: /rocketleague/Rocket_League_Championship_Series/2026/1v1/North_America
+          - listitem [ref=e142]:
+            - link "zen" [ref=e143] [cursor=pointer]:
+              - /url: /rocketleague/Zen
+      - generic [ref=e144]:
+        - heading "PUBG Mobile" [level=2] [ref=e145]:
+          - link "PUBG Mobile" [ref=e146] [cursor=pointer]:
+            - /url: /pubgmobile/Main_Page
+        - generic [ref=e149]: 
+        - list [ref=e151]:
+          - listitem [ref=e152]:
+            - link "PUBG Mobile World Cup 2026" [ref=e153] [cursor=pointer]:
+              - /url: /pubgmobile/PUBG_Mobile_World_Cup/2026
+          - listitem [ref=e154]:
+            - link "BMPS 2026" [ref=e155] [cursor=pointer]:
+              - /url: /pubgmobile/Battlegrounds_Mobile_India_Pro_Series/2026
+          - listitem [ref=e156]:
+            - link "PUBG Mobile Macau Invitational 2026" [ref=e157] [cursor=pointer]:
+              - /url: /pubgmobile/PUBG_Mobile_Macau_Invitational/2026
+          - listitem [ref=e158]:
+            - link "BGMI Esports - KIE Points" [ref=e159] [cursor=pointer]:
+              - /url: /pubgmobile/BGMI_Esports/KIE_Global_Leaderboard
+          - listitem [ref=e160]:
+            - link "GodLike Esports" [ref=e161] [cursor=pointer]:
+              - /url: /pubgmobile/GodLike_Esports
+      - generic [ref=e162]:
+        - heading "Overwatch" [level=2] [ref=e163]:
+          - link "Overwatch" [ref=e164] [cursor=pointer]:
+            - /url: /overwatch/Main_Page
+        - generic [ref=e167]: 
+        - list [ref=e169]:
+          - listitem [ref=e170]:
+            - link "OWCS Korea Stage 2" [ref=e171] [cursor=pointer]:
+              - /url: /overwatch/Overwatch_Champions_Series/2026/Asia/Stage_2/Korea
+          - listitem [ref=e172]:
+            - link "OWCS Pacific Stage 2" [ref=e173] [cursor=pointer]:
+              - /url: /overwatch/Overwatch_Champions_Series/2026/Asia/Stage_2/Pacific
+          - listitem [ref=e174]:
+            - link "OWCS Japan Stage 2" [ref=e175] [cursor=pointer]:
+              - /url: /overwatch/Overwatch_Champions_Series/2026/Asia/Stage_2/Japan
+          - listitem [ref=e176]:
+            - link "OWCS Stage 2 Pacific - Regular Season" [ref=e177] [cursor=pointer]:
+              - /url: /overwatch/Overwatch_Champions_Series/2026/Asia/Stage_2/Pacific/Regular_Season
+          - listitem [ref=e178]:
+            - link "OWCS Korea Stage 2 - Regular Season" [ref=e179] [cursor=pointer]:
+              - /url: /overwatch/Overwatch_Champions_Series/2026/Asia/Stage_2/Korea/Regular_Season
+      - generic [ref=e180]:
+        - heading "Apex Legends" [level=2] [ref=e181]:
+          - link "Apex Legends" [ref=e182] [cursor=pointer]:
+            - /url: /apexlegends/Main_Page
+        - generic [ref=e185]: 
+        - list [ref=e187]:
+          - listitem [ref=e188]:
+            - 'link "ALGS: 2026 S1 Playoffs" [ref=e189] [cursor=pointer]':
+              - /url: /apexlegends/Apex_Legends_Global_Series/2026/Split_1/Playoffs
+          - listitem [ref=e190]:
+            - link "Esports Nations Cup 2026" [ref=e191] [cursor=pointer]:
+              - /url: /apexlegends/Esports_Nations_Cup/2026
+          - listitem [ref=e192]:
+            - 'link "Apex Legends Global Series: 2026 Split 1 Playoffs - Group Stage" [ref=e193] [cursor=pointer]':
+              - /url: /apexlegends/Apex_Legends_Global_Series/2026/Split_1/Playoffs/Group_Stage
+          - listitem [ref=e194]:
+            - 'link "ALGS: Americas PL Split 1 2026" [ref=e195] [cursor=pointer]':
+              - /url: /apexlegends/Apex_Legends_Global_Series/2026/Split_1/Pro_League/Americas
+          - listitem [ref=e196]:
+            - link "Team Falcons" [ref=e197] [cursor=pointer]:
+              - /url: /apexlegends/Team_Falcons
+      - generic [ref=e198]:
+        - heading "Fighting Games" [level=2] [ref=e199]:
+          - link "Fighting Games" [ref=e200] [cursor=pointer]:
+            - /url: /fighters/Main_Page
+        - generic [ref=e203]: 
+        - list [ref=e205]:
+          - listitem [ref=e206]:
+            - link "Evolution Championship Series 2026 - SF6" [ref=e207] [cursor=pointer]:
+              - /url: /fighters/Evolution_Championship_Series/2026/SF6
+          - listitem [ref=e208]:
+            - link "Evolution Championship Series 2026" [ref=e209] [cursor=pointer]:
+              - /url: /fighters/Evolution_Championship_Series/2026
+          - listitem [ref=e210]:
+            - link "Evolution Championship Series 2026 - T8" [ref=e211] [cursor=pointer]:
+              - /url: /fighters/Evolution_Championship_Series/2026/T8
+          - listitem [ref=e212]:
+            - link "Tekken 8 - Esports World Cup 2026" [ref=e213] [cursor=pointer]:
+              - /url: /fighters/Esports_World_Cup/2026/T8
+          - listitem [ref=e214]:
+            - link "CHAIN SHIFT 2026 - T8" [ref=e215] [cursor=pointer]:
+              - /url: /fighters/Chain_Shift/2026/T8
+      - generic [ref=e216]:
+        - heading "StarCraft 2" [level=2] [ref=e217]:
+          - link "StarCraft 2" [ref=e218] [cursor=pointer]:
+            - /url: /starcraft2/Main_Page
+        - generic [ref=e221]: 
+        - list [ref=e223]:
+          - listitem [ref=e224]:
+            - link "Douyu Cup 2026" [ref=e225] [cursor=pointer]:
+              - /url: /starcraft2/Douyu_Cup/2026
+          - listitem [ref=e226]:
+            - link "Maestros of the Game 2" [ref=e227] [cursor=pointer]:
+              - /url: /starcraft2/Maestros_of_the_Game/2
+          - listitem [ref=e228]:
+            - link "TY" [ref=e229] [cursor=pointer]:
+              - /url: /starcraft2/TY
+          - listitem [ref=e230]:
+            - link "FanTaSy" [ref=e231] [cursor=pointer]:
+              - /url: /starcraft2/FanTaSy
+          - listitem [ref=e232]:
+            - link "Neeb" [ref=e233] [cursor=pointer]:
+              - /url: /starcraft2/Neeb
+      - generic [ref=e234]:
+        - 'heading "PUBG: Battlegrounds" [level=2] [ref=e235]':
+          - 'link "PUBG: Battlegrounds" [ref=e236] [cursor=pointer]':
+            - /url: /pubg/Main_Page
+        - generic [ref=e239]: 
+        - list [ref=e241]:
+          - listitem [ref=e242]:
+            - link "PUBG Nations Cup 2026" [ref=e243] [cursor=pointer]:
+              - /url: /pubg/PUBG_Nations_Cup/2026
+          - listitem [ref=e244]:
+            - link "PUBG Nations Cup 2026 - Grand Finals" [ref=e245] [cursor=pointer]:
+              - /url: /pubg/PUBG_Nations_Cup/2026/Grand_Finals
+          - listitem [ref=e246]:
+            - link "PUBG Nations Cup 2026 - Survival Stage" [ref=e247] [cursor=pointer]:
+              - /url: /pubg/PUBG_Nations_Cup/2026/Survival_Stage
+          - listitem [ref=e248]:
+            - link "Esports World Cup 2026" [ref=e249] [cursor=pointer]:
+              - /url: /pubg/Esports_World_Cup/2026
+          - listitem [ref=e250]:
+            - link "PUBG Nations Cup 2025" [ref=e251] [cursor=pointer]:
+              - /url: /pubg/PUBG_Nations_Cup/2025
+      - generic [ref=e252]:
+        - heading "Honor of Kings" [level=2] [ref=e253]:
+          - link "Honor of Kings" [ref=e254] [cursor=pointer]:
+            - /url: /honorofkings/Main_Page
+        - generic [ref=e257]: 
+        - list [ref=e259]:
+          - listitem [ref=e260]:
+            - link "Arena of Valor Premier League 2026" [ref=e261] [cursor=pointer]:
+              - /url: /honorofkings/Arena_of_Valor_Premier_League/2026
+          - listitem [ref=e262]:
+            - link "Arena of Valor Premier League 2026 - Swiss Stage" [ref=e263] [cursor=pointer]:
+              - /url: /honorofkings/Arena_of_Valor_Premier_League/2026/Swiss_Stage
+          - listitem [ref=e264]:
+            - link "King Pro League Summer 2026" [ref=e265] [cursor=pointer]:
+              - /url: /honorofkings/King_Pro_League/2026/Summer
+          - listitem [ref=e266]:
+            - link "King Pro League Summer 2026 - Stage 1" [ref=e267] [cursor=pointer]:
+              - /url: /honorofkings/King_Pro_League/2026/Summer/Stage_1
+          - listitem [ref=e268]:
+            - link "Honor of Kings World Cup 2026" [ref=e269] [cursor=pointer]:
+              - /url: /honorofkings/Honor_of_Kings_World_Cup/2026
+      - generic [ref=e270]:
+        - heading "Age of Empires" [level=2] [ref=e271]:
+          - link "Age of Empires" [ref=e272] [cursor=pointer]:
+            - /url: /ageofempires/Main_Page
+        - generic [ref=e275]: 
+        - list [ref=e277]:
+          - listitem [ref=e278]:
+            - link "The King's Gauntlet" [ref=e279] [cursor=pointer]:
+              - /url: /ageofempires/The_King's_Gauntlet
+          - listitem [ref=e280]:
+            - link "Brazilian Dynasty" [ref=e281] [cursor=pointer]:
+              - /url: /ageofempires/Brazilian_Dynasty
+          - listitem [ref=e282]:
+            - link "USA Cup 2026" [ref=e283] [cursor=pointer]:
+              - /url: /ageofempires/USA_Cup/2026
+          - listitem [ref=e284]:
+            - link "The Elite Classic IV" [ref=e285] [cursor=pointer]:
+              - /url: /ageofempires/The_Elite_Classic/4
+          - listitem [ref=e286]:
+            - 'link "Age of Empires II: S-Tier Tournaments" [ref=e287] [cursor=pointer]':
+              - /url: /ageofempires/Age_of_Empires_II/S-Tier_Tournaments
+      - generic [ref=e288]:
+        - heading "Rainbow Six" [level=2] [ref=e289]:
+          - link "Rainbow Six" [ref=e290] [cursor=pointer]:
+            - /url: /rainbowsix/Main_Page
+        - generic [ref=e293]: 
+        - list [ref=e295]:
+          - listitem [ref=e296]:
+            - link "Europe MENA League 2026 - Stage 1" [ref=e297] [cursor=pointer]:
+              - /url: /rainbowsix/Europe_MENA_League/2026/Stage_1
+          - listitem [ref=e298]:
+            - link "APL 2026 ASIA - Stage 1" [ref=e299] [cursor=pointer]:
+              - /url: /rainbowsix/Asia_Pacific_League/2026/Stage_1/Asia
+          - listitem [ref=e300]:
+            - 'link "Europe MENA League 2026 - Stage 1: Group Stage" [ref=e301] [cursor=pointer]':
+              - /url: /rainbowsix/Europe_MENA_League/2026/Stage_1/Group_Stage
+          - listitem [ref=e302]:
+            - 'link "Asia Pacific League Asia 2026 - Stage 1: Group Stage" [ref=e303] [cursor=pointer]':
+              - /url: /rainbowsix/Asia_Pacific_League/2026/Stage_1/Asia/Group_Stage
+          - listitem [ref=e304]:
+            - link "North America League 2026 - Stage 1" [ref=e305] [cursor=pointer]:
+              - /url: /rainbowsix/North_America_League/2026/Stage_1
+      - generic [ref=e306]:
+        - heading "Brawl Stars" [level=2] [ref=e307]:
+          - link "Brawl Stars" [ref=e308] [cursor=pointer]:
+            - /url: /brawlstars/Main_Page
+        - generic [ref=e311]: 
+        - list [ref=e313]:
+          - listitem [ref=e314]:
+            - link "BS Chal FR Q4" [ref=e315] [cursor=pointer]:
+              - /url: /brawlstars/Brawl_Stars_Challengers/France/Qualifier/4
+          - listitem [ref=e316]:
+            - link "BS Chal FR" [ref=e317] [cursor=pointer]:
+              - /url: /brawlstars/Brawl_Stars_Challengers/France/Finals
+          - listitem [ref=e318]:
+            - 'link "Supremacy League SA: Season 2" [ref=e319] [cursor=pointer]':
+              - /url: /brawlstars/Supremacy_League/Season_2/SA
+          - listitem [ref=e320]:
+            - 'link "Brawl Stars Championship 2026: EMEA Leaderboard" [ref=e321] [cursor=pointer]':
+              - /url: /brawlstars/Brawl_Stars_Championship/2026/Leaderboards/EMEA
+          - listitem [ref=e322]:
+            - 'link "BSC 26: Brawl Cup" [ref=e323] [cursor=pointer]':
+              - /url: /brawlstars/Brawl_Stars_Championship/2026/Brawl_Cup
+      - generic [ref=e324]:
+        - heading "Marvel Rivals" [level=2] [ref=e325]:
+          - link "Marvel Rivals" [ref=e326] [cursor=pointer]:
+            - /url: /marvelrivals/Main_Page
+        - generic [ref=e329]: 
+        - list [ref=e331]:
+          - listitem [ref=e332]:
+            - 'link "MRIG 2026 S1: PAC" [ref=e333] [cursor=pointer]':
+              - /url: /marvelrivals/MR_Ignite/2026/Stage_1/Pacific
+          - listitem [ref=e334]:
+            - 'link "MRIG 2026 S1: AMER" [ref=e335] [cursor=pointer]':
+              - /url: /marvelrivals/MR_Ignite/2026/Stage_1/Americas
+          - listitem [ref=e336]:
+            - 'link "MRIG 2026 S1: EMEA" [ref=e337] [cursor=pointer]':
+              - /url: /marvelrivals/MR_Ignite/2026/Stage_1/EMEA
+          - listitem [ref=e338]:
+            - 'link "MRIG 2026 Preseason: PAC-ASIA" [ref=e339] [cursor=pointer]':
+              - /url: /marvelrivals/MR_Ignite/2026/Stage_1/Pacific/Asia
+          - listitem [ref=e340]:
+            - link "Creator World Championship" [ref=e341] [cursor=pointer]:
+              - /url: /marvelrivals/Creator_World_Championship
+      - generic [ref=e342]:
+        - heading "Fortnite" [level=2] [ref=e343]:
+          - link "Fortnite" [ref=e344] [cursor=pointer]:
+            - /url: /fortnite/Main_Page
+        - generic [ref=e347]: 
+        - list [ref=e349]:
+          - listitem [ref=e350]:
+            - link "Reload Elite Series 2026 - Championship" [ref=e351] [cursor=pointer]:
+              - /url: /fortnite/Reload_Elite_Series/2026
+          - listitem [ref=e352]:
+            - link "FNCS 2026 - Major 1 Summit" [ref=e353] [cursor=pointer]:
+              - /url: /fortnite/Fortnite_Champion_Series/2026/Major_1/Summit
+          - listitem [ref=e354]:
+            - link "Peterbot" [ref=e355] [cursor=pointer]:
+              - /url: /fortnite/Peterbot
+          - listitem [ref=e356]:
+            - link "FNCS 2026 - Global Championship" [ref=e357] [cursor=pointer]:
+              - /url: /fortnite/Fortnite_Champion_Series/2026
+          - listitem [ref=e358]:
+            - link "FNCS 2025 - Global Championship" [ref=e359] [cursor=pointer]:
+              - /url: /fortnite/Fortnite_Champion_Series/2025
+      - generic [ref=e360]:
+        - heading "Call of Duty" [level=2] [ref=e361]:
+          - link "Call of Duty" [ref=e362] [cursor=pointer]:
+            - /url: /callofduty/Main_Page
+        - generic [ref=e365]: 
+        - list [ref=e367]:
+          - listitem [ref=e368]:
+            - link "CDL '26 Paris Major" [ref=e369] [cursor=pointer]:
+              - /url: /callofduty/Call_of_Duty_League/Season_7/Stage_4/Major
+          - listitem [ref=e370]:
+            - link "CDM Summer 2026" [ref=e371] [cursor=pointer]:
+              - /url: /callofduty/Call_of_Duty_Mobile_Major/2026/Summer
+          - listitem [ref=e372]:
+            - link "CDM Summer 2026 Stage 1" [ref=e373] [cursor=pointer]:
+              - /url: /callofduty/Call_of_Duty_Mobile_Major/2026/Summer/Stage_1
+          - listitem [ref=e374]:
+            - link "HyDra" [ref=e375] [cursor=pointer]:
+              - /url: /callofduty/HyDra
+          - listitem [ref=e376]:
+            - link "CDM Spring 2026" [ref=e377] [cursor=pointer]:
+              - /url: /callofduty/Call_of_Duty_Mobile_Major/2026/Spring
+      - generic [ref=e378]:
+        - heading "Smash" [level=2] [ref=e379]:
+          - link "Smash" [ref=e380] [cursor=pointer]:
+            - /url: /smash/Main_Page
+        - generic [ref=e383]: 
+        - list [ref=e385]:
+          - listitem [ref=e386]:
+            - link "UltRank" [ref=e387] [cursor=pointer]:
+              - /url: /smash/UltRank
+          - listitem [ref=e388]:
+            - 'link "Major Tournaments: Ultimate" [ref=e389] [cursor=pointer]':
+              - /url: /smash/Major_Tournaments/Ultimate
+          - listitem [ref=e390]:
+            - link "SSBMRank" [ref=e391] [cursor=pointer]:
+              - /url: /smash/SSBMRank
+          - listitem [ref=e392]:
+            - 'link "Major Tournaments: Melee" [ref=e393] [cursor=pointer]':
+              - /url: /smash/Major_Tournaments/Melee
+          - listitem [ref=e394]:
+            - link "Sumabato SP70" [ref=e395] [cursor=pointer]:
+              - /url: /smash/Sumabato/SP70
+      - generic [ref=e396]:
+        - heading "Warcraft" [level=2] [ref=e397]:
+          - link "Warcraft" [ref=e398] [cursor=pointer]:
+            - /url: /warcraft/Main_Page
+        - generic [ref=e401]: 
+        - list [ref=e403]:
+          - listitem [ref=e404]:
+            - link "Gladiator Golden Cup 2" [ref=e405] [cursor=pointer]:
+              - /url: /warcraft/Gladiator_Golden_Cup/2
+          - listitem [ref=e406]:
+            - link "Gladiator Triumph Tournament 1" [ref=e407] [cursor=pointer]:
+              - /url: /warcraft/Gladiator_Triumph_Tournament/1
+          - listitem [ref=e408]:
+            - link "B Cup Super Cup" [ref=e409] [cursor=pointer]:
+              - /url: /warcraft/B_Cup_Super_Cup
+          - listitem [ref=e410]:
+            - link "Young Marshal Cup 6" [ref=e411] [cursor=pointer]:
+              - /url: /warcraft/Young_Marshal_Cup/6
+          - listitem [ref=e412]:
+            - link "Warcraft Pro League - Season 2" [ref=e413] [cursor=pointer]:
+              - /url: /warcraft/Warcraft_Pro_League/2
+      - generic [ref=e414]:
+        - heading "StarCraft" [level=2] [ref=e415]:
+          - link "StarCraft" [ref=e416] [cursor=pointer]:
+            - /url: /starcraft/Main_Page
+        - generic [ref=e419]: 
+        - list [ref=e421]:
+          - listitem [ref=e422]:
+            - link "ASL Season 21" [ref=e423] [cursor=pointer]:
+              - /url: /starcraft/ASL/21
+          - listitem [ref=e424]:
+            - link "BSL 22 Non-Korean Championship" [ref=e425] [cursor=pointer]:
+              - /url: /starcraft/Bombastic_StarLeague/22/Non-Korean_Championship
+          - listitem [ref=e426]:
+            - 'link "StarCraft Portal: Units" [ref=e427] [cursor=pointer]':
+              - /url: /starcraft/Units
+          - listitem [ref=e428]:
+            - link "Flash" [ref=e429] [cursor=pointer]:
+              - /url: /starcraft/Flash
+          - listitem [ref=e430]:
+            - link "Vulture" [ref=e431] [cursor=pointer]:
+              - /url: /starcraft/Vulture
+      - generic [ref=e432]:
+        - heading "World of Tanks" [level=2] [ref=e433]:
+          - link "World of Tanks" [ref=e434] [cursor=pointer]:
+            - /url: /worldoftanks/Main_Page
+        - generic [ref=e437]: 
+        - list [ref=e439]:
+          - listitem [ref=e440]:
+            - link "Onslaught Summer Arena 2026" [ref=e441] [cursor=pointer]:
+              - /url: /worldoftanks/Onslaught_Summer_Arena/2026
+          - listitem [ref=e442]:
+            - link "Onslaught Legends Series - Season 6" [ref=e443] [cursor=pointer]:
+              - /url: /worldoftanks/Onslaught_Legends_Series/Season_6
+          - listitem [ref=e444]:
+            - link "BB CH - Div 2 - Split 4" [ref=e445] [cursor=pointer]:
+              - /url: /worldoftanks/Battle_of_Champions/Division_2/Split_4
+          - listitem [ref=e446]:
+            - 'link "OLC #5 EU - Quali" [ref=e447] [cursor=pointer]':
+              - /url: /worldoftanks/Onslaught_Legends_Cup/5/Europe/Qualifier
+          - listitem [ref=e448]:
+            - link "OLS S7 Qualifier" [ref=e449] [cursor=pointer]:
+              - /url: /worldoftanks/Onslaught_Legends_Series/Season_7/Qualifier
+      - generic [ref=e450]:
+        - heading "EA SPORTS FC" [level=2] [ref=e451]:
+          - link "EA SPORTS FC" [ref=e452] [cursor=pointer]:
+            - /url: /easportsfc/Main_Page
+        - generic [ref=e455]: 
+        - list [ref=e457]:
+          - listitem [ref=e458]:
+            - link "FCP 26 World Champ" [ref=e459] [cursor=pointer]:
+              - /url: /easportsfc/FC_Pro_26/World_Championship
+          - listitem [ref=e460]:
+            - link "Esports Nations Cup 2026" [ref=e461] [cursor=pointer]:
+              - /url: /easportsfc/Esports_Nations_Cup/2026
+          - listitem [ref=e462]:
+            - link "FC Pro 26 Play-Ins" [ref=e463] [cursor=pointer]:
+              - /url: /easportsfc/FC_Pro_26/Play-Ins
+          - listitem [ref=e464]:
+            - link "Msdossary" [ref=e465] [cursor=pointer]:
+              - /url: /easportsfc/Msdossary
+          - listitem [ref=e466]:
+            - link "Vejrgang" [ref=e467] [cursor=pointer]:
+              - /url: /easportsfc/Vejrgang
+      - generic [ref=e468]:
+        - heading "Hearthstone" [level=2] [ref=e469]:
+          - link "Hearthstone" [ref=e470] [cursor=pointer]:
+            - /url: /hearthstone/Main_Page
+        - generic [ref=e473]: 
+        - list [ref=e475]:
+          - listitem [ref=e476]:
+            - link "Hearthstone World Championship 2026" [ref=e477] [cursor=pointer]:
+              - /url: /hearthstone/Hearthstone_World_Championship/2026
+          - listitem [ref=e478]:
+            - link "MT Summer 2026" [ref=e479] [cursor=pointer]:
+              - /url: /hearthstone/Masters_Tour/Summer_Championship/2026
+          - listitem [ref=e480]:
+            - link "MT Spring 2026" [ref=e481] [cursor=pointer]:
+              - /url: /hearthstone/Masters_Tour/Spring_Championship/2026
+          - listitem [ref=e482]:
+            - link "Hearthstone World Championship 2025" [ref=e483] [cursor=pointer]:
+              - /url: /hearthstone/Hearthstone_World_Championship/2025
+          - listitem [ref=e484]:
+            - link "MT Winter 2026" [ref=e485] [cursor=pointer]:
+              - /url: /hearthstone/Masters_Tour/Winter_Championship/2026
+      - generic [ref=e486]:
+        - heading "Wild Rift" [level=2] [ref=e487]:
+          - link "Wild Rift" [ref=e488] [cursor=pointer]:
+            - /url: /wildrift/Main_Page
+        - generic [ref=e491]: 
+        - list [ref=e493]:
+          - listitem [ref=e494]:
+            - link "Wild Rift Super League 2026 Summer" [ref=e495] [cursor=pointer]:
+              - /url: /wildrift/Wild_Rift_Super_League/2026/Summer
+          - listitem [ref=e496]:
+            - link "Spring Split Groups" [ref=e497] [cursor=pointer]:
+              - /url: /wildrift/Wild_Circuit/2026/Rift_Legends/Spring_Split/Groups
+          - listitem [ref=e498]:
+            - link "S-Tier Tournaments" [ref=e499] [cursor=pointer]:
+              - /url: /wildrift/S-Tier_Tournaments
+          - listitem [ref=e500]:
+            - link "ThunderTalk Gaming" [ref=e501] [cursor=pointer]:
+              - /url: /wildrift/ThunderTalk_Gaming
+          - listitem [ref=e502]:
+            - link "Icons Global Championship 2022" [ref=e503] [cursor=pointer]:
+              - /url: /wildrift/Icons_Global_Championship/2022
+      - generic [ref=e504]:
+        - heading "Heroes of the Storm" [level=2] [ref=e505]:
+          - link "Heroes of the Storm" [ref=e506] [cursor=pointer]:
+            - /url: /heroes/Main_Page
+        - generic [ref=e509]: 
+        - list [ref=e511]:
+          - listitem [ref=e512]:
+            - link "Murky Cup 2026" [ref=e513] [cursor=pointer]:
+              - /url: /heroes/Murky_Cup/3
+          - listitem [ref=e514]:
+            - link "Nations Cup 2026" [ref=e515] [cursor=pointer]:
+              - /url: /heroes/Nations_Cup_2026
+          - listitem [ref=e516]:
+            - link "Eternal Conflict Season 2" [ref=e517] [cursor=pointer]:
+              - /url: /heroes/Eternal_Conflict/Season_2
+          - listitem [ref=e518]:
+            - link "Eternal Conflict S2 E1" [ref=e519] [cursor=pointer]:
+              - /url: /heroes/Eternal_Conflict/Season_2/Episode_1
+          - listitem [ref=e520]:
+            - link "Blizzard Classic Cup 2026" [ref=e521] [cursor=pointer]:
+              - /url: /heroes/Blizzard_Classic_Cup/2026
+    - generic [ref=e522]:
+      - generic [ref=e524]:
+        - heading "Alpha Wiki" [level=2] [ref=e525]
+        - paragraph [ref=e526]: Alpha wikis are wikis that are still in the building process
+      - generic [ref=e527]:
+        - generic [ref=e528]:
+          - paragraph [ref=e529]: Is your game not listed yet on Liquipedia? Visit the Lab and start a new wiki! It's easy and setup to support building new wikis with other community members.
+          - link "Visit the Lab wiki" [ref=e530] [cursor=pointer]:
+            - /url: /lab/Main_Page
+        - generic [ref=e531]:
+          - generic [ref=e532]:
+            - heading "New Delta Force" [level=2] [ref=e533]:
+              - generic [ref=e534]: New
+              - link "Delta Force" [ref=e535] [cursor=pointer]:
+                - /url: /deltaforce/Main_Page
+            - generic [ref=e538]: 
+            - list [ref=e540]:
+              - listitem [ref=e541]:
+                - link "DFI Warfare 2026" [ref=e542] [cursor=pointer]:
+                  - /url: /deltaforce/Delta_Force_Invitational/Warfare/2026
+              - listitem [ref=e543]:
+                - link "Delta Force RISE Series EMEA Season 1" [ref=e544] [cursor=pointer]:
+                  - /url: /deltaforce/Delta_Force_Rise_Series/2026/EMEA/Season_1
+              - listitem [ref=e545]:
+                - link "RISE Series Americas S1" [ref=e546] [cursor=pointer]:
+                  - /url: /deltaforce/Delta_Force_RISE_Series/2026/Americas/Season_1
+              - listitem [ref=e547]:
+                - link "Delta Force Pro League Summer 2026" [ref=e548] [cursor=pointer]:
+                  - /url: /deltaforce/Delta_Force_Pro_League/2026/Summer
+              - listitem [ref=e549]:
+                - link "Delta Force Invitational 2026" [ref=e550] [cursor=pointer]:
+                  - /url: /deltaforce/Delta_Force_Invitational/2026
+          - generic [ref=e551]:
+            - heading "The Finals" [level=2] [ref=e552]:
+              - link "The Finals" [ref=e553] [cursor=pointer]:
+                - /url: /thefinals/Main_Page
+            - generic [ref=e556]: 
+            - list [ref=e558]:
+              - listitem [ref=e559]:
+                - link "Grand Major 2025" [ref=e560] [cursor=pointer]:
+                  - /url: /thefinals/Grand_Major/2025
+              - listitem [ref=e561]:
+                - link "NTMR" [ref=e562] [cursor=pointer]:
+                  - /url: /thefinals/NTMR
+              - listitem [ref=e563]:
+                - 'link "TGM26 Online Series - APAC: Cycle 2" [ref=e564] [cursor=pointer]':
+                  - /url: /thefinals/Grand_Major/2026/APAC/Cycle_2
+              - listitem [ref=e565]:
+                - 'link "TGM26 Online Series - Americas: Cycle 2" [ref=e566] [cursor=pointer]':
+                  - /url: /thefinals/Grand_Major/2026/Americas/Cycle_2
+              - listitem [ref=e567]:
+                - link "PHL 2026 - EU Regional Championship" [ref=e568] [cursor=pointer]:
+                  - /url: /thefinals/ProHubs.TF/2026/Europe
+          - generic [ref=e569]:
+            - heading "Identity V" [level=2] [ref=e570]:
+              - link "Identity V" [ref=e571] [cursor=pointer]:
+                - /url: /identityv/Main_Page
+            - generic [ref=e574]: 
+            - list [ref=e576]:
+              - listitem [ref=e577]:
+                - link "2026 Asian Games" [ref=e578] [cursor=pointer]:
+                  - /url: /identityv/Asian_Games/2026
+              - listitem [ref=e579]:
+                - link "Call of the Abyss IX" [ref=e580] [cursor=pointer]:
+                  - /url: /identityv/Call_of_the_Abyss/IX/Global_Finals
+              - listitem [ref=e581]:
+                - link "Identity V League 2026 Summer" [ref=e582] [cursor=pointer]:
+                  - /url: /identityv/IVL/2026/Summer
+              - listitem [ref=e583]:
+                - link "Identity V Japan League 2026 Summer" [ref=e584] [cursor=pointer]:
+                  - /url: /identityv/IJL/2026/Summer
+              - listitem [ref=e585]:
+                - link "ZETA DIVISION" [ref=e586] [cursor=pointer]:
+                  - /url: /identityv/ZETA_DIVISION
+          - generic [ref=e587]:
+            - heading "Free Fire" [level=2] [ref=e588]:
+              - link "Free Fire" [ref=e589] [cursor=pointer]:
+                - /url: /freefire/Main_Page
+            - generic [ref=e592]: 
+            - list [ref=e594]:
+              - listitem [ref=e595]:
+                - link "Free Fire at Esports World Cup 2026" [ref=e596] [cursor=pointer]:
+                  - /url: /freefire/Esports_World_Cup/2026
+              - listitem [ref=e597]:
+                - link "FFBPL S3" [ref=e598] [cursor=pointer]:
+                  - /url: /freefire/Free_Fire_Bangladesh_Pro_League/Season_3
+              - listitem [ref=e599]:
+                - link "Free Fire MAX India Cup 2026 Spring" [ref=e600] [cursor=pointer]:
+                  - /url: /freefire/Free_Fire_MAX_India_Cup/2026/Spring
+              - listitem [ref=e601]:
+                - link "Team Apex Gaming" [ref=e602] [cursor=pointer]:
+                  - /url: /freefire/Team_Apex_Gaming
+              - listitem [ref=e603]:
+                - link "Titan Esports Club" [ref=e604] [cursor=pointer]:
+                  - /url: /freefire/Titan_Esports_Club
+          - generic [ref=e605]:
+            - heading "Esports" [level=2] [ref=e606]:
+              - link "Esports" [ref=e607] [cursor=pointer]:
+                - /url: /esports/Main_Page
+            - generic [ref=e610]: 
+            - list [ref=e612]:
+              - listitem [ref=e613]:
+                - link "Esports Nations Cup 2026" [ref=e614] [cursor=pointer]:
+                  - /url: /esports/Esports_Nations_Cup/2026
+              - listitem [ref=e615]:
+                - link "Esports World Cup 2026" [ref=e616] [cursor=pointer]:
+                  - /url: /esports/Esports_World_Cup/2026
+              - listitem [ref=e617]:
+                - link "Esports World Cup 2026 - List of Qualified teams" [ref=e618] [cursor=pointer]:
+                  - /url: /esports/Esports_World_Cup/2026/Clubs
+              - listitem [ref=e619]:
+                - link "Esports Nations Cup 2026 - List of Qualified teams" [ref=e620] [cursor=pointer]:
+                  - /url: /esports/Esports_Nations_Cup/2026/Nations
+              - listitem [ref=e621]:
+                - link "Esports World Cup 2025" [ref=e622] [cursor=pointer]:
+                  - /url: /esports/Esports_World_Cup/2025
+          - generic [ref=e623]:
+            - heading "Teamfight Tactics" [level=2] [ref=e624]:
+              - link "Teamfight Tactics" [ref=e625] [cursor=pointer]:
+                - /url: /tft/Main_Page
+            - generic [ref=e628]: 
+            - list [ref=e630]:
+              - listitem [ref=e631]:
+                - link "TFT at Esports World Cup 2026" [ref=e632] [cursor=pointer]:
+                  - /url: /tft/Esports_World_Cup/2026
+              - listitem [ref=e633]:
+                - 'link "Space Gods: APAC Regional Finals" [ref=e634] [cursor=pointer]':
+                  - /url: /tft/Space_Gods/APAC/Regional_Finals
+              - listitem [ref=e635]:
+                - 'link "Space Gods: EMEA Regional Finals" [ref=e636] [cursor=pointer]':
+                  - /url: /tft/Space_Gods/EMEA/Regional_Finals
+              - listitem [ref=e637]:
+                - link "Space Gods Tactician's Crown" [ref=e638] [cursor=pointer]:
+                  - /url: /tft/Space_Gods/Tacticians_Crown
+              - listitem [ref=e639]:
+                - 'link "Space Gods: AMER Regional Finals" [ref=e640] [cursor=pointer]':
+                  - /url: /tft/Space_Gods/AMER/Regional_Finals
+          - generic [ref=e641]:
+            - heading "Clash Royale" [level=2] [ref=e642]:
+              - link "Clash Royale" [ref=e643] [cursor=pointer]:
+                - /url: /clashroyale/Main_Page
+            - generic [ref=e646]: 
+            - list [ref=e648]:
+              - listitem [ref=e649]:
+                - link "Clash Royale League 2026 Season 3" [ref=e650] [cursor=pointer]:
+                  - /url: /clashroyale/Clash_Royale_League/2026/Season_3
+              - listitem [ref=e651]:
+                - link "Mohamed Light" [ref=e652] [cursor=pointer]:
+                  - /url: /clashroyale/Mohamed_Light
+              - listitem [ref=e653]:
+                - link "CRL 2026 LB" [ref=e654] [cursor=pointer]:
+                  - /url: /clashroyale/Clash_Royale_League/2026/Leaderboard
+              - listitem [ref=e655]:
+                - link "Clash Royale League 2026 Season 1" [ref=e656] [cursor=pointer]:
+                  - /url: /clashroyale/Clash_Royale_League/2026/Season_1
+              - listitem [ref=e657]:
+                - link "CRL 2025 Worlds" [ref=e658] [cursor=pointer]:
+                  - /url: /clashroyale/Clash_Royale_League/2025/World_Finals
+          - generic [ref=e659]:
+            - heading "CrossFire" [level=2] [ref=e660]:
+              - link "CrossFire" [ref=e661] [cursor=pointer]:
+                - /url: /crossfire/Main_Page
+            - generic [ref=e664]: 
+            - list [ref=e666]:
+              - listitem [ref=e667]:
+                - link "CrossFire Pro League Season 28" [ref=e668] [cursor=pointer]:
+                  - /url: /crossfire/CrossFire_Pro_League/Season_28
+              - listitem [ref=e669]:
+                - link "CFML S19 Groups" [ref=e670] [cursor=pointer]:
+                  - /url: /crossfire/CrossFire_Mobile_League/Season_19/Group_Stage
+              - listitem [ref=e671]:
+                - link "CFPL S28 Groups" [ref=e672] [cursor=pointer]:
+                  - /url: /crossfire/CrossFire_Pro_League/Season_28/Group_Stage
+              - listitem [ref=e673]:
+                - link "CrossFire Mobile League Season 19" [ref=e674] [cursor=pointer]:
+                  - /url: /crossfire/CrossFire_Mobile_League/Season_19
+              - listitem [ref=e675]:
+                - link "CFS SEA Masters Summer '26" [ref=e676] [cursor=pointer]:
+                  - /url: /crossfire/CrossFire_Stars/SEA_Masters/2026/Summer
+          - generic [ref=e677]:
+            - heading "Pokémon" [level=2] [ref=e678]:
+              - link "Pokémon" [ref=e679] [cursor=pointer]:
+                - /url: /pokemon/Main_Page
+            - generic [ref=e682]: 
+            - list [ref=e684]:
+              - listitem [ref=e685]:
+                - link "Wolfe Glick" [ref=e686] [cursor=pointer]:
+                  - /url: /pokemon/Wolfe_Glick
+              - listitem [ref=e687]:
+                - link "2026 UNITE Worlds" [ref=e688] [cursor=pointer]:
+                  - /url: /pokemon/Pokemon_UNITE_World_Championship/2026
+              - listitem [ref=e689]:
+                - link "'26 NAIC - VGC" [ref=e690] [cursor=pointer]:
+                  - /url: /pokemon/Pokemon_Championships/International/North_America/2026/VGC
+              - listitem [ref=e691]:
+                - link "Francesco Pio Pero" [ref=e692] [cursor=pointer]:
+                  - /url: /pokemon/Francesco_Pio_Pero
+              - listitem [ref=e693]:
+                - link "Pokémon World Championships" [ref=e694] [cursor=pointer]:
+                  - /url: /pokemon/Pok%C3%A9mon_World_Championships
+          - generic [ref=e695]:
+            - heading "GeoGuessr" [level=2] [ref=e696]:
+              - link "GeoGuessr" [ref=e697] [cursor=pointer]:
+                - /url: /geoguessr/Main_Page
+            - generic [ref=e700]: 
+            - list [ref=e702]:
+              - listitem [ref=e703]:
+                - link "GWC 2026 Finals" [ref=e704] [cursor=pointer]:
+                  - /url: /geoguessr/GeoGuessr_World_Championship/2026/Finals
+              - listitem [ref=e705]:
+                - link "Jeff League - Season 1" [ref=e706] [cursor=pointer]:
+                  - /url: /geoguessr/Jeff_League/Season_1/Overview
+              - listitem [ref=e707]:
+                - link "GeoGuessr World Championship 2026" [ref=e708] [cursor=pointer]:
+                  - /url: /geoguessr/GeoGuessr_World_Championship/2026
+              - listitem [ref=e709]:
+                - link "Jeff League - Season 1 - Division 1" [ref=e710] [cursor=pointer]:
+                  - /url: /geoguessr/Jeff_League/Season_1/Division_1
+              - listitem [ref=e711]:
+                - link "GWC 2025 Finals" [ref=e712] [cursor=pointer]:
+                  - /url: /geoguessr/GeoGuessr_World_Championship/2025/Finals
+          - generic [ref=e713]:
+            - heading "Deadlock" [level=2] [ref=e714]:
+              - link "Deadlock" [ref=e715] [cursor=pointer]:
+                - /url: /deadlock/Main_Page
+            - generic [ref=e718]: 
+            - list [ref=e720]:
+              - listitem [ref=e721]:
+                - link "R1 Tourney DeadLock 02" [ref=e722] [cursor=pointer]:
+                  - /url: /deadlock/R1_Tourney_DeadLock/02
+              - listitem [ref=e723]:
+                - link "R1 Tourney DeadLock 02 GS" [ref=e724] [cursor=pointer]:
+                  - /url: /deadlock/R1_Tourney_DeadLock/02/Group_Stage
+              - listitem [ref=e725]:
+                - 'link "Deadlock Night Shift #44 - Europe" [ref=e726] [cursor=pointer]':
+                  - /url: /deadlock/Deadlock_Night_Shift/44/EU
+              - listitem [ref=e727]:
+                - link "Buff Enjoyers" [ref=e728] [cursor=pointer]:
+                  - /url: /deadlock/Buff_Enjoyers
+              - listitem [ref=e729]:
+                - 'link "Night Shift #44 - NA" [ref=e730] [cursor=pointer]':
+                  - /url: /deadlock/Deadlock_Night_Shift/44/NA
+          - generic [ref=e731]:
+            - heading "Halo" [level=2] [ref=e732]:
+              - link "Halo" [ref=e733] [cursor=pointer]:
+                - /url: /halo/Main_Page
+            - generic [ref=e736]: 
+            - list [ref=e738]:
+              - listitem [ref=e739]:
+                - link "S-Tier Tournaments (Post 2010)" [ref=e740] [cursor=pointer]:
+                  - /url: /halo/S-Tier_Tournaments
+              - listitem [ref=e741]:
+                - 'link "Ninja: Results" [ref=e742] [cursor=pointer]':
+                  - /url: /halo/Ninja/Results
+              - listitem [ref=e743]:
+                - link "Halo World Championship 2025" [ref=e744] [cursor=pointer]:
+                  - /url: /halo/Halo_World_Championship/2025
+              - listitem [ref=e745]:
+                - link "Dreamhack Atlanta 2026" [ref=e746] [cursor=pointer]:
+                  - /url: /halo/Dreamhack/Atlanta/2026
+              - listitem [ref=e747]:
+                - link "A-Tier Tournaments (Post 2010)" [ref=e748] [cursor=pointer]:
+                  - /url: /halo/A-Tier_Tournaments
+          - generic [ref=e749]:
+            - heading "TrackMania" [level=2] [ref=e750]:
+              - link "TrackMania" [ref=e751] [cursor=pointer]:
+                - /url: /trackmania/Main_Page
+            - generic [ref=e754]: 
+            - list [ref=e756]:
+              - listitem [ref=e757]:
+                - link "Trackmania at Esports World Cup 2026" [ref=e758] [cursor=pointer]:
+                  - /url: /trackmania/Esports_World_Cup/2026
+              - listitem [ref=e759]:
+                - link "Trackmania at Esports Nations Cup 2026" [ref=e760] [cursor=pointer]:
+                  - /url: /trackmania/Esports_Nations_Cup/2026
+              - listitem [ref=e761]:
+                - link "Carl Jr." [ref=e762] [cursor=pointer]:
+                  - /url: /trackmania/Carl_Jr.
+              - listitem [ref=e763]:
+                - 'link "Esport Nations Cup: Online Qualifiers - Europe West" [ref=e764] [cursor=pointer]':
+                  - /url: /trackmania/Esports_Nations_Cup/2026/Online_Qualifiers/Europe_West
+              - listitem [ref=e765]:
+                - 'link "Esport Nations Cup: Online Qualifiers - Asia" [ref=e766] [cursor=pointer]':
+                  - /url: /trackmania/Esports_Nations_Cup/2026/Online_Qualifiers/Asia
+          - generic [ref=e767]:
+            - heading "Clash of Clans" [level=2] [ref=e768]:
+              - link "Clash of Clans" [ref=e769] [cursor=pointer]:
+                - /url: /clashofclans/Main_Page
+            - generic [ref=e772]: 
+            - list [ref=e774]:
+              - listitem [ref=e775]:
+                - link "Worlds 2025" [ref=e776] [cursor=pointer]:
+                  - /url: /clashofclans/Clash_of_Clans_World_Championship/2025
+              - listitem [ref=e777]:
+                - link "Worlds 2026 June Qualifier" [ref=e778] [cursor=pointer]:
+                  - /url: /clashofclans/Clash_of_Clans_World_Championship/2026/June
+              - listitem [ref=e779]:
+                - link "Worlds 2026 September Qualifier" [ref=e780] [cursor=pointer]:
+                  - /url: /clashofclans/Clash_of_Clans_World_Championship/2026/September
+              - listitem [ref=e781]:
+                - link "Worlds 2024" [ref=e782] [cursor=pointer]:
+                  - /url: /clashofclans/Clash_of_Clans_World_Championship/2024
+              - listitem [ref=e783]:
+                - link "Natus Vincere" [ref=e784] [cursor=pointer]:
+                  - /url: /clashofclans/Natus_Vincere
+          - generic [ref=e785]:
+            - heading "osu" [level=2] [ref=e786]:
+              - link "osu" [ref=e787] [cursor=pointer]:
+                - /url: /osu/Main_Page
+            - generic [ref=e790]: 
+            - list [ref=e792]:
+              - listitem [ref=e793]:
+                - link "mrekk" [ref=e794] [cursor=pointer]:
+                  - /url: /osu/Mrekk
+              - listitem [ref=e795]:
+                - link "osu! World Cup 2025" [ref=e796] [cursor=pointer]:
+                  - /url: /osu/Osu_World_Cup/2025
+              - listitem [ref=e797]:
+                - link "maliszewski" [ref=e798] [cursor=pointer]:
+                  - /url: /osu/Maliszewski
+              - listitem [ref=e799]:
+                - link "osu!catch World Cup 2026" [ref=e800] [cursor=pointer]:
+                  - /url: /osu/Osucatch_World_Cup/2026
+              - listitem [ref=e801]:
+                - link "5 Digit World Cup 2026" [ref=e802] [cursor=pointer]:
+                  - /url: /osu/5_Digit_World_Cup/2026
+          - generic [ref=e803]:
+            - heading "Esports Virtual Arenas" [level=2] [ref=e804]:
+              - link "Esports Virtual Arenas" [ref=e805] [cursor=pointer]:
+                - /url: /eva/Main_Page
+            - generic [ref=e808]: 
+            - list [ref=e810]:
+              - listitem [ref=e811]:
+                - link "Pro League 2026" [ref=e812] [cursor=pointer]:
+                  - /url: /eva/Pro_League/2026
+              - listitem [ref=e813]:
+                - link "Pro League 2026 - Group Stage" [ref=e814] [cursor=pointer]:
+                  - /url: /eva/Pro_League/2026/Group_Stage
+              - listitem [ref=e815]:
+                - link "Challenger League 2026" [ref=e816] [cursor=pointer]:
+                  - /url: /eva/Challenger_League/2026
+              - listitem [ref=e817]:
+                - link "EVA Summit 2026 - Stage 1" [ref=e818] [cursor=pointer]:
+                  - /url: /eva/Summit/2026/Stage_1
+              - listitem [ref=e819]:
+                - link "VEXAA" [ref=e820] [cursor=pointer]:
+                  - /url: /eva/VEXAA
+          - generic [ref=e821]:
+            - heading "Team Fortress" [level=2] [ref=e822]:
+              - link "Team Fortress" [ref=e823] [cursor=pointer]:
+                - /url: /teamfortress/Main_Page
+            - generic [ref=e826]: 
+            - list [ref=e828]:
+              - listitem [ref=e829]:
+                - link "froyotech" [ref=e830] [cursor=pointer]:
+                  - /url: /teamfortress/Froyotech
+              - listitem [ref=e831]:
+                - link "Demoman" [ref=e832] [cursor=pointer]:
+                  - /url: /teamfortress/Demoman
+              - listitem [ref=e833]:
+                - 'link "RGL Highlander Season 24: Invite" [ref=e834] [cursor=pointer]':
+                  - /url: /teamfortress/RGL/Invite/Highlander/North_America/Season_24
+              - listitem [ref=e835]:
+                - link "b4nny" [ref=e836] [cursor=pointer]:
+                  - /url: /teamfortress/B4nny
+              - listitem [ref=e837]:
+                - link "RGL Sixes S20" [ref=e838] [cursor=pointer]:
+                  - /url: /teamfortress/RGL/Traditional_Sixes/North_America/Season_20/Invite
+          - generic [ref=e839]:
+            - heading "Tetris" [level=2] [ref=e840]:
+              - link "Tetris" [ref=e841] [cursor=pointer]:
+                - /url: /tetris/Main_Page
+            - generic [ref=e844]: 
+            - list [ref=e846]:
+              - listitem [ref=e847]:
+                - link "meme" [ref=e848] [cursor=pointer]:
+                  - /url: /tetris/Meme
+              - listitem [ref=e849]:
+                - link "CTWC 2026" [ref=e850] [cursor=pointer]:
+                  - /url: /tetris/CTWC/2026
+              - listitem [ref=e851]:
+                - link "Apple Orchard Cup" [ref=e852] [cursor=pointer]:
+                  - /url: /tetris/Apple_Orchard_Cup
+              - listitem [ref=e853]:
+                - link "CTM DAS Masters June 2026" [ref=e854] [cursor=pointer]:
+                  - /url: /tetris/Classic_Tetris_Monthly/DAS/2026/June
+              - listitem [ref=e855]:
+                - link "dogplayingtetris" [ref=e856] [cursor=pointer]:
+                  - /url: /tetris/Dogplayingtetris
+          - generic [ref=e857]:
+            - heading "World of Warcraft" [level=2] [ref=e858]:
+              - link "World of Warcraft" [ref=e859] [cursor=pointer]:
+                - /url: /worldofwarcraft/Main_Page
+            - generic [ref=e862]: 
+            - list [ref=e864]:
+              - listitem [ref=e865]:
+                - link "Whaazz" [ref=e866] [cursor=pointer]:
+                  - /url: /worldofwarcraft/Whaazz
+              - listitem [ref=e867]:
+                - 'link "Whaazz: Results" [ref=e868] [cursor=pointer]':
+                  - /url: /worldofwarcraft/Whaazz/Results
+              - listitem [ref=e869]:
+                - link "Pikaboo" [ref=e870] [cursor=pointer]:
+                  - /url: /worldofwarcraft/Pikaboo
+              - listitem [ref=e871]:
+                - link "Team Dignitas" [ref=e872] [cursor=pointer]:
+                  - /url: /worldofwarcraft/Team_Dignitas
+              - listitem [ref=e873]:
+                - link "Echo" [ref=e874] [cursor=pointer]:
+                  - /url: /worldofwarcraft/Echo
+          - generic [ref=e875]:
+            - heading "Arena FPS" [level=2] [ref=e876]:
+              - link "Arena FPS" [ref=e877] [cursor=pointer]:
+                - /url: /arenafps/Main_Page
+            - generic [ref=e880]: 
+            - list [ref=e882]:
+              - listitem [ref=e883]:
+                - link "rapha" [ref=e884] [cursor=pointer]:
+                  - /url: /arenafps/Rapha
+              - listitem [ref=e885]:
+                - link "k1llsen" [ref=e886] [cursor=pointer]:
+                  - /url: /arenafps/K1llsen
+              - listitem [ref=e887]:
+                - link "zsx" [ref=e888] [cursor=pointer]:
+                  - /url: /arenafps/Zsx
+              - listitem [ref=e889]:
+                - link "socrates" [ref=e890] [cursor=pointer]:
+                  - /url: /arenafps/Socrates
+              - listitem [ref=e891]:
+                - link "World Series of Video Games - Intel Summer Championship 2006" [ref=e892] [cursor=pointer]:
+                  - /url: /arenafps/World_Series_of_Video_Games/Intel_Summer_Championship/2006
+          - generic [ref=e893]:
+            - heading "Stormgate" [level=2] [ref=e894]:
+              - link "Stormgate" [ref=e895] [cursor=pointer]:
+                - /url: /stormgate/Main_Page
+            - generic [ref=e898]: 
+            - list [ref=e900]:
+              - listitem [ref=e901]:
+                - link "Clem" [ref=e902] [cursor=pointer]:
+                  - /url: /stormgate/Clem
+              - listitem [ref=e903]:
+                - link "Sentry Post" [ref=e904] [cursor=pointer]:
+                  - /url: /stormgate/Sentry_Post
+              - listitem [ref=e905]:
+                - link "Void Weaver" [ref=e906] [cursor=pointer]:
+                  - /url: /stormgate/Void_Weaver
+              - listitem [ref=e907]:
+                - link "Phantom" [ref=e908] [cursor=pointer]:
+                  - /url: /stormgate/Phantom
+              - listitem [ref=e909]:
+                - link "Inspired" [ref=e910] [cursor=pointer]:
+                  - /url: /stormgate/Inspired
+          - generic [ref=e911]:
+            - heading "Sim Racing" [level=2] [ref=e912]:
+              - link "Sim Racing" [ref=e913] [cursor=pointer]:
+                - /url: /simracing/Main_Page
+            - generic [ref=e916]: 
+            - list [ref=e918]:
+              - listitem [ref=e919]:
+                - link "R1 at EWC 2025" [ref=e920] [cursor=pointer]:
+                  - /url: /simracing/Esports_World_Cup/2025
+              - listitem [ref=e921]:
+                - link "S-Tier Tournaments" [ref=e922] [cursor=pointer]:
+                  - /url: /simracing/S-Tier_Tournaments
+              - listitem [ref=e923]:
+                - link "Marcel Kiefer" [ref=e924] [cursor=pointer]:
+                  - /url: /simracing/Marcel_Kiefer
+              - listitem [ref=e925]:
+                - link "Verstappen Sim Racing" [ref=e926] [cursor=pointer]:
+                  - /url: /simracing/Verstappen_Sim_Racing
+              - listitem [ref=e927]:
+                - link "F1 Sim Racing World Championship 2026" [ref=e928] [cursor=pointer]:
+                  - /url: /simracing/F1_Esports_Series/2026
+          - generic [ref=e929]:
+            - 'heading "Escape from Tarkov: Arena" [level=2] [ref=e930]':
+              - 'link "Escape from Tarkov: Arena" [ref=e931] [cursor=pointer]':
+                - /url: /tarkovarena/Main_Page
+            - generic [ref=e934]: 
+            - list [ref=e936]:
+              - listitem [ref=e937]:
+                - link "Aspect" [ref=e938] [cursor=pointer]:
+                  - /url: /tarkovarena/Aspect
+              - listitem [ref=e939]:
+                - 'link "EFT: Arena Cup Series V" [ref=e940] [cursor=pointer]':
+                  - /url: /tarkovarena/EFT:_Arena_Cup_Series/V
+              - listitem [ref=e941]:
+                - link "GHA 2026 Summer" [ref=e942] [cursor=pointer]:
+                  - /url: /tarkovarena/GHA/2026_Summer
+              - listitem [ref=e943]:
+                - link "Virtus.pro" [ref=e944] [cursor=pointer]:
+                  - /url: /tarkovarena/Virtus.pro
+              - listitem [ref=e945]:
+                - link "Walker's Arena MINICUP 6" [ref=e946] [cursor=pointer]:
+                  - /url: /tarkovarena/Walker's_Arena_MINICUP/6
+          - generic [ref=e947]:
+            - heading "War Thunder" [level=2] [ref=e948]:
+              - link "War Thunder" [ref=e949] [cursor=pointer]:
+                - /url: /warthunder/Main_Page
+            - generic [ref=e952]: 
+            - list [ref=e954]:
+              - listitem [ref=e955]:
+                - link "COVERT" [ref=e956] [cursor=pointer]:
+                  - /url: /warthunder/COVERT
+              - listitem [ref=e957]:
+                - link "Trepkas Christmas Tourney - 4v4" [ref=e958] [cursor=pointer]:
+                  - /url: /warthunder/Trepkas_Christmas_Tourney/4v4
+              - listitem [ref=e959]:
+                - link "DODEC" [ref=e960] [cursor=pointer]:
+                  - /url: /warthunder/DODEC
+              - listitem [ref=e961]:
+                - link "Game thunder 天" [ref=e962] [cursor=pointer]:
+                  - /url: /warthunder/Game_thunder_%E5%A4%A9
+              - listitem [ref=e963]:
+                - link "Team Miracles" [ref=e964] [cursor=pointer]:
+                  - /url: /warthunder/Team_Miracles
+          - generic [ref=e965]:
+            - heading "Naraka" [level=2] [ref=e966]:
+              - link "Naraka" [ref=e967] [cursor=pointer]:
+                - /url: /naraka/Main_Page
+            - generic [ref=e970]: 
+            - list [ref=e972]:
+              - listitem [ref=e973]:
+                - 'link "MSC 2026: Solo" [ref=e974] [cursor=pointer]':
+                  - /url: /naraka/Mid-Season_Championship/2026/Solo
+              - listitem [ref=e975]:
+                - 'link "MSC 2026: Trios" [ref=e976] [cursor=pointer]':
+                  - /url: /naraka/Mid-Season_Championship/2026/Trios
+              - listitem [ref=e977]:
+                - 'link "NARAKA: BLADEPOINT - Mid-Season Championship 2026: Solo Group Stage" [ref=e978] [cursor=pointer]':
+                  - /url: /naraka/Mid-Season_Championship/2026/Solo/Group_Stage
+              - listitem [ref=e979]:
+                - 'link "NARAKA: BLADEPOINT - Mid-Season Championship 2026: Trios Group Stage" [ref=e980] [cursor=pointer]':
+                  - /url: /naraka/Mid-Season_Championship/2026/Trios/Group_Stage
+              - listitem [ref=e981]:
+                - link "2026 Asian Games" [ref=e982] [cursor=pointer]:
+                  - /url: /naraka/Asian_Games/2026
+          - generic [ref=e983]:
+            - heading "Brawlhalla" [level=2] [ref=e984]:
+              - link "Brawlhalla" [ref=e985] [cursor=pointer]:
+                - /url: /brawlhalla/Main_Page
+            - generic [ref=e988]: 
+            - list [ref=e990]:
+              - listitem [ref=e991]:
+                - link "Marckiemoo" [ref=e992] [cursor=pointer]:
+                  - /url: /brawlhalla/Marckiemoo
+              - listitem [ref=e993]:
+                - link "Sandstorm" [ref=e994] [cursor=pointer]:
+                  - /url: /brawlhalla/Sandstorm
+              - listitem [ref=e995]:
+                - link "Winter Championship 2026" [ref=e996] [cursor=pointer]:
+                  - /url: /brawlhalla/Year_Eleven/Winter_Championship
+              - listitem [ref=e997]:
+                - link "yüz" [ref=e998] [cursor=pointer]:
+                  - /url: /brawlhalla/Y%C3%BCz
+              - listitem [ref=e999]:
+                - link "Brawlhalla Esports Year Eleven" [ref=e1000] [cursor=pointer]:
+                  - /url: /brawlhalla/Year_Eleven
+          - generic [ref=e1001]:
+            - heading "Rematch" [level=2] [ref=e1002]:
+              - link "Rematch" [ref=e1003] [cursor=pointer]:
+                - /url: /rematch/Main_Page
+            - generic [ref=e1006]: 
+            - list [ref=e1008]:
+              - listitem [ref=e1009]:
+                - link "dzosi" [ref=e1010] [cursor=pointer]:
+                  - /url: /rematch/Dzosi
+              - listitem [ref=e1011]:
+                - 'link "Rematch Elite Series: North America" [ref=e1012] [cursor=pointer]':
+                  - /url: /rematch/Rematch_Elite_Series/North_America
+              - listitem [ref=e1013]:
+                - link "OVERDOZEE" [ref=e1014] [cursor=pointer]:
+                  - /url: /rematch/OVERDOZEE
+              - listitem [ref=e1015]:
+                - link "Kami Sami Sama" [ref=e1016] [cursor=pointer]:
+                  - /url: /rematch/Kami_Sami_Sama
+              - listitem [ref=e1017]:
+                - 'link "MRC S3: Invitational" [ref=e1018] [cursor=pointer]':
+                  - /url: /rematch/Major_Rematch_Championship/Europe/Season_3
+          - generic [ref=e1019]:
+            - heading "Splatoon" [level=2] [ref=e1020]:
+              - link "Splatoon" [ref=e1021] [cursor=pointer]:
+                - /url: /splatoon/Main_Page
+            - generic [ref=e1024]: 
+            - list [ref=e1026]:
+              - listitem [ref=e1027]:
+                - link "Moonlight" [ref=e1028] [cursor=pointer]:
+                  - /url: /splatoon/Moonlight
+              - listitem [ref=e1029]:
+                - link "New! Area Cup 19" [ref=e1030] [cursor=pointer]:
+                  - /url: /splatoon/New!_Area_Cup/19
+              - listitem [ref=e1031]:
+                - link "Starburst" [ref=e1032] [cursor=pointer]:
+                  - /url: /splatoon/Starburst
+              - listitem [ref=e1033]:
+                - link "Arashi" [ref=e1034] [cursor=pointer]:
+                  - /url: /splatoon/Arashi
+              - listitem [ref=e1035]:
+                - link "Birthday list" [ref=e1036] [cursor=pointer]:
+                  - /url: /splatoon/Birthday_list
+          - generic [ref=e1037]:
+            - heading "GOALS" [level=2] [ref=e1038]:
+              - link "GOALS" [ref=e1039] [cursor=pointer]:
+                - /url: /goals/Main_Page
+            - generic [ref=e1042]: 
+            - list [ref=e1044]:
+              - listitem [ref=e1045]:
+                - link "Triangle Kings FC" [ref=e1046] [cursor=pointer]:
+                  - /url: /goals/Triangle_Kings_FC
+              - listitem [ref=e1047]:
+                - link "Akela" [ref=e1048] [cursor=pointer]:
+                  - /url: /goals/Akela
+              - listitem [ref=e1049]:
+                - link "Brad" [ref=e1050] [cursor=pointer]:
+                  - /url: /goals/Brad
+              - listitem [ref=e1051]:
+                - link "GOALS Open x Glitched" [ref=e1052] [cursor=pointer]:
+                  - /url: /goals/GOALS_Open_x_Glitched
+    - generic [ref=e1053]:
+      - generic [ref=e1055]:
+        - heading "Sports Wiki" [level=2] [ref=e1056]
+        - paragraph [ref=e1057]: These are wikis that cover traditional sports
+      - generic [ref=e1059]:
+        - generic [ref=e1060]:
+          - heading "Chess" [level=2] [ref=e1061]:
+            - link "Chess" [ref=e1062] [cursor=pointer]:
+              - /url: /chess/Main_Page
+          - generic [ref=e1065]: 
+          - list [ref=e1067]:
+            - listitem [ref=e1068]:
+              - link "Chess at Esports World Cup 2026" [ref=e1069] [cursor=pointer]:
+                - /url: /chess/Esports_World_Cup/2026
+            - listitem [ref=e1070]:
+              - link "Bullet Chess Championship 2026" [ref=e1071] [cursor=pointer]:
+                - /url: /chess/Bullet_Chess_Championship/2026
+            - listitem [ref=e1072]:
+              - link "Chess at Esports Nations Cup 2026" [ref=e1073] [cursor=pointer]:
+                - /url: /chess/Esports_Nations_Cup/2026
+            - listitem [ref=e1074]:
+              - link "Magnus Carlsen" [ref=e1075] [cursor=pointer]:
+                - /url: /chess/Magnus_Carlsen
+            - listitem [ref=e1076]:
+              - link "India Rising 2026" [ref=e1077] [cursor=pointer]:
+                - /url: /chess/India_Rising/2026
+        - generic [ref=e1078]:
+          - heading "Formula 1" [level=2] [ref=e1079]:
+            - link "Formula 1" [ref=e1080] [cursor=pointer]:
+              - /url: /formula1/Main_Page
+          - generic [ref=e1083]: 
+          - list [ref=e1085]:
+            - listitem [ref=e1086]:
+              - link "2026 Formula One World Championship" [ref=e1087] [cursor=pointer]:
+                - /url: /formula1/2026_Formula_One_World_Championship
+            - listitem [ref=e1088]:
+              - link "2026 Austrian Grand Prix" [ref=e1089] [cursor=pointer]:
+                - /url: /formula1/2026_Austrian_Grand_Prix
+            - listitem [ref=e1090]:
+              - link "2025 Formula One World Championship" [ref=e1091] [cursor=pointer]:
+                - /url: /formula1/2025_Formula_One_World_Championship
+            - listitem [ref=e1092]:
+              - link "Max Verstappen" [ref=e1093] [cursor=pointer]:
+                - /url: /formula1/Max_Verstappen
+            - listitem [ref=e1094]:
+              - link "2026 Formula 2 Championship" [ref=e1095] [cursor=pointer]:
+                - /url: /formula1/2026_Formula_2_Championship
+    - generic [ref=e1096]:
+      - generic [ref=e1098]:
+        - heading "Grow Liquipedia" [level=2] [ref=e1099]
+        - paragraph [ref=e1100]: Want to contribute?
+      - generic [ref=e1102]:
+        - generic [ref=e1103]:
+          - heading "Hub" [level=2] [ref=e1104]:
+            - link "Hub" [ref=e1105] [cursor=pointer]:
+              - /url: /hub/Main_Page
+          - generic [ref=e1108]: 
+          - list [ref=e1110]:
+            - listitem [ref=e1111]:
+              - link "Getting started" [ref=e1112] [cursor=pointer]:
+                - /url: /hub/Support/Getting_started
+            - listitem [ref=e1113]:
+              - link "Create an account" [ref=e1114] [cursor=pointer]:
+                - /url: https://tl.net/mytlnet/register
+            - listitem [ref=e1115]:
+              - link "Support" [ref=e1116] [cursor=pointer]:
+                - /url: /hub/Support
+            - listitem [ref=e1117]:
+              - link "Policies" [ref=e1118] [cursor=pointer]:
+                - /url: /hub/Liquipedia:Policy
+            - listitem [ref=e1119]:
+              - link "Commons" [ref=e1120] [cursor=pointer]:
+                - /url: /commons/Main_Page
+        - generic [ref=e1121]:
+          - heading "Lab" [level=2] [ref=e1122]:
+            - link "Lab" [ref=e1123] [cursor=pointer]:
+              - /url: /lab/Main_Page
+          - generic [ref=e1126]: 
+          - list [ref=e1128]:
+            - listitem [ref=e1129]:
+              - link "FIFA World Cup 2026" [ref=e1130] [cursor=pointer]:
+                - /url: /lab/Football/FIFA/World_Cup/2026
+            - listitem [ref=e1131]:
+              - link "MCSR Ranked Worlds 2026" [ref=e1132] [cursor=pointer]:
+                - /url: /lab/Minecraft/MCSR_Ranked/2026/World_Championships
+            - listitem [ref=e1133]:
+              - link "FIFA World Cup 2026 - Group Stage" [ref=e1134] [cursor=pointer]:
+                - /url: /lab/Football/FIFA/World_Cup/2026/Group_Stage
+            - listitem [ref=e1135]:
+              - link "FWC 26 - Knockouts" [ref=e1136] [cursor=pointer]:
+                - /url: /lab/Football/FIFA/World_Cup/2026/Knockout_Stage
+            - listitem [ref=e1137]:
+              - link "Midoffs Season 3" [ref=e1138] [cursor=pointer]:
+                - /url: /lab/Minecraft/Midoffs/3
+  - contentinfo [ref=e1140]:
+    - generic [ref=e1141]:
+      - generic [ref=e1142]:
+        - generic [ref=e1143]:
+          - generic [ref=e1144]:
+            - img "Liquipedia logo" [ref=e1145]
+            - paragraph [ref=e1150]: Your home for esports.
+          - list [ref=e1151]:
+            - listitem [ref=e1152]:
+              - link "Contact" [ref=e1153] [cursor=pointer]:
+                - /url: /commons/Contact
+            - listitem [ref=e1154]:
+              - link "Disclaimer" [ref=e1155] [cursor=pointer]:
+                - /url: /commons/Liquipedia:General_disclaimer
+            - listitem [ref=e1156]:
+              - link "Privacy Policy" [ref=e1157] [cursor=pointer]:
+                - /url: /commons/Liquipedia:Privacy_policy
+            - listitem [ref=e1158]:
+              - link "API" [ref=e1159] [cursor=pointer]:
+                - /url: /api
+        - generic [ref=e1160]:
+          - heading "Liquipedia App" [level=2] [ref=e1161]:
+            - img [ref=e1162]
+            - text: Liquipedia App
+          - paragraph [ref=e1164]: "Your esports companion: track results, get notified & never miss a match."
+          - generic [ref=e1165]:
+            - link "Android App" [ref=e1166] [cursor=pointer]:
+              - /url: https://play.google.com/store/apps/details?id=com.teamliquid.liquipedia.liquipedia_app
+              - img "Google Play Icon"
+            - link "Iphone App" [ref=e1167] [cursor=pointer]:
+              - /url: https://apps.apple.com/app/liquipedia/id1640722331
+              - img "App Store Icon"
+      - generic [ref=e1168]:
+        - list [ref=e1169]:
+          - listitem [ref=e1170]:
+            - link "Link to Liquipedia's Discord" [ref=e1171] [cursor=pointer]:
+              - /url: https://discord.gg/liquipedia
+              - img
+          - listitem [ref=e1172]:
+            - link "Link to Liquipedia's Twitter" [ref=e1173] [cursor=pointer]:
+              - /url: https://x.com/liquipedianet
+              - img
+          - listitem [ref=e1174]:
+            - link "Link to Liquipedia's Facebook" [ref=e1175] [cursor=pointer]:
+              - /url: https://www.facebook.com/Liquipedia
+              - img
+          - listitem [ref=e1176]:
+            - link "Link to Liquipedia's YouTube" [ref=e1177] [cursor=pointer]:
+              - /url: https://www.youtube.com/user/Liquipedia
+              - img
+          - listitem [ref=e1178]:
+            - link "Link to Liquipedia's Twitch" [ref=e1179] [cursor=pointer]:
+              - /url: https://www.twitch.tv/liquipedia
+              - img
+          - listitem [ref=e1180]:
+            - link "Link to Liquipedia's TikTok" [ref=e1181] [cursor=pointer]:
+              - /url: https://www.tiktok.com/@liquipedianet
+              - img
+          - listitem [ref=e1182]:
+            - link "Link to Liquipedia's GitHub" [ref=e1183] [cursor=pointer]:
+              - /url: https://github.com/Liquipedia
+              - img
+        - paragraph [ref=e1184]:
+          - text: Text/code is available under
+          - link "CC BY-SA" [ref=e1185] [cursor=pointer]:
+            - /url: https://creativecommons.org/licenses/by-sa/3.0/
+          - text: . Licenses for other media varies.

@@ -1,0 +1,99 @@
+[package]
+name = "ventus"
+version = "1.0.37"
+edition = "2021"
+description = "Ventus — a focused desktop browser with AI built in"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/neura-spheres/Ventus"
+homepage = "https://github.com/neura-spheres/Ventus"
+keywords = ["browser", "desktop", "webview", "ai", "rust"]
+categories = ["gui"]
+
+[[bin]]
+name = "ventus"
+path = "src/main.rs"
+
+[dependencies]
+wry = { version = "0.38", features = ["devtools"] }
+tao = "0.28"
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+regex = "1"
+rusqlite = { version = "0.31", features = ["bundled"] }
+reqwest = { version = "0.12", features = ["json", "stream", "multipart"] }
+anyhow = "1"
+thiserror = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+directories = "5"
+url = "2"
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+keyring = "2"
+futures-util = "0.3"
+async-trait = "0.1"
+async-stream = "0.3"
+base64 = "0.22"
+aes-gcm = "0.10"
+rand = "0.8"
+image = { version = "0.25", features = ["png", "jpeg", "gif", "webp", "ico"], default-features = false }
+semver = "1"
+rfd = { version = "0.14", default-features = false }
+roxmltree = "0.20"
+pdf-extract = "0.10"
+zip = { version = "2.4", default-features = false, features = ["deflate"] }
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.57", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Dwm",
+    "Win32_Graphics_Gdi",
+    "Win32_Security",
+    "Win32_Security_Cryptography",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Com",
+    "Win32_System_Memory",
+    "Win32_System_Threading",
+    "Win32_System_WinRT",
+    "Win32_System_DataExchange",
+    "Win32_System_Registry",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+    "Foundation",
+    "Data_Xml_Dom",
+    "UI_Notifications"
+] }
+webview2-com = "0.29"
+# Pinned to the version used by webview2-com-sys 0.29, so that PCWSTR/PWSTR/Interface
+# types in cookie_manager.rs are type-compatible with ICoreWebView2CookieManager.
+# Both 0.54 and 0.57 of windows-core already exist in the dep tree; this alias just
+# makes the 0.54 copy addressable from our code without downgrading the `windows` crate.
+wv2core = { package = "windows-core", version = "0.54" }
+# Alias for the `windows` crate at the version webview2-com uses.  Needed for
+# Win32::Foundation::BOOL which is passed as an out-parameter to cookie getters.
+wv2win  = { package = "windows", version = "0.54", default-features = false, features = ["Win32_Foundation", "Win32_System_Com", "Win32_System_Com_StructuredStorage"] }
+
+[build-dependencies]
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+[target.'cfg(windows)'.build-dependencies]
+winres = "0.1"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[patch.crates-io]
+wry = { path = "vendor/wry-0.38.2" }
+webview2-com = { path = "vendor/webview2-com-0.29.0" }

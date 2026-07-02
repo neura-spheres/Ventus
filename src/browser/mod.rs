@@ -1,0 +1,13 @@
+pub mod accel_download;
+pub mod cookie_manager;
+pub mod downloads;
+pub mod extensions;
+pub mod navigation;
+pub mod omnibox;
+pub mod search_engine;
+pub mod split_view;
+pub mod strictblock;
+pub mod tab;
+pub mod tab_manager;
+pub mod trends;
+pub mod workspace;

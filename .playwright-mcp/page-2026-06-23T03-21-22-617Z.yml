@@ -1,0 +1,241 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - generic [ref=e4]:
+      - link "Savvy Time Savvy Time World Clock" [ref=e6] [cursor=pointer]:
+        - /url: /
+        - img "Savvy Time" [ref=e8]
+        - heading "Savvy Time World Clock" [level=5] [ref=e9]:
+          - text: Savvy Time
+          - generic [ref=e10]: World Clock
+      - navigation [ref=e14]:
+        - list:
+          - listitem [ref=e15]:
+            - link "Home" [ref=e16] [cursor=pointer]:
+              - /url: /
+          - listitem [ref=e17]:
+            - link "Converter" [ref=e18] [cursor=pointer]:
+              - /url: /converter
+          - listitem [ref=e19]:
+            - link "Local Time" [ref=e20] [cursor=pointer]:
+              - /url: /local
+          - listitem [ref=e21]:
+            - link "Timers" [ref=e22] [cursor=pointer]:
+              - /url: /timers
+          - listitem [ref=e23]:
+            - link "Calendar" [ref=e24] [cursor=pointer]:
+              - /url: /calendars
+          - listitem [ref=e25]:
+            - link "Mobile" [ref=e26] [cursor=pointer]:
+              - /url: /mobile
+  - generic [ref=e28]:
+    - list [ref=e29]:
+      - listitem [ref=e30]:
+        - link "Home" [ref=e31] [cursor=pointer]:
+          - /url: /
+      - listitem [ref=e32]: / Converter
+    - generic [ref=e33]:
+      - button "Switch to 12-hour time format" [pressed]: "12"
+      - text: "|"
+      - button "Switch to 24-hour time format" [ref=e34] [cursor=pointer]: "24"
+  - main [ref=e35]:
+    - heading "Time Zone Converter" [level=1] [ref=e39]
+    - generic [ref=e41]:
+      - generic [ref=e42]:
+        - generic [ref=e43]:
+          - generic [ref=e45]:
+            - search [ref=e46]:
+              - generic [ref=e48]:
+                - combobox "Add time zone, city, or town" [ref=e49]
+                - button "Search time zones and cities" [ref=e50] [cursor=pointer]:
+                  - img [ref=e51]
+            - generic [ref=e58]:
+              - button "Reset to current time":
+                - img
+              - button "Converter settings" [ref=e60] [cursor=pointer]:
+                - img [ref=e61]
+          - generic [ref=e66]:
+            - heading "Start by searching for a time zone, city, or town." [level=2] [ref=e67]
+            - paragraph [ref=e68]: Add one or more places to compare local times, adjust the date, and share the result.
+        - region "Time zone converter overview" [ref=e69]:
+          - paragraph [ref=e70]: Search by city, country, or abbreviation such as UTC, EST, PST, IST, and GMT. Check current local time, daylight saving changes, conversion tables, and shareable schedule links.
+        - paragraph [ref=e71]:
+          - strong [ref=e72]: Compare cities, time zones, UTC offsets, and GMT offsets from one page. Adjust the date or time, then share a link that keeps everyone on the same schedule.
+        - heading "How to use the time zone converter" [level=2] [ref=e73]
+        - paragraph [ref=e74]: Add a time zone, city, or town, then add more places to compare local time side by side. Change the date or time to plan a meeting, call, webinar, livestream, or travel connection.
+        - list [ref=e75]:
+          - listitem [ref=e76]: Compare several time zones in one view.
+          - listitem [ref=e77]: Share a permanent link for meetings, calls, webinars, or travel plans.
+          - listitem [ref=e78]: Use the table view to scan day, night, and sunrise hours.
+          - listitem [ref=e79]: Switch between 12-hour and 24-hour time formats.
+          - listitem [ref=e80]: Review local time zone details, maps, and major cities when available.
+        - heading "Common time converter examples" [level=3] [ref=e81]
+        - list [ref=e82]:
+          - listitem [ref=e83]:
+            - link "New York to London time" [ref=e84] [cursor=pointer]:
+              - /url: /converter/ny-new-york-city-to-united-kingdom-london
+          - listitem [ref=e85]:
+            - link "EST to IST time" [ref=e86] [cursor=pointer]:
+              - /url: /converter/est-to-ist
+          - listitem [ref=e87]:
+            - link "UTC to PST time" [ref=e88] [cursor=pointer]:
+              - /url: /converter/utc-to-pst
+          - listitem [ref=e89]:
+            - link "EST to Singapore time" [ref=e90] [cursor=pointer]:
+              - /url: /converter/est-to-singapore-singapore
+        - generic [ref=e91]:
+          - heading "Popular time zone converter pages" [level=2] [ref=e92]
+          - generic [ref=e93]:
+            - generic [ref=e94]:
+              - heading "Popular India time converters" [level=3] [ref=e95]
+              - list [ref=e96]:
+                - listitem [ref=e97]:
+                  - link "EST to IST time converter" [ref=e98] [cursor=pointer]:
+                    - /url: /converter/est-to-ist
+                - listitem [ref=e99]:
+                  - link "PST to IST time converter" [ref=e100] [cursor=pointer]:
+                    - /url: /converter/pst-to-ist
+                - listitem [ref=e101]:
+                  - link "UTC to IST time converter" [ref=e102] [cursor=pointer]:
+                    - /url: /converter/utc-to-ist
+                - listitem [ref=e103]:
+                  - link "CST to IST time converter" [ref=e104] [cursor=pointer]:
+                    - /url: /converter/cst-to-ist
+                - listitem [ref=e105]:
+                  - link "CET to IST time converter" [ref=e106] [cursor=pointer]:
+                    - /url: /converter/cet-to-ist
+                - listitem [ref=e107]:
+                  - link "GMT to IST time converter" [ref=e108] [cursor=pointer]:
+                    - /url: /converter/gmt-to-ist
+                - listitem [ref=e109]:
+                  - link "SGT to IST time converter" [ref=e110] [cursor=pointer]:
+                    - /url: /converter/sgt-to-ist
+                - listitem [ref=e111]:
+                  - link "EDT to IST time converter" [ref=e112] [cursor=pointer]:
+                    - /url: /converter/edt-to-ist
+            - generic [ref=e113]:
+              - heading "Popular US time converters" [level=3] [ref=e114]
+              - list [ref=e115]:
+                - listitem [ref=e116]:
+                  - link "PST to EST time converter" [ref=e117] [cursor=pointer]:
+                    - /url: /converter/pst-to-est
+                - listitem [ref=e118]:
+                  - link "UTC to PST time converter" [ref=e119] [cursor=pointer]:
+                    - /url: /converter/utc-to-pst
+                - listitem [ref=e120]:
+                  - link "UTC to EST time converter" [ref=e121] [cursor=pointer]:
+                    - /url: /converter/utc-to-est
+                - listitem [ref=e122]:
+                  - link "EST to PST time converter" [ref=e123] [cursor=pointer]:
+                    - /url: /converter/est-to-pst
+                - listitem [ref=e124]:
+                  - link "PST to CST time converter" [ref=e125] [cursor=pointer]:
+                    - /url: /converter/pst-to-cst
+                - listitem [ref=e126]:
+                  - link "GMT to EST time converter" [ref=e127] [cursor=pointer]:
+                    - /url: /converter/gmt-to-est
+                - listitem [ref=e128]:
+                  - link "EST to CST time converter" [ref=e129] [cursor=pointer]:
+                    - /url: /converter/est-to-cst
+                - listitem [ref=e130]:
+                  - link "CET to EST time converter" [ref=e131] [cursor=pointer]:
+                    - /url: /converter/cet-to-est
+            - generic [ref=e132]:
+              - heading "Popular city time converters" [level=3] [ref=e133]
+              - list [ref=e134]:
+                - listitem [ref=e135]:
+                  - link "London, United Kingdom to IST time converter" [ref=e136] [cursor=pointer]:
+                    - /url: /converter/united-kingdom-london-to-ist
+                - listitem [ref=e137]:
+                  - link "London, United Kingdom to PHT time converter" [ref=e138] [cursor=pointer]:
+                    - /url: /converter/united-kingdom-london-to-pht
+                - listitem [ref=e139]:
+                  - link "EST to Singapore, Singapore time converter" [ref=e140] [cursor=pointer]:
+                    - /url: /converter/est-to-singapore-singapore
+                - listitem [ref=e141]:
+                  - link "Chicago, IL, USA to London, United Kingdom time converter" [ref=e142] [cursor=pointer]:
+                    - /url: /converter/il-chicago-to-united-kingdom-london
+                - listitem [ref=e143]:
+                  - link "New York City, NY, USA to London, United Kingdom time converter" [ref=e144] [cursor=pointer]:
+                    - /url: /converter/ny-new-york-city-to-united-kingdom-london
+                - listitem [ref=e145]:
+                  - link "Toronto, Canada to London, United Kingdom time converter" [ref=e146] [cursor=pointer]:
+                    - /url: /converter/canada-toronto-to-united-kingdom-london
+                - listitem [ref=e147]:
+                  - link "IST to London, United Kingdom time converter" [ref=e148] [cursor=pointer]:
+                    - /url: /converter/ist-to-united-kingdom-london
+                - listitem [ref=e149]:
+                  - link "Chicago, IL, USA to Tokyo, Japan time converter" [ref=e150] [cursor=pointer]:
+                    - /url: /converter/il-chicago-to-japan-tokyo
+      - generic [ref=e151]:
+        - complementary [ref=e152]
+        - complementary [ref=e154]:
+          - heading "Mobile Apps" [level=3] [ref=e156]
+          - generic [ref=e157]:
+            - link "Savvy time App iOS" [ref=e158] [cursor=pointer]:
+              - /url: https://apps.apple.com/sa/app/savvy-time/id1604337442
+              - img "Savvy time App iOS" [ref=e159]
+            - link "Savvy time App Android" [ref=e160] [cursor=pointer]:
+              - /url: https://play.google.com/store/apps/details?id=com.savvytime.mobile
+              - img "Savvy time App Android" [ref=e161]
+          - heading "Chrome Extension" [level=3] [ref=e163]
+          - link "Google Chrome Savvy time time zone converter Savvy Time Converter at Google Chrome Store" [ref=e164] [cursor=pointer]:
+            - /url: https://chromewebstore.google.com/detail/time-zone-converter-savvy/plhnjpnbkmdmooideifhkonobdkgbbof
+            - img "Google Chrome Savvy time time zone converter" [ref=e165]
+            - generic [ref=e166]: Savvy Time Converter at Google Chrome Store
+        - complementary [ref=e167]:
+          - heading "Popular Time Zone Converters" [level=3] [ref=e169]
+          - list [ref=e170]:
+            - listitem [ref=e171]:
+              - link "EST to IST" [ref=e172] [cursor=pointer]:
+                - /url: /converter/est-to-ist
+            - listitem [ref=e173]:
+              - link "PST to IST" [ref=e174] [cursor=pointer]:
+                - /url: /converter/pst-to-ist
+            - listitem [ref=e175]:
+              - link "UTC to IST" [ref=e176] [cursor=pointer]:
+                - /url: /converter/utc-to-ist
+            - listitem [ref=e177]:
+              - link "CST to IST" [ref=e178] [cursor=pointer]:
+                - /url: /converter/cst-to-ist
+            - listitem [ref=e179]:
+              - link "CET to IST" [ref=e180] [cursor=pointer]:
+                - /url: /converter/cet-to-ist
+            - listitem [ref=e181]:
+              - link "PST to EST" [ref=e182] [cursor=pointer]:
+                - /url: /converter/pst-to-est
+            - listitem [ref=e183]:
+              - link "UTC to PST" [ref=e184] [cursor=pointer]:
+                - /url: /converter/utc-to-pst
+            - listitem [ref=e185]:
+              - link "UTC to EST" [ref=e186] [cursor=pointer]:
+                - /url: /converter/utc-to-est
+            - listitem [ref=e187]:
+              - link "GMT to IST" [ref=e188] [cursor=pointer]:
+                - /url: /converter/gmt-to-ist
+            - listitem [ref=e189]:
+              - link "EST to PST" [ref=e190] [cursor=pointer]:
+                - /url: /converter/est-to-pst
+    - generic [ref=e191]:
+      - separator [ref=e192]
+      - link "EST to IST" [ref=e193] [cursor=pointer]:
+        - /url: /converter/est-to-ist
+      - link "GMT to EST" [ref=e194] [cursor=pointer]:
+        - /url: /converter/gmt-to-est
+      - link "PST to EST" [ref=e195] [cursor=pointer]:
+        - /url: /converter/pst-to-est
+      - link "EST to GMT" [ref=e196] [cursor=pointer]:
+        - /url: /converter/est-to-gmt
+      - link "PST to GMT" [ref=e197] [cursor=pointer]:
+        - /url: /converter/pst-to-gmt
+  - contentinfo [ref=e198]:
+    - generic [ref=e199]:
+      - link "Contact Us" [ref=e200] [cursor=pointer]:
+        - /url: /contact
+      - link "Privacy Policy" [ref=e201] [cursor=pointer]:
+        - /url: /privacy
+      - link "Disclaimer" [ref=e202] [cursor=pointer]:
+        - /url: /disclaimer
+      - link "App Store" [ref=e203] [cursor=pointer]:
+        - /url: https://apps.apple.com/sa/app/savvy-time/id1604337442
+      - link "Play Store" [ref=e204] [cursor=pointer]:
+        - /url: https://play.google.com/store/apps/details?id=com.savvytime.mobile

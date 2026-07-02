@@ -1,0 +1,10 @@
+/target
+*.env
+*.key
+*.log
+app-stderr.log
+.DS_Store
+Thumbs.db
+/dist
+/neura-data
+RULES.md

@@ -1,0 +1,98 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+      - '!v*-pre*'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version and verify tag
+        id: ver
+        shell: pwsh
+        run: |
+          $v = (Get-Content config.yaml | Where-Object { $_ -match '^\s*version:' }) -replace '^\s*version:\s*','' -replace '[''"]','' -replace '\s',''
+          if ($env:GITHUB_REF_NAME -ne "v$v") {
+            Write-Error "Tag $env:GITHUB_REF_NAME does not match config.yaml version v$v"
+            exit 1
+          }
+          "VERSION=$v" >> $env:GITHUB_OUTPUT
+          Write-Host "Version: $v"
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Build release
+        run: cargo build --release
+
+      - name: Install Inno Setup
+        run: choco install innosetup --yes --no-progress
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion="${{ steps.ver.outputs.VERSION }}" installer\ventus.iss
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      - name: Upload unsigned installer
+        id: upload_installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-installer
+          path: dist/Ventus-Setup-${{ steps.ver.outputs.VERSION }}.exe
+          if-no-files-found: error
+
+      - name: Sign installer (SignPath)
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          connector-url: https://app.signpath.io
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: ${{ vars.SIGNPATH_INSTALLER_ARTIFACT_CONFIG_SLUG }}
+          github-artifact-id: ${{ steps.upload_installer.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: dist/signed-installer
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Ventus v${{ steps.ver.outputs.VERSION }}"
+          tag_name: ${{ github.ref_name }}
+          body: |
+            ## Install
+
+            Download **Ventus-Setup-${{ steps.ver.outputs.VERSION }}.exe** and run it.
+
+            ## Requirements
+
+            - Windows 10 (build 17763) or later
+            - Microsoft WebView2 Runtime (bundled in the installer)
+          files: dist/signed-installer/Ventus-Setup-${{ steps.ver.outputs.VERSION }}.exe
+          draft: false
+          prerelease: false
+          fail_on_unmatched_files: true

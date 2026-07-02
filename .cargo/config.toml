@@ -1,0 +1,2 @@
+[build]
+rustc-workspace-wrapper = "scripts/rustc-workspace-wrapper.cmd"
