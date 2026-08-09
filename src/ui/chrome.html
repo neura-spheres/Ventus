@@ -16206,7 +16206,13 @@ function tabContextMenu(ev, tabId) {
   // ── Open in new window (web URLs only) ──────────────────────────────────â”€
   if (isWeb) {
     items.push({sep: true});
-    items.push({label: 'Open in new window', action: () => send('OpenInNewWindow', {url: tab.url})});
+    items.push({
+      label: 'Open to new window',
+      action: () => {
+        send('OpenInNewWindow', {url: tab.url});
+        send('CloseTab', {id: tabId});
+      }
+    });
   }
 
   // ── Bulk-close (only when there is something to close) ──────────────────â”€
