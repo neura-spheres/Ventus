@@ -837,6 +837,44 @@
                 }
             }
 
+            Event::UserEvent(AppEvent::ContentFirstPaint { tab_id }) => {
+                let is_active =
+                    state.tab_manager.active_tab_id.as_deref() == Some(tab_id.as_str());
+                let loading = state
+                    .tab_manager
+                    .get_tab(&tab_id)
+                    .map(|tab| tab.status == crate::browser::tab::TabStatus::Loading)
+                    .unwrap_or(false);
+                if is_active && (state.content_cover_open || loading) {
+                    if state.content_cover_open {
+                        state.set_content_cover(&chrome, false);
+                    }
+                    apply_layout(
+                        &chrome,
+                        chrome_hwnd,
+                        &content_views,
+                        &state,
+                        &layout_config,
+                        &window,
+                    );
+                    #[cfg(windows)]
+                    {
+                        let layout = AppLayout::calculate(
+                            layout_size(&window, &state),
+                            window.scale_factor(),
+                            &state,
+                            &layout_config,
+                        );
+                        nudge_active_content(
+                            &content_views,
+                            &content_hwnds,
+                            &state,
+                            layout,
+                        );
+                    }
+                }
+            }
+
             #[cfg(windows)]
             Event::UserEvent(AppEvent::AccelProbe { id, url }) => {
                 let referer = state
@@ -1717,6 +1755,7 @@
                         TabAction::ContentGoBack => {
                             if let Some(id) = &state.tab_manager.active_tab_id {
                                 if let Some(wv) = content_views.get(id) {
+                                    wake_content_webview(wv);
                                     let _ = wv.go_back();
                                 }
                             }
@@ -1724,6 +1763,7 @@
                         TabAction::ContentGoForward => {
                             if let Some(id) = &state.tab_manager.active_tab_id {
                                 if let Some(wv) = content_views.get(id) {
+                                    wake_content_webview(wv);
                                     let _ = wv.go_forward();
                                 }
                             }
@@ -1815,7 +1855,8 @@
                                         &layout_config,
                                         &window,
                                     );
-                                } else if content_views.contains_key(id) {
+                                } else if let Some(wv) = content_views.get(id) {
+                                    wake_content_webview(wv);
                                     load_url_or_gate_incognito_ubol(
                                         &content_views,
                                         id,
@@ -3081,7 +3122,11 @@
                 }
                 if let Some(id) = state.tab_manager.active_tab_id.clone() {
                     if let Some(wv) = content_views.get(&id) {
-                        wake_content_webview(wv);
+                        if suspended_tabs.remove(&id) {
+                            state.tab_manager.wake_tab(&id);
+                            wake_content_webview(wv);
+                            state.push_state_to_chrome(&chrome);
+                        }
                         let _ = wv.focus();
                     }
                     #[cfg(windows)]

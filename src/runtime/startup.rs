@@ -515,6 +515,86 @@ fn process_running(pid: u32) -> bool {
 }
 
 #[cfg(windows)]
+fn reap_orphan_webview2(sentinel: &std::path::Path) -> usize {
+    use std::collections::{HashMap, HashSet};
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
+        TH32CS_SNAPPROCESS,
+    };
+    use windows::Win32::System::Threading::{OpenProcess, TerminateProcess, PROCESS_TERMINATE};
+
+    let Some(old_pid) = std::fs::read_to_string(sentinel)
+        .ok()
+        .and_then(|s| s.trim().parse::<u32>().ok())
+    else {
+        return 0;
+    };
+    if process_running(old_pid) {
+        return 0;
+    }
+
+    let mut kids: HashMap<u32, Vec<u32>> = HashMap::new();
+    let mut webview: HashSet<u32> = HashSet::new();
+    unsafe {
+        let Ok(snap) = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) else {
+            return 0;
+        };
+        let mut entry = PROCESSENTRY32W {
+            dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
+            ..Default::default()
+        };
+        let mut ok = Process32FirstW(snap, &mut entry).is_ok();
+        while ok {
+            let end = entry
+                .szExeFile
+                .iter()
+                .position(|&c| c == 0)
+                .unwrap_or(entry.szExeFile.len());
+            let name = String::from_utf16_lossy(&entry.szExeFile[..end]);
+            if name.eq_ignore_ascii_case("msedgewebview2.exe") {
+                webview.insert(entry.th32ProcessID);
+            }
+            kids.entry(entry.th32ParentProcessID)
+                .or_default()
+                .push(entry.th32ProcessID);
+            ok = Process32NextW(snap, &mut entry).is_ok();
+        }
+        let _ = CloseHandle(snap);
+    }
+
+    let mut targets: Vec<u32> = Vec::new();
+    let mut seen: HashSet<u32> = HashSet::new();
+    let mut stack = vec![old_pid];
+    while let Some(pid) = stack.pop() {
+        let Some(children) = kids.get(&pid) else {
+            continue;
+        };
+        for &child in children {
+            if !seen.insert(child) || !webview.contains(&child) {
+                continue;
+            }
+            targets.push(child);
+            stack.push(child);
+        }
+    }
+
+    let mut killed = 0usize;
+    for pid in targets {
+        unsafe {
+            let Ok(handle) = OpenProcess(PROCESS_TERMINATE, false, pid) else {
+                continue;
+            };
+            if !handle.is_invalid() && TerminateProcess(handle, 1).is_ok() {
+                killed += 1;
+            }
+            let _ = CloseHandle(handle);
+        }
+    }
+    killed
+}
+
+#[cfg(windows)]
 fn cleanup_secondary_webview_profiles(data_dir: &std::path::Path) {
     let Ok(entries) = std::fs::read_dir(data_dir) else {
         return;
@@ -692,6 +772,34 @@ fn sweep_incognito_trash(data_dir: &std::path::Path) {
 }
 
 #[cfg(windows)]
+fn process_failed_reason_label(
+    reason: webview2_com::Microsoft::Web::WebView2::Win32::COREWEBVIEW2_PROCESS_FAILED_REASON,
+) -> &'static str {
+    use webview2_com::Microsoft::Web::WebView2::Win32::{
+        COREWEBVIEW2_PROCESS_FAILED_REASON_CRASHED,
+        COREWEBVIEW2_PROCESS_FAILED_REASON_LAUNCH_FAILED,
+        COREWEBVIEW2_PROCESS_FAILED_REASON_OUT_OF_MEMORY,
+        COREWEBVIEW2_PROCESS_FAILED_REASON_PROFILE_DELETED,
+        COREWEBVIEW2_PROCESS_FAILED_REASON_TERMINATED,
+        COREWEBVIEW2_PROCESS_FAILED_REASON_UNRESPONSIVE,
+    };
+    if reason == COREWEBVIEW2_PROCESS_FAILED_REASON_CRASHED {
+        "crashed"
+    } else if reason == COREWEBVIEW2_PROCESS_FAILED_REASON_LAUNCH_FAILED {
+        "launch_failed"
+    } else if reason == COREWEBVIEW2_PROCESS_FAILED_REASON_OUT_OF_MEMORY {
+        "out_of_memory"
+    } else if reason == COREWEBVIEW2_PROCESS_FAILED_REASON_PROFILE_DELETED {
+        "profile_deleted"
+    } else if reason == COREWEBVIEW2_PROCESS_FAILED_REASON_TERMINATED {
+        "terminated"
+    } else if reason == COREWEBVIEW2_PROCESS_FAILED_REASON_UNRESPONSIVE {
+        "unresponsive"
+    } else {
+        "unexpected"
+    }
+}
+
 fn attach_process_failed_handler(
     wv: &WebView,
     proxy: tao::event_loop::EventLoopProxy<AppEvent>,
@@ -699,13 +807,16 @@ fn attach_process_failed_handler(
 ) {
     use webview2_com::{
         Microsoft::Web::WebView2::Win32::{
-            ICoreWebView2, COREWEBVIEW2_PROCESS_FAILED_KIND_GPU_PROCESS_EXITED,
+            ICoreWebView2, ICoreWebView2ProcessFailedEventArgs2,
+            COREWEBVIEW2_PROCESS_FAILED_KIND_GPU_PROCESS_EXITED,
             COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_EXITED,
             COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_UNRESPONSIVE,
             COREWEBVIEW2_PROCESS_FAILED_KIND_UTILITY_PROCESS_EXITED,
+            COREWEBVIEW2_PROCESS_FAILED_REASON,
         },
         ProcessFailedEventHandler,
     };
+    use wv2core::{Interface, PWSTR};
 
     let controller = wv.controller();
     let webview: ICoreWebView2 = unsafe {
@@ -720,9 +831,29 @@ fn attach_process_failed_handler(
             return Ok(());
         };
         let mut kind = COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_EXITED;
+        let mut reason = COREWEBVIEW2_PROCESS_FAILED_REASON(-1);
+        let mut exit_code = 0i32;
+        let mut description = String::new();
         unsafe {
             let _ = args.ProcessFailedKind(&mut kind);
+            if let Ok(args2) = args.cast::<ICoreWebView2ProcessFailedEventArgs2>() {
+                let _ = args2.Reason(&mut reason);
+                let _ = args2.ExitCode(&mut exit_code);
+                let mut desc_ptr = PWSTR::null();
+                if args2.ProcessDescription(&mut desc_ptr).is_ok() {
+                    description = take_pwstr(desc_ptr);
+                }
+            }
         }
+        tracing::warn!(
+            target: "ventus::content",
+            tab = %tab_id,
+            kind = kind.0,
+            reason = process_failed_reason_label(reason),
+            exit_code,
+            process = %description,
+            "WebView2 ProcessFailed"
+        );
         if kind == COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_EXITED
             || kind == COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_UNRESPONSIVE
         {
@@ -733,17 +864,9 @@ fn attach_process_failed_handler(
         } else if kind == COREWEBVIEW2_PROCESS_FAILED_KIND_UTILITY_PROCESS_EXITED
             || kind == COREWEBVIEW2_PROCESS_FAILED_KIND_GPU_PROCESS_EXITED
         {
-            tracing::warn!(
-                target: "ventus::content",
-                tab = %tab_id,
-                kind = kind.0,
-                "WebView2 subprocess exited; leaving the page in place"
-            );
-        } else {
-            tracing::error!(
-                "WebView2 browser process failed (kind={}) - restart required",
-                kind.0
-            );
+            let _ = proxy.send_event(AppEvent::ContentSubprocessCrashed {
+                tab_id: tab_id.clone(),
+            });
         }
         Ok(())
     }));

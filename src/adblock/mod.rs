@@ -3,6 +3,9 @@ pub struct AdBlockEngine {
     pub enabled: bool,
 }
 
+pub const BUILTIN_AD_BLOCK_EXCEPTION_HOSTS: &[&str] =
+    &["ecosia.org", "sp.ecosia.org", "syndicatedsearch.goog"];
+
 impl AdBlockEngine {
     pub fn new(enabled: bool, exceptions: &[String]) -> Self {
         Self {
@@ -21,6 +24,9 @@ impl AdBlockEngine {
 
     pub fn toggle_exception(&mut self, host: &str) -> bool {
         let host = normalize_host(host);
+        if is_builtin_exception_host(&host) {
+            return true;
+        }
         if let Some(pos) = self.exceptions.iter().position(|e| e == &host) {
             self.exceptions.remove(pos);
             return false;
@@ -49,7 +55,21 @@ pub fn is_site_excepted(url: &str, exceptions: &[String]) -> bool {
     let Some(host) = u.host_str() else {
         return false;
     };
-    host_matches_list(host, exceptions)
+    host_matches_list(host, exceptions) || is_builtin_exception_host(host)
+}
+
+pub fn is_builtin_exception(url: &str) -> bool {
+    let Ok(u) = url::Url::parse(url) else {
+        return false;
+    };
+    let Some(host) = u.host_str() else {
+        return false;
+    };
+    is_builtin_exception_host(host)
+}
+
+pub fn is_builtin_exception_host(host: &str) -> bool {
+    host_matches_list(host, BUILTIN_AD_BLOCK_EXCEPTION_HOSTS)
 }
 
 pub fn normalize_host(host: &str) -> String {
@@ -131,5 +151,30 @@ mod tests {
         assert!(is_x_auth_url("https://x.com/account/access"));
         assert!(!is_x_auth_url("https://x.com/home"));
         assert!(!is_x_auth_url("https://x.com/someone/status/1"));
+    }
+
+    #[test]
+    fn ecosia_hosts_are_builtin_exceptions() {
+        assert!(is_site_excepted(
+            "https://www.ecosia.org/search?q=trees",
+            &[]
+        ));
+        assert!(is_site_excepted("http://sp.ecosia.org/search?q=trees", &[]));
+        assert!(is_site_excepted("https://syndicatedsearch.goog/ads", &[]));
+        assert!(!is_site_excepted(
+            "https://example.com/search?q=ecosia",
+            &[]
+        ));
+        assert!(!is_site_excepted(
+            "https://fake-syndicatedsearch.goog.example",
+            &[]
+        ));
+    }
+
+    #[test]
+    fn builtin_exceptions_are_not_added_to_user_exceptions() {
+        let mut engine = AdBlockEngine::new(true, &[]);
+        assert!(engine.toggle_exception("https://www.ecosia.org/"));
+        assert!(engine.exceptions().is_empty());
     }
 }

@@ -649,6 +649,9 @@ pub enum AppEvent {
         native: bool,
         nav_id: u64,
     },
+    ContentFirstPaint {
+        tab_id: String,
+    },
     ContentLoadEnd {
         tab_id: String,
         url: String,
@@ -927,6 +930,9 @@ pub enum AppEvent {
         tab_id: String,
         fatal: bool,
     },
+    ContentSubprocessCrashed {
+        tab_id: String,
+    },
     /// A sized popup (OAuth, share, payment) was requested. The main loop drains the
     /// pending-popup queue and builds a Ventus-wrapped window for each.
     CreatePopupWindow,
@@ -1013,6 +1019,7 @@ impl AppEvent {
             AppEvent::FindResult { .. } => "find_result",
             AppEvent::ContentNav { .. } => "content_nav",
             AppEvent::ContentLoadStart { .. } => "content_load_start",
+            AppEvent::ContentFirstPaint { .. } => "content_first_paint",
             AppEvent::ContentLoadEnd { .. } => "content_load_end",
             AppEvent::ContentLoadProgress { .. } => "content_load_progress",
             AppEvent::ContentLoadStalled { .. } => "content_load_stalled",
@@ -1070,6 +1077,7 @@ impl AppEvent {
             AppEvent::CurrencyRatesLoaded { .. } => "currency_rates_loaded",
             AppEvent::CurrencyRatesFailed => "currency_rates_failed",
             AppEvent::ContentProcessFailed { .. } => "content_process_failed",
+            AppEvent::ContentSubprocessCrashed { .. } => "content_subprocess_crashed",
             AppEvent::CreatePopupWindow => "create_popup_window",
             AppEvent::CreateTabFromHandoff => "create_tab_from_handoff",
             AppEvent::PopupClose { .. } => "popup_close",
