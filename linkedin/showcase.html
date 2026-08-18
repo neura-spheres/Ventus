@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ventus LinkedIn Showcase</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@600;700;800&display=swap');
+:root{--ink:#f8fbff;--muted:#aeb8cd;--line:rgba(255,255,255,.12);--panel:rgba(8,13,26,.82);--cyan:#31d6ff;--blue:#2878ff;--violet:#8b5cff}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#050711;color:var(--ink);font-family:Inter,Segoe UI,sans-serif}
+.slide{display:none;position:relative;width:1600px;height:900px;overflow:hidden;background:#050711}
+body[data-slide="cover"] .cover,body[data-slide="product"] .product,body[data-slide="engineering"] .engineering,body[data-slide="features"] .features{display:block}
+.bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.shade{position:absolute;inset:0;background:linear-gradient(90deg,rgba(4,7,15,.92) 0%,rgba(4,7,15,.62) 48%,rgba(4,7,15,.16) 100%)}
+.grain{position:absolute;inset:0;opacity:.16;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.22'/%3E%3C/svg%3E")}
+.topline{position:absolute;left:82px;right:82px;top:54px;height:1px;background:linear-gradient(90deg,rgba(49,214,255,.75),rgba(139,92,255,.45),transparent)}
+.brand{display:flex;align-items:center;gap:17px;font-family:Manrope,sans-serif;font-weight:800;letter-spacing:-.03em}
+.brand img{width:58px;height:58px;filter:drop-shadow(0 8px 24px rgba(42,126,255,.35))}
+.brand span{font-size:29px}
+.eyebrow{color:#77ddff;text-transform:uppercase;letter-spacing:.19em;font-size:13px;font-weight:700}
+.cover .content{position:absolute;left:90px;top:88px;width:720px}
+.cover .brand{margin-bottom:112px}
+.cover h1{font-family:Manrope,sans-serif;font-size:80px;line-height:1.03;letter-spacing:-.055em;margin:20px 0 25px;max-width:800px}
+.grad{background:linear-gradient(110deg,#fff 16%,#90eaff 58%,#aa82ff 95%);-webkit-background-clip:text;color:transparent}
+.cover p{font-size:22px;line-height:1.6;color:#c4cde0;max-width:625px;margin:0}
+.pills{display:flex;gap:12px;margin-top:38px}
+.pill{padding:11px 16px;border:1px solid var(--line);border-radius:999px;background:rgba(7,12,24,.55);font-size:14px;font-weight:600;color:#dfe8fa;backdrop-filter:blur(12px)}
+.version{position:absolute;left:92px;bottom:54px;color:#7f8ca7;font-size:13px;letter-spacing:.08em;text-transform:uppercase}
+.orb{position:absolute;right:96px;top:154px;width:460px;height:460px;border-radius:50%;background:radial-gradient(circle at 36% 28%,#c5b4ff 0,#8855ff 18%,#155fff 48%,#09184d 72%,#030713 100%);box-shadow:0 0 110px rgba(48,128,255,.34),inset -40px -40px 90px rgba(0,0,0,.62);border:1px solid rgba(255,255,255,.16)}
+.orb:after{content:"V";position:absolute;inset:0;display:grid;place-items:center;font-family:Manrope,sans-serif;font-size:255px;font-weight:800;color:white;transform:scaleX(1.1);text-shadow:0 12px 40px rgba(0,0,0,.34)}
+.orb-ring{position:absolute;right:32px;top:90px;width:590px;height:590px;border:1px solid rgba(67,206,255,.22);border-radius:50%;transform:rotate(-18deg);box-shadow:0 0 80px rgba(84,80,255,.08)}
+.product{background:radial-gradient(circle at 78% 20%,rgba(70,64,255,.21),transparent 36%),linear-gradient(145deg,#080b16,#050711 68%)}
+.product .head,.engineering .head,.features .head{position:absolute;left:84px;right:84px;top:54px;display:flex;align-items:center;justify-content:space-between}
+.head .brand img{width:44px;height:44px}.head .brand span{font-size:23px}
+.counter{font-size:12px;letter-spacing:.18em;color:#74819b;text-transform:uppercase}
+.product .title{position:absolute;left:84px;top:137px}
+.slide h2{font-family:Manrope,sans-serif;font-size:49px;line-height:1.05;letter-spacing:-.045em;margin:13px 0 0}
+.browser{position:absolute;left:84px;right:84px;top:245px;height:575px;border:1px solid rgba(255,255,255,.16);border-radius:22px;background:#090d18;box-shadow:0 36px 100px rgba(0,0,0,.55),0 0 0 1px rgba(81,159,255,.08);overflow:hidden}
+.browser-top{height:79px;display:flex;align-items:center;padding:0 21px;gap:14px;border-bottom:1px solid rgba(255,255,255,.08);background:#0d111d}
+.traffic{display:flex;gap:7px;margin-right:3px}.traffic i{width:10px;height:10px;border-radius:50%;background:#2e3544}.traffic i:first-child{background:#ff6570}.traffic i:nth-child(2){background:#ffc65a}.traffic i:nth-child(3){background:#43d07c}
+.nav{color:#8490a6;font-size:20px;display:flex;gap:17px}
+.address{height:44px;flex:1;max-width:720px;margin:auto;border:1px solid rgba(121,102,255,.42);border-radius:14px;background:#141927;display:flex;align-items:center;gap:12px;padding:0 17px;color:#aeb8ca;font-size:13px;box-shadow:0 0 28px rgba(84,82,255,.08)}
+.address b{color:#55d8ff;font-size:15px}.browser-actions{display:flex;gap:11px;color:#8793aa}
+.browser-body{display:grid;grid-template-columns:72px 1fr 360px;height:496px}
+.rail{border-right:1px solid rgba(255,255,255,.075);background:#0b0f1a;display:flex;flex-direction:column;align-items:center;padding:22px 0;gap:20px}
+.rail .app{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;color:#8490a5;font-weight:700;font-size:13px}
+.rail .app.active{background:linear-gradient(145deg,#6936f4,#2387ff);color:#fff;box-shadow:0 9px 22px rgba(55,103,255,.35)}
+.newtab{padding:48px 54px;background:radial-gradient(circle at 78% 15%,rgba(58,76,166,.16),transparent 38%),#080c16}
+.newtab .hello{color:#8390a8;font-size:14px}.newtab h3{font-family:Manrope,sans-serif;font-size:33px;letter-spacing:-.04em;margin:10px 0 30px}
+.search{height:55px;max-width:640px;border:1px solid rgba(255,255,255,.12);border-radius:16px;background:#111725;display:flex;align-items:center;padding:0 19px;color:#7f8ba0;font-size:14px;box-shadow:0 16px 40px rgba(0,0,0,.25)}
+.shortcut-row{display:flex;gap:14px;margin:25px 0 41px}.shortcut{width:72px;height:72px;border-radius:18px;border:1px solid rgba(255,255,255,.09);background:#0e1421;display:grid;place-items:center;font-weight:700;color:#cbd5e8}.shortcut:nth-child(2){color:#ff7575}.shortcut:nth-child(3){color:#71ddff}.shortcut:nth-child(4){color:#ab8cff}
+.feed-label{display:flex;justify-content:space-between;max-width:675px;font-size:14px;font-weight:700}.feed-label span{color:#64718a;font-weight:500}
+.feed{display:grid;grid-template-columns:1.35fr 1fr;gap:14px;max-width:675px;margin-top:15px}
+.story{height:140px;padding:19px;border:1px solid rgba(255,255,255,.08);border-radius:17px;background:linear-gradient(145deg,rgba(32,43,70,.86),rgba(13,18,31,.9));display:flex;flex-direction:column;justify-content:flex-end}
+.story small{color:#65d9ff;margin-bottom:8px}.story b{font-size:16px;line-height:1.35}
+.ai{border-left:1px solid rgba(255,255,255,.075);background:linear-gradient(180deg,#101523,#090d18);padding:27px 24px;position:relative}
+.ai-head{display:flex;justify-content:space-between;align-items:center}.ai-title{display:flex;align-items:center;gap:10px;font-weight:700}.spark{width:27px;height:27px;border-radius:9px;display:grid;place-items:center;background:linear-gradient(145deg,#7c41f4,#1aa8ff);font-size:13px}
+.model{font-size:10px;color:#9ba8bf;border:1px solid rgba(255,255,255,.1);padding:6px 9px;border-radius:9px}
+.message{margin-top:31px;font-size:14px;line-height:1.55;color:#d7deeb}.message.me{margin-left:41px;padding:13px 15px;border-radius:14px 14px 4px 14px;background:#192238}
+.message.bot{padding-left:16px;border-left:2px solid #655af7;color:#aeb9ce}
+.composer{position:absolute;left:22px;right:22px;bottom:22px;height:52px;border:1px solid rgba(255,255,255,.12);border-radius:15px;background:#141a28;color:#6f7d95;display:flex;align-items:center;padding:0 15px;font-size:12px}.composer i{margin-left:auto;color:#68d8ff}
+.engineering{background:radial-gradient(circle at 22% 87%,rgba(27,158,224,.15),transparent 34%),radial-gradient(circle at 82% 21%,rgba(117,63,255,.2),transparent 36%),#060914}
+.engineering .title,.features .title{position:absolute;left:84px;top:131px}
+.diagram{position:absolute;left:84px;right:84px;top:270px;height:536px}
+.flow{display:flex;align-items:center;height:100%;gap:34px}
+.stack{width:278px;display:flex;flex-direction:column;gap:15px}
+.node{position:relative;border:1px solid rgba(255,255,255,.12);border-radius:18px;background:linear-gradient(145deg,rgba(22,31,53,.93),rgba(9,13,24,.93));padding:24px 23px;box-shadow:0 20px 44px rgba(0,0,0,.24)}
+.node.core{width:330px;padding:34px 30px;border-color:rgba(89,163,255,.35);box-shadow:0 0 55px rgba(52,94,255,.13)}
+.node.wide{width:355px}.node .kicker{font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:#6ddfff;font-weight:700}.node h4{font-family:Manrope,sans-serif;font-size:19px;margin:9px 0 7px}.node p{font-size:12px;line-height:1.55;color:#8f9db4;margin:0}
+.rust{width:60px;height:60px;border-radius:18px;background:linear-gradient(145deg,#7e3fff,#168dff);display:grid;place-items:center;font-family:Manrope;font-weight:800;font-size:25px;margin-bottom:18px}
+.arrow{width:64px;height:1px;background:linear-gradient(90deg,#4166f4,#55d8ff);position:relative;opacity:.7}.arrow:after{content:"";position:absolute;right:-1px;top:-4px;border-left:8px solid #55d8ff;border-top:4px solid transparent;border-bottom:4px solid transparent}
+.native{position:absolute;left:0;bottom:0;color:#607089;font-size:11px;letter-spacing:.14em;text-transform:uppercase}
+.features{background:radial-gradient(circle at 92% 8%,rgba(80,61,255,.2),transparent 32%),linear-gradient(155deg,#090c17,#050711)}
+.cards{position:absolute;left:84px;right:84px;top:283px;display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.card{height:222px;border:1px solid rgba(255,255,255,.11);border-radius:20px;background:linear-gradient(145deg,rgba(19,26,44,.92),rgba(8,12,23,.95));padding:27px;position:relative;overflow:hidden}
+.card:after{content:"";position:absolute;width:130px;height:130px;border-radius:50%;right:-62px;top:-62px;background:var(--glow,#5e4bff);filter:blur(55px);opacity:.38}
+.icon{width:42px;height:42px;border-radius:13px;background:linear-gradient(145deg,rgba(98,67,245,.95),rgba(31,146,249,.95));display:grid;place-items:center;font-weight:800;margin-bottom:23px}
+.card h4{font-family:Manrope;font-size:19px;margin:0 0 9px}.card p{font-size:13px;line-height:1.6;color:#8f9db4;margin:0;max-width:350px}
+.foot{position:absolute;left:84px;right:84px;bottom:52px;border-top:1px solid rgba(255,255,255,.08);padding-top:20px;display:flex;justify-content:space-between;color:#71809a;font-size:12px}.foot b{color:#b3bfd4}
+.thumb{display:none;width:1200px;height:1200px;position:relative;overflow:hidden;background:#050711}
+body[data-slide="thumb"]{width:1200px;height:1200px}body[data-slide="thumb"] .thumb{display:block}
+.thumb .bg{filter:saturate(1.1)}.thumb .shade{background:linear-gradient(180deg,rgba(4,7,15,.32),rgba(4,7,15,.89))}
+.thumb .brand{position:absolute;left:75px;top:72px}.thumb .brand img{width:72px;height:72px}.thumb .brand span{font-size:38px}
+.thumb h1{position:absolute;left:75px;right:75px;bottom:188px;font-family:Manrope;font-size:90px;line-height:1.02;letter-spacing:-.055em;margin:0}.thumb p{position:absolute;left:80px;bottom:93px;font-size:21px;color:#b5c0d5;margin:0}
+</style>
+</head>
+<body>
+<section class="slide cover">
+  <img class="bg" src="ventus-background.png"><div class="shade"></div><div class="grain"></div><div class="orb-ring"></div><div class="orb"></div>
+  <div class="content">
+    <div class="brand"><img src="../public/ventus.png"><span>Ventus</span></div>
+    <div class="eyebrow">Native Windows Browser</div>
+    <h1>A focused browser, <span class="grad">with AI built in.</span></h1>
+    <p>Designed and engineered from scratch with Rust, a custom frameless interface, and Microsoft Edge WebView2.</p>
+    <div class="pills"><div class="pill">Rust</div><div class="pill">Tao + Wry</div><div class="pill">WebView2</div><div class="pill">SQLite</div></div>
+  </div>
+  <div class="version">Independent software project · 2026</div>
+</section>
+
+<section class="slide product">
+  <div class="head"><div class="brand"><img src="../public/ventus.png"><span>Ventus</span></div><div class="counter">Product experience · 01</div></div>
+  <div class="title"><div class="eyebrow">One focused workspace</div><h2>Browse. Organize. Think.</h2></div>
+  <div class="browser">
+    <div class="browser-top"><div class="traffic"><i></i><i></i><i></i></div><div class="nav"><span>‹</span><span>›</span><span>↻</span></div><div class="address"><b>⌕</b> Search the web or enter a URL</div><div class="browser-actions"><span>☆</span><span>↓</span><span>⚙</span><span>✦</span></div></div>
+    <div class="browser-body">
+      <div class="rail"><div class="app active">V</div><div class="app">W1</div><div class="app">W2</div><div class="app">＋</div></div>
+      <div class="newtab"><div class="hello">Good morning</div><h3>Where do you want to go?</h3><div class="search">⌕ &nbsp; Search with your preferred engine</div><div class="shortcut-row"><div class="shortcut">G</div><div class="shortcut">Y</div><div class="shortcut">GH</div><div class="shortcut">＋</div></div><div class="feed-label">Neura Feed <span>Fresh stories for you</span></div><div class="feed"><div class="story"><small>TECHNOLOGY</small><b>Building a native browser shell across Rust, JS, Win32, and WebView2</b></div><div class="story"><small>PRODUCT</small><b>A calmer way to browse and think</b></div></div></div>
+      <div class="ai"><div class="ai-head"><div class="ai-title"><span class="spark">✦</span>Ventus AI</div><div class="model">OpenAI</div></div><div class="message me">Summarize what matters on this page.</div><div class="message bot">Here are the main ideas, organized into a quick, useful overview.</div><div class="composer">Ask about this page <i>↗</i></div></div>
+    </div>
+  </div>
+</section>
+
+<section class="slide engineering">
+  <div class="head"><div class="brand"><img src="../public/ventus.png"><span>Ventus</span></div><div class="counter">Under the hood · 02</div></div>
+  <div class="title"><div class="eyebrow">Architecture</div><h2>Native control, web-scale reach.</h2></div>
+  <div class="diagram">
+    <div class="flow">
+      <div class="node core"><div class="rust">R</div><div class="kicker">Application core</div><h4>Rust native runtime</h4><p>Owns startup, application state, window lifecycle, IPC, persistence, downloads, updates, and async services.</p></div>
+      <div class="arrow"></div>
+      <div class="stack"><div class="node"><div class="kicker">Desktop shell</div><h4>Tao event loop</h4><p>Native Windows events and frameless window control.</p></div><div class="node"><div class="kicker">Browser bridge</div><h4>Wry + WebView2</h4><p>Chromium-compatible content through layered child WebViews.</p></div></div>
+      <div class="arrow"></div>
+      <div class="stack">
+        <div class="node wide"><div class="kicker">Interface layer</div><h4>Custom chrome WebView</h4><p>Toolbar, workspaces, overlays, new tab, downloads, settings, and AI.</p></div>
+        <div class="node wide"><div class="kicker">Content layer</div><h4>Per-tab WebViews</h4><p>Shared profile for cookies, local storage, cache, and native browser behavior.</p></div>
+        <div class="node wide"><div class="kicker">Local + connected services</div><h4>SQLite · Keychain · AI APIs</h4><p>Local user data, protected credentials, and multi-provider intelligence.</p></div>
+      </div>
+    </div>
+    <div class="native">Windows 10 / 11 · MIT Licensed · Built for practical daily workflows</div>
+  </div>
+</section>
+
+<section class="slide features">
+  <div class="head"><div class="brand"><img src="../public/ventus.png"><span>Ventus</span></div><div class="counter">Core capabilities · 03</div></div>
+  <div class="title"><div class="eyebrow">What I built</div><h2>A complete browser experience.</h2></div>
+  <div class="cards">
+    <div class="card"><div class="icon">01</div><h4>Native browser shell</h4><p>Custom frameless Windows UI with layered WebViews, Win32 clipping, z-order, and responsive layout control.</p></div>
+    <div class="card" style="--glow:#20b8ff"><div class="icon">02</div><h4>Workspaces and tabs</h4><p>Tab search, pinned tabs, workspace navigation, quick links, bookmarks, history, and downloads.</p></div>
+    <div class="card" style="--glow:#8b5cff"><div class="icon">03</div><h4>Multi-provider AI</h4><p>An integrated assistant supporting OpenAI, OpenRouter, Anthropic, and local Ollama models.</p></div>
+    <div class="card" style="--glow:#347dff"><div class="icon">04</div><h4>Local-first storage</h4><p>SQLite persistence for browser data with API secrets kept outside the database in the Windows keychain.</p></div>
+    <div class="card" style="--glow:#1bd3b6"><div class="icon">05</div><h4>Privacy controls</h4><p>Built-in ad blocking, tracking URL cleanup, site permissions, secure DNS options, and local settings.</p></div>
+    <div class="card" style="--glow:#aa56ff"><div class="icon">06</div><h4>Desktop-grade delivery</h4><p>Downloads, native file actions, automatic updates, Windows installers, and release build tooling.</p></div>
+  </div>
+  <div class="foot"><span><b>Stack:</b> Rust · Tao · Wry · WebView2 · SQLite · Tokio · Reqwest</span><span>github.com/neura-spheres/Ventus</span></div>
+</section>
+
+<section class="thumb">
+  <img class="bg" src="ventus-background.png"><div class="shade"></div><div class="grain"></div>
+  <div class="brand"><img src="../public/ventus.png"><span>Ventus</span></div>
+  <h1>A focused browser,<br><span class="grad">with AI built in.</span></h1>
+  <p>Native Windows desktop app · Built with Rust and WebView2</p>
+</section>
+<script>document.body.dataset.slide=new URLSearchParams(location.search).get("slide")||"cover";</script>
+</body>
+</html>

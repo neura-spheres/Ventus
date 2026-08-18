@@ -33,6 +33,16 @@ impl SearchEngine {
                 icon: "🔍".to_string(),
             },
             SearchEngine {
+                id: "ecosia".to_string(),
+                name: "Ecosia".to_string(),
+                url_template: "https://www.ecosia.org/search?q={query}&addon=manualopensearch"
+                    .to_string(),
+                shortcut: Some("@eco".to_string()),
+                is_default: false,
+                is_builtin: true,
+                icon: "🌱".to_string(),
+            },
+            SearchEngine {
                 id: "bing".to_string(),
                 name: "Bing".to_string(),
                 url_template: "https://www.bing.com/search?q={query}".to_string(),
@@ -169,7 +179,24 @@ fn urlencoding_encode(input: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::add_google_context;
+    use super::{add_google_context, SearchEngine};
+
+    #[test]
+    fn ecosia_builtin_uses_official_template() {
+        let engine = SearchEngine::builtin_engines()
+            .into_iter()
+            .find(|engine| engine.id == "ecosia")
+            .unwrap();
+
+        assert_eq!(engine.name, "Ecosia");
+        assert_eq!(
+            engine.url_template,
+            "https://www.ecosia.org/search?q={query}&addon=manualopensearch"
+        );
+        assert_eq!(engine.shortcut.as_deref(), Some("@eco"));
+        assert!(engine.is_builtin);
+        assert!(!engine.is_default);
+    }
 
     #[test]
     fn google_search_gets_reusable_context() {

@@ -39,6 +39,11 @@ const UNCOMMITTED_PATIENT_TRIES: u8 = 3;
 // ceiling only bites when the response is genuinely just very slow.
 const IN_FLIGHT_PATIENT_TRIES: u8 = 12;
 
+const CRASH_RELOAD_WINDOW_MS: u128 = 2500;
+const CRASH_RELOAD_MAX: u8 = 2;
+
+const FRESH_ABORT_RETRY_MAX: u8 = 3;
+
 #[derive(Debug, Clone, Copy)]
 pub struct ChromeClipRect {
     pub x: f64,
@@ -84,6 +89,9 @@ pub struct AppState {
     /// just slow to fire its final load event (heavy page on a slow device).
     pub load_progress: HashMap<String, f64>,
     pub nav_started_at: HashMap<String, std::time::Instant>,
+    pub last_subprocess_crash: Option<std::time::Instant>,
+    pub crash_reloads: HashMap<String, u8>,
+    pub fresh_abort_retries: HashMap<String, u8>,
     pub spotlight_open: bool,
     pub zoom_levels: HashMap<String, f64>,
     /// Pending AI page-tool channels — keyed by call_id.
@@ -207,6 +215,9 @@ impl AppState {
             load_recoveries: HashMap::new(),
             load_progress: HashMap::new(),
             nav_started_at: HashMap::new(),
+            last_subprocess_crash: None,
+            crash_reloads: HashMap::new(),
+            fresh_abort_retries: HashMap::new(),
             spotlight_open: false,
             zoom_levels: HashMap::new(),
             ai_pending_tools: Arc::new(Mutex::new(HashMap::new())),
@@ -443,6 +454,8 @@ impl AppState {
         let workspace_tab_counts = self.tab_manager.workspace_tab_counts();
         let active_url = active_tab.map(|t| t.url.as_str()).unwrap_or("");
         let ad_blocker_active = self.settings.privacy.ad_blocker_enabled;
+        let ad_blocker_builtin_excepted =
+            !active_url.is_empty() && crate::adblock::is_builtin_exception(active_url);
         let ad_blocker_site_excepted =
             !active_url.is_empty() && self.ad_blocker_site_excepted(active_url);
         let x_login_compat_active = active_tab
@@ -498,6 +511,7 @@ impl AppState {
             },
             "ad_blocker_active": ad_blocker_active,
             "ad_blocker_site_excepted": ad_blocker_site_excepted,
+            "ad_blocker_builtin_excepted": ad_blocker_builtin_excepted,
             "ad_blocker_kills": self.adblock_page_kills,
             "x_login_compat_active": x_login_compat_active,
             "requested_permissions": &self.requested_permissions,
@@ -1406,6 +1420,12 @@ pub fn handle_chrome_command(
             {
                 return None;
             }
+            if crate::adblock::is_builtin_exception(&url) {
+                let _ = chrome.evaluate_script(
+                    "window.__neura && window.__neura.showError('Ecosia ads stay allowed so searches can help fund tree planting.')",
+                );
+                return None;
+            }
             let tab_id = state.tab_manager.active_tab_id.clone().unwrap_or_default();
             state.ad_block_engine.toggle_exception(&url);
             state.settings.privacy.ad_blocker_exceptions =
@@ -2170,6 +2190,7 @@ fn clear_tab_recoveries(state: &mut AppState, tab_id: &str) {
     state
         .load_recoveries
         .retain(|key, _| !key.starts_with(&prefix));
+    state.fresh_abort_retries.remove(tab_id);
 }
 
 fn begin_user_nav(state: &mut AppState, chrome: &WebView, tab_id: &str) {
@@ -2510,6 +2531,8 @@ pub(crate) fn finalize_completed_load(state: &mut AppState, chrome: &WebView, ta
     if let Some(tab) = state.tab_manager.get_tab(tab_id) {
         state.load_recoveries.remove(&load_key(tab_id, &tab.url));
     }
+    state.crash_reloads.remove(tab_id);
+    state.fresh_abort_retries.remove(tab_id);
     state.native_loads.remove(tab_id);
     state.native_nav_ids.remove(tab_id);
     state.load_progress.remove(tab_id);
@@ -2840,6 +2863,80 @@ fn rebuild_black_tab(
     Some(TabAction::RebuildContent {
         tab_id,
         url: recover_url,
+    })
+}
+
+fn crash_reload_aborted_nav(
+    state: &mut AppState,
+    tab_id: &str,
+    clean_url: &str,
+) -> Option<TabAction> {
+    let recent = state
+        .last_subprocess_crash
+        .map(|t| t.elapsed().as_millis() < CRASH_RELOAD_WINDOW_MS)
+        .unwrap_or(false);
+    if !recent {
+        return None;
+    }
+    if state.tab_manager.active_tab_id.as_deref() != Some(tab_id) {
+        return None;
+    }
+    if clean_url.trim().is_empty() || !clean_url.starts_with("http") {
+        return None;
+    }
+    let count = state.crash_reloads.get(tab_id).copied().unwrap_or(0);
+    if count >= CRASH_RELOAD_MAX {
+        return None;
+    }
+    state.last_subprocess_crash = None;
+    state.crash_reloads.insert(tab_id.to_string(), count + 1);
+    state.load_progress.insert(tab_id.to_string(), 0.0);
+    tracing::info!(
+        target: "ventus::nav",
+        tab = %tab_id,
+        url = %crate::utils::url::log_url(clean_url),
+        attempt = count + 1,
+        "crash-abort recovery: reloading navigation aborted by a subprocess crash"
+    );
+    Some(TabAction::ReloadContent {
+        tab_id: tab_id.to_string(),
+        url: clean_url.to_string(),
+    })
+}
+
+fn retry_fresh_aborted_nav(
+    state: &mut AppState,
+    tab_id: &str,
+    clean_url: &str,
+) -> Option<TabAction> {
+    if state.tab_manager.active_tab_id.as_deref() != Some(tab_id) {
+        return None;
+    }
+    if clean_url.trim().is_empty() || !clean_url.starts_with("http") {
+        return None;
+    }
+    let committed = state.load_progress.get(tab_id).copied().unwrap_or(0.0) > 0.0;
+    if committed {
+        return None;
+    }
+    let count = state.fresh_abort_retries.get(tab_id).copied().unwrap_or(0);
+    if count >= FRESH_ABORT_RETRY_MAX {
+        return None;
+    }
+    state
+        .fresh_abort_retries
+        .insert(tab_id.to_string(), count + 1);
+    state.load_progress.insert(tab_id.to_string(), 0.0);
+    tracing::info!(
+        target: "ventus::nav",
+        tab = %tab_id,
+        url = %crate::utils::url::log_url(clean_url),
+        attempt = count + 1,
+        "fresh-abort recovery: reloading a first navigation that aborted before committing"
+    );
+    Some(TabAction::ReloadContent {
+        tab_id: tab_id.to_string(),
+        url: clean_url.to_string(),
     })
 }
 
@@ -3712,6 +3809,8 @@ pub fn handle_app_event_inner(
             if let Some(tab) = state.tab_manager.get_tab(&tab_id) {
                 state.load_recoveries.remove(&load_key(&tab_id, &tab.url));
             }
+            state.crash_reloads.remove(&tab_id);
+            state.fresh_abort_retries.remove(&tab_id);
             state.native_loads.remove(&tab_id);
             state.native_nav_ids.remove(&tab_id);
             state.load_progress.remove(&tab_id);
@@ -3814,6 +3913,7 @@ pub fn handle_app_event_inner(
                 state.native_loads.remove(&tab_id);
                 state.native_nav_ids.remove(&tab_id);
                 state.load_recoveries.remove(&load_key(&tab_id, &clean_url));
+                state.crash_reloads.remove(&tab_id);
                 state.load_progress.remove(&tab_id);
                 if let Some(started) = state.nav_started_at.remove(&tab_id) {
                     let dur_ms = started.elapsed().as_millis() as u64;
@@ -3868,6 +3968,15 @@ pub fn handle_app_event_inner(
         AppEvent::ContentBlackProbe { tab_id, url, .. } => {
             rebuild_black_tab(tab_id, url, state, chrome)
         }
+        AppEvent::ContentSubprocessCrashed { tab_id } => {
+            state.last_subprocess_crash = Some(std::time::Instant::now());
+            tracing::warn!(
+                target: "ventus::nav",
+                tab = %tab_id,
+                "utility/GPU subprocess crashed — arming crash-abort recovery for in-flight navigations"
+            );
+            None
+        }
         AppEvent::ContentNavigationFailed {
             tab_id,
             url,
@@ -3893,6 +4002,12 @@ pub fn handle_app_event_inner(
             if canceled_nav_status(status) {
                 if should_show_blocked_page(state, &tab_id, &clean_url, status) {
                     return show_blocked_page(tab_id, clean_url, state, chrome);
+                }
+                if let Some(action) = crash_reload_aborted_nav(state, &tab_id, &clean_url) {
+                    return Some(action);
+                }
+                if let Some(action) = retry_fresh_aborted_nav(state, &tab_id, &clean_url) {
+                    return Some(action);
                 }
                 // An explicit abort (ERR_ABORTED / canceled) of an uncommitted load is almost
                 // always the site superseding its own navigation — an SPA/redirect handoff
@@ -5560,6 +5675,7 @@ fn get_search_url(state: &AppState) -> String {
     }
     match engine_id.as_str() {
         "google" => "https://www.google.com/search?q={query}".to_string(),
+        "ecosia" => "https://www.ecosia.org/search?q={query}&addon=manualopensearch".to_string(),
         "bing" => "https://www.bing.com/search?q={query}".to_string(),
         "brave" => "https://search.brave.com/search?q={query}".to_string(),
         "perplexity" => "https://www.perplexity.ai/search?q={query}".to_string(),

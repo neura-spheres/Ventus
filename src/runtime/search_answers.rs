@@ -296,6 +296,7 @@ mod webview_arg_tests {
         assert!(ua.contains("Win64; x64; Ventus"));
         assert!(ua.contains("Chrome/"));
         assert!(ua.contains("Safari/"));
+        assert!(!ua.contains("Chrome/0.0.0.0"));
         assert!(!ua.contains("Edg/"));
         assert!(!ua.contains("Microsoft Edge"));
     }
@@ -474,6 +475,30 @@ mod webview_arg_tests {
             )
         );
         assert!(chromium_versions_from_raw("runtime unavailable").is_none());
+    }
+
+    #[test]
+    fn chromium_identity_uses_modern_fallback_when_runtime_is_bad() {
+        assert_eq!(
+            chromium_identity_versions("runtime unavailable"),
+            chrome_identity_fallback()
+        );
+        assert_eq!(
+            chromium_identity_versions("109.0.1518.140"),
+            chrome_identity_fallback()
+        );
+    }
+
+    #[test]
+    fn chromium_identity_keeps_recent_runtime() {
+        assert_eq!(
+            chromium_identity_versions("150.1"),
+            (
+                "150.1.0.0".to_string(),
+                "150.0.0.0".to_string(),
+                "150".to_string()
+            )
+        );
     }
 
     #[test]

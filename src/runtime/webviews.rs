@@ -225,6 +225,12 @@ fn build_content_webview_once(
                     }
                     return;
                 }
+                if value.get("cmd").and_then(|v| v.as_str()) == Some("content_first_paint") {
+                    let _ = proxy_ipc.send_event(AppEvent::ContentFirstPaint {
+                        tab_id: tab_id_ipc.clone(),
+                    });
+                    return;
+                }
                 if value.get("cmd").and_then(|v| v.as_str()) == Some("content_progress") {
                     let progress = value
                         .get("progress")
@@ -1164,12 +1170,32 @@ fn browser_user_agent() -> String {
     )
 }
 
+const CHROME_IDENTITY_MIN_MAJOR: u32 = 120;
+const CHROME_IDENTITY_FALLBACK_MAJOR: &str = "149";
+const CHROME_IDENTITY_FALLBACK_FULL: &str = "149.0.0.0";
+
 fn chromium_versions() -> (String, String, String) {
     let raw = wry::webview_version().ok().unwrap_or_default();
-    chromium_versions_from_raw(&raw).unwrap_or_else(|| {
-        let full = "0.0.0.0".to_string();
-        (full.clone(), full, "0".to_string())
-    })
+    chromium_identity_versions(&raw)
+}
+
+fn chromium_identity_versions(raw: &str) -> (String, String, String) {
+    let Some(versions) = chromium_versions_from_raw(raw) else {
+        return chrome_identity_fallback();
+    };
+    let major = versions.2.parse::<u32>().unwrap_or(0);
+    if major < CHROME_IDENTITY_MIN_MAJOR {
+        return chrome_identity_fallback();
+    }
+    versions
+}
+
+fn chrome_identity_fallback() -> (String, String, String) {
+    (
+        CHROME_IDENTITY_FALLBACK_FULL.to_string(),
+        CHROME_IDENTITY_FALLBACK_FULL.to_string(),
+        CHROME_IDENTITY_FALLBACK_MAJOR.to_string(),
+    )
 }
 
 fn chromium_versions_from_raw(raw: &str) -> Option<(String, String, String)> {
