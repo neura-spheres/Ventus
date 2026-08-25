@@ -2911,6 +2911,12 @@ fn crash_reload_aborted_nav(
     })
 }
 
+fn nav_superseded(current: Option<&String>, aborted: &str) -> bool {
+    current
+        .map(|current| !same_nav(current, aborted))
+        .unwrap_or(false)
+}
+
 fn retry_fresh_aborted_nav(
     state: &mut AppState,
     tab_id: &str,
@@ -4010,11 +4016,22 @@ pub fn handle_app_event_inner(
                 if should_show_blocked_page(state, &tab_id, &clean_url, status) {
                     return show_blocked_page(tab_id, clean_url, state, chrome);
                 }
-                if let Some(action) = crash_reload_aborted_nav(state, &tab_id, &clean_url) {
-                    return Some(action);
+                let superseded = nav_superseded(state.native_loads.get(&tab_id), &clean_url);
+                if superseded {
+                    tracing::debug!(
+                        target: "ventus::nav",
+                        tab = %tab_id,
+                        aborted = %crate::utils::url::log_url(&clean_url),
+                        "abort was a redirect handoff — leaving the new navigation alone"
+                    );
                 }
-                if let Some(action) = retry_fresh_aborted_nav(state, &tab_id, &clean_url) {
-                    return Some(action);
+                if !superseded {
+                    if let Some(action) = crash_reload_aborted_nav(state, &tab_id, &clean_url) {
+                        return Some(action);
+                    }
+                    if let Some(action) = retry_fresh_aborted_nav(state, &tab_id, &clean_url) {
+                        return Some(action);
+                    }
                 }
                 // An explicit abort (ERR_ABORTED / canceled) of an uncommitted load is almost
                 // always the site superseding its own navigation — an SPA/redirect handoff
@@ -5054,6 +5071,23 @@ mod tests {
         should_record_replace_as_visit,
     };
     use std::collections::HashMap;
+
+    #[test]
+    fn oauth_redirect_handoff_is_not_retried() {
+        let initiate =
+            "https://github.com/sessions/social/google/initiate?return_to=&disable_signup=false"
+                .to_string();
+        let google =
+            "https://accounts.google.com/o/oauth2/v2/auth?client_id=x&state=abc".to_string();
+        assert!(super::nav_superseded(Some(&google), &initiate));
+    }
+
+    #[test]
+    fn genuine_fresh_abort_is_still_retried() {
+        let url = "https://example.com/page".to_string();
+        assert!(!super::nav_superseded(Some(&url), &url));
+        assert!(!super::nav_superseded(None, &url));
+    }
 
     #[test]
     fn csp_hides_translate_on_strict_sites() {
