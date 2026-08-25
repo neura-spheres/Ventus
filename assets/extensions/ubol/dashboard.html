@@ -115,6 +115,15 @@
 <!-- -------- -->
 <section data-pane="rulesets">
     <div id="lists"></div>
+    <aside>
+        <p class="userScriptsInfo"><span data-i18n="customListImportUserScriptsInfo"></span> <span data-i18n="userScriptsInfo"></span></p>
+        <details class="importRulesetURL"><summary data-i18n="customListImportLabel">_</summary>
+        <p>
+            <input type="url" spellcheck="false" placeholder="customListImportPlaceholder">
+            <button class="iconified dontshrink" type="button"><span class="fa-icon">check</span><span data-i18n="addButton">_</span><span class="hover"></span></button>
+        </p>
+        </details>
+    </aside>
 </section>
 
 <!-- -------- -->
@@ -132,6 +141,7 @@
     </aside>
     <aside id="sandboxEditor">
         <h3 data-i18n="sandboxEditorLabel">_</h3>
+        <p class="userScriptsInfo"><span data-i18n="sandboxEditorUserScriptsInfo"></span> <span data-i18n="userScriptsInfo"></span></p>
         <div class="cm-container"></div>
     </aside>
 </section>
@@ -162,6 +172,7 @@
             <div class="li">Copyright (c) Raymond Hill 2014-present</div>
         </div>
         <div class="li"><a href="https://github.com/uBlockOrigin/uBOL-home/wiki/Privacy-policy" data-i18n="aboutPrivacyPolicy"></a></div>
+        <div class="li"><a href="https://github.com/uBlockOrigin/uBOL-home/wiki" data-i18n="aboutDocumentation"></a></div>
         <div class="li"><a href="https://github.com/uBlockOrigin/uBOL-home/releases" data-i18n="aboutChangelog"></a></div>
         <div class="li"><a href="https://github.com/gorhill/uBlock" data-i18n="aboutCode"></a></div>
         <div class="li"><span data-i18n="aboutContributors"></span></div>
@@ -199,6 +210,8 @@
             <label><span class="input checkbox"><input type="checkbox"><svg viewBox="0 0 24 24"><path d="M1.73,12.91 8.1,19.28 22.79,4.59"/></svg></span><span class="listname forinput"></span>
             </label>
             <span class="iconbar"><!--
+             --><span class="fa-icon support doRemove">trash-o</span><!--
+             --><span class="fa-icon support undoRemove">undo</span><!--
              --><a class="fa-icon support" href="#" target="_blank">home</a>
             </span>
         </span>

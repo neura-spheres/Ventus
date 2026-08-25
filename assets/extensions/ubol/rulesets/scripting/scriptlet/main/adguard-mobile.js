@@ -150,8 +150,8 @@ class JSONPath {
     }
     compile(query) {
         this.#compiled = undefined;
-        const v2 = query.startsWith('v2:');
-        if ( v2 ) { query = query.slice(3); }
+        this.v2 = query.startsWith('v2:');
+        if ( this.v2 ) { query = query.slice(3); }
         const r = this.#compile(query, 0);
         if ( r === undefined ) { return; }
         if ( r.i !== query.length ) {
@@ -171,7 +171,7 @@ class JSONPath {
             try { r.rval = JSON.parse(val); }
             catch { return; }
         }
-        r.v2 = v2;
+        r.v2 = this.v2;
         this.#compiled = r;
     }
     evaluate(root) {
@@ -303,6 +303,7 @@ class JSONPath {
                 continue;
             }
             // Bracket accessor syntax
+            if ( mv === this.#CHILDREN ) { return; }
             if ( query.startsWith('[?', i) ) {
                 const not = query.charCodeAt(i+2) === 0x21 /* ! */ ? 1 : 0;
                 const j = i + 2 + not;
@@ -399,7 +400,7 @@ class JSONPath {
         return listout;
     }
     #expandKey(owner, k) {
-        if ( typeof owner !== 'object' ) { return; }
+        if ( typeof owner !== 'object' || owner === null ) { return; }
         if ( Array.isArray(k) ) {
             const out = [];
             for ( const a of k ) {
@@ -485,11 +486,18 @@ class JSONPath {
     }
     #consumeIdentifier(query, i) {
         const keys = [];
-        for (;;) {
+        let needIdentifier = true;
+        while ( i < query.length ) {
             const c0 = query.charCodeAt(i);
             if ( c0 === 0x5D /* ] */ ) { break; }
-            if ( c0 === 0x2C /* , */ || c0 === 0x20 /* SPACE */) {
+            if ( c0 === 0x20 /* SPACE */ ) {
                 i += 1;
+                continue;
+            }
+            if ( c0 === 0x2C /* , */ ) {
+                if ( needIdentifier ) { return; }
+                i += 1;
+                needIdentifier = true;
                 continue;
             }
             if ( c0 === 0x22 /* " */ || c0 === 0x27 /* ' */ ) {
@@ -497,6 +505,7 @@ class JSONPath {
                 if ( r === undefined ) { return; }
                 keys.push(r.s);
                 i = r.i;
+                needIdentifier = false;
                 continue;
             }
             if ( c0 === 0x2D /* - */ || c0 >= 0x30 && c0 <= 0x39 ) {
@@ -505,13 +514,16 @@ class JSONPath {
                 const indice = parseInt(query.slice(i), 10);
                 keys.push(indice);
                 i += match[0].length;
+                needIdentifier = false;
                 continue;
             }
+            if ( this.v2 ) { return; }
             const r = this.#consumeUnquotedIdentifier(query, i);
             if ( r === undefined ) { return; }
             keys.push(r.s);
             i = r.i;
         }
+        if ( needIdentifier ) { return; }
         return { s: keys.length === 1 ? keys[0] : keys, i };
     }
     #consumeUnquotedIdentifier(query, i) {
@@ -709,28 +721,7 @@ function abortCurrentScriptFn(
     const logPrefix = safe.makeLogPrefix('abort-current-script', target, needle, context);
     const reNeedle = safe.patternToRegex(needle);
     const reContext = safe.patternToRegex(context);
-    const extraArgs = safe.getExtraArgs(Array.from(arguments), 3);
     const thisScript = document.currentScript;
-    const chain = safe.String_split.call(target, '.');
-    let owner = window;
-    let prop;
-    for (;;) {
-        prop = chain.shift();
-        if ( chain.length === 0 ) { break; }
-        if ( prop in owner === false ) { break; }
-        owner = owner[prop];
-        if ( owner instanceof Object === false ) { return; }
-    }
-    let value;
-    let desc = Object.getOwnPropertyDescriptor(owner, prop);
-    if (
-        desc instanceof Object === false ||
-        desc.get instanceof Function === false
-    ) {
-        value = owner[prop];
-        desc = undefined;
-    }
-    const debug = shouldDebug(extraArgs);
     const exceptionToken = getExceptionTokenFn();
     const scriptTexts = new WeakMap();
     const textContentGetter = Object.getOwnPropertyDescriptor(Node.prototype, 'textContent').get;
@@ -738,8 +729,7 @@ function abortCurrentScriptFn(
         let text = textContentGetter.call(elem);
         if ( text.trim() !== '' ) { return text; }
         if ( scriptTexts.has(elem) ) { return scriptTexts.get(elem); }
-        const [ , mime, content ] =
-            /^data:([^,]*),(.+)$/.exec(elem.src.trim()) ||
+        const [ , mime, content ] = /^data:([^,]*),(.+)$/.exec(elem.src.trim()) ||
             [ '', '', '' ];
         try {
             switch ( true ) {
@@ -759,50 +749,28 @@ function abortCurrentScriptFn(
         const e = document.currentScript;
         if ( e instanceof HTMLScriptElement === false ) { return; }
         if ( e === thisScript ) { return; }
-        if ( context !== '' && reContext.test(e.src) === false ) {
-            // eslint-disable-next-line no-debugger
-            if ( debug === 'nomatch' || debug === 'all' ) { debugger; }
-            return;
-        }
+        if ( context !== '' && reContext.test(e.src) === false ) { return; }
         if ( safe.logLevel > 1 && context !== '' ) {
             safe.uboLog(logPrefix, `Matched src\n${e.src}`);
         }
         const scriptText = getScriptText(e);
-        if ( reNeedle.test(scriptText) === false ) {
-            // eslint-disable-next-line no-debugger
-            if ( debug === 'nomatch' || debug === 'all' ) { debugger; }
-            return;
-        }
+        if ( reNeedle.test(scriptText) === false ) { return; }
         if ( safe.logLevel > 1 ) {
             safe.uboLog(logPrefix, `Matched text\n${scriptText}`);
         }
-        // eslint-disable-next-line no-debugger
-        if ( debug === 'match' || debug === 'all' ) { debugger; }
         safe.uboLog(logPrefix, 'Aborted');
         throw new ReferenceError(exceptionToken);
     };
-    // eslint-disable-next-line no-debugger
-    if ( debug === 'install' ) { debugger; }
-    try {
-        Object.defineProperty(owner, prop, {
-            get: function() {
-                validate();
-                return desc instanceof Object
-                    ? desc.get.call(owner)
-                    : value;
-            },
-            set: function(a) {
-                validate();
-                if ( desc instanceof Object ) {
-                    desc.set.call(owner, a);
-                } else {
-                    value = a;
-                }
-            }
-        });
-    } catch(ex) {
-        safe.uboErr(logPrefix, `Error: ${ex}`);
-    }
+    let currentValue = trapPropertyFn(target, {
+        get: function() {
+            validate();
+            return currentValue;
+        },
+        set: function(a) {
+            validate();
+            currentValue = a;
+        }
+    }, { canThrow: true });
 }
 
 function abortOnPropertyRead(
@@ -879,12 +847,13 @@ function abortOnPropertyWrite(
 
 function abortOnStackTrace(
     chain = '',
-    needle = ''
+    needle = '',
+    ...varargs
 ) {
     if ( typeof chain !== 'string' ) { return; }
     const safe = safeSelf();
     const needleDetails = safe.initPattern(needle, { canNegate: true });
-    const extraArgs = safe.getExtraArgs(Array.from(arguments), 2);
+    const extraArgs = safe.parseVarargs(varargs);
     if ( needle === '' ) { extraArgs.log = 'all'; }
     const makeProxy = function(owner, chain) {
         const pos = chain.indexOf('.');
@@ -1106,7 +1075,7 @@ function getRandomTokenFn() {
         safe.Math_floor(safe.Math_random() * 982451653 + 982451653).toString(36);
 }
 
-function jsonEditFetchResponseFn(trusted, jsonq = '') {
+function jsonEditFetchResponseFn(trusted, jsonq = '', ...varargs) {
     const safe = safeSelf();
     const logPrefix = safe.makeLogPrefix(
         `${trusted ? 'trusted-' : ''}json-edit-fetch-response`,
@@ -1116,7 +1085,7 @@ function jsonEditFetchResponseFn(trusted, jsonq = '') {
     if ( jsonp.valid === false || jsonp.value !== undefined && trusted !== true ) {
         return safe.uboLog(logPrefix, 'Bad JSONPath query');
     }
-    const extraArgs = safe.getExtraArgs(Array.from(arguments), 2);
+    const extraArgs = safe.parseVarargs(varargs);
     const propNeedles = parsePropertiesToMatchFn(extraArgs.propsToMatch, 'url');
     proxyApplyFn('fetch', function(context) {
         const args = context.callArgs;
@@ -1161,11 +1130,12 @@ function jsonEditFetchResponseFn(trusted, jsonq = '') {
 
 function jsonPruneFetchResponse(
     rawPrunePaths = '',
-    rawNeedlePaths = ''
+    rawNeedlePaths = '',
+    ...varargs
 ) {
     const safe = safeSelf();
     const logPrefix = safe.makeLogPrefix('json-prune-fetch-response', rawPrunePaths, rawNeedlePaths);
-    const extraArgs = safe.getExtraArgs(Array.from(arguments), 2);
+    const extraArgs = safe.parseVarargs(varargs);
     const propNeedles = parsePropertiesToMatchFn(extraArgs.propsToMatch, 'url');
     const stackNeedle = safe.initPattern(extraArgs.stackToMatch || '', { canNegate: true });
     const logall = rawPrunePaths === '';
@@ -1224,12 +1194,13 @@ function jsonPruneFetchResponse(
 
 function jsonPruneXhrResponse(
     rawPrunePaths = '',
-    rawNeedlePaths = ''
+    rawNeedlePaths = '',
+    ...varargs
 ) {
     const safe = safeSelf();
     const logPrefix = safe.makeLogPrefix('json-prune-xhr-response', rawPrunePaths, rawNeedlePaths);
     const xhrInstances = new WeakMap();
-    const extraArgs = safe.getExtraArgs(Array.from(arguments), 2);
+    const extraArgs = safe.parseVarargs(varargs);
     const propNeedles = parsePropertiesToMatchFn(extraArgs.propsToMatch, 'url');
     const stackNeedle = safe.initPattern(extraArgs.stackToMatch || '', { canNegate: true });
     self.XMLHttpRequest = class extends self.XMLHttpRequest {
@@ -1535,10 +1506,11 @@ function parseReplaceFn(s) {
 
 function preventAddEventListener(
     type = '',
-    pattern = ''
+    pattern = '',
+    ...varargs
 ) {
     const safe = safeSelf();
-    const extraArgs = safe.getExtraArgs(Array.from(arguments), 2);
+    const extraArgs = safe.parseVarargs(varargs);
     const logPrefix = safe.makeLogPrefix('prevent-addEventListener', type, pattern);
     const reType = safe.patternToRegex(type, undefined, true);
     const rePattern = safe.patternToRegex(pattern);
@@ -1605,22 +1577,23 @@ function preventAddEventListener(
         }
         return context.reflect();
     };
+    const protect = owner => {
+        const { addEventListener } = owner;
+        Object.defineProperty(owner, 'addEventListener', {
+            set() { },
+            get() { return addEventListener; }
+        });
+    };
     runAt(( ) => {
         proxyApplyFn('EventTarget.prototype.addEventListener', proxyFn);
-        if ( extraArgs.protect ) {
-            const { addEventListener } = EventTarget.prototype;
-            Object.defineProperty(EventTarget.prototype, 'addEventListener', {
-                set() { },
-                get() { return addEventListener; }
-            });
+        if ( extraArgs.protect ) { protect(EventTarget.prototype); }
+        if ( Object.hasOwn(document, 'addEventListener') ) {
+            proxyApplyFn('document.addEventListener', proxyFn);
+            if ( extraArgs.protect ) { protect(document); }
         }
-        proxyApplyFn('document.addEventListener', proxyFn);
-        if ( extraArgs.protect ) {
-            const { addEventListener } = document;
-            Object.defineProperty(document, 'addEventListener', {
-                set() { },
-                get() { return addEventListener; }
-            });
+        if ( Object.hasOwn(window, 'addEventListener') ) {
+            proxyApplyFn('window.addEventListener', proxyFn);
+            if ( extraArgs.protect ) { protect(window); }
         }
     }, extraArgs.runAt);
 }
@@ -1633,7 +1606,8 @@ function preventFetchFn(
     trusted = false,
     propsToMatch = '',
     responseBody = '',
-    responseType = ''
+    responseType = '',
+    ...varargs
 ) {
     const safe = safeSelf();
     const setTimeout = self.setTimeout;
@@ -1644,7 +1618,7 @@ function preventFetchFn(
         responseBody,
         responseType
     );
-    const extraArgs = safe.getExtraArgs(Array.from(arguments), 4);
+    const extraArgs = safe.parseVarargs(varargs);
     const propNeedles = parsePropertiesToMatchFn(propsToMatch, 'url');
     const validResponseProps = {
         ok: [ false, true ],
@@ -1739,7 +1713,8 @@ function preventSetTimeout(
 
 function proxyApplyFn(
     target = '',
-    handler = ''
+    handler = '',
+    options = {}
 ) {
     let context = globalThis;
     let prop = target;
@@ -1800,20 +1775,22 @@ function proxyApplyFn(
         };
         proxyApplyFn.isCtor = new Map();
         proxyApplyFn.proxies = new WeakMap();
-        proxyApplyFn.nativeToString = Function.prototype.toString;
-        const proxiedToString = new Proxy(Function.prototype.toString, {
-            apply(target, thisArg) {
-                let proxied = thisArg;
-                for(;;) {
-                    const fn = proxyApplyFn.proxies.get(proxied);
-                    if ( fn === undefined ) { break; }
-                    proxied = fn;
+        if ( (options.skipToString || proxyApplyFn.skipToString) !== true ) {
+            proxyApplyFn.nativeToString = Function.prototype.toString;
+            const proxiedToString = new Proxy(Function.prototype.toString, {
+                apply(target, thisArg) {
+                    let proxied = thisArg;
+                    for(;;) {
+                        const fn = proxyApplyFn.proxies.get(proxied);
+                        if ( fn === undefined ) { break; }
+                        proxied = fn;
+                    }
+                    return proxyApplyFn.nativeToString.call(proxied);
                 }
-                return proxyApplyFn.nativeToString.call(proxied);
-            }
-        });
-        proxyApplyFn.proxies.set(proxiedToString, proxyApplyFn.nativeToString);
-        Function.prototype.toString = proxiedToString;
+            });
+            proxyApplyFn.proxies.set(proxiedToString, proxyApplyFn.nativeToString);
+            Function.prototype.toString = proxiedToString;
+        }
     }
     if ( proxyApplyFn.isCtor.has(target) === false ) {
         proxyApplyFn.isCtor.set(target, fn.prototype?.constructor === fn);
@@ -1947,8 +1924,8 @@ function runAtHtmlElementFn(fn) {
 }
 
 function safeSelf() {
-    if ( scriptletGlobals.safeSelf ) {
-        return scriptletGlobals.safeSelf;
+    if ( safeSelf.safe ) {
+        return safeSelf.safe;
     }
     const self = globalThis;
     const safe = {
@@ -2053,21 +2030,20 @@ function safeSelf() {
             }
             return /^/;
         },
-        getExtraArgs(args, offset = 0) {
-            const entries = args.slice(offset).reduce((out, v, i, a) => {
-                if ( (i & 1) === 0 ) {
-                    const rawValue = a[i+1];
-                    const value = /^\d+$/.test(rawValue)
-                        ? parseInt(rawValue, 10)
-                        : rawValue;
-                    out.push([ a[i], value ]);
-                }
+        parseVarargs(varargs) {
+            const entries = varargs.reduce((out, v, i, a) => {
+                if ( i & 1 ) { return out; }
+                const rawValue = a[i+1];
+                const value = /^\d+$/.test(rawValue)
+                    ? parseInt(rawValue, 10)
+                    : rawValue;
+                out.push([ a[i], value ]);
                 return out;
             }, []);
             return this.Object_fromEntries(entries);
         },
     };
-    scriptletGlobals.safeSelf = safe;
+    safeSelf.safe = safe;
     if ( scriptletGlobals.bcSecret === undefined ) { return safe; }
     // This is executed only when the logger is opened
     safe.logLevel = scriptletGlobals.logLevel || 1;
@@ -2134,12 +2110,13 @@ function setConstant(
 function setConstantFn(
     trusted = false,
     chain = '',
-    rawValue = ''
+    rawValue = '',
+    ...varargs
 ) {
     if ( chain === '' ) { return; }
     const safe = safeSelf();
     const logPrefix = safe.makeLogPrefix('set-constant', chain, rawValue);
-    const extraArgs = safe.getExtraArgs(Array.from(arguments), 3);
+    const extraArgs = safe.parseVarargs(varargs);
     function setConstant(chain, rawValue) {
         const trappedProp = (( ) => {
             const pos = chain.lastIndexOf('.');
@@ -2281,9 +2258,77 @@ function setConstantFn(
     }, extraArgs.runAt);
 }
 
-function shouldDebug(details) {
-    if ( details instanceof Object === false ) { return false; }
-    return scriptletGlobals.canDebug && details.debug;
+function trapPropertyFn(propChain, handler, options = {}) {
+    if ( propChain === '' ) { return; }
+    let owner = self;
+    let prop = propChain;
+    for (;;) {
+        const pos = prop.indexOf('.');
+        if ( pos === -1 ) { break; }
+        owner = owner[prop.slice(0, pos)];
+        if ( owner instanceof Object === false ) { return; }
+        prop = prop.slice(pos + 1);
+    }
+    const safe = safeSelf();
+    if ( trapPropertyFn.db === undefined ) {
+        trapPropertyFn.db = new WeakMap();
+        trapPropertyFn.entryFromContext = (owner, prop) => {
+            const handlers = trapPropertyFn.db.get(owner);
+            return handlers?.get(prop);
+        };
+        trapPropertyFn.getter = (owner, prop) => {
+            const entry = trapPropertyFn.entryFromContext(owner, prop);
+            if ( entry === undefined ) { return; }
+            let r = entry.value;
+            for ( const desc of entry.stack ) {
+                try { r = desc.get(); } catch (e) {
+                    if ( entry.canThrow ) { throw e; }
+                }
+            }
+            return r;
+        };
+        trapPropertyFn.setter = (owner, prop, value) => {
+            const entry = trapPropertyFn.entryFromContext(owner, prop);
+            if ( entry === undefined ) { return; }
+            entry.value = value;
+            for ( const desc of entry.stack ) {
+                try { desc.set(value); } catch (e) {
+                    if ( entry.canThrow ) { throw e; }
+                }
+            }
+        };
+    }
+    const { db } = trapPropertyFn;
+    const handlers = db.get(owner) || new Map();
+    if ( handlers.size === 0 ) {
+        db.set(owner, handlers);
+    }
+    const entry = handlers.get(prop) || {
+        value: owner[prop],
+        stack: [],
+    };
+    entry.stack.push(handler);
+    if ( entry.stack.length > 1 ) { return entry.value; }
+    Object.assign(entry, options);
+    handlers.set(prop, entry);
+    const desc = safe.Object_getOwnPropertyDescriptor(owner, prop);
+    if ( desc instanceof safe.Object ) {
+        if ( desc.get || desc.set ) {
+            entry.stack.push(desc);
+        }
+    }
+    try {
+        safe.Object_defineProperty(owner, prop, {
+            get() {
+                return trapPropertyFn.getter(owner, prop);
+            },
+            set(value) {
+                trapPropertyFn.setter(owner, prop, value);
+            }
+        });
+    } catch {
+    }
+    return entry.value;
 }
 
 function trustedJsonEditFetchResponse(jsonq = '', ...args) {
@@ -2293,13 +2338,14 @@ function trustedJsonEditFetchResponse(jsonq = '', ...args) {
 function trustedReplaceArgument(
     propChain = '',
     argposRaw = '',
-    argraw = ''
+    argraw = '',
+    ...varargs
 ) {
     if ( propChain === '' ) { return; }
     const safe = safeSelf();
     const logPrefix = safe.makeLogPrefix('trusted-replace-argument', propChain, argposRaw, argraw);
     const argoffset = parseInt(argposRaw, 10) || 0;
-    const extraArgs = safe.getExtraArgs(Array.from(arguments), 3);
+    const extraArgs = safe.parseVarargs(varargs);
     let replacer;
     if ( argraw.startsWith('repl:/') ) {
         const parsed = parseReplaceFn(argraw.slice(5));
@@ -2409,14 +2455,15 @@ function validateConstantFn(trusted, raw, extraArgs = {}) {
 function xmlPrune(
     selector = '',
     selectorCheck = '',
-    urlPattern = ''
+    urlPattern = '',
+    ...varargs
 ) {
     if ( typeof selector !== 'string' ) { return; }
     if ( selector === '' ) { return; }
     const safe = safeSelf();
     const logPrefix = safe.makeLogPrefix('xml-prune', selector, selectorCheck, urlPattern);
     const reUrl = safe.patternToRegex(urlPattern);
-    const extraArgs = safe.getExtraArgs(Array.from(arguments), 3);
+    const extraArgs = safe.parseVarargs(varargs);
     const queryAll = (xmlDoc, selector) => {
         const isXpath = /^xpath\(.+\)$/.test(selector);
         if ( isXpath === false ) {
@@ -2549,19 +2596,7 @@ function xmlPrune(
 
 const scriptletGlobals = {}; // eslint-disable-line
 
-const $scriptletFunctions$ = /* 16 */
-[trustedReplaceArgument,trustedJsonEditFetchResponse,setConstant,jsonPruneFetchResponse,jsonPruneXhrResponse,xmlPrune,preventSetTimeout,preventFetch,abortOnPropertyRead,preventAddEventListener,removeAttr,adjustSetInterval,adjustSetTimeout,abortCurrentScript,abortOnPropertyWrite,abortOnStackTrace];
-
-const $scriptletArgs$ = /* 104 */ ["matchMedia.call","1","json:\"none\"","condition","max-width","..show_ads=false","propsToMatch","/statsig/initialize?","Object.prototype.hasAd","false","Object.prototype.isAdActive","Object.prototype.vastOptions","{}","advertising","","/player/metadata",".json","[breakId]","_VMAP_","bait","Object.prototype.showInterstitialModalIfRequired","noopFunc","adsbygoogle","freeProConfig.btnRefresh","DOMContentLoaded","adBoxEl","mobiles","scroll","adBlockerCalled","DMP_IS_AUTOPLAY_ENABLED","createApp","load","document.cookie","id","#div-gpt-ad-header","inviewstitial_fired","true","(f-1)","*","0.001","firstLoad","300","style",".tadm_ad_unit","interstitial-popup","add_h2023","abp1","0","continueToVideoUrl","JSON.parse","/interstitial?viewkey=","player.postitialTimeout","returnAd","hidden","adformtag","[]","customAdlistMob","$","exoMobilePop","/^(?:scroll|touchmove|wheel)$/","preventDefault","/^(?:mousewheel|touchmove)$/","mobileAdvPop","data-universal-link","body","InfCustomSTAMobileFunc","bindPostitial","document.getElementsByClassName","adBlocked","initializeInterstitial","isPeriodic","0.02","PopUnder.bindEvent","exoUrl","undefined","organicPop","popUnderUrl","Object.prototype.vjsPlayer.ads","nor","nor.pageview","nor.eventURL","nor.pageviewURL","nor.setPageData","eval","/ddnext|ddtop/","bw_no_ad","ads_every_x_videos","click","clkUnder","cache_loader","RecommendItems.RecommendInfo.[-].DataSource.[=].spsr RecommendInfo.[-].DataSource.[=].spsr","m/product/ajax/productPersonalization","height","iframe[src=\"https://dq.h1g.jp/img/ad/ad_heigu.html\"]","document.createElement","interstitialAdDiv","showme","pcc","jmp","Math","document.write","_rand","adsbyimobile","div[class*=\"site-header__with-mobile-leaderboard\"]"];
-
-const $scriptletArglists$ = /* 69 */ "0,0,1,2,3,4;1,5,6,7;2,8,9;2,10,9;2,11,12;3,13,14,6,15;4,13,14,6,16;5,17,14,18;6,19;2,20,21;7,22;8,23;9,24,19;6,25;2,26,14;9,27,28;2,29,9;8,30;9,31,32;10,33,34;2,35,36;11,37,38,39;6,40,41;10,42,43;9,24,44;2,45,21;2,46,47;12,48,38,39;13,49,50;2,51,47;9,14,52;14,53;2,54,55;2,56,55;13,57,58;9,59,60;9,61;8,62;10,63,64;2,65,21;13,66;13,67,68;2,69,21;11,70,14,71;2,72,21;2,73,74;2,75,74;8,76;2,77,21;2,78,12;2,79,21;2,80,21;2,81,21;2,82,21;15,83,84;2,85,21;2,86,74;9,87,88;14,89;3,90,14,91;10,92,93;13,94,14;9,24,95;2,96,9;2,97,1;13,98,99;13,100,101;8,102;10,42,103";
-
-const $scriptletArglistRefs$ = /* 64 */ "60;66;49,50,51,52,53;32;43;61;29,37;22;4;14;-8;54;65;29,37;59;47;23;41;48;67;44;25;56,57;20;26,27,28;26;26;62;68;55;8;38;18;11;10;19;30,31;37;45,46;29;12;39;58;34;35;24;19;5,6,16;33;30;9;0,1,2;42;19;40;15;63,64;36;21;7;13;17;13;3";
-
-const $scriptletHostnames$ = /* 64 */ ["h1g.jp","blog.jp","news.jp","delfi.lt","m.iyf.tv","tu93.org","m.nuvid.*","nbc4i.com","redd.tube","erozine.jp","google.com","kbook8.com","komaki2.jp","m.hd21.com","newegg.com","pornhd.com","saveur.com","supleks.jp","usnews.com","gamerch.com","gotporn.com","m.efuxs.com","onlytik.com","oreno3d.com","pornhub.com","pornhub.net","pornhub.org","rakukan.net","reuters.com","trashbox.ru","daotekno.com","idaprikol.ru","momon-ga.com","planetf1.com","sht-link.com","youpouch.com","erobanach.com","m.drtuber.com","m.tnaflix.com","m.viptube.com","mangalivre.tv","mediafire.com","player4me.vip","m.sunporno.com","news.mynavi.jp","quiz-facts.com","soranews24.com","dailymotion.com","m.hellporno.com","openloadpro.com","planefinder.net","www.nytimes.com","moneycontrol.com","rocketnews24.com","straitstimes.com","m.livehindustan.com","m.minixiaoshuow.com","mudainodocument.com","business-standard.com","www.dailymotion.com>>","nijimen.kusuguru.co.jp","wuxianxiaoshuowang.com","nazology.kusuguru.co.jp","timesofindia.indiatimes.com"];
-
-const $scriptletFromRegexes$ = /* 0 */ [];
-
+const $hasHostnames$ = true;
 const $hasEntities$ = true;
 const $hasAncestors$ = true;
 const $hasRegexes$ = false;
@@ -2580,18 +2615,22 @@ const entries = (( ) => {
         const hn1 = origin.slice(beg+3)
         const end = hn1.indexOf(':');
         const hn2 = end === -1 ? hn1 : hn1.slice(0, end);
-        const hnParts = hn2.split('.');
         if ( hn2.length === 0 ) { return; }
-        const hns = [];
-        for ( let i = 0; i < hnParts.length; i++ ) {
-            hns.push(`${hnParts.slice(i).join('.')}`);
+        const hns = [ hn2 ];
+        for ( let pos = 0; ; ) {
+            pos = hn2.indexOf('.', pos) + 1;
+            if ( pos === 0 ) { break; }
+            hns.push(hn2.slice(pos));
         }
+        hns.push('*');
         const ens = [];
         if ( $hasEntities$ ) {
-            const n = hnParts.length - 1;
-            for ( let i = 0; i < n; i++ ) {
-                for ( let j = n; j > i; j-- ) {
-                    ens.push(`${hnParts.slice(i,j).join('.')}.*`);
+            for ( let hn of hns ) {
+                for (;;) {
+                    const pos = hn.lastIndexOf('.');
+                    if ( pos === -1 ) { break; }
+                    hn = hn.slice(0, pos);
+                    ens.push(`${hn}.*`);
                 }
             }
             ens.sort((a, b) => {
@@ -2601,12 +2640,14 @@ const entries = (( ) => {
             });
         }
         return { hns, ens, i };
-    }).filter(a => a !== undefined);
+    }).filter(a => a);
 })();
 if ( entries.length === 0 ) { return; }
 
-const todoIndices = new Set();
-if ( $scriptletHostnames$.length ) {
+const todo = new Set();
+
+if ( $hasHostnames$ ) {
+    const $scriptletHostnames$ = /* 66 */ ["h1g.jp","blog.jp","news.jp","delfi.lt","m.iyf.tv","tu93.org","m.nuvid.*","nbc4i.com","redd.tube","erozine.jp","google.com","kbook8.com","komaki2.jp","m.hd21.com","newegg.com","pornhd.com","saveur.com","supleks.jp","usnews.com","gamerch.com","gotporn.com","m.efuxs.com","onlytik.com","oreno3d.com","pornhex.com","pornhub.com","pornhub.net","pornhub.org","rakukan.net","reuters.com","trashbox.ru","daotekno.com","gosexpod.com","idaprikol.ru","momon-ga.com","planetf1.com","sht-link.com","youpouch.com","erobanach.com","m.drtuber.com","m.tnaflix.com","m.viptube.com","mangalivre.tv","mediafire.com","player4me.vip","m.sunporno.com","news.mynavi.jp","quiz-facts.com","soranews24.com","dailymotion.com","m.hellporno.com","planefinder.net","www.nytimes.com","moneycontrol.com","outlook.live.com","rocketnews24.com","straitstimes.com","m.livehindustan.com","m.minixiaoshuow.com","mudainodocument.com","business-standard.com","www.dailymotion.com>>","nijimen.kusuguru.co.jp","wuxianxiaoshuowang.com","nazology.kusuguru.co.jp","timesofindia.indiatimes.com"];
     const collectArglistRefIndices = (out, hn, r) => {
         let l = 0, i = 0, d = 0;
         let candidate = '';
@@ -2641,6 +2682,7 @@ if ( $scriptletHostnames$.length ) {
             }
         }
     };
+    const todoIndices = new Set();
     indicesFromHostname(todoIndices, entries[0]);
     if ( $hasAncestors$ ) {
         for ( const entry of entries ) {
@@ -2648,20 +2690,20 @@ if ( $scriptletHostnames$.length ) {
             indicesFromHostname(todoIndices, entry, '>>');
         }
     }
-    $scriptletHostnames$.length = 0;
-}
-
-// Collect arglist references
-const todo = new Set();
-if ( todoIndices.size !== 0 ) {
-    const arglistRefs = $scriptletArglistRefs$.split(';');
-    for ( const i of todoIndices ) {
-        for ( const ref of JSON.parse(`[${arglistRefs[i]}]`) ) {
-            todo.add(ref);
+    // Collect arglist references
+    if ( todoIndices.size ) {
+        const $scriptletArglistRefs$ = /* 66 */ "64;70;52,53,54,55,56;35;46;65;32,40;25;5;17;-10;58;69;32,40;63;50;26;44;51;71;47;28;60,61;23;12;29,30,31;29;29;66;72;59;10;57;41;21;14;13;22;33,34;40;48,49;32;15;42;62;37;38;27;22;7,8,19;36;11;1,2,3;45;6;22;43;18;67,68;39;24;9;16;20;16;4";
+        const arglistRefs = $scriptletArglistRefs$.split(';');
+        for ( const i of todoIndices ) {
+            for ( const ref of JSON.parse(`[${arglistRefs[i]}]`) ) {
+                todo.add(ref);
+            }
         }
     }
 }
+
 if ( $hasRegexes$ ) {
+    const $scriptletFromRegexes$ = /* 0 */ [];
     const { hns } = entries[0];
     for ( let i = 0, n = $scriptletFromRegexes$.length; i < n; i += 3 ) {
         const needle = $scriptletFromRegexes$[i+0];
@@ -2678,10 +2720,13 @@ if ( $hasRegexes$ ) {
         }
     }
 }
-if ( todo.size === 0 ) { return; }
 
-// Execute scriplets
-{
+// Execute scriptlets
+if ( todo.size && todo.has(0) === false ) {
+    const $scriptletFunctions$ = /* 16 */
+[trustedReplaceArgument,trustedJsonEditFetchResponse,setConstant,jsonPruneFetchResponse,jsonPruneXhrResponse,xmlPrune,preventSetTimeout,preventFetch,abortOnPropertyRead,preventAddEventListener,removeAttr,adjustSetInterval,adjustSetTimeout,abortCurrentScript,abortOnPropertyWrite,abortOnStackTrace];
+    const $scriptletArgs$ = /* 107 */ ["matchMedia.call","1","json:\"none\"","condition","max-width","..show_ads=false","propsToMatch","/statsig/initialize?","Object.prototype.hasAd","false","Object.prototype.isAdActive","Object.prototype.vastOptions","{}","Object.prototype.showNativeAdFormat","0","advertising","","/player/metadata",".json","[breakId]","_VMAP_","bait","Object.prototype.showInterstitialModalIfRequired","noopFunc","/AdBlock/i","adsbygoogle","freeProConfig.btnRefresh","DOMContentLoaded","adBoxEl","mobiles","scroll","adBlockerCalled","DMP_IS_AUTOPLAY_ENABLED","createApp","load","document.cookie","id","#div-gpt-ad-header","inviewstitial_fired","true","(f-1)","*","0.001","firstLoad","300","style",".tadm_ad_unit","interstitial-popup","add_h2023","abp1","continueToVideoUrl","JSON.parse","/interstitial?viewkey=","player.postitialTimeout","returnAd","hidden","adformtag","[]","customAdlistMob","$","exoMobilePop","/^(?:scroll|touchmove|wheel)$/","preventDefault","/^(?:mousewheel|touchmove)$/","mobileAdvPop","data-universal-link","body","InfCustomSTAMobileFunc","bindPostitial","document.getElementsByClassName","adBlocked","initializeInterstitial","isPeriodic","0.02","PopUnder.bindEvent","exoUrl","undefined","organicPop","popUnderUrl","Object.prototype.vjsPlayer.ads","nor","nor.pageview","nor.eventURL","nor.pageviewURL","nor.setPageData","crLoad","eval","/ddnext|ddtop/","bw_no_ad","ads_every_x_videos","click","clkUnder","cache_loader","RecommendItems.RecommendInfo.[-].DataSource.[=].spsr RecommendInfo.[-].DataSource.[=].spsr","m/product/ajax/productPersonalization","height","iframe[src=\"https://dq.h1g.jp/img/ad/ad_heigu.html\"]","document.createElement","interstitialAdDiv","showme","pcc","jmp","Math","document.write","_rand","adsbyimobile","div[class*=\"site-header__with-mobile-leaderboard\"]"];
+    const $scriptletArglists$ = /* 73 */ ";0,0,1,2,3,4;1,5,6,7;2,8,9;2,10,9;2,11,12;2,13,14;3,15,16,6,17;4,15,16,6,18;5,19,16,20;6,21;2,22,23;6,24;7,25;8,26;9,27,21;6,28;2,29,16;9,30,31;2,32,9;8,33;9,34,35;10,36,37;2,38,39;11,40,41,42;6,43,44;10,45,46;9,27,47;2,48,23;2,49,14;12,50,41,42;13,51,52;2,53,14;9,16,54;14,55;2,56,57;2,58,57;13,59,60;9,61,62;9,63;8,64;10,65,66;2,67,23;13,68;13,69,70;2,71,23;11,72,16,73;2,74,23;2,75,76;2,77,76;8,78;2,79,23;2,80,12;2,81,23;2,82,23;2,83,23;2,84,23;14,85;15,86,87;2,88,23;2,89,76;9,90,91;14,92;3,93,16,6,94;10,95,96;13,97,16;9,27,98;2,99,9;2,100,1;13,101,102;13,103,104;8,105;10,45,106";
     const arglists = $scriptletArglists$.split(';');
     const args = $scriptletArgs$;
     for ( const ref of todo ) {

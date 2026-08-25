@@ -59,10 +59,8 @@ function lookupElementsFn(directive, until = 0) {
             if ( elem.openOrClosedShadowRoot ) { // Firefox
                 return elem.openOrClosedShadowRoot;
             }
-            if ( typeof chrome === 'object' ) { // Chromium
-                if ( chrome.dom && chrome.dom.openOrClosedShadowRoot ) {
-                    return chrome.dom.openOrClosedShadowRoot(elem);
-                }
+            if ( self.chrome?.dom?.openOrClosedShadowRoot ) { // Chromium
+                return self.chrome.dom.openOrClosedShadowRoot(elem);
             }
             return elem.shadowRoot;
         };
@@ -171,8 +169,8 @@ function runAtHtmlElementFn(fn) {
 }
 
 function safeSelf() {
-    if ( scriptletGlobals.safeSelf ) {
-        return scriptletGlobals.safeSelf;
+    if ( safeSelf.safe ) {
+        return safeSelf.safe;
     }
     const self = globalThis;
     const safe = {
@@ -277,21 +275,20 @@ function safeSelf() {
             }
             return /^/;
         },
-        getExtraArgs(args, offset = 0) {
-            const entries = args.slice(offset).reduce((out, v, i, a) => {
-                if ( (i & 1) === 0 ) {
-                    const rawValue = a[i+1];
-                    const value = /^\d+$/.test(rawValue)
-                        ? parseInt(rawValue, 10)
-                        : rawValue;
-                    out.push([ a[i], value ]);
-                }
+        parseVarargs(varargs) {
+            const entries = varargs.reduce((out, v, i, a) => {
+                if ( i & 1 ) { return out; }
+                const rawValue = a[i+1];
+                const value = /^\d+$/.test(rawValue)
+                    ? parseInt(rawValue, 10)
+                    : rawValue;
+                out.push([ a[i], value ]);
                 return out;
             }, []);
             return this.Object_fromEntries(entries);
         },
     };
-    scriptletGlobals.safeSelf = safe;
+    safeSelf.safe = safe;
     if ( scriptletGlobals.bcSecret === undefined ) { return safe; }
     // This is executed only when the logger is opened
     safe.logLevel = scriptletGlobals.logLevel || 1;
@@ -401,10 +398,16 @@ function trustedClickElement(
         }
     }
 
-    const steps = safe.String_split.call(selectors, /\s*,\s*/).map(a => {
-        if ( /^\d+$/.test(a) ) { return parseInt(a, 10); }
-        return a;
-    });
+    const steps = (( ) => {
+        const steps = /^[;|]/.test(selectors)
+            ? safe.String_split.call(selectors.slice(1), selectors.charAt(0))
+            : safe.String_split.call(selectors, ',');
+        return steps.map(a => {
+            a = a.trim();
+            if ( /^\d+$/.test(a) ) { return parseInt(a, 10); }
+            return a;
+        });
+    })();
     if ( steps.length === 0 ) { return; }
     const clickDelay = parseInt(delay, 10) || 1;
     for ( let i = steps.length-1; i > 0; i-- ) {
@@ -465,19 +468,7 @@ function trustedClickElement(
 
 const scriptletGlobals = {}; // eslint-disable-line
 
-const $scriptletFunctions$ = /* 1 */
-[trustedClickElement];
-
-const $scriptletArgs$ = /* 1 */ ["500, #sf8 .fail"];
-
-const $scriptletArglists$ = /* 1 */ "0,0";
-
-const $scriptletArglistRefs$ = /* 2 */ "0;0";
-
-const $scriptletHostnames$ = /* 2 */ ["localhost","ublockorigin.github.io"];
-
-const $scriptletFromRegexes$ = /* 0 */ [];
-
+const $hasHostnames$ = true;
 const $hasEntities$ = false;
 const $hasAncestors$ = false;
 const $hasRegexes$ = false;
@@ -496,18 +487,22 @@ const entries = (( ) => {
         const hn1 = origin.slice(beg+3)
         const end = hn1.indexOf(':');
         const hn2 = end === -1 ? hn1 : hn1.slice(0, end);
-        const hnParts = hn2.split('.');
         if ( hn2.length === 0 ) { return; }
-        const hns = [];
-        for ( let i = 0; i < hnParts.length; i++ ) {
-            hns.push(`${hnParts.slice(i).join('.')}`);
+        const hns = [ hn2 ];
+        for ( let pos = 0; ; ) {
+            pos = hn2.indexOf('.', pos) + 1;
+            if ( pos === 0 ) { break; }
+            hns.push(hn2.slice(pos));
         }
+        hns.push('*');
         const ens = [];
         if ( $hasEntities$ ) {
-            const n = hnParts.length - 1;
-            for ( let i = 0; i < n; i++ ) {
-                for ( let j = n; j > i; j-- ) {
-                    ens.push(`${hnParts.slice(i,j).join('.')}.*`);
+            for ( let hn of hns ) {
+                for (;;) {
+                    const pos = hn.lastIndexOf('.');
+                    if ( pos === -1 ) { break; }
+                    hn = hn.slice(0, pos);
+                    ens.push(`${hn}.*`);
                 }
             }
             ens.sort((a, b) => {
@@ -517,12 +512,14 @@ const entries = (( ) => {
             });
         }
         return { hns, ens, i };
-    }).filter(a => a !== undefined);
+    }).filter(a => a);
 })();
 if ( entries.length === 0 ) { return; }
 
-const todoIndices = new Set();
-if ( $scriptletHostnames$.length ) {
+const todo = new Set();
+
+if ( $hasHostnames$ ) {
+    const $scriptletHostnames$ = /* 2 */ ["localhost","ublockorigin.github.io"];
     const collectArglistRefIndices = (out, hn, r) => {
         let l = 0, i = 0, d = 0;
         let candidate = '';
@@ -557,6 +554,7 @@ if ( $scriptletHostnames$.length ) {
             }
         }
     };
+    const todoIndices = new Set();
     indicesFromHostname(todoIndices, entries[0]);
     if ( $hasAncestors$ ) {
         for ( const entry of entries ) {
@@ -564,20 +562,20 @@ if ( $scriptletHostnames$.length ) {
             indicesFromHostname(todoIndices, entry, '>>');
         }
     }
-    $scriptletHostnames$.length = 0;
-}
-
-// Collect arglist references
-const todo = new Set();
-if ( todoIndices.size !== 0 ) {
-    const arglistRefs = $scriptletArglistRefs$.split(';');
-    for ( const i of todoIndices ) {
-        for ( const ref of JSON.parse(`[${arglistRefs[i]}]`) ) {
-            todo.add(ref);
+    // Collect arglist references
+    if ( todoIndices.size ) {
+        const $scriptletArglistRefs$ = /* 2 */ "1;1";
+        const arglistRefs = $scriptletArglistRefs$.split(';');
+        for ( const i of todoIndices ) {
+            for ( const ref of JSON.parse(`[${arglistRefs[i]}]`) ) {
+                todo.add(ref);
+            }
         }
     }
 }
+
 if ( $hasRegexes$ ) {
+    const $scriptletFromRegexes$ = /* 0 */ [];
     const { hns } = entries[0];
     for ( let i = 0, n = $scriptletFromRegexes$.length; i < n; i += 3 ) {
         const needle = $scriptletFromRegexes$[i+0];
@@ -594,10 +592,13 @@ if ( $hasRegexes$ ) {
         }
     }
 }
-if ( todo.size === 0 ) { return; }
 
-// Execute scriplets
-{
+// Execute scriptlets
+if ( todo.size && todo.has(0) === false ) {
+    const $scriptletFunctions$ = /* 1 */
+[trustedClickElement];
+    const $scriptletArgs$ = /* 1 */ ["500, #sf8 .fail"];
+    const $scriptletArglists$ = /* 2 */ ";0,0";
     const arglists = $scriptletArglists$.split(';');
     const args = $scriptletArgs$;
     for ( const ref of todo ) {

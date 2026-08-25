@@ -52,11 +52,13 @@
    "adiam.tech",
    "admulti.com",
    "adpartner.pro",
+   "adport.net",
    "ads.digitalcaramel.com",
    "ads.go2net.com.ua",
    "ads.kingads.digital",
    "ads.people-group.net",
    "ads2.pbxware.ru",
+   "adseedtech.com",
    "adstag0102.xyz",
    "adtec.ru",
    "adtscriptshark.com",
@@ -72,6 +74,7 @@
    "all-audio.pro",
    "alloviewroll.com",
    "almosto.com",
+   "alpharockone.com",
    "alsmdb.com",
    "api.moonanime.art",
    "api.native-track.com",
@@ -83,9 +86,11 @@
    "backromy.com",
    "ban.mirorgazma.ru",
    "banner.lbs.km.ru",
+   "banner.volynnews.com",
    "banners.getiton.com",
    "bannet.fryazino.net",
    "bc-news.net",
+   "bearclonepeak.com",
    "beesratyou.com",
    "bestdealfor1.life",
    "bestssrv.com",
@@ -101,6 +106,7 @@
    "brocode1s.com",
    "brocode3s.com",
    "brodownload8s.com",
+   "bs.serving-sys.ru",
    "builthuosefor.com",
    "burningpushing.info",
    "bvbypswhds.com",
@@ -119,6 +125,7 @@
    "cdn.sov.stream",
    "cdn7.network",
    "cenoobi.run",
+   "chernomaza.link",
    "chicgar.info",
    "clairpixum.com",
    "click.ad1.ru",
@@ -132,10 +139,12 @@
    "contemo.ru",
    "context.hotline.ua",
    "crackac.com",
+   "czxbcy.com",
    "d1mib12jcgwmnv.cloudfront.net",
    "ddyipu.com",
    "debitcrebit669.com",
    "deltarockme.com",
+   "distribrey.com",
    "dn3hksy6kf.com",
    "dominantroute.com",
    "dosawes.com",
@@ -168,8 +177,10 @@
    "fzgrpqktmq.com",
    "g4p.redtram.com",
    "get2.fun",
+   "getandgo.ru",
    "getb.7ya.ru",
    "getnodejs.com",
+   "getter.cfd",
    "gimnsr.com",
    "givemelink.cc",
    "gjv7fg.ru",
@@ -216,6 +227,7 @@
    "klonedaset.org",
    "knowens.com",
    "kputjp.com",
+   "kudlavasta.link",
    "kyccmn.com",
    "laimroll.ru",
    "lenta.sparrow.ru",
@@ -235,6 +247,7 @@
    "mezima.com",
    "mibmcbm.com",
    "mikellli.com",
+   "mimokrikodil.link",
    "moneymaiker.ru",
    "mrbasic.com",
    "mrrvmp.com",
@@ -255,6 +268,7 @@
    "o4svlxhjun.xyz",
    "octolinkcom.me",
    "oiya.ru",
+   "onfeed.ru",
    "openssp.ru",
    "opnbwg.com",
    "ouqyid.com",
@@ -269,6 +283,7 @@
    "pmi1yarhxx.com",
    "portoteamo.com",
    "post.rmbn.ru",
+   "pressms.ru",
    "prft1pub.com",
    "prod.html5-ads.vk-apps.com",
    "proppellerads.ru",
@@ -295,6 +310,7 @@
    "roomgome.com",
    "rot.rusoul.ru",
    "rqnvci.com",
+   "ruehofmdhvu.com",
    "s.cummerata.link",
    "s.holder.com.ua",
    "s2517.com",
@@ -318,6 +334,7 @@
    "snsv.ru",
    "socdem-enrich.getshop.tv",
    "sofq.site",
+   "solutionsin103.net",
    "sparelli.com",
    "spdcdnmpg.com",
    "spitter.pauk.ru",
@@ -330,7 +347,9 @@
    "streetuptowind.com",
    "stteeruptowind.com",
    "suprion.ru",
+   "surfy.space",
    "svc.kartinka.com.ua",
+   "svetoborka.link",
    "sync.ads.oveeo.com",
    "sync.platform.lightad.com",
    "sync.spotim.market",
@@ -364,6 +383,7 @@
    "v.strosin.biz",
    "vasia.bluentated.racing",
    "vast.videocdn.tv",
+   "veoapi.net",
    "veyszc.com",
    "video.agenteimmobiliare.info",
    "video.begun.ru",
@@ -372,6 +392,7 @@
    "vidigital.ru",
    "vidustal.com",
    "viewdeos.com",
+   "vipapi.me",
    "virnews.club",
    "vjdciu.com",
    "vk-ads.ru",
@@ -382,6 +403,7 @@
    "vqhrqt.com",
    "vrglcmzgbj.com",
    "vst.dfn-network.pro",
+   "vvapi.org",
    "vvdrhe.win",
    "w716eb02n9.ru",
    "webmedia.co.il",
@@ -396,6 +418,7 @@
    "www.mir-stalkera.ru",
    "www2.bubblesmedia.ru",
    "x-app639-cc.tod99shi.com",
+   "x.ctrltech.ai",
    "xjwzbo.com",
    "xveenk.com",
    "xvnitu.com",
@@ -425,12 +448,92 @@
   "type": "redirect"
  },
  "condition": {
-  "regexFilter": "^[^:]+:\\/\\/([^:/]+\\.)?slotscity\\.ua\\/registration\\?refcode=.*",
+  "regexFilter": "^.*\\.shop\\/tb\\/#.*",
   "resourceTypes": [
    "main_frame"
   ]
  },
  "id": 2,
+ "priority": 29
+},
+{
+ "action": {
+  "redirect": {
+   "regexSubstitution": "/strictblock.html#\\0"
+  },
+  "type": "redirect"
+ },
+ "condition": {
+  "regexFilter": "^.*\\.shop\\/tb\\/$",
+  "resourceTypes": [
+   "main_frame"
+  ]
+ },
+ "id": 3,
+ "priority": 29
+},
+{
+ "action": {
+  "redirect": {
+   "regexSubstitution": "/strictblock.html#\\0"
+  },
+  "type": "redirect"
+ },
+ "condition": {
+  "regexFilter": "^.*\\/l\\?tag=.*?&ad=.*",
+  "resourceTypes": [
+   "main_frame"
+  ]
+ },
+ "id": 4,
+ "priority": 29
+},
+{
+ "action": {
+  "redirect": {
+   "regexSubstitution": "/strictblock.html#\\0"
+  },
+  "type": "redirect"
+ },
+ "condition": {
+  "regexFilter": "^.*\\/l\\?tag=.*?_clickunder&.*",
+  "resourceTypes": [
+   "main_frame"
+  ]
+ },
+ "id": 5,
+ "priority": 29
+},
+{
+ "action": {
+  "redirect": {
+   "regexSubstitution": "/strictblock.html#\\0"
+  },
+  "type": "redirect"
+ },
+ "condition": {
+  "regexFilter": "^.*\\/\\?goto=sitereg&atp=.*?&plid=.*?&bnid=.*",
+  "resourceTypes": [
+   "main_frame"
+  ]
+ },
+ "id": 6,
+ "priority": 29
+},
+{
+ "action": {
+  "redirect": {
+   "regexSubstitution": "/strictblock.html#\\0"
+  },
+  "type": "redirect"
+ },
+ "condition": {
+  "regexFilter": "^[^:]+:\\/\\/([^:/]+\\.)?slotscity\\.ua\\/registration\\?refcode=.*",
+  "resourceTypes": [
+   "main_frame"
+  ]
+ },
+ "id": 7,
  "priority": 29
 }
 ]

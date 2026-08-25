@@ -56,8 +56,8 @@ class JSONPath {
     }
     compile(query) {
         this.#compiled = undefined;
-        const v2 = query.startsWith('v2:');
-        if ( v2 ) { query = query.slice(3); }
+        this.v2 = query.startsWith('v2:');
+        if ( this.v2 ) { query = query.slice(3); }
         const r = this.#compile(query, 0);
         if ( r === undefined ) { return; }
         if ( r.i !== query.length ) {
@@ -77,7 +77,7 @@ class JSONPath {
             try { r.rval = JSON.parse(val); }
             catch { return; }
         }
-        r.v2 = v2;
+        r.v2 = this.v2;
         this.#compiled = r;
     }
     evaluate(root) {
@@ -209,6 +209,7 @@ class JSONPath {
                 continue;
             }
             // Bracket accessor syntax
+            if ( mv === this.#CHILDREN ) { return; }
             if ( query.startsWith('[?', i) ) {
                 const not = query.charCodeAt(i+2) === 0x21 /* ! */ ? 1 : 0;
                 const j = i + 2 + not;
@@ -305,7 +306,7 @@ class JSONPath {
         return listout;
     }
     #expandKey(owner, k) {
-        if ( typeof owner !== 'object' ) { return; }
+        if ( typeof owner !== 'object' || owner === null ) { return; }
         if ( Array.isArray(k) ) {
             const out = [];
             for ( const a of k ) {
@@ -391,11 +392,18 @@ class JSONPath {
     }
     #consumeIdentifier(query, i) {
         const keys = [];
-        for (;;) {
+        let needIdentifier = true;
+        while ( i < query.length ) {
             const c0 = query.charCodeAt(i);
             if ( c0 === 0x5D /* ] */ ) { break; }
-            if ( c0 === 0x2C /* , */ || c0 === 0x20 /* SPACE */) {
+            if ( c0 === 0x20 /* SPACE */ ) {
                 i += 1;
+                continue;
+            }
+            if ( c0 === 0x2C /* , */ ) {
+                if ( needIdentifier ) { return; }
+                i += 1;
+                needIdentifier = true;
                 continue;
             }
             if ( c0 === 0x22 /* " */ || c0 === 0x27 /* ' */ ) {
@@ -403,6 +411,7 @@ class JSONPath {
                 if ( r === undefined ) { return; }
                 keys.push(r.s);
                 i = r.i;
+                needIdentifier = false;
                 continue;
             }
             if ( c0 === 0x2D /* - */ || c0 >= 0x30 && c0 <= 0x39 ) {
@@ -411,13 +420,16 @@ class JSONPath {
                 const indice = parseInt(query.slice(i), 10);
                 keys.push(indice);
                 i += match[0].length;
+                needIdentifier = false;
                 continue;
             }
+            if ( this.v2 ) { return; }
             const r = this.#consumeUnquotedIdentifier(query, i);
             if ( r === undefined ) { return; }
             keys.push(r.s);
             i = r.i;
         }
+        if ( needIdentifier ) { return; }
         return { s: keys.length === 1 ? keys[0] : keys, i };
     }
     #consumeUnquotedIdentifier(query, i) {
@@ -584,28 +596,7 @@ function abortCurrentScriptFn(
     const logPrefix = safe.makeLogPrefix('abort-current-script', target, needle, context);
     const reNeedle = safe.patternToRegex(needle);
     const reContext = safe.patternToRegex(context);
-    const extraArgs = safe.getExtraArgs(Array.from(arguments), 3);
     const thisScript = document.currentScript;
-    const chain = safe.String_split.call(target, '.');
-    let owner = window;
-    let prop;
-    for (;;) {
-        prop = chain.shift();
-        if ( chain.length === 0 ) { break; }
-        if ( prop in owner === false ) { break; }
-        owner = owner[prop];
-        if ( owner instanceof Object === false ) { return; }
-    }
-    let value;
-    let desc = Object.getOwnPropertyDescriptor(owner, prop);
-    if (
-        desc instanceof Object === false ||
-        desc.get instanceof Function === false
-    ) {
-        value = owner[prop];
-        desc = undefined;
-    }
-    const debug = shouldDebug(extraArgs);
     const exceptionToken = getExceptionTokenFn();
     const scriptTexts = new WeakMap();
     const textContentGetter = Object.getOwnPropertyDescriptor(Node.prototype, 'textContent').get;
@@ -613,8 +604,7 @@ function abortCurrentScriptFn(
         let text = textContentGetter.call(elem);
         if ( text.trim() !== '' ) { return text; }
         if ( scriptTexts.has(elem) ) { return scriptTexts.get(elem); }
-        const [ , mime, content ] =
-            /^data:([^,]*),(.+)$/.exec(elem.src.trim()) ||
+        const [ , mime, content ] = /^data:([^,]*),(.+)$/.exec(elem.src.trim()) ||
             [ '', '', '' ];
         try {
             switch ( true ) {
@@ -634,60 +624,39 @@ function abortCurrentScriptFn(
         const e = document.currentScript;
         if ( e instanceof HTMLScriptElement === false ) { return; }
         if ( e === thisScript ) { return; }
-        if ( context !== '' && reContext.test(e.src) === false ) {
-            // eslint-disable-next-line no-debugger
-            if ( debug === 'nomatch' || debug === 'all' ) { debugger; }
-            return;
-        }
+        if ( context !== '' && reContext.test(e.src) === false ) { return; }
         if ( safe.logLevel > 1 && context !== '' ) {
             safe.uboLog(logPrefix, `Matched src\n${e.src}`);
         }
         const scriptText = getScriptText(e);
-        if ( reNeedle.test(scriptText) === false ) {
-            // eslint-disable-next-line no-debugger
-            if ( debug === 'nomatch' || debug === 'all' ) { debugger; }
-            return;
-        }
+        if ( reNeedle.test(scriptText) === false ) { return; }
         if ( safe.logLevel > 1 ) {
             safe.uboLog(logPrefix, `Matched text\n${scriptText}`);
         }
-        // eslint-disable-next-line no-debugger
-        if ( debug === 'match' || debug === 'all' ) { debugger; }
         safe.uboLog(logPrefix, 'Aborted');
         throw new ReferenceError(exceptionToken);
     };
-    // eslint-disable-next-line no-debugger
-    if ( debug === 'install' ) { debugger; }
-    try {
-        Object.defineProperty(owner, prop, {
-            get: function() {
-                validate();
-                return desc instanceof Object
-                    ? desc.get.call(owner)
-                    : value;
-            },
-            set: function(a) {
-                validate();
-                if ( desc instanceof Object ) {
-                    desc.set.call(owner, a);
-                } else {
-                    value = a;
-                }
-            }
-        });
-    } catch(ex) {
-        safe.uboErr(logPrefix, `Error: ${ex}`);
-    }
+    let currentValue = trapPropertyFn(target, {
+        get: function() {
+            validate();
+            return currentValue;
+        },
+        set: function(a) {
+            validate();
+            currentValue = a;
+        }
+    }, { canThrow: true });
 }
 
 function abortOnStackTrace(
     chain = '',
-    needle = ''
+    needle = '',
+    ...varargs
 ) {
     if ( typeof chain !== 'string' ) { return; }
     const safe = safeSelf();
     const needleDetails = safe.initPattern(needle, { canNegate: true });
-    const extraArgs = safe.getExtraArgs(Array.from(arguments), 2);
+    const extraArgs = safe.parseVarargs(varargs);
     if ( needle === '' ) { extraArgs.log = 'all'; }
     const makeProxy = function(owner, chain) {
         const pos = chain.indexOf('.');
@@ -767,34 +736,6 @@ function collateFetchArgumentsFn(resource, options) {
         collateFetchArgumentsFn.collateKnownProps(options, out);
     }
     return out;
-}
-
-function editOutboundObjectFn(
-    trusted = false,
-    propChain = '',
-    jsonq = '',
-) {
-    if ( propChain === '' ) { return; }
-    const safe = safeSelf();
-    const logPrefix = safe.makeLogPrefix(
-        `${trusted ? 'trusted-' : ''}edit-outbound-object`,
-        propChain,
-        jsonq
-    );
-    const jsonp = JSONPath.create(jsonq);
-    if ( jsonp.valid === false || jsonp.value !== undefined && trusted !== true ) {
-        return safe.uboLog(logPrefix, 'Bad JSONPath query');
-    }
-    proxyApplyFn(propChain, function(context) {
-        const obj = context.reflect();
-        const objAfter = jsonp.apply(obj);
-        if ( objAfter === undefined ) { return obj; }
-        safe.uboLog(logPrefix, 'Edited');
-        if ( safe.logLevel > 1 ) {
-            safe.uboLog(logPrefix, `After edit:\n${safe.JSON_stringify(objAfter, null, 2)}`);
-        }
-        return objAfter;
-    });
 }
 
 function generateContentFn(trusted, directive) {
@@ -881,8 +822,35 @@ function getRandomTokenFn() {
         safe.Math_floor(safe.Math_random() * 982451653 + 982451653).toString(36);
 }
 
-function jsonEdit(jsonq = '') {
-    editOutboundObjectFn(false, 'JSON.parse', jsonq);
+function jsonEdit(jsonq = '', ...varargs) {
+    jsonEditFn(false, jsonq, ...varargs);
+}
+
+function jsonEditFn(trusted = false, jsonq = '', ...varargs) {
+    const safe = safeSelf();
+    const logPrefix = safe.makeLogPrefix(
+        `${trusted ? 'trusted-' : ''}json-edit`,
+        jsonq,
+        ...varargs
+    );
+    const jsonp = JSONPath.create(jsonq);
+    if ( jsonp.valid === false || jsonp.value !== undefined && trusted !== true ) {
+        return safe.uboLog(logPrefix, 'Bad JSONPath query');
+    }
+    const extraArgs = safe.parseVarargs(varargs);
+    const pattern = extraArgs.matches && safe.initPattern(extraArgs.matches);
+    proxyApplyFn('JSON.parse', function(context) {
+        const json = context.callArgs[0];
+        const obj = context.reflect();
+        if ( pattern && safe.testPattern(pattern, json) === false ) { return obj; }
+        const objAfter = jsonp.apply(obj);
+        if ( objAfter === undefined ) { return obj; }
+        safe.uboLog(logPrefix, 'Edited');
+        if ( safe.logLevel > 1 ) {
+            safe.uboLog(logPrefix, `After edit:\n${safe.JSON_stringify(objAfter, null, 2)}`);
+        }
+        return objAfter;
+    });
 }
 
 function matchObjectPropertiesFn(propNeedles, ...objs) {
@@ -979,7 +947,8 @@ function preventFetchFn(
     trusted = false,
     propsToMatch = '',
     responseBody = '',
-    responseType = ''
+    responseType = '',
+    ...varargs
 ) {
     const safe = safeSelf();
     const setTimeout = self.setTimeout;
@@ -990,7 +959,7 @@ function preventFetchFn(
         responseBody,
         responseType
     );
-    const extraArgs = safe.getExtraArgs(Array.from(arguments), 4);
+    const extraArgs = safe.parseVarargs(varargs);
     const propNeedles = parsePropertiesToMatchFn(propsToMatch, 'url');
     const validResponseProps = {
         ok: [ false, true ],
@@ -1057,7 +1026,7 @@ function preventFetchFn(
 }
 
 function preventXhr(...args) {
-    return preventXhrFn(false, ...args);
+    preventXhrFn(false, ...args);
 }
 
 function preventXhrFn(
@@ -1230,7 +1199,8 @@ function preventXhrFn(
 
 function proxyApplyFn(
     target = '',
-    handler = ''
+    handler = '',
+    options = {}
 ) {
     let context = globalThis;
     let prop = target;
@@ -1291,20 +1261,22 @@ function proxyApplyFn(
         };
         proxyApplyFn.isCtor = new Map();
         proxyApplyFn.proxies = new WeakMap();
-        proxyApplyFn.nativeToString = Function.prototype.toString;
-        const proxiedToString = new Proxy(Function.prototype.toString, {
-            apply(target, thisArg) {
-                let proxied = thisArg;
-                for(;;) {
-                    const fn = proxyApplyFn.proxies.get(proxied);
-                    if ( fn === undefined ) { break; }
-                    proxied = fn;
+        if ( (options.skipToString || proxyApplyFn.skipToString) !== true ) {
+            proxyApplyFn.nativeToString = Function.prototype.toString;
+            const proxiedToString = new Proxy(Function.prototype.toString, {
+                apply(target, thisArg) {
+                    let proxied = thisArg;
+                    for(;;) {
+                        const fn = proxyApplyFn.proxies.get(proxied);
+                        if ( fn === undefined ) { break; }
+                        proxied = fn;
+                    }
+                    return proxyApplyFn.nativeToString.call(proxied);
                 }
-                return proxyApplyFn.nativeToString.call(proxied);
-            }
-        });
-        proxyApplyFn.proxies.set(proxiedToString, proxyApplyFn.nativeToString);
-        Function.prototype.toString = proxiedToString;
+            });
+            proxyApplyFn.proxies.set(proxiedToString, proxyApplyFn.nativeToString);
+            Function.prototype.toString = proxiedToString;
+        }
     }
     if ( proxyApplyFn.isCtor.has(target) === false ) {
         proxyApplyFn.isCtor.set(target, fn.prototype?.constructor === fn);
@@ -1366,8 +1338,8 @@ function runAtHtmlElementFn(fn) {
 }
 
 function safeSelf() {
-    if ( scriptletGlobals.safeSelf ) {
-        return scriptletGlobals.safeSelf;
+    if ( safeSelf.safe ) {
+        return safeSelf.safe;
     }
     const self = globalThis;
     const safe = {
@@ -1472,21 +1444,20 @@ function safeSelf() {
             }
             return /^/;
         },
-        getExtraArgs(args, offset = 0) {
-            const entries = args.slice(offset).reduce((out, v, i, a) => {
-                if ( (i & 1) === 0 ) {
-                    const rawValue = a[i+1];
-                    const value = /^\d+$/.test(rawValue)
-                        ? parseInt(rawValue, 10)
-                        : rawValue;
-                    out.push([ a[i], value ]);
-                }
+        parseVarargs(varargs) {
+            const entries = varargs.reduce((out, v, i, a) => {
+                if ( i & 1 ) { return out; }
+                const rawValue = a[i+1];
+                const value = /^\d+$/.test(rawValue)
+                    ? parseInt(rawValue, 10)
+                    : rawValue;
+                out.push([ a[i], value ]);
                 return out;
             }, []);
             return this.Object_fromEntries(entries);
         },
     };
-    scriptletGlobals.safeSelf = safe;
+    safeSelf.safe = safe;
     if ( scriptletGlobals.bcSecret === undefined ) { return safe; }
     // This is executed only when the logger is opened
     safe.logLevel = scriptletGlobals.logLevel || 1;
@@ -1553,12 +1524,13 @@ function setConstant(
 function setConstantFn(
     trusted = false,
     chain = '',
-    rawValue = ''
+    rawValue = '',
+    ...varargs
 ) {
     if ( chain === '' ) { return; }
     const safe = safeSelf();
     const logPrefix = safe.makeLogPrefix('set-constant', chain, rawValue);
-    const extraArgs = safe.getExtraArgs(Array.from(arguments), 3);
+    const extraArgs = safe.parseVarargs(varargs);
     function setConstant(chain, rawValue) {
         const trappedProp = (( ) => {
             const pos = chain.lastIndexOf('.');
@@ -1700,9 +1672,77 @@ function setConstantFn(
     }, extraArgs.runAt);
 }
 
-function shouldDebug(details) {
-    if ( details instanceof Object === false ) { return false; }
-    return scriptletGlobals.canDebug && details.debug;
+function trapPropertyFn(propChain, handler, options = {}) {
+    if ( propChain === '' ) { return; }
+    let owner = self;
+    let prop = propChain;
+    for (;;) {
+        const pos = prop.indexOf('.');
+        if ( pos === -1 ) { break; }
+        owner = owner[prop.slice(0, pos)];
+        if ( owner instanceof Object === false ) { return; }
+        prop = prop.slice(pos + 1);
+    }
+    const safe = safeSelf();
+    if ( trapPropertyFn.db === undefined ) {
+        trapPropertyFn.db = new WeakMap();
+        trapPropertyFn.entryFromContext = (owner, prop) => {
+            const handlers = trapPropertyFn.db.get(owner);
+            return handlers?.get(prop);
+        };
+        trapPropertyFn.getter = (owner, prop) => {
+            const entry = trapPropertyFn.entryFromContext(owner, prop);
+            if ( entry === undefined ) { return; }
+            let r = entry.value;
+            for ( const desc of entry.stack ) {
+                try { r = desc.get(); } catch (e) {
+                    if ( entry.canThrow ) { throw e; }
+                }
+            }
+            return r;
+        };
+        trapPropertyFn.setter = (owner, prop, value) => {
+            const entry = trapPropertyFn.entryFromContext(owner, prop);
+            if ( entry === undefined ) { return; }
+            entry.value = value;
+            for ( const desc of entry.stack ) {
+                try { desc.set(value); } catch (e) {
+                    if ( entry.canThrow ) { throw e; }
+                }
+            }
+        };
+    }
+    const { db } = trapPropertyFn;
+    const handlers = db.get(owner) || new Map();
+    if ( handlers.size === 0 ) {
+        db.set(owner, handlers);
+    }
+    const entry = handlers.get(prop) || {
+        value: owner[prop],
+        stack: [],
+    };
+    entry.stack.push(handler);
+    if ( entry.stack.length > 1 ) { return entry.value; }
+    Object.assign(entry, options);
+    handlers.set(prop, entry);
+    const desc = safe.Object_getOwnPropertyDescriptor(owner, prop);
+    if ( desc instanceof safe.Object ) {
+        if ( desc.get || desc.set ) {
+            entry.stack.push(desc);
+        }
+    }
+    try {
+        safe.Object_defineProperty(owner, prop, {
+            get() {
+                return trapPropertyFn.getter(owner, prop);
+            },
+            set(value) {
+                trapPropertyFn.setter(owner, prop, value);
+            }
+        });
+    } catch {
+    }
+    return entry.value;
 }
 
 function validateConstantFn(trusted, raw, extraArgs = {}) {
@@ -1761,19 +1801,7 @@ function validateConstantFn(trusted, raw, extraArgs = {}) {
 
 const scriptletGlobals = {}; // eslint-disable-line
 
-const $scriptletFunctions$ = /* 6 */
-[setConstant,abortCurrentScript,abortOnStackTrace,jsonEdit,preventFetch,preventXhr];
-
-const $scriptletArgs$ = /* 22 */ ["Navigator.prototype.globalPrivacyControl","false","navigator.globalPrivacyControl","document.getElementsByTagName","gtm.js","document.createElement","admiral",".pubads","HTMLElement.prototype.insertBefore","/[A-Z] .+chunks\\/\\d{4}\\./",".js?","decodeURI","/(?=^(?!.*\\.js))/","..props.children.*[?.key==\"admiral-script\"]","noopFunc","gnt.x.adm","","keen-tracking","stella","ncbi.sg","{}","ncbi.sg.ping"];
-
-const $scriptletArglists$ = /* 16 */ "0,0,1;0,2,1;1,3,4;1,5,6;1,3,7;2,8,9;2,6,10;2,11,12;3,13;0,6,14;0,15,16;1,5,17;4,18;5,18;0,19,20;0,21,14";
-
-const $scriptletArglistRefs$ = /* 181 */ "0,1;3,7;7;3;0,1;3;11;3;4;3;0,1;0,1;3;3;0,1;0,1;4;3;0,1;0,1;0,1;3;3,7;3,7;0,1;0,1;0,1;4;0,1;0,1;0,1;4;0,1;0,1;7;0,1;3;5;0,1;3;0,1;4;2;0,1;3;3;7;3,9;0,1;4;3;3;0,1;0,1;6;4;3;0,1;3;0,1;4;0,1;0,1;4;3;4;4;0,1;0,1;3;3;3;3;0,1;0,1;3;0,1;3;7;12,13;3;4;7;3;0,1;3;0,1;9,10;3;3;4;3;3;4;3;3;4;3;3;4;0,1;4;3;3;3;0,1;4;3;3;0,1;7;3,4;0,1;0,1;3;7;4;3;3,7;0,1;0,1,4;7;0,1;4;3;3;0,1;0,1;3;0,1;7;7;0,1;7;8;3;0,1;3;3;3;4;3;3;3;0,1;3;4;14,15;3;4;3;3;7;4;3;0,1;4;0,1;4;0,1;0,1;4;3;3,4;3;3;3;3;3;7;3;3;7;7;4;3;0,1;0,1;3;3;0,1";
-
-const $scriptletHostnames$ = /* 181 */ ["x.com","al.com","nj.com","cbr.com","dnb.com","ijr.com","mwed.jp","wnd.com","wwd.com","cwtv.com","espn.com","kkrt.com","money.it","omg.blog","uber.com","usaa.com","vibe.com","wral.com","chime.com","delta.com","dnb.co.uk","freep.com","mlive.com","pcwelt.de","qobuz.com","tidal.com","vimeo.com","apnews.com","boston.com","costco.com","deezer.com","driving.ca","filson.com","hopwtr.com","macwelt.de","norton.com","nypost.com","ranker.com","rivals.com","silive.com","subway.com","artnews.com","bolighub.dk","capezio.com","cattime.com","dogtime.com","gamepur.com","gbatemp.net","geizhals.de","lfpress.com","nbcnews.com","neopets.com","pandora.com","porsche.com","reuters.com","sherdog.com","sporcle.com","spotify.com","titantv.com","twitter.com","variety.com","visible.com","weather.com","artforum.com","collider.com","deadline.com","dpreview.com","engadget.com","formula1.com","gamerant.com","grabify.link","hemmings.com","inquirer.net","jdsports.com","madewell.com","masslive.com","mazdausa.com","movieweb.com","news8000.com","nicovideo.jp","pennlive.com","sidereel.com","syracuse.com","thegamer.com","tirerack.com","topspeed.com","ubereats.com","usatoday.com","webmail.wiki","247sports.com","billboard.com","cleveland.com","fresnobee.com","goldderby.com","hancinema.net","howtogeek.com","indiewire.com","magesypro.pro","makeuseof.com","nbcsports.com","newyorker.com","ottawasun.com","pwinsider.com","savvytime.com","thelayoff.com","www.yahoo.com","calgarysun.com","cheatsheet.com","comingsoon.net","eventbrite.com","gameskinny.com","golfdigest.com","mail.yahoo.com","milesplit.live","oregonlive.com","primagames.com","robbreport.com","screenrant.com","siliconera.com","soundcloud.com","techcrunch.com","themarysue.com","ticketmaster.*","torontosun.com","twinfinite.net","videogamer.com","accuweather.com","acmemarkets.com","arstechnica.com","crunchyroll.com","destructoid.com","edmontonsun.com","flyfrontier.com","lgbtqnation.com","mensjournal.com","order-order.com","payment.nba.com","techlicious.com","technicpack.net","theprovince.com","windsorstar.com","wrestlezone.com","esportstales.com","knowyourmeme.com","lenscrafters.com","motorbiscuit.com","nationalpost.com","ncbi.nlm.nih.gov","nofilmschool.com","rollingstone.com","simpleflying.com","thenerdstash.com","touchtapplay.com","vancouversun.com","wrestlinginc.com","wunderground.com","calgaryherald.com","dollargeneral.com","financialpost.com","harborfreight.com","monsterenergy.com","superherohype.com","bringmethenews.com","crooksandliars.com","insider-gaming.com","nationalreview.com","thefashionspot.com","xda-developers.com","forums.hfboards.com","gamerjournalist.com","stealthoptional.com","thedraftnetwork.com","wegotthiscovered.com","attackofthefanboy.com","hollywoodreporter.com","informazionefiscale.it","gladiatorgarageworks.com","livewithkellyandmark.com","playstationlifestyle.net","worldpopulationreview.com","aiskillsnavigator.microsoft.com"];
-
-const $scriptletFromRegexes$ = /* 0 */ [];
-
+const $hasHostnames$ = true;
 const $hasEntities$ = true;
 const $hasAncestors$ = false;
 const $hasRegexes$ = false;
@@ -1792,18 +1820,22 @@ const entries = (( ) => {
         const hn1 = origin.slice(beg+3)
         const end = hn1.indexOf(':');
         const hn2 = end === -1 ? hn1 : hn1.slice(0, end);
-        const hnParts = hn2.split('.');
         if ( hn2.length === 0 ) { return; }
-        const hns = [];
-        for ( let i = 0; i < hnParts.length; i++ ) {
-            hns.push(`${hnParts.slice(i).join('.')}`);
+        const hns = [ hn2 ];
+        for ( let pos = 0; ; ) {
+            pos = hn2.indexOf('.', pos) + 1;
+            if ( pos === 0 ) { break; }
+            hns.push(hn2.slice(pos));
         }
+        hns.push('*');
         const ens = [];
         if ( $hasEntities$ ) {
-            const n = hnParts.length - 1;
-            for ( let i = 0; i < n; i++ ) {
-                for ( let j = n; j > i; j-- ) {
-                    ens.push(`${hnParts.slice(i,j).join('.')}.*`);
+            for ( let hn of hns ) {
+                for (;;) {
+                    const pos = hn.lastIndexOf('.');
+                    if ( pos === -1 ) { break; }
+                    hn = hn.slice(0, pos);
+                    ens.push(`${hn}.*`);
                 }
             }
             ens.sort((a, b) => {
@@ -1813,12 +1845,14 @@ const entries = (( ) => {
             });
         }
         return { hns, ens, i };
-    }).filter(a => a !== undefined);
+    }).filter(a => a);
 })();
 if ( entries.length === 0 ) { return; }
 
-const todoIndices = new Set();
-if ( $scriptletHostnames$.length ) {
+const todo = new Set();
+
+if ( $hasHostnames$ ) {
+    const $scriptletHostnames$ = /* 239 */ ["x.com","al.com","nj.com","rd.com","cbr.com","dnb.com","ijr.com","kgw.com","mwed.jp","wnd.com","wwd.com","10tv.com","cbs19.tv","cbs8.com","cwtv.com","espn.com","kkrt.com","krem.com","ktvb.com","kvue.com","money.it","omg.blog","uber.com","usaa.com","vibe.com","wbir.com","wcnc.com","wfaa.com","wgrz.com","wkyc.com","wltx.com","wnep.com","wqad.com","wral.com","wthr.com","wtol.com","wtsp.com","9news.com","abc10.com","chime.com","delta.com","dnb.co.uk","fox43.com","fox61.com","freep.com","kens5.com","king5.com","mlive.com","pcwelt.de","qobuz.com","thv11.com","tidal.com","vimeo.com","wusa9.com","wwltv.com","12news.com","13wmaz.com","apnews.com","boston.com","costco.com","deezer.com","driving.ca","filson.com","hopwtr.com","kare11.com","kcentv.com","kiiitv.com","macwelt.de","norton.com","nypost.com","ranker.com","rivals.com","silive.com","subway.com","whas11.com","wzzm13.com","11alive.com","artnews.com","bolighub.dk","capezio.com","cattime.com","dogtime.com","gamepur.com","gbatemp.net","geizhals.de","lfpress.com","nbcnews.com","neopets.com","pandora.com","porsche.com","queerty.com","reuters.com","sherdog.com","sporcle.com","spotify.com","titantv.com","twitter.com","variety.com","visible.com","weather.com","artforum.com","collider.com","deadline.com","dpreview.com","engadget.com","formula1.com","gamerant.com","grabify.link","hemmings.com","inquirer.net","jdsports.com","madewell.com","masslive.com","mazdausa.com","michaels.com","movieweb.com","news8000.com","nicovideo.jp","pennlive.com","sidereel.com","syracuse.com","thegamer.com","tirerack.com","topspeed.com","ubereats.com","usatoday.com","webmail.wiki","12newsnow.com","13newsnow.com","247sports.com","billboard.com","cleveland.com","fresnobee.com","goldderby.com","hancinema.net","howtogeek.com","indiewire.com","magesypro.pro","makeuseof.com","myfoxzone.com","nbcsports.com","newswest9.com","newyorker.com","ottawasun.com","pwinsider.com","savvytime.com","thelayoff.com","weareiowa.com","wfmynews2.com","www.yahoo.com","calgarysun.com","cheatsheet.com","comingsoon.net","eventbrite.com","gameskinny.com","golfdigest.com","mail.yahoo.com","milesplit.live","oregonlive.com","primagames.com","robbreport.com","screenrant.com","siliconera.com","soundcloud.com","techcrunch.com","thebeenews.com","themarysue.com","ticketmaster.*","torontosun.com","twinfinite.net","videogamer.com","5newsonline.com","accuweather.com","acmemarkets.com","arstechnica.com","crunchyroll.com","destructoid.com","edmontonsun.com","flyfrontier.com","lgbtqnation.com","mensjournal.com","order-order.com","payment.nba.com","tasteofhome.com","techlicious.com","technicpack.net","theprovince.com","windsorstar.com","wrestlezone.com","esportstales.com","knowyourmeme.com","lenscrafters.com","localmemphis.com","motorbiscuit.com","nationalpost.com","ncbi.nlm.nih.gov","nofilmschool.com","rollingstone.com","simpleflying.com","thenerdstash.com","touchtapplay.com","vancouversun.com","wrestlinginc.com","wunderground.com","calgaryherald.com","dollargeneral.com","financialpost.com","harborfreight.com","monsterenergy.com","progameguides.com","superherohype.com","birdsandblooms.com","bringmethenews.com","crooksandliars.com","familyhandyman.com","firstcoastnews.com","insider-gaming.com","nationalreview.com","thefashionspot.com","xda-developers.com","forums.hfboards.com","gamerjournalist.com","lehighvalleylivecom","newscentermaine.com","portlandtribune.com","stealthoptional.com","thedraftnetwork.com","lehighvalleylive.com","theoutlookonline.com","wegotthiscovered.com","attackofthefanboy.com","hollywoodreporter.com","informazionefiscale.it","beavertonvalleytimes.com","gladiatorgarageworks.com","livewithkellyandmark.com","playstationlifestyle.net","worldpopulationreview.com","aiskillsnavigator.microsoft.com"];
     const collectArglistRefIndices = (out, hn, r) => {
         let l = 0, i = 0, d = 0;
         let candidate = '';
@@ -1853,6 +1887,7 @@ if ( $scriptletHostnames$.length ) {
             }
         }
     };
+    const todoIndices = new Set();
     indicesFromHostname(todoIndices, entries[0]);
     if ( $hasAncestors$ ) {
         for ( const entry of entries ) {
@@ -1860,20 +1895,20 @@ if ( $scriptletHostnames$.length ) {
             indicesFromHostname(todoIndices, entry, '>>');
         }
     }
-    $scriptletHostnames$.length = 0;
-}
-
-// Collect arglist references
-const todo = new Set();
-if ( todoIndices.size !== 0 ) {
-    const arglistRefs = $scriptletArglistRefs$.split(';');
-    for ( const i of todoIndices ) {
-        for ( const ref of JSON.parse(`[${arglistRefs[i]}]`) ) {
-            todo.add(ref);
+    // Collect arglist references
+    if ( todoIndices.size ) {
+        const $scriptletArglistRefs$ = /* 239 */ "1,2,17;4,8;8;5;4;1,2;4;5;12;4;5;5;5;5;4;1,2;1,2;5;5;5;4;4;1,2;1,2;5;5;5;5;5;5;5;5;5;4;5;5;5;5;5;1,2;1,2;1,2;5;5;4;5;5;4,8;4,8;1,2;5;1,2;1,2;5;5;5;5;5;1,2;1,2;1,2;5;1,2;1,2;5;5;5;8;1,2;4;6;1,2;4;1,2;5;5;5;5;3;1,2;4;4;8;4,10;1,2;5;4;4;1,2;1,2;8;7;5;4;1,2;4;1,2;5;1,2;1,2;5;4;5;5;1,2;1,2;4;4;4;4;1,2;1,2;5;1,2;1,2;4;8;13,14;4,8;5;8;4;1,2;4;1,2;10,11;4;5;5;4;5;5;4;5;4;4;5;4;4;5;5;5;1,2;5;4;4;4;5;5;1,2;5;4;4;1,2;8;4,5;1,2;1,2;4,5;8;5;4;4,8;1,2;1,2,8;8;8;1,2;5;4;4;5;1,2;1,2;4;1,2;8;8;1,2;8;9;4;1,2;5;4;4;4;5;4;4;4;1,2;5;4;5;15,16;4;5;4;4;8;5;4;1,2;5;1,2;5;1,2;1,2;8;5;5;4;4,5;5;5;4;4;4;4;4;8;8;5;8;4;4;5;8;8;8;5;4;8;1,2;1,2;4;4;1,2";
+        const arglistRefs = $scriptletArglistRefs$.split(';');
+        for ( const i of todoIndices ) {
+            for ( const ref of JSON.parse(`[${arglistRefs[i]}]`) ) {
+                todo.add(ref);
+            }
         }
     }
 }
+
 if ( $hasRegexes$ ) {
+    const $scriptletFromRegexes$ = /* 0 */ [];
     const { hns } = entries[0];
     for ( let i = 0, n = $scriptletFromRegexes$.length; i < n; i += 3 ) {
         const needle = $scriptletFromRegexes$[i+0];
@@ -1890,10 +1925,13 @@ if ( $hasRegexes$ ) {
         }
     }
 }
-if ( todo.size === 0 ) { return; }
 
-// Execute scriplets
-{
+// Execute scriptlets
+if ( todo.size && todo.has(0) === false ) {
+    const $scriptletFunctions$ = /* 6 */
+[setConstant,abortCurrentScript,abortOnStackTrace,jsonEdit,preventFetch,preventXhr];
+    const $scriptletArgs$ = /* 23 */ ["Navigator.prototype.globalPrivacyControl","false","navigator.globalPrivacyControl","document.getElementsByTagName","gtm.js","document.createElement","admiral",".pubads","HTMLElement.prototype.insertBefore","/[A-Z] .+chunks\\/\\d{4}\\./",".js?","decodeURI","/(?=^(?!.*\\.js))/","..props.children.*[?.key==\"admiral-script\"]","noopFunc","gnt.x.adm","","keen-tracking","stella","ncbi.sg","{}","ncbi.sg.ping","/i/api/1.1/flow/viewer.json"];
+    const $scriptletArglists$ = /* 18 */ ";0,0,1;0,2,1;1,3,4;1,5,6;1,3,7;2,8,9;2,6,10;2,11,12;3,13;0,6,14;0,15,16;1,5,17;4,18;5,18;0,19,20;0,21,14;5,22";
     const arglists = $scriptletArglists$.split(';');
     const args = $scriptletArgs$;
     for ( const ref of todo ) {

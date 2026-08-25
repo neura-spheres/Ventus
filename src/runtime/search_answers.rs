@@ -257,6 +257,18 @@ mod webview_arg_tests {
     }
 
     #[test]
+    fn device_bound_sessions_stay_disabled() {
+        let settings = config::AppSettings::default();
+        let args = webview_args(&settings);
+        let disabled = args
+            .split_whitespace()
+            .find(|a| a.starts_with("--disable-features="))
+            .expect("disable-features arg");
+        assert!(disabled.contains("DeviceBoundSessions"));
+        assert!(disabled.contains("EnableBoundSessionCredentials"));
+    }
+
+    #[test]
     fn secure_dns_off_keeps_doh_out() {
         let settings = config::AppSettings::default();
         let args = webview_args(&settings);

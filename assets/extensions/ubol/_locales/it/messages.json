@@ -35,6 +35,10 @@
     "message": "Politica di riservatezza",
     "description": "Link to privacy policy on GitHub (English)"
   },
+  "aboutDocumentation": {
+    "message": "Documentazione",
+    "description": "Link to documentation in About pane"
+  },
   "popupFilteringModeLabel": {
     "message": "Modalità di filtraggio",
     "description": "Label in the popup panel for the current filtering mode"
@@ -87,6 +91,22 @@
     "message": "Lingue e regioni",
     "description": "Header for a ruleset section in 'Filter lists pane'"
   },
+  "3pGroupImported": {
+    "message": "Elenchi importati",
+    "description": "Header for a ruleset section in 'Filter lists pane'"
+  },
+  "customListImportLabel": {
+    "message": "Aggiungi elenco di filtri…",
+    "description": "Text label heading the import area of custom filter lists"
+  },
+  "customListImportPlaceholder": {
+    "message": "Incolla qui l'URL dell'elenco di filtri da aggiungere",
+    "description": "Placeholder text which describes the purpose of the textarea widget"
+  },
+  "customListImportUserScriptsInfo": {
+    "message": "Per applicare i filtri cosmetici o gli scriptlet provenienti da elenchi importati, è necessario concedere a uBO Lite l'autorizzazione a eseguire gli script utente.",
+    "description": "A notice to inform user that the enforcement of some filters requires permission to execute 'user scripts'"
+  },
   "customFiltersImportExportLabel": {
     "message": "Importa / Esporta",
     "description": "Text label heading the import/export area of custom filters"
@@ -94,6 +114,10 @@
   "customFiltersImportTextareaPlaceholder": {
     "message": "Incolla qui i filtri cosmetici o scriptlet specifici da aggiungere.",
     "description": "Placeholder text which describes the purpose of the textarea widget"
+  },
+  "userScriptsInfo": {
+    "message": "Apri la pagina delle estensioni del tuo browser (<code>chrome://extensions</code> su Chrome o <code>about:addons</code> su Firefox), apri i dettagli di <b>uBO Lite</b> e attiva l'opzione <b>Consenti script utente</b> (nota anche come \"script di terze parti non verificati\").",
+    "description": "A notice to inform user on how to enable 'user scripts' permission"
   },
   "aboutChangelog": {
     "message": "Reg. modifiche",
@@ -266,6 +290,10 @@
   "sandboxEditorLabel": {
     "message": "Sandbox per la creazione di filtri",
     "description": "Header for filter-creation section in the dashboard"
+  },
+  "sandboxEditorUserScriptsInfo": {
+    "message": "Per applicare i filtri cosmetici o gli scriptlet dalla sandbox, è necessario concedere a uBO Lite l'autorizzazione a eseguire gli script utente.",
+    "description": "A notice to inform user that the enforcement of some filters requires permission to execute 'user scripts'"
   },
   "developerModeLabel": {
     "message": "Modalità sviluppatore",

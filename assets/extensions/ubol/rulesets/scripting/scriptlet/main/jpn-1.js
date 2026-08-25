@@ -78,28 +78,7 @@ function abortCurrentScriptFn(
     const logPrefix = safe.makeLogPrefix('abort-current-script', target, needle, context);
     const reNeedle = safe.patternToRegex(needle);
     const reContext = safe.patternToRegex(context);
-    const extraArgs = safe.getExtraArgs(Array.from(arguments), 3);
     const thisScript = document.currentScript;
-    const chain = safe.String_split.call(target, '.');
-    let owner = window;
-    let prop;
-    for (;;) {
-        prop = chain.shift();
-        if ( chain.length === 0 ) { break; }
-        if ( prop in owner === false ) { break; }
-        owner = owner[prop];
-        if ( owner instanceof Object === false ) { return; }
-    }
-    let value;
-    let desc = Object.getOwnPropertyDescriptor(owner, prop);
-    if (
-        desc instanceof Object === false ||
-        desc.get instanceof Function === false
-    ) {
-        value = owner[prop];
-        desc = undefined;
-    }
-    const debug = shouldDebug(extraArgs);
     const exceptionToken = getExceptionTokenFn();
     const scriptTexts = new WeakMap();
     const textContentGetter = Object.getOwnPropertyDescriptor(Node.prototype, 'textContent').get;
@@ -107,8 +86,7 @@ function abortCurrentScriptFn(
         let text = textContentGetter.call(elem);
         if ( text.trim() !== '' ) { return text; }
         if ( scriptTexts.has(elem) ) { return scriptTexts.get(elem); }
-        const [ , mime, content ] =
-            /^data:([^,]*),(.+)$/.exec(elem.src.trim()) ||
+        const [ , mime, content ] = /^data:([^,]*),(.+)$/.exec(elem.src.trim()) ||
             [ '', '', '' ];
         try {
             switch ( true ) {
@@ -128,50 +106,28 @@ function abortCurrentScriptFn(
         const e = document.currentScript;
         if ( e instanceof HTMLScriptElement === false ) { return; }
         if ( e === thisScript ) { return; }
-        if ( context !== '' && reContext.test(e.src) === false ) {
-            // eslint-disable-next-line no-debugger
-            if ( debug === 'nomatch' || debug === 'all' ) { debugger; }
-            return;
-        }
+        if ( context !== '' && reContext.test(e.src) === false ) { return; }
         if ( safe.logLevel > 1 && context !== '' ) {
             safe.uboLog(logPrefix, `Matched src\n${e.src}`);
         }
         const scriptText = getScriptText(e);
-        if ( reNeedle.test(scriptText) === false ) {
-            // eslint-disable-next-line no-debugger
-            if ( debug === 'nomatch' || debug === 'all' ) { debugger; }
-            return;
-        }
+        if ( reNeedle.test(scriptText) === false ) { return; }
         if ( safe.logLevel > 1 ) {
             safe.uboLog(logPrefix, `Matched text\n${scriptText}`);
         }
-        // eslint-disable-next-line no-debugger
-        if ( debug === 'match' || debug === 'all' ) { debugger; }
         safe.uboLog(logPrefix, 'Aborted');
         throw new ReferenceError(exceptionToken);
     };
-    // eslint-disable-next-line no-debugger
-    if ( debug === 'install' ) { debugger; }
-    try {
-        Object.defineProperty(owner, prop, {
-            get: function() {
-                validate();
-                return desc instanceof Object
-                    ? desc.get.call(owner)
-                    : value;
-            },
-            set: function(a) {
-                validate();
-                if ( desc instanceof Object ) {
-                    desc.set.call(owner, a);
-                } else {
-                    value = a;
-                }
-            }
-        });
-    } catch(ex) {
-        safe.uboErr(logPrefix, `Error: ${ex}`);
-    }
+    let currentValue = trapPropertyFn(target, {
+        get: function() {
+            validate();
+            return currentValue;
+        },
+        set: function(a) {
+            validate();
+            currentValue = a;
+        }
+    }, { canThrow: true });
 }
 
 function abortOnPropertyRead(
@@ -223,12 +179,13 @@ function abortOnPropertyRead(
 
 function abortOnStackTrace(
     chain = '',
-    needle = ''
+    needle = '',
+    ...varargs
 ) {
     if ( typeof chain !== 'string' ) { return; }
     const safe = safeSelf();
     const needleDetails = safe.initPattern(needle, { canNegate: true });
-    const extraArgs = safe.getExtraArgs(Array.from(arguments), 2);
+    const extraArgs = safe.parseVarargs(varargs);
     if ( needle === '' ) { extraArgs.log = 'all'; }
     const makeProxy = function(owner, chain) {
         const pos = chain.indexOf('.');
@@ -453,12 +410,13 @@ function getRandomTokenFn() {
 function jsonPrune(
     rawPrunePaths = '',
     rawNeedlePaths = '',
-    stackNeedle = ''
+    stackNeedle = '',
+    ...varargs
 ) {
     const safe = safeSelf();
     const logPrefix = safe.makeLogPrefix('json-prune', rawPrunePaths, rawNeedlePaths, stackNeedle);
     const stackNeedleDetails = safe.initPattern(stackNeedle, { canNegate: true });
-    const extraArgs = safe.getExtraArgs(Array.from(arguments), 3);
+    const extraArgs = safe.parseVarargs(varargs);
     proxyApplyFn('JSON.parse', function(context) {
         const objBefore = context.reflect();
         if ( rawPrunePaths === '' ) {
@@ -796,10 +754,11 @@ function parsePropertiesToMatchFn(propsToMatch, implicit = '') {
 
 function preventAddEventListener(
     type = '',
-    pattern = ''
+    pattern = '',
+    ...varargs
 ) {
     const safe = safeSelf();
-    const extraArgs = safe.getExtraArgs(Array.from(arguments), 2);
+    const extraArgs = safe.parseVarargs(varargs);
     const logPrefix = safe.makeLogPrefix('prevent-addEventListener', type, pattern);
     const reType = safe.patternToRegex(type, undefined, true);
     const rePattern = safe.patternToRegex(pattern);
@@ -866,22 +825,23 @@ function preventAddEventListener(
         }
         return context.reflect();
     };
+    const protect = owner => {
+        const { addEventListener } = owner;
+        Object.defineProperty(owner, 'addEventListener', {
+            set() { },
+            get() { return addEventListener; }
+        });
+    };
     runAt(( ) => {
         proxyApplyFn('EventTarget.prototype.addEventListener', proxyFn);
-        if ( extraArgs.protect ) {
-            const { addEventListener } = EventTarget.prototype;
-            Object.defineProperty(EventTarget.prototype, 'addEventListener', {
-                set() { },
-                get() { return addEventListener; }
-            });
+        if ( extraArgs.protect ) { protect(EventTarget.prototype); }
+        if ( Object.hasOwn(document, 'addEventListener') ) {
+            proxyApplyFn('document.addEventListener', proxyFn);
+            if ( extraArgs.protect ) { protect(document); }
         }
-        proxyApplyFn('document.addEventListener', proxyFn);
-        if ( extraArgs.protect ) {
-            const { addEventListener } = document;
-            Object.defineProperty(document, 'addEventListener', {
-                set() { },
-                get() { return addEventListener; }
-            });
+        if ( Object.hasOwn(window, 'addEventListener') ) {
+            proxyApplyFn('window.addEventListener', proxyFn);
+            if ( extraArgs.protect ) { protect(window); }
         }
     }, extraArgs.runAt);
 }
@@ -894,7 +854,8 @@ function preventFetchFn(
     trusted = false,
     propsToMatch = '',
     responseBody = '',
-    responseType = ''
+    responseType = '',
+    ...varargs
 ) {
     const safe = safeSelf();
     const setTimeout = self.setTimeout;
@@ -905,7 +866,7 @@ function preventFetchFn(
         responseBody,
         responseType
     );
-    const extraArgs = safe.getExtraArgs(Array.from(arguments), 4);
+    const extraArgs = safe.parseVarargs(varargs);
     const propNeedles = parsePropertiesToMatchFn(propsToMatch, 'url');
     const validResponseProps = {
         ok: [ false, true ],
@@ -1026,7 +987,7 @@ function preventSetTimeout(
 }
 
 function preventXhr(...args) {
-    return preventXhrFn(false, ...args);
+    preventXhrFn(false, ...args);
 }
 
 function preventXhrFn(
@@ -1199,7 +1160,8 @@ function preventXhrFn(
 
 function proxyApplyFn(
     target = '',
-    handler = ''
+    handler = '',
+    options = {}
 ) {
     let context = globalThis;
     let prop = target;
@@ -1260,20 +1222,22 @@ function proxyApplyFn(
         };
         proxyApplyFn.isCtor = new Map();
         proxyApplyFn.proxies = new WeakMap();
-        proxyApplyFn.nativeToString = Function.prototype.toString;
-        const proxiedToString = new Proxy(Function.prototype.toString, {
-            apply(target, thisArg) {
-                let proxied = thisArg;
-                for(;;) {
-                    const fn = proxyApplyFn.proxies.get(proxied);
-                    if ( fn === undefined ) { break; }
-                    proxied = fn;
+        if ( (options.skipToString || proxyApplyFn.skipToString) !== true ) {
+            proxyApplyFn.nativeToString = Function.prototype.toString;
+            const proxiedToString = new Proxy(Function.prototype.toString, {
+                apply(target, thisArg) {
+                    let proxied = thisArg;
+                    for(;;) {
+                        const fn = proxyApplyFn.proxies.get(proxied);
+                        if ( fn === undefined ) { break; }
+                        proxied = fn;
+                    }
+                    return proxyApplyFn.nativeToString.call(proxied);
                 }
-                return proxyApplyFn.nativeToString.call(proxied);
-            }
-        });
-        proxyApplyFn.proxies.set(proxiedToString, proxyApplyFn.nativeToString);
-        Function.prototype.toString = proxiedToString;
+            });
+            proxyApplyFn.proxies.set(proxiedToString, proxyApplyFn.nativeToString);
+            Function.prototype.toString = proxiedToString;
+        }
     }
     if ( proxyApplyFn.isCtor.has(target) === false ) {
         proxyApplyFn.isCtor.set(target, fn.prototype?.constructor === fn);
@@ -1407,8 +1371,8 @@ function runAtHtmlElementFn(fn) {
 }
 
 function safeSelf() {
-    if ( scriptletGlobals.safeSelf ) {
-        return scriptletGlobals.safeSelf;
+    if ( safeSelf.safe ) {
+        return safeSelf.safe;
     }
     const self = globalThis;
     const safe = {
@@ -1513,21 +1477,20 @@ function safeSelf() {
             }
             return /^/;
         },
-        getExtraArgs(args, offset = 0) {
-            const entries = args.slice(offset).reduce((out, v, i, a) => {
-                if ( (i & 1) === 0 ) {
-                    const rawValue = a[i+1];
-                    const value = /^\d+$/.test(rawValue)
-                        ? parseInt(rawValue, 10)
-                        : rawValue;
-                    out.push([ a[i], value ]);
-                }
+        parseVarargs(varargs) {
+            const entries = varargs.reduce((out, v, i, a) => {
+                if ( i & 1 ) { return out; }
+                const rawValue = a[i+1];
+                const value = /^\d+$/.test(rawValue)
+                    ? parseInt(rawValue, 10)
+                    : rawValue;
+                out.push([ a[i], value ]);
                 return out;
             }, []);
             return this.Object_fromEntries(entries);
         },
     };
-    scriptletGlobals.safeSelf = safe;
+    safeSelf.safe = safe;
     if ( scriptletGlobals.bcSecret === undefined ) { return safe; }
     // This is executed only when the logger is opened
     safe.logLevel = scriptletGlobals.logLevel || 1;
@@ -1594,12 +1557,13 @@ function setConstant(
 function setConstantFn(
     trusted = false,
     chain = '',
-    rawValue = ''
+    rawValue = '',
+    ...varargs
 ) {
     if ( chain === '' ) { return; }
     const safe = safeSelf();
     const logPrefix = safe.makeLogPrefix('set-constant', chain, rawValue);
-    const extraArgs = safe.getExtraArgs(Array.from(arguments), 3);
+    const extraArgs = safe.parseVarargs(varargs);
     function setConstant(chain, rawValue) {
         const trappedProp = (( ) => {
             const pos = chain.lastIndexOf('.');
@@ -1741,11 +1705,6 @@ function setConstantFn(
     }, extraArgs.runAt);
 }
 
-function shouldDebug(details) {
-    if ( details instanceof Object === false ) { return false; }
-    return scriptletGlobals.canDebug && details.debug;
-}
-
 function spoofCSS(
     selector,
     ...args
@@ -1864,6 +1823,79 @@ function spoofCSS(
     });
 }
 
+function trapPropertyFn(propChain, handler, options = {}) {
+    if ( propChain === '' ) { return; }
+    let owner = self;
+    let prop = propChain;
+    for (;;) {
+        const pos = prop.indexOf('.');
+        if ( pos === -1 ) { break; }
+        owner = owner[prop.slice(0, pos)];
+        if ( owner instanceof Object === false ) { return; }
+        prop = prop.slice(pos + 1);
+    }
+    const safe = safeSelf();
+    if ( trapPropertyFn.db === undefined ) {
+        trapPropertyFn.db = new WeakMap();
+        trapPropertyFn.entryFromContext = (owner, prop) => {
+            const handlers = trapPropertyFn.db.get(owner);
+            return handlers?.get(prop);
+        };
+        trapPropertyFn.getter = (owner, prop) => {
+            const entry = trapPropertyFn.entryFromContext(owner, prop);
+            if ( entry === undefined ) { return; }
+            let r = entry.value;
+            for ( const desc of entry.stack ) {
+                try { r = desc.get(); } catch (e) {
+                    if ( entry.canThrow ) { throw e; }
+                }
+            }
+            return r;
+        };
+        trapPropertyFn.setter = (owner, prop, value) => {
+            const entry = trapPropertyFn.entryFromContext(owner, prop);
+            if ( entry === undefined ) { return; }
+            entry.value = value;
+            for ( const desc of entry.stack ) {
+                try { desc.set(value); } catch (e) {
+                    if ( entry.canThrow ) { throw e; }
+                }
+            }
+        };
+    }
+    const { db } = trapPropertyFn;
+    const handlers = db.get(owner) || new Map();
+    if ( handlers.size === 0 ) {
+        db.set(owner, handlers);
+    }
+    const entry = handlers.get(prop) || {
+        value: owner[prop],
+        stack: [],
+    };
+    entry.stack.push(handler);
+    if ( entry.stack.length > 1 ) { return entry.value; }
+    Object.assign(entry, options);
+    handlers.set(prop, entry);
+    const desc = safe.Object_getOwnPropertyDescriptor(owner, prop);
+    if ( desc instanceof safe.Object ) {
+        if ( desc.get || desc.set ) {
+            entry.stack.push(desc);
+        }
+    }
+    try {
+        safe.Object_defineProperty(owner, prop, {
+            get() {
+                return trapPropertyFn.getter(owner, prop);
+            },
+            set(value) {
+                trapPropertyFn.setter(owner, prop, value);
+            }
+        });
+    } catch {
+    }
+    return entry.value;
+}
+
 function validateConstantFn(trusted, raw, extraArgs = {}) {
     const safe = safeSelf();
     let value;
@@ -1920,19 +1952,7 @@ function validateConstantFn(trusted, raw, extraArgs = {}) {
 
 const scriptletGlobals = {}; // eslint-disable-line
 
-const $scriptletFunctions$ = /* 16 */
-[preventFetch,preventSetTimeout,setConstant,preventAddEventListener,noEvalIf,spoofCSS,abortOnStackTrace,abortCurrentScript,removeAttr,abortOnPropertyRead,jsonPrune,preventXhr,adjustSetInterval,preventSetInterval,noWindowOpenIf,adjustSetTimeout];
-
-const $scriptletArgs$ = /* 178 */ ["adsbygoogle","pagead2.googlesyndication.com","aswift_","d.socdm.com","null===document.getElementById","1000","intersa.aspx","/adm\\.shinobi\\.jp\\/st\\/t\\.js/ method:HEAD mode:no-cors","navigator.brave","undefined","adsbygoogle.js","load","adBlockDetected","google_tag_manager","{}","adsbygoogle.pageState","1","広告","/pagead2\\.googlesyndication\\.com|metrics\\.streaks\\.jp|ads-twitter\\.com/","delayCheckA","delayCheckAB","myFunc","noopFunc","ins.adsbygoogle","display","block","Function.prototype.toString","/w/load.php?lang=ja&modules=codex-search-styles%2Cjquery%2Coojs%2C&skin=vector-2022&version=L58hf","()=>k(S(4","#mw-content-text div[style] a:is([href*=\"contents.fc2.com\"],[href*=\"dmm.co.jp\"])","font-size","14px","#mw-content-text div[style] a:is([href*=\"contents.fc2.com\"],[href*=\"dmm.co.jp\"]) img","height","128px","EventTarget.prototype.addEventListener","eval","href","a[style*=\"display:\"][href^=\"https://al.dmm.co.jp\"]","stay","return","style",".js-reward-target[style]","onload","google_esf","adBlockerDetected","false","DOMContentLoaded","interstitialAd","ad_flg ad_url data.adData data.adTagUrl","doubleclick.net","all520dddaaa2022ccc","true","oAdChk","tpc.googlesyndication.com","id","#div-gpt-ad-sidebottom","#div-gpt-ad-footer","#div-gpt-ad-pagebottom","#div-gpt-ad-relatedbottom-1","adsCount","/adsbygoogle|clientHeight/","cors","document.getElementById","_0x","cdn.adschill.com","document.querySelector","error","adscript-error","flgDisplay","adsbygoogle.loaded","gptScriptLoaded","AdBlockLimitation","objDef.resolve","class",".quigo","jQuery","decodeURIComponent","ads","result.ad_info","result.paths.[].ad_info","document.write","sitejack","document.createElement","overview","imageUrls","videoInstArea","$","google_ads_iframe_","","setTrigger","pum_vars","reward_countdown","ads_data","timerId",".cps-post-main a[href^=\"https://www.amazon.co.jp\"]","q2w3_sidebar(q2w3_sidebar_options","movie_cnt","300","document.referrer","gmo_bb","scroll","b.type","click","event","ads.[].imageUrl","document.currentScript","insertAdjacentHTML","fanza_link","floatingAd","playing","VAST_TARGET",".run()}","getAdCookie","tag","Math.random","addEventListener","style.display","simplegameAdCountDown","0.02","window[","jmp","Math","showPopUpBanner","hoihoi","lists","geoAvailable","$.popunder","data-popup-url","aeriaGamesAdCountDown","onclick","span > a[onclick]","visibility","4000","[native code]","2000","0.3","3000","0.25","0.2","FIRST_DELAY","0","NEXT_DELAY","sec","actress","myad","dataLayer.push","document.cookie.includes","#kk","skipcnt","0.001","waqool","/[Aa]dDiv|showVignette/","return r(!0)","IFTG","data.adData","/nrWrapper\\(\\)|n\\.setTimeoutIds_\\.has\\(i\\)/","10000","/adSkip|window\\.ADGMAD/","30000","return n(!0)","univresalP","isGGSurvey","enable_dl_after_countdown","props.initialProps.pageProps.pageData.brandingAds","wpsite_clickable_data","randomad","SU_Api.AdsTimer","-1","map_ad_bottom_height","Fixed","data.response.videoAds data.response.waku.tagRelatedBanner",".topentry_text a","registration_guide_modal","onmousedown","a[onmousedown^=\"this.href=\\\"//widgets.taxel.jp\"]","iframe[id^=\"google_ads_iframe\"]","TagProvider.cleanup"];
-
-const $scriptletArglists$ = /* 134 */ "0,0;0,1;1,2;1,0;0,3;1,4,5;1,6;0,7;2,8,9;0,10;3,11,12;2,13,14;2,15,16;4,17;0,18;3,11,19;3,11,20;2,21,22;5,23,24,25;6,26,27;1,28;5,29,30,31;5,32,33,34;7,35,36;8,37,38,39;1,40;8,41,42,39;7,43,44;9,12;2,45,46;3,47,48;10,49;11,50;2,51,52;1,53;0,54;8,55,56;8,55,57;8,55,58;8,55,59;7,43,60;7,8;1,61;0,1,52,62;7,63,64;3,11,60;1,64;0,65;7,66,64;3,67,68;2,69,46;2,70,52;2,71,52;9,72;1,73;2,12,22;8,74,75,39;7,76,77;10,78;10,79;10,80;7,81,82;7,83,84;7,63,85;3,11,86;7,87,88;3,89,90;2,91,9;12,92;2,93,14;12,94,5;8,37,95,39;13,96;1,97,98;7,99,100;14;2,81,22;3,101,102;3,103,104;10,105;7,106,107;9,108;7,76,109;3,110,111;12,112,5;1,113;7,114,115;1,109;7,116,117;15,118,5,119;3,47,120;7,121,122;3,47,123;4,124;7,63,125;2,126,52;2,127,22;8,128;15,129,89,119;8,130,131;15,132,133;15,134,135,136;15,134,137,138;15,134,133,139;2,140,141;2,142,141;2,143,141;7,144,145;7,146,147;8,37,148,39;12,149,5,150;3,103,151;3,47,152;1,153;7,106,154;10,155;15,156,157;15,158,159,150;1,160;2,161,22;2,162,52;2,163,52;10,164;9,165;7,83,166;2,167,168;2,169,141;3,47,170;10,171;8,37,172,39;3,47,173;8,174,175,39;8,33,176,39;2,177,22";
-
-const $scriptletArglistRefs$ = /* 220 */ "75;74;75,96,97;17;82,87;106;4,5,58,115,116;99;33;15;88;6;8,9;54;106;51;55;52;26;87;30;79;34;28;74;81;79;1;79;82,87;33;11,12;56;87;1;17;76;85;87;132;82;79;67;0;30,112;113;79;87;30;15;49,50;75;82,87;29;133;124;10;106;7;30;25;15;46,47,48;53;73;74;1;79;79;1;0;79;87;80;46;84;46;74;46;15;15,114;129;79;87;126;79;127;87;46;17;65,120,121;112;46;106;27;74;46;46;112;79;66;63,64;35,36,37,38,39;65,120,121;87;119;74;92;23,24;46;46;46;82;82,87;79;86;75;79;41;67;112;2;89;118;79;87;131;18;79;30;16;112;69;112;117;74;74;79;130;13;74;19,20,21,22;3;74;87;87;87;15;87;71;112;79;87;15;79;90;72;125;61,82,87,91;74;79;94;79;87;35,36,37,38,39;68;75,83;128;61;79;62;79;15;15;82;87;107;109;87;111;120,121;77;78;57;82;79;122;74;95;1;123;3;46;31,32;82;75;40,45;42,43;1,44;93;87;14;82;79;93;98;93;1;58,59,60;42,43;108;79;88;117;117;100,101,102,103,104,105;110;70;79;117";
-
-const $scriptletHostnames$ = /* 220 */ ["asg.to","h1g.jp","wav.tv","xth.jp","blog.jp","cmnw.jp","tver.jp","380cc.cc","520cc.cc","h178.com","javmix.*","r326.com","rkd3.dev","crefan.jp","dotti2.jp","g-pc.info","h-ken.net","intaa.net","jprime.jp","ldblog.jp","memo.wiki","misskey.*","o-dan.net","pointi.jp","riajo.com","shico.xyz","sushi.ski","tojav.net","trpger.us","2chblog.jp","520call.me","aimomo.net","coron.tech","ebitsu.net","gunauc.net","in-jpn.com","jav380.com","javcup.com","jisaka.com","kojodan.jp","nwknews.jp","p1.a9z.dev","pictab.art","rxlife.net","seesaa.net","twiman.net","uneune.one","vipnews.jp","beasoku.com","best-hit.tv","coolpan.net","dl.520cc.cc","doorblog.jp","egotter.com","famitsu.com","figsoku.net","gigafile.nu","gotouchi.jp","himachat.jp","kakenhi.net","kotobank.jp","localch.net","manga1001.*","modalina.jp","nan-net.com","nkreport.jp","pc.moppy.jp","posskey.com","redfuku.com","shihiro.com","spotvnow.jp","warpday.net","46matome.net","agora-web.jp","ap-siken.com","collepic.net","db-siken.com","engineweb.jp","fe-siken.com","j-rugby.club","jukenbbs.com","kokopyon.net","labo.wovs.tk","livedoor.biz","mapion.co.jp","mk.yopo.work","negisoku.com","norisoku.com","nw-siken.com","oninet.ne.jp","photo-ac.com","playing.wiki","pm-siken.com","pochitto2.jp","qa.crefan.jp","realsound.jp","sc-siken.com","sg-siken.com","sokuhou.wiki","takusuki.com","twidouga.net","twivideo.net","youpouch.com","ac-illust.com","animesoku.com","ddd-smart.net","encount.press","ero-video.net","exploader.net","fp1-siken.com","fp2-siken.com","fp3-siken.com","gundamlog.com","livedoor.blog","m.eskey.click","majikichi.com","motimoti3d.jp","msk.ilnk.info","musenboya.com","onagazou.info","seesaawiki.jp","si-coding.net","simplegame.jp","skebetter.com","uttaeruyo.com","vtubernews.jp","www.ohk.co.jp","yourfones.net","zadankai.club","addchannel.net","bm.best-hit.tv","chronicle.wiki","fashionpost.jp","game-info.wiki","kantangame.com","kenshonavi.com","maidonanews.jp","misskirara.net","news.mynavi.jp","pokegonews.net","trafficnews.jp","wiki.yjsnpi.nu","yomury.blog.jp","yougakumap.com","all-nationz.com","fiveslot777.com","giants-news.com","j-baseball.club","kijyomatome.com","lifematome.blog","mindhack2ch.com","misskeytsf.love","momoclonews.com","shukatsubbs.com","stormskey.works","tokyomotion.net","yaraon-blog.com","azby.fmworld.net","blog.livedoor.jp","chibanippo.co.jp","live-theater.net","momoiroadult.com","msk.kitamiss.com","oumaga-times.com","rocketnews24.com","shindanmaker.com","uraaka-joshi.com","www.nicovideo.jp","akibablog.blog.jp","empire.miyaco.moe","erommd-street.com","ikaskey.bktsk.com","j-basketball.club","j-volleyball.club","kijomatomelog.com","konoyubitomare.jp","matome-geinou.net","mekomeko-club.icu","openworldnews.net","shinshi-manga.net","silhouette-ac.com","anacap.doorblog.jp","anianierosuki.work","connect.coron.tech","digital-thread.com","misskey.secinet.jp","search.yahoo.co.jp","searchkoreanews.jp","sonae.sankei.co.jp","success-corp.co.jp","automaton-media.com","girlsvip-matome.com","itpassportsiken.com","lemino.docomo.ne.jp","nandemo-uketori.com","trendynailwraps.com","blog-and-destroy.com","gamemod.blog.fc2.com","kledgeb.blogspot.com","mjoato3uion.ky-3.net","pachinkopachisro.com","video.tv-tokyo.co.jp","yugioh-starlight.com","misskey.resonite.love","ov53i9il.blog.fc2.com","minigame.aeriagames.jp","qaacacthlive.omaww.net","audio-sound-premium.com","sports.tv.rakuten.co.jp","helpsupport.blog.fc2.com","news.denfaminicogamer.jp","signalskey.signal-st.com","xn--gmq92kd2rm1kx34a.com","game.pointmall.rakuten.net","chance.enjoy.point.auone.jp","ponta.abstractpainting.work","portal.game.success-corp.jp","portal.game.sycasualgames.com","nukers-misskey.hpc-densi.f5.si","game.hiroba.dpoint.docomo.ne.jp"];
-
-const $scriptletFromRegexes$ = /* 0 */ [];
-
+const $hasHostnames$ = true;
 const $hasEntities$ = true;
 const $hasAncestors$ = false;
 const $hasRegexes$ = false;
@@ -1951,18 +1971,22 @@ const entries = (( ) => {
         const hn1 = origin.slice(beg+3)
         const end = hn1.indexOf(':');
         const hn2 = end === -1 ? hn1 : hn1.slice(0, end);
-        const hnParts = hn2.split('.');
         if ( hn2.length === 0 ) { return; }
-        const hns = [];
-        for ( let i = 0; i < hnParts.length; i++ ) {
-            hns.push(`${hnParts.slice(i).join('.')}`);
+        const hns = [ hn2 ];
+        for ( let pos = 0; ; ) {
+            pos = hn2.indexOf('.', pos) + 1;
+            if ( pos === 0 ) { break; }
+            hns.push(hn2.slice(pos));
         }
+        hns.push('*');
         const ens = [];
         if ( $hasEntities$ ) {
-            const n = hnParts.length - 1;
-            for ( let i = 0; i < n; i++ ) {
-                for ( let j = n; j > i; j-- ) {
-                    ens.push(`${hnParts.slice(i,j).join('.')}.*`);
+            for ( let hn of hns ) {
+                for (;;) {
+                    const pos = hn.lastIndexOf('.');
+                    if ( pos === -1 ) { break; }
+                    hn = hn.slice(0, pos);
+                    ens.push(`${hn}.*`);
                 }
             }
             ens.sort((a, b) => {
@@ -1972,12 +1996,14 @@ const entries = (( ) => {
             });
         }
         return { hns, ens, i };
-    }).filter(a => a !== undefined);
+    }).filter(a => a);
 })();
 if ( entries.length === 0 ) { return; }
 
-const todoIndices = new Set();
-if ( $scriptletHostnames$.length ) {
+const todo = new Set();
+
+if ( $hasHostnames$ ) {
+    const $scriptletHostnames$ = /* 225 */ ["asg.to","h1g.jp","wav.tv","xth.jp","blog.jp","cmnw.jp","tver.jp","380cc.cc","520cc.cc","h178.com","javmix.*","r326.com","rkd3.dev","crefan.jp","dotti2.jp","g-pc.info","h-ken.net","intaa.net","jprime.jp","ldblog.jp","memo.wiki","misskey.*","o-dan.net","pointi.jp","riajo.com","shico.xyz","sushi.ski","tojav.net","trpger.us","2chblog.jp","520call.me","aimomo.net","coron.tech","ebitsu.net","gunauc.net","in-jpn.com","jav380.com","javcup.com","jisaka.com","kojodan.jp","nwknews.jp","p1.a9z.dev","pictab.art","rxlife.net","seesaa.net","twiman.net","uneune.one","vipnews.jp","beasoku.com","best-hit.tv","coolpan.net","dl.520cc.cc","doorblog.jp","egotter.com","famitsu.com","figsoku.net","gigafile.nu","gotouchi.jp","himachat.jp","kakenhi.net","kotobank.jp","localch.net","manga1001.*","modalina.jp","nan-net.com","nkreport.jp","pc.moppy.jp","posskey.com","rawfree.top","redfuku.com","shihiro.com","spotvnow.jp","warpday.net","46matome.net","agora-web.jp","ap-siken.com","collepic.net","db-siken.com","engineweb.jp","fe-siken.com","j-rugby.club","jukenbbs.com","kokopyon.net","labo.wovs.tk","livedoor.biz","mangaruu.com","mapion.co.jp","mk.yopo.work","negisoku.com","norisoku.com","nw-siken.com","oninet.ne.jp","photo-ac.com","playing.wiki","pm-siken.com","pochitto2.jp","qa.crefan.jp","realsound.jp","sc-siken.com","sg-siken.com","sokuhou.wiki","takusuki.com","twidouga.net","twivideo.net","youpouch.com","ac-illust.com","animesoku.com","ddd-smart.net","encount.press","ero-video.net","exploader.net","fp1-siken.com","fp2-siken.com","fp3-siken.com","gundamlog.com","livedoor.blog","m.eskey.click","majikichi.com","motimoti3d.jp","msk.ilnk.info","musenboya.com","onagazou.info","seesaawiki.jp","si-coding.net","simplegame.jp","skebetter.com","suki-kira.com","uttaeruyo.com","vtubernews.jp","www.ohk.co.jp","yourfones.net","zadankai.club","addchannel.net","bm.best-hit.tv","chronicle.wiki","fashionpost.jp","game-info.wiki","kantangame.com","kenshonavi.com","maidonanews.jp","misskirara.net","news.mynavi.jp","pokegonews.net","trafficnews.jp","wiki.yjsnpi.nu","yomury.blog.jp","yougakumap.com","all-nationz.com","fiveslot777.com","giants-news.com","j-baseball.club","kijyomatome.com","lifematome.blog","mindhack2ch.com","misskeytsf.love","momoclonews.com","shukatsubbs.com","stormskey.works","tokyomotion.net","yaraon-blog.com","azby.fmworld.net","blog.livedoor.jp","chibanippo.co.jp","live-theater.net","momoiroadult.com","msk.kitamiss.com","oumaga-times.com","rocketnews24.com","shindanmaker.com","uraaka-joshi.com","www.nicovideo.jp","akibablog.blog.jp","empire.miyaco.moe","erommd-street.com","ikaskey.bktsk.com","j-basketball.club","j-volleyball.club","kijomatomelog.com","konoyubitomare.jp","matome-geinou.net","mekomeko-club.icu","openworldnews.net","shinshi-manga.net","silhouette-ac.com","anacap.doorblog.jp","anianierosuki.work","connect.coron.tech","digital-thread.com","misskey.secinet.jp","search.yahoo.co.jp","searchkoreanews.jp","sonae.sankei.co.jp","success-corp.co.jp","automaton-media.com","girlsvip-matome.com","itpassportsiken.com","lemino.docomo.ne.jp","nandemo-uketori.com","trendynailwraps.com","blog-and-destroy.com","gamemod.blog.fc2.com","kledgeb.blogspot.com","mjoato3uion.ky-3.net","pachinkopachisro.com","video.tv-tokyo.co.jp","yugioh-starlight.com","gakudohoiku.gaccom.jp","misskey.resonite.love","ov53i9il.blog.fc2.com","minigame.aeriagames.jp","qaacacthlive.omaww.net","audio-sound-premium.com","sports.tv.rakuten.co.jp","helpsupport.blog.fc2.com","news.denfaminicogamer.jp","signalskey.signal-st.com","xn--gmq92kd2rm1kx34a.com","game.pointmall.rakuten.net","chance.enjoy.point.auone.jp","ponta.abstractpainting.work","portal.game.success-corp.jp","portal.game.sycasualgames.com","nukers-misskey.hpc-densi.f5.si","game.hiroba.dpoint.docomo.ne.jp","skyscrapers-and-urbandevelopment.com"];
     const collectArglistRefIndices = (out, hn, r) => {
         let l = 0, i = 0, d = 0;
         let candidate = '';
@@ -2012,6 +2038,7 @@ if ( $scriptletHostnames$.length ) {
             }
         }
     };
+    const todoIndices = new Set();
     indicesFromHostname(todoIndices, entries[0]);
     if ( $hasAncestors$ ) {
         for ( const entry of entries ) {
@@ -2019,20 +2046,20 @@ if ( $scriptletHostnames$.length ) {
             indicesFromHostname(todoIndices, entry, '>>');
         }
     }
-    $scriptletHostnames$.length = 0;
-}
-
-// Collect arglist references
-const todo = new Set();
-if ( todoIndices.size !== 0 ) {
-    const arglistRefs = $scriptletArglistRefs$.split(';');
-    for ( const i of todoIndices ) {
-        for ( const ref of JSON.parse(`[${arglistRefs[i]}]`) ) {
-            todo.add(ref);
+    // Collect arglist references
+    if ( todoIndices.size ) {
+        const $scriptletArglistRefs$ = /* 225 */ "77;76;77,98,99;19;84,89;108;6,7,60,118,119;101;35;17;90;8;10,11;56;108;53;57;54;28;89;32;81;36;30;76;83;81;3;81;84,89;35;13,14;58;89;3;19;78;87;89;136;84;81;69;4;32,115;116;81;89;32;17;51,52;77;84,89;31;137;127;12;108;9;32;27;17;48,49,50;55;75;76;3;81;1;81;3;4;81;89;82;48;86;48;76;48;17;17,117;133;81;89;3;129;81;130;89;48;19;67,123,124;115;48;108;29;76;48;48;115;81;68;65,66;37,38,39,40,41;67,123,124;89;122;76;94;25,26;48;48;48;84;84,89;81;88;77;81;43;69;115;5;91;121;109;81;89;135;20;81;32;18;115;71;115;120;76;76;81;134;15;76;21,22,23,24;1;76;89;89;89;17;89;73;115;81;89;17;81;92;74;128;63,84,89,93;76;81;96;81;89;37,38,39,40,41;70;77,85;131;63;81;64;81;17;17;84;89;110;112;89;114;123,124;79;80;59;84;81;125;76;97;3;126;1;48;33,34;84;77;42,47;44,45;3,46;95;89;16;84;132;81;95;100;95;3;60,61,62;44,45;111;81;90;120;120;102,103,104,105,106,107;113;72;81;120;2";
+        const arglistRefs = $scriptletArglistRefs$.split(';');
+        for ( const i of todoIndices ) {
+            for ( const ref of JSON.parse(`[${arglistRefs[i]}]`) ) {
+                todo.add(ref);
+            }
         }
     }
 }
+
 if ( $hasRegexes$ ) {
+    const $scriptletFromRegexes$ = /* 0 */ [];
     const { hns } = entries[0];
     for ( let i = 0, n = $scriptletFromRegexes$.length; i < n; i += 3 ) {
         const needle = $scriptletFromRegexes$[i+0];
@@ -2049,10 +2076,13 @@ if ( $hasRegexes$ ) {
         }
     }
 }
-if ( todo.size === 0 ) { return; }
 
-// Execute scriplets
-{
+// Execute scriptlets
+if ( todo.size && todo.has(0) === false ) {
+    const $scriptletFunctions$ = /* 16 */
+[preventSetTimeout,preventAddEventListener,preventFetch,setConstant,noEvalIf,spoofCSS,abortOnStackTrace,abortCurrentScript,removeAttr,abortOnPropertyRead,jsonPrune,preventXhr,adjustSetInterval,preventSetInterval,noWindowOpenIf,adjustSetTimeout];
+    const $scriptletArgs$ = /* 181 */ ["adsbygoogle","DOMContentLoaded","isAllowedBrowser","pagead2.googlesyndication.com","aswift_","d.socdm.com","null===document.getElementById","1000","intersa.aspx","/adm\\.shinobi\\.jp\\/st\\/t\\.js/ method:HEAD mode:no-cors","navigator.brave","undefined","adsbygoogle.js","load","adBlockDetected","google_tag_manager","{}","adsbygoogle.pageState","1","広告","/pagead2\\.googlesyndication\\.com|metrics\\.streaks\\.jp|ads-twitter\\.com/","delayC","delayCheckAB","myFunc","noopFunc","ins.adsbygoogle","display","block","Function.prototype.toString","/w/load.php?lang=ja&modules=codex-search-styles%2Cjquery%2Coojs%2C&skin=vector-2022&version=L58hf","()=>k(S(4","#mw-content-text div[style] a:is([href*=\"contents.fc2.com\"],[href*=\"dmm.co.jp\"])","font-size","14px","#mw-content-text div[style] a:is([href*=\"contents.fc2.com\"],[href*=\"dmm.co.jp\"]) img","height","128px","EventTarget.prototype.addEventListener","eval","href","a[style*=\"display:\"][href^=\"https://al.dmm.co.jp\"]","stay","return","style",".js-reward-target[style]","onload","google_esf","adBlockerDetected","false","interstitialAd","ad_flg ad_url data.adData data.adTagUrl","doubleclick.net","all520dddaaa2022ccc","true","oAdChk","tpc.googlesyndication.com","id","#div-gpt-ad-sidebottom","#div-gpt-ad-footer","#div-gpt-ad-pagebottom","#div-gpt-ad-relatedbottom-1","adsCount","/adsbygoogle|clientHeight/","cors","document.getElementById","_0x","cdn.adschill.com","document.querySelector","error","adscript-error","flgDisplay","adsbygoogle.loaded","gptScriptLoaded","AdBlockLimitation","objDef.resolve","class",".quigo","jQuery","decodeURIComponent","ads","result.ad_info","result.paths.[].ad_info","document.write","sitejack","document.createElement","overview","imageUrls","videoInstArea","$","google_ads_iframe_","","setTrigger","pum_vars","reward_countdown","ads_data","timerId",".cps-post-main a[href^=\"https://www.amazon.co.jp\"]","q2w3_sidebar(q2w3_sidebar_options","movie_cnt","300","document.referrer","gmo_bb","scroll","b.type","click","event","ads.[].imageUrl","document.currentScript","insertAdjacentHTML","fanza_link","floatingAd","playing","VAST_TARGET",".run()}","getAdCookie","tag","Math.random","addEventListener","style.display","simplegameAdCountDown","0.02","window[","jmp","Math","showPopUpBanner","hoihoi","lists","geoAvailable","$.popunder","data-popup-url","aeriaGamesAdCountDown","onclick","span > a[onclick]","visibility","4000","[native code]","2000","0.3","3000","0.25","0.2","FIRST_DELAY","0","NEXT_DELAY","sec","#close-ad","actress","myad","dataLayer.push","document.cookie.includes","#kk","skipcnt","0.001","waqool","/[Aa]dDiv|showVignette/","return r(!0)","IFTG","data.adData","/nrWrapper\\(\\)|n\\.setTimeoutIds_\\.has\\(i\\)/","10000","/adSkip|window\\.ADGMAD/","30000","return n(!0)","univresalP","isGGSurvey","enable_dl_after_countdown","props.initialProps.pageProps.pageData.brandingAds","wpsite_clickable_data","randomad","SU_Api.AdsTimer","-1","map_ad_bottom_height","Fixed","data.response.videoAds data.response.waku.tagRelatedBanner","kyujin_box juku",".topentry_text a","registration_guide_modal","onmousedown","a[onmousedown^=\"this.href=\\\"//widgets.taxel.jp\"]","iframe[id^=\"google_ads_iframe\"]","TagProvider.cleanup"];
+    const $scriptletArglists$ = /* 138 */ ";0,0;1,1,2;2,3;2,0;0,4;2,5;0,6,7;0,8;2,9;3,10,11;2,12;1,13,14;3,15,16;3,17,18;4,19;2,20;1,13,21;1,13,22;3,23,24;5,25,26,27;6,28,29;0,30;5,31,32,33;5,34,35,36;7,37,38;8,39,40,41;0,42;8,43,44,41;7,45,46;9,14;3,47,48;1,1,49;10,50;11,51;3,52,53;0,54;2,55;8,56,57;8,56,58;8,56,59;8,56,60;7,45,61;7,10;0,62;2,3,53,63;7,64,65;1,13,61;0,65;2,66;7,67,65;1,68,69;3,70,48;3,71,53;3,72,53;9,73;0,74;3,14,24;8,75,76,41;7,77,78;10,79;10,80;10,81;7,82,83;7,84,85;7,64,86;1,13,87;7,88,89;1,90,91;3,92,11;12,93;3,94,16;12,95,7;8,39,96,41;13,97;0,98,99;7,100,101;14;3,82,24;1,102,103;1,104,105;10,106;7,107,108;9,109;7,77,110;1,111,112;12,113,7;0,114;7,115,116;0,110;7,117,118;15,119,7,120;1,1,121;7,122,123;1,1,124;4,125;7,64,126;3,127,53;3,128,24;8,129;15,130,90,120;8,131,132;15,133,134;15,135,136,137;15,135,138,139;15,135,134,140;3,141,142;3,143,142;3,144,142;12,145,7;7,146,147;7,148,149;8,39,150,41;12,151,7,152;1,104,153;1,1,154;0,155;7,107,156;10,157;15,158,159;15,160,161,152;0,162;3,163,24;3,164,53;3,165,53;10,166;9,167;7,84,168;3,169,170;3,171,142;1,1,172;10,173;10,174;8,39,175,41;1,1,176;8,177,178,41;8,35,179,41;3,180,24";
     const arglists = $scriptletArglists$.split(';');
     const args = $scriptletArgs$;
     for ( const ref of todo ) {

@@ -1118,12 +1118,19 @@ fn webview_args(settings: &config::AppSettings) -> String {
     // built-in PDF viewer render blank/stuck, breaking file:// PDF tabs (the "Read PDF"
     // feature). Keeping it enabled also restores the PDF toolbar (zoom/print/download).
     // "msWebOOUI" only governs web overlay UI (web capture/select) and is safe to disable.
+    // DeviceBoundSessions / EnableBoundSessionCredentials run inside the network service and
+    // only Google properties exercise them today. In an embedded WebView2 host the binding can
+    // never complete - `Network/Device Bound Sessions` stays empty - and the network service
+    // aborts with 0x80000003 on signed-in Google traffic, which is where every observed crash
+    // came from. Turning them off costs nothing here because the feature was never working.
     let disable_features = vec![
         "msWebOOUI".to_string(),
         "msSmartScreenProtection".to_string(),
         "SleepingTabs".to_string(),
         "AutoDiscardTabs".to_string(),
         "CalculateNativeWinOcclusion".to_string(),
+        "DeviceBoundSessions".to_string(),
+        "EnableBoundSessionCredentials".to_string(),
     ];
     let mut enable_features = vec!["ParallelDownloading".to_string()];
     let total_mb = crate::utils::sysinfo::total_memory_mb();

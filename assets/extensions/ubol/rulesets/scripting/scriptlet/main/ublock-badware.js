@@ -141,28 +141,7 @@ function abortCurrentScriptFn(
     const logPrefix = safe.makeLogPrefix('abort-current-script', target, needle, context);
     const reNeedle = safe.patternToRegex(needle);
     const reContext = safe.patternToRegex(context);
-    const extraArgs = safe.getExtraArgs(Array.from(arguments), 3);
     const thisScript = document.currentScript;
-    const chain = safe.String_split.call(target, '.');
-    let owner = window;
-    let prop;
-    for (;;) {
-        prop = chain.shift();
-        if ( chain.length === 0 ) { break; }
-        if ( prop in owner === false ) { break; }
-        owner = owner[prop];
-        if ( owner instanceof Object === false ) { return; }
-    }
-    let value;
-    let desc = Object.getOwnPropertyDescriptor(owner, prop);
-    if (
-        desc instanceof Object === false ||
-        desc.get instanceof Function === false
-    ) {
-        value = owner[prop];
-        desc = undefined;
-    }
-    const debug = shouldDebug(extraArgs);
     const exceptionToken = getExceptionTokenFn();
     const scriptTexts = new WeakMap();
     const textContentGetter = Object.getOwnPropertyDescriptor(Node.prototype, 'textContent').get;
@@ -170,8 +149,7 @@ function abortCurrentScriptFn(
         let text = textContentGetter.call(elem);
         if ( text.trim() !== '' ) { return text; }
         if ( scriptTexts.has(elem) ) { return scriptTexts.get(elem); }
-        const [ , mime, content ] =
-            /^data:([^,]*),(.+)$/.exec(elem.src.trim()) ||
+        const [ , mime, content ] = /^data:([^,]*),(.+)$/.exec(elem.src.trim()) ||
             [ '', '', '' ];
         try {
             switch ( true ) {
@@ -191,60 +169,39 @@ function abortCurrentScriptFn(
         const e = document.currentScript;
         if ( e instanceof HTMLScriptElement === false ) { return; }
         if ( e === thisScript ) { return; }
-        if ( context !== '' && reContext.test(e.src) === false ) {
-            // eslint-disable-next-line no-debugger
-            if ( debug === 'nomatch' || debug === 'all' ) { debugger; }
-            return;
-        }
+        if ( context !== '' && reContext.test(e.src) === false ) { return; }
         if ( safe.logLevel > 1 && context !== '' ) {
             safe.uboLog(logPrefix, `Matched src\n${e.src}`);
         }
         const scriptText = getScriptText(e);
-        if ( reNeedle.test(scriptText) === false ) {
-            // eslint-disable-next-line no-debugger
-            if ( debug === 'nomatch' || debug === 'all' ) { debugger; }
-            return;
-        }
+        if ( reNeedle.test(scriptText) === false ) { return; }
         if ( safe.logLevel > 1 ) {
             safe.uboLog(logPrefix, `Matched text\n${scriptText}`);
         }
-        // eslint-disable-next-line no-debugger
-        if ( debug === 'match' || debug === 'all' ) { debugger; }
         safe.uboLog(logPrefix, 'Aborted');
         throw new ReferenceError(exceptionToken);
     };
-    // eslint-disable-next-line no-debugger
-    if ( debug === 'install' ) { debugger; }
-    try {
-        Object.defineProperty(owner, prop, {
-            get: function() {
-                validate();
-                return desc instanceof Object
-                    ? desc.get.call(owner)
-                    : value;
-            },
-            set: function(a) {
-                validate();
-                if ( desc instanceof Object ) {
-                    desc.set.call(owner, a);
-                } else {
-                    value = a;
-                }
-            }
-        });
-    } catch(ex) {
-        safe.uboErr(logPrefix, `Error: ${ex}`);
-    }
+    let currentValue = trapPropertyFn(target, {
+        get: function() {
+            validate();
+            return currentValue;
+        },
+        set: function(a) {
+            validate();
+            currentValue = a;
+        }
+    }, { canThrow: true });
 }
 
 function abortOnStackTrace(
     chain = '',
-    needle = ''
+    needle = '',
+    ...varargs
 ) {
     if ( typeof chain !== 'string' ) { return; }
     const safe = safeSelf();
     const needleDetails = safe.initPattern(needle, { canNegate: true });
-    const extraArgs = safe.getExtraArgs(Array.from(arguments), 2);
+    const extraArgs = safe.parseVarargs(varargs);
     if ( needle === '' ) { extraArgs.log = 'all'; }
     const makeProxy = function(owner, chain) {
         const pos = chain.indexOf('.');
@@ -399,10 +356,11 @@ function parseReplaceFn(s) {
 
 function preventAddEventListener(
     type = '',
-    pattern = ''
+    pattern = '',
+    ...varargs
 ) {
     const safe = safeSelf();
-    const extraArgs = safe.getExtraArgs(Array.from(arguments), 2);
+    const extraArgs = safe.parseVarargs(varargs);
     const logPrefix = safe.makeLogPrefix('prevent-addEventListener', type, pattern);
     const reType = safe.patternToRegex(type, undefined, true);
     const rePattern = safe.patternToRegex(pattern);
@@ -469,29 +427,31 @@ function preventAddEventListener(
         }
         return context.reflect();
     };
+    const protect = owner => {
+        const { addEventListener } = owner;
+        Object.defineProperty(owner, 'addEventListener', {
+            set() { },
+            get() { return addEventListener; }
+        });
+    };
     runAt(( ) => {
         proxyApplyFn('EventTarget.prototype.addEventListener', proxyFn);
-        if ( extraArgs.protect ) {
-            const { addEventListener } = EventTarget.prototype;
-            Object.defineProperty(EventTarget.prototype, 'addEventListener', {
-                set() { },
-                get() { return addEventListener; }
-            });
+        if ( extraArgs.protect ) { protect(EventTarget.prototype); }
+        if ( Object.hasOwn(document, 'addEventListener') ) {
+            proxyApplyFn('document.addEventListener', proxyFn);
+            if ( extraArgs.protect ) { protect(document); }
         }
-        proxyApplyFn('document.addEventListener', proxyFn);
-        if ( extraArgs.protect ) {
-            const { addEventListener } = document;
-            Object.defineProperty(document, 'addEventListener', {
-                set() { },
-                get() { return addEventListener; }
-            });
+        if ( Object.hasOwn(window, 'addEventListener') ) {
+            proxyApplyFn('window.addEventListener', proxyFn);
+            if ( extraArgs.protect ) { protect(window); }
         }
     }, extraArgs.runAt);
 }
 
 function proxyApplyFn(
     target = '',
-    handler = ''
+    handler = '',
+    options = {}
 ) {
     let context = globalThis;
     let prop = target;
@@ -552,20 +512,22 @@ function proxyApplyFn(
         };
         proxyApplyFn.isCtor = new Map();
         proxyApplyFn.proxies = new WeakMap();
-        proxyApplyFn.nativeToString = Function.prototype.toString;
-        const proxiedToString = new Proxy(Function.prototype.toString, {
-            apply(target, thisArg) {
-                let proxied = thisArg;
-                for(;;) {
-                    const fn = proxyApplyFn.proxies.get(proxied);
-                    if ( fn === undefined ) { break; }
-                    proxied = fn;
+        if ( (options.skipToString || proxyApplyFn.skipToString) !== true ) {
+            proxyApplyFn.nativeToString = Function.prototype.toString;
+            const proxiedToString = new Proxy(Function.prototype.toString, {
+                apply(target, thisArg) {
+                    let proxied = thisArg;
+                    for(;;) {
+                        const fn = proxyApplyFn.proxies.get(proxied);
+                        if ( fn === undefined ) { break; }
+                        proxied = fn;
+                    }
+                    return proxyApplyFn.nativeToString.call(proxied);
                 }
-                return proxyApplyFn.nativeToString.call(proxied);
-            }
-        });
-        proxyApplyFn.proxies.set(proxiedToString, proxyApplyFn.nativeToString);
-        Function.prototype.toString = proxiedToString;
+            });
+            proxyApplyFn.proxies.set(proxiedToString, proxyApplyFn.nativeToString);
+            Function.prototype.toString = proxiedToString;
+        }
     }
     if ( proxyApplyFn.isCtor.has(target) === false ) {
         proxyApplyFn.isCtor.set(target, fn.prototype?.constructor === fn);
@@ -627,8 +589,8 @@ function runAtHtmlElementFn(fn) {
 }
 
 function safeSelf() {
-    if ( scriptletGlobals.safeSelf ) {
-        return scriptletGlobals.safeSelf;
+    if ( safeSelf.safe ) {
+        return safeSelf.safe;
     }
     const self = globalThis;
     const safe = {
@@ -733,21 +695,20 @@ function safeSelf() {
             }
             return /^/;
         },
-        getExtraArgs(args, offset = 0) {
-            const entries = args.slice(offset).reduce((out, v, i, a) => {
-                if ( (i & 1) === 0 ) {
-                    const rawValue = a[i+1];
-                    const value = /^\d+$/.test(rawValue)
-                        ? parseInt(rawValue, 10)
-                        : rawValue;
-                    out.push([ a[i], value ]);
-                }
+        parseVarargs(varargs) {
+            const entries = varargs.reduce((out, v, i, a) => {
+                if ( i & 1 ) { return out; }
+                const rawValue = a[i+1];
+                const value = /^\d+$/.test(rawValue)
+                    ? parseInt(rawValue, 10)
+                    : rawValue;
+                out.push([ a[i], value ]);
                 return out;
             }, []);
             return this.Object_fromEntries(entries);
         },
     };
-    scriptletGlobals.safeSelf = safe;
+    safeSelf.safe = safe;
     if ( scriptletGlobals.bcSecret === undefined ) { return safe; }
     // This is executed only when the logger is opened
     safe.logLevel = scriptletGlobals.logLevel || 1;
@@ -805,21 +766,90 @@ function safeSelf() {
     return safe;
 }
 
-function shouldDebug(details) {
-    if ( details instanceof Object === false ) { return false; }
-    return scriptletGlobals.canDebug && details.debug;
+function trapPropertyFn(propChain, handler, options = {}) {
+    if ( propChain === '' ) { return; }
+    let owner = self;
+    let prop = propChain;
+    for (;;) {
+        const pos = prop.indexOf('.');
+        if ( pos === -1 ) { break; }
+        owner = owner[prop.slice(0, pos)];
+        if ( owner instanceof Object === false ) { return; }
+        prop = prop.slice(pos + 1);
+    }
+    const safe = safeSelf();
+    if ( trapPropertyFn.db === undefined ) {
+        trapPropertyFn.db = new WeakMap();
+        trapPropertyFn.entryFromContext = (owner, prop) => {
+            const handlers = trapPropertyFn.db.get(owner);
+            return handlers?.get(prop);
+        };
+        trapPropertyFn.getter = (owner, prop) => {
+            const entry = trapPropertyFn.entryFromContext(owner, prop);
+            if ( entry === undefined ) { return; }
+            let r = entry.value;
+            for ( const desc of entry.stack ) {
+                try { r = desc.get(); } catch (e) {
+                    if ( entry.canThrow ) { throw e; }
+                }
+            }
+            return r;
+        };
+        trapPropertyFn.setter = (owner, prop, value) => {
+            const entry = trapPropertyFn.entryFromContext(owner, prop);
+            if ( entry === undefined ) { return; }
+            entry.value = value;
+            for ( const desc of entry.stack ) {
+                try { desc.set(value); } catch (e) {
+                    if ( entry.canThrow ) { throw e; }
+                }
+            }
+        };
+    }
+    const { db } = trapPropertyFn;
+    const handlers = db.get(owner) || new Map();
+    if ( handlers.size === 0 ) {
+        db.set(owner, handlers);
+    }
+    const entry = handlers.get(prop) || {
+        value: owner[prop],
+        stack: [],
+    };
+    entry.stack.push(handler);
+    if ( entry.stack.length > 1 ) { return entry.value; }
+    Object.assign(entry, options);
+    handlers.set(prop, entry);
+    const desc = safe.Object_getOwnPropertyDescriptor(owner, prop);
+    if ( desc instanceof safe.Object ) {
+        if ( desc.get || desc.set ) {
+            entry.stack.push(desc);
+        }
+    }
+    try {
+        safe.Object_defineProperty(owner, prop, {
+            get() {
+                return trapPropertyFn.getter(owner, prop);
+            },
+            set(value) {
+                trapPropertyFn.setter(owner, prop, value);
+            }
+        });
+    } catch {
+    }
+    return entry.value;
 }
 
 function trustedReplaceArgument(
     propChain = '',
     argposRaw = '',
-    argraw = ''
+    argraw = '',
+    ...varargs
 ) {
     if ( propChain === '' ) { return; }
     const safe = safeSelf();
     const logPrefix = safe.makeLogPrefix('trusted-replace-argument', propChain, argposRaw, argraw);
     const argoffset = parseInt(argposRaw, 10) || 0;
-    const extraArgs = safe.getExtraArgs(Array.from(arguments), 3);
+    const extraArgs = safe.parseVarargs(varargs);
     let replacer;
     if ( argraw.startsWith('repl:/') ) {
         const parsed = parseReplaceFn(argraw.slice(5));
@@ -930,19 +960,7 @@ function validateConstantFn(trusted, raw, extraArgs = {}) {
 
 const scriptletGlobals = {}; // eslint-disable-line
 
-const $scriptletFunctions$ = /* 5 */
-[preventAddEventListener,noEvalIf,abortCurrentScript,trustedReplaceArgument,abortOnStackTrace];
-
-const $scriptletArgs$ = /* 18 */ ["DOMContentLoaded","fullscreenEnabled","tigervip2","atob","new Function(atob(","String.prototype.includes","0","undefined","condition","/^checkout$/","WebSocket","event.data","XMLHttpRequest","/wp-content","open","executeCode","Array.prototype.indexOf","isWin"];
-
-const $scriptletArglists$ = /* 8 */ "0,0,1;1,2;2,3,4;3,5,6,7,8,9;2,10,11;4,12,13;2,14,15;4,16,17";
-
-const $scriptletArglistRefs$ = /* 26 */ "4;4;3;4;4;2;4;3;4;4;5;4;4;4;4;4;4;6;4;4;3;1;7;3;0;2";
-
-const $scriptletHostnames$ = /* 26 */ ["ojworld.it","forqueen.cz","red17.co.uk","tvojstyl.sk","up-shop.org","crimsonav.com","adrissa.com.co","lundracing.com","jollibee.com.vn","kitapsan.com.tr","rapidkil.com.au","yairalon.com.br","joinusonline.net","mebelinovdom.com","qualityrental.com","szaszmotorshop.hu","americansoda.co.uk","weightlossdiet.top","casteloforte.com.br","centerfabril.com.br","energiasolare100.it","www.cambe.pr.gov.br","sport.elwatannews.com","workplace-products.co.uk","z13.web.core.windows.net","ngsingleissues.nationalgeographic.com"];
-
-const $scriptletFromRegexes$ = /* 0 */ [];
-
+const $hasHostnames$ = true;
 const $hasEntities$ = false;
 const $hasAncestors$ = false;
 const $hasRegexes$ = false;
@@ -961,18 +979,22 @@ const entries = (( ) => {
         const hn1 = origin.slice(beg+3)
         const end = hn1.indexOf(':');
         const hn2 = end === -1 ? hn1 : hn1.slice(0, end);
-        const hnParts = hn2.split('.');
         if ( hn2.length === 0 ) { return; }
-        const hns = [];
-        for ( let i = 0; i < hnParts.length; i++ ) {
-            hns.push(`${hnParts.slice(i).join('.')}`);
+        const hns = [ hn2 ];
+        for ( let pos = 0; ; ) {
+            pos = hn2.indexOf('.', pos) + 1;
+            if ( pos === 0 ) { break; }
+            hns.push(hn2.slice(pos));
         }
+        hns.push('*');
         const ens = [];
         if ( $hasEntities$ ) {
-            const n = hnParts.length - 1;
-            for ( let i = 0; i < n; i++ ) {
-                for ( let j = n; j > i; j-- ) {
-                    ens.push(`${hnParts.slice(i,j).join('.')}.*`);
+            for ( let hn of hns ) {
+                for (;;) {
+                    const pos = hn.lastIndexOf('.');
+                    if ( pos === -1 ) { break; }
+                    hn = hn.slice(0, pos);
+                    ens.push(`${hn}.*`);
                 }
             }
             ens.sort((a, b) => {
@@ -982,12 +1004,14 @@ const entries = (( ) => {
             });
         }
         return { hns, ens, i };
-    }).filter(a => a !== undefined);
+    }).filter(a => a);
 })();
 if ( entries.length === 0 ) { return; }
 
-const todoIndices = new Set();
-if ( $scriptletHostnames$.length ) {
+const todo = new Set();
+
+if ( $hasHostnames$ ) {
+    const $scriptletHostnames$ = /* 26 */ ["ojworld.it","forqueen.cz","red17.co.uk","tvojstyl.sk","up-shop.org","crimsonav.com","adrissa.com.co","lundracing.com","jollibee.com.vn","kitapsan.com.tr","rapidkil.com.au","yairalon.com.br","joinusonline.net","mebelinovdom.com","qualityrental.com","szaszmotorshop.hu","americansoda.co.uk","weightlossdiet.top","casteloforte.com.br","centerfabril.com.br","energiasolare100.it","www.cambe.pr.gov.br","sport.elwatannews.com","workplace-products.co.uk","z13.web.core.windows.net","ngsingleissues.nationalgeographic.com"];
     const collectArglistRefIndices = (out, hn, r) => {
         let l = 0, i = 0, d = 0;
         let candidate = '';
@@ -1022,6 +1046,7 @@ if ( $scriptletHostnames$.length ) {
             }
         }
     };
+    const todoIndices = new Set();
     indicesFromHostname(todoIndices, entries[0]);
     if ( $hasAncestors$ ) {
         for ( const entry of entries ) {
@@ -1029,20 +1054,20 @@ if ( $scriptletHostnames$.length ) {
             indicesFromHostname(todoIndices, entry, '>>');
         }
     }
-    $scriptletHostnames$.length = 0;
-}
-
-// Collect arglist references
-const todo = new Set();
-if ( todoIndices.size !== 0 ) {
-    const arglistRefs = $scriptletArglistRefs$.split(';');
-    for ( const i of todoIndices ) {
-        for ( const ref of JSON.parse(`[${arglistRefs[i]}]`) ) {
-            todo.add(ref);
+    // Collect arglist references
+    if ( todoIndices.size ) {
+        const $scriptletArglistRefs$ = /* 26 */ "5;5;4;5;5;3;5;4;5;5;6;5;5;5;5;5;5;7;5;5;4;2;8;4;1;3";
+        const arglistRefs = $scriptletArglistRefs$.split(';');
+        for ( const i of todoIndices ) {
+            for ( const ref of JSON.parse(`[${arglistRefs[i]}]`) ) {
+                todo.add(ref);
+            }
         }
     }
 }
+
 if ( $hasRegexes$ ) {
+    const $scriptletFromRegexes$ = /* 0 */ [];
     const { hns } = entries[0];
     for ( let i = 0, n = $scriptletFromRegexes$.length; i < n; i += 3 ) {
         const needle = $scriptletFromRegexes$[i+0];
@@ -1059,10 +1084,13 @@ if ( $hasRegexes$ ) {
         }
     }
 }
-if ( todo.size === 0 ) { return; }
 
-// Execute scriplets
-{
+// Execute scriptlets
+if ( todo.size && todo.has(0) === false ) {
+    const $scriptletFunctions$ = /* 5 */
+[preventAddEventListener,noEvalIf,abortCurrentScript,trustedReplaceArgument,abortOnStackTrace];
+    const $scriptletArgs$ = /* 18 */ ["DOMContentLoaded","fullscreenEnabled","tigervip2","atob","new Function(atob(","String.prototype.includes","0","undefined","condition","/^checkout$/","WebSocket","event.data","XMLHttpRequest","/wp-content","open","executeCode","Array.prototype.indexOf","isWin"];
+    const $scriptletArglists$ = /* 9 */ ";0,0,1;1,2;2,3,4;3,5,6,7,8,9;2,10,11;4,12,13;2,14,15;4,16,17";
     const arglists = $scriptletArglists$.split(';');
     const args = $scriptletArgs$;
     for ( const ref of todo ) {

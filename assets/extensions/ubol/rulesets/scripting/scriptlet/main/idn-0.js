@@ -78,28 +78,7 @@ function abortCurrentScriptFn(
     const logPrefix = safe.makeLogPrefix('abort-current-script', target, needle, context);
     const reNeedle = safe.patternToRegex(needle);
     const reContext = safe.patternToRegex(context);
-    const extraArgs = safe.getExtraArgs(Array.from(arguments), 3);
     const thisScript = document.currentScript;
-    const chain = safe.String_split.call(target, '.');
-    let owner = window;
-    let prop;
-    for (;;) {
-        prop = chain.shift();
-        if ( chain.length === 0 ) { break; }
-        if ( prop in owner === false ) { break; }
-        owner = owner[prop];
-        if ( owner instanceof Object === false ) { return; }
-    }
-    let value;
-    let desc = Object.getOwnPropertyDescriptor(owner, prop);
-    if (
-        desc instanceof Object === false ||
-        desc.get instanceof Function === false
-    ) {
-        value = owner[prop];
-        desc = undefined;
-    }
-    const debug = shouldDebug(extraArgs);
     const exceptionToken = getExceptionTokenFn();
     const scriptTexts = new WeakMap();
     const textContentGetter = Object.getOwnPropertyDescriptor(Node.prototype, 'textContent').get;
@@ -107,8 +86,7 @@ function abortCurrentScriptFn(
         let text = textContentGetter.call(elem);
         if ( text.trim() !== '' ) { return text; }
         if ( scriptTexts.has(elem) ) { return scriptTexts.get(elem); }
-        const [ , mime, content ] =
-            /^data:([^,]*),(.+)$/.exec(elem.src.trim()) ||
+        const [ , mime, content ] = /^data:([^,]*),(.+)$/.exec(elem.src.trim()) ||
             [ '', '', '' ];
         try {
             switch ( true ) {
@@ -128,50 +106,28 @@ function abortCurrentScriptFn(
         const e = document.currentScript;
         if ( e instanceof HTMLScriptElement === false ) { return; }
         if ( e === thisScript ) { return; }
-        if ( context !== '' && reContext.test(e.src) === false ) {
-            // eslint-disable-next-line no-debugger
-            if ( debug === 'nomatch' || debug === 'all' ) { debugger; }
-            return;
-        }
+        if ( context !== '' && reContext.test(e.src) === false ) { return; }
         if ( safe.logLevel > 1 && context !== '' ) {
             safe.uboLog(logPrefix, `Matched src\n${e.src}`);
         }
         const scriptText = getScriptText(e);
-        if ( reNeedle.test(scriptText) === false ) {
-            // eslint-disable-next-line no-debugger
-            if ( debug === 'nomatch' || debug === 'all' ) { debugger; }
-            return;
-        }
+        if ( reNeedle.test(scriptText) === false ) { return; }
         if ( safe.logLevel > 1 ) {
             safe.uboLog(logPrefix, `Matched text\n${scriptText}`);
         }
-        // eslint-disable-next-line no-debugger
-        if ( debug === 'match' || debug === 'all' ) { debugger; }
         safe.uboLog(logPrefix, 'Aborted');
         throw new ReferenceError(exceptionToken);
     };
-    // eslint-disable-next-line no-debugger
-    if ( debug === 'install' ) { debugger; }
-    try {
-        Object.defineProperty(owner, prop, {
-            get: function() {
-                validate();
-                return desc instanceof Object
-                    ? desc.get.call(owner)
-                    : value;
-            },
-            set: function(a) {
-                validate();
-                if ( desc instanceof Object ) {
-                    desc.set.call(owner, a);
-                } else {
-                    value = a;
-                }
-            }
-        });
-    } catch(ex) {
-        safe.uboErr(logPrefix, `Error: ${ex}`);
-    }
+    let currentValue = trapPropertyFn(target, {
+        get: function() {
+            validate();
+            return currentValue;
+        },
+        set: function(a) {
+            validate();
+            currentValue = a;
+        }
+    }, { canThrow: true });
 }
 
 function abortOnPropertyRead(
@@ -543,10 +499,11 @@ function parsePropertiesToMatchFn(propsToMatch, implicit = '') {
 
 function preventAddEventListener(
     type = '',
-    pattern = ''
+    pattern = '',
+    ...varargs
 ) {
     const safe = safeSelf();
-    const extraArgs = safe.getExtraArgs(Array.from(arguments), 2);
+    const extraArgs = safe.parseVarargs(varargs);
     const logPrefix = safe.makeLogPrefix('prevent-addEventListener', type, pattern);
     const reType = safe.patternToRegex(type, undefined, true);
     const rePattern = safe.patternToRegex(pattern);
@@ -613,24 +570,89 @@ function preventAddEventListener(
         }
         return context.reflect();
     };
+    const protect = owner => {
+        const { addEventListener } = owner;
+        Object.defineProperty(owner, 'addEventListener', {
+            set() { },
+            get() { return addEventListener; }
+        });
+    };
     runAt(( ) => {
         proxyApplyFn('EventTarget.prototype.addEventListener', proxyFn);
-        if ( extraArgs.protect ) {
-            const { addEventListener } = EventTarget.prototype;
-            Object.defineProperty(EventTarget.prototype, 'addEventListener', {
-                set() { },
-                get() { return addEventListener; }
-            });
+        if ( extraArgs.protect ) { protect(EventTarget.prototype); }
+        if ( Object.hasOwn(document, 'addEventListener') ) {
+            proxyApplyFn('document.addEventListener', proxyFn);
+            if ( extraArgs.protect ) { protect(document); }
         }
-        proxyApplyFn('document.addEventListener', proxyFn);
-        if ( extraArgs.protect ) {
-            const { addEventListener } = document;
-            Object.defineProperty(document, 'addEventListener', {
-                set() { },
-                get() { return addEventListener; }
-            });
+        if ( Object.hasOwn(window, 'addEventListener') ) {
+            proxyApplyFn('window.addEventListener', proxyFn);
+            if ( extraArgs.protect ) { protect(window); }
         }
     }, extraArgs.runAt);
+}
+
+function preventBab() {
+    const safe = safeSelf();
+    const logPrefix = safe.makeLogPrefix('prevent-bab');
+    const signatures = [
+        [ 'blockadblock' ],
+        [ 'babasbm' ],
+        [ /getItem\('babn'\)/ ],
+        [
+            'getElementById',
+            'String.fromCharCode',
+            'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789',
+            'charAt',
+            'DOMContentLoaded',
+            'AdBlock',
+            'addEventListener',
+            'doScroll',
+            'fromCharCode',
+            '<<2|r>>4',
+            'sessionStorage',
+            'clientWidth',
+            'localStorage',
+            'Math',
+            'random',
+        ],
+    ];
+    const check = function(s) {
+        if ( typeof s !== 'string' ) { return false; }
+        for ( const tokens of signatures ) {
+            let match = 0;
+            for ( const token of tokens ) {
+                const hit = token instanceof RegExp
+                    ? token.test(s)
+                    : s.includes(token);
+                if ( hit ) { match += 1; }
+            }
+            if ( (match / tokens.length) >= 0.8 ) { return true; }
+        }
+        return false;
+    };
+    proxyApplyFn('eval', function(context) {
+        const a = context.callArgs[0];
+        if ( !check(a) ) {
+            return context.reflect();
+        }
+        safe.uboLog(logPrefix, 'Prevented');
+        if ( document.body ) {
+            document.body.style.removeProperty('visibility');
+        }
+        const el = document.getElementById('babasbmsgx');
+        if ( el ) {
+            el.parentNode.removeChild(el);
+        }
+    });
+    proxyApplyFn('setTimeout', function(context) {
+        const { callArgs } = context;
+        const a = callArgs[0];
+        if ( typeof a === 'string'  && /\.bab_elementid.$/.test(a) ) {
+            callArgs[0] = ( ) => { };
+            safe.uboLog(logPrefix, 'Prevented');
+        }
+        return context.reflect();
+    });
 }
 
 function preventFetch(...args) {
@@ -641,7 +663,8 @@ function preventFetchFn(
     trusted = false,
     propsToMatch = '',
     responseBody = '',
-    responseType = ''
+    responseType = '',
+    ...varargs
 ) {
     const safe = safeSelf();
     const setTimeout = self.setTimeout;
@@ -652,7 +675,7 @@ function preventFetchFn(
         responseBody,
         responseType
     );
-    const extraArgs = safe.getExtraArgs(Array.from(arguments), 4);
+    const extraArgs = safe.parseVarargs(varargs);
     const propNeedles = parsePropertiesToMatchFn(propsToMatch, 'url');
     const validResponseProps = {
         ok: [ false, true ],
@@ -746,7 +769,7 @@ function preventSetTimeout(
 }
 
 function preventXhr(...args) {
-    return preventXhrFn(false, ...args);
+    preventXhrFn(false, ...args);
 }
 
 function preventXhrFn(
@@ -919,7 +942,8 @@ function preventXhrFn(
 
 function proxyApplyFn(
     target = '',
-    handler = ''
+    handler = '',
+    options = {}
 ) {
     let context = globalThis;
     let prop = target;
@@ -980,20 +1004,22 @@ function proxyApplyFn(
         };
         proxyApplyFn.isCtor = new Map();
         proxyApplyFn.proxies = new WeakMap();
-        proxyApplyFn.nativeToString = Function.prototype.toString;
-        const proxiedToString = new Proxy(Function.prototype.toString, {
-            apply(target, thisArg) {
-                let proxied = thisArg;
-                for(;;) {
-                    const fn = proxyApplyFn.proxies.get(proxied);
-                    if ( fn === undefined ) { break; }
-                    proxied = fn;
+        if ( (options.skipToString || proxyApplyFn.skipToString) !== true ) {
+            proxyApplyFn.nativeToString = Function.prototype.toString;
+            const proxiedToString = new Proxy(Function.prototype.toString, {
+                apply(target, thisArg) {
+                    let proxied = thisArg;
+                    for(;;) {
+                        const fn = proxyApplyFn.proxies.get(proxied);
+                        if ( fn === undefined ) { break; }
+                        proxied = fn;
+                    }
+                    return proxyApplyFn.nativeToString.call(proxied);
                 }
-                return proxyApplyFn.nativeToString.call(proxied);
-            }
-        });
-        proxyApplyFn.proxies.set(proxiedToString, proxyApplyFn.nativeToString);
-        Function.prototype.toString = proxiedToString;
+            });
+            proxyApplyFn.proxies.set(proxiedToString, proxyApplyFn.nativeToString);
+            Function.prototype.toString = proxiedToString;
+        }
     }
     if ( proxyApplyFn.isCtor.has(target) === false ) {
         proxyApplyFn.isCtor.set(target, fn.prototype?.constructor === fn);
@@ -1055,8 +1081,8 @@ function runAtHtmlElementFn(fn) {
 }
 
 function safeSelf() {
-    if ( scriptletGlobals.safeSelf ) {
-        return scriptletGlobals.safeSelf;
+    if ( safeSelf.safe ) {
+        return safeSelf.safe;
     }
     const self = globalThis;
     const safe = {
@@ -1161,21 +1187,20 @@ function safeSelf() {
             }
             return /^/;
         },
-        getExtraArgs(args, offset = 0) {
-            const entries = args.slice(offset).reduce((out, v, i, a) => {
-                if ( (i & 1) === 0 ) {
-                    const rawValue = a[i+1];
-                    const value = /^\d+$/.test(rawValue)
-                        ? parseInt(rawValue, 10)
-                        : rawValue;
-                    out.push([ a[i], value ]);
-                }
+        parseVarargs(varargs) {
+            const entries = varargs.reduce((out, v, i, a) => {
+                if ( i & 1 ) { return out; }
+                const rawValue = a[i+1];
+                const value = /^\d+$/.test(rawValue)
+                    ? parseInt(rawValue, 10)
+                    : rawValue;
+                out.push([ a[i], value ]);
                 return out;
             }, []);
             return this.Object_fromEntries(entries);
         },
     };
-    scriptletGlobals.safeSelf = safe;
+    safeSelf.safe = safe;
     if ( scriptletGlobals.bcSecret === undefined ) { return safe; }
     // This is executed only when the logger is opened
     safe.logLevel = scriptletGlobals.logLevel || 1;
@@ -1233,28 +1258,293 @@ function safeSelf() {
     return safe;
 }
 
-function shouldDebug(details) {
-    if ( details instanceof Object === false ) { return false; }
-    return scriptletGlobals.canDebug && details.debug;
+function setConstant(
+    ...args
+) {
+    setConstantFn(false, ...args);
+}
+
+function setConstantFn(
+    trusted = false,
+    chain = '',
+    rawValue = '',
+    ...varargs
+) {
+    if ( chain === '' ) { return; }
+    const safe = safeSelf();
+    const logPrefix = safe.makeLogPrefix('set-constant', chain, rawValue);
+    const extraArgs = safe.parseVarargs(varargs);
+    function setConstant(chain, rawValue) {
+        const trappedProp = (( ) => {
+            const pos = chain.lastIndexOf('.');
+            if ( pos === -1 ) { return chain; }
+            return chain.slice(pos+1);
+        })();
+        const cloakFunc = fn => {
+            safe.Object_defineProperty(fn, 'name', { value: trappedProp });
+            return new Proxy(fn, {
+                defineProperty(target, prop) {
+                    if ( prop !== 'toString' ) {
+                        return Reflect.defineProperty(...arguments);
+                    }
+                    return true;
+                },
+                deleteProperty(target, prop) {
+                    if ( prop !== 'toString' ) {
+                        return Reflect.deleteProperty(...arguments);
+                    }
+                    return true;
+                },
+                get(target, prop) {
+                    if ( prop === 'toString' ) {
+                        return function() {
+                            return `function ${trappedProp}() { [native code] }`;
+                        }.bind(null);
+                    }
+                    return Reflect.get(...arguments);
+                },
+            });
+        };
+        if ( trappedProp === '' ) { return; }
+        const thisScript = document.currentScript;
+        let normalValue = validateConstantFn(trusted, rawValue, extraArgs);
+        if ( rawValue === 'noopFunc' || rawValue === 'trueFunc' || rawValue === 'falseFunc' ) {
+            normalValue = cloakFunc(normalValue);
+        }
+        let aborted = false;
+        const mustAbort = function(v) {
+            if ( trusted ) { return false; }
+            if ( aborted ) { return true; }
+            aborted =
+                (v !== undefined && v !== null) &&
+                (normalValue !== undefined && normalValue !== null) &&
+                (typeof v !== typeof normalValue);
+            if ( aborted ) {
+                safe.uboLog(logPrefix, `Aborted because value set to ${v}`);
+            }
+            return aborted;
+        };
+        // https://github.com/uBlockOrigin/uBlock-issues/issues/156
+        //   Support multiple trappers for the same property.
+        const trapProp = function(owner, prop, configurable, handler) {
+            if ( handler.init(configurable ? owner[prop] : normalValue) === false ) { return; }
+            const odesc = safe.Object_getOwnPropertyDescriptor(owner, prop);
+            let prevGetter, prevSetter;
+            if ( odesc instanceof safe.Object ) {
+                owner[prop] = normalValue;
+                if ( odesc.get instanceof Function ) {
+                    prevGetter = odesc.get;
+                }
+                if ( odesc.set instanceof Function ) {
+                    prevSetter = odesc.set;
+                }
+            }
+            try {
+                safe.Object_defineProperty(owner, prop, {
+                    configurable,
+                    get() {
+                        if ( prevGetter !== undefined ) {
+                            prevGetter();
+                        }
+                        return handler.getter();
+                    },
+                    set(a) {
+                        if ( prevSetter !== undefined ) {
+                            prevSetter(a);
+                        }
+                        handler.setter(a);
+                    }
+                });
+                safe.uboLog(logPrefix, 'Trap installed');
+            } catch(ex) {
+                safe.uboErr(logPrefix, ex);
+            }
+        };
+        const trapChain = function(owner, chain) {
+            const pos = chain.indexOf('.');
+            if ( pos === -1 ) {
+                trapProp(owner, chain, false, {
+                    v: undefined,
+                    init: function(v) {
+                        if ( mustAbort(v) ) { return false; }
+                        this.v = v;
+                        return true;
+                    },
+                    getter: function() {
+                        if ( document.currentScript === thisScript ) {
+                            return this.v;
+                        }
+                        safe.uboLog(logPrefix, 'Property read');
+                        return normalValue;
+                    },
+                    setter: function(a) {
+                        if ( mustAbort(a) === false ) { return; }
+                        normalValue = a;
+                    }
+                });
+                return;
+            }
+            const prop = chain.slice(0, pos);
+            const v = owner[prop];
+            chain = chain.slice(pos + 1);
+            if ( v instanceof safe.Object || typeof v === 'object' && v !== null ) {
+                trapChain(v, chain);
+                return;
+            }
+            trapProp(owner, prop, true, {
+                v: undefined,
+                init: function(v) {
+                    this.v = v;
+                    return true;
+                },
+                getter: function() {
+                    return this.v;
+                },
+                setter: function(a) {
+                    this.v = a;
+                    if ( a instanceof safe.Object ) {
+                        trapChain(a, chain);
+                    }
+                }
+            });
+        };
+        trapChain(window, chain);
+    }
+    runAt(( ) => {
+        setConstant(chain, rawValue);
+    }, extraArgs.runAt);
+}
+
+function trapPropertyFn(propChain, handler, options = {}) {
+    if ( propChain === '' ) { return; }
+    let owner = self;
+    let prop = propChain;
+    for (;;) {
+        const pos = prop.indexOf('.');
+        if ( pos === -1 ) { break; }
+        owner = owner[prop.slice(0, pos)];
+        if ( owner instanceof Object === false ) { return; }
+        prop = prop.slice(pos + 1);
+    }
+    const safe = safeSelf();
+    if ( trapPropertyFn.db === undefined ) {
+        trapPropertyFn.db = new WeakMap();
+        trapPropertyFn.entryFromContext = (owner, prop) => {
+            const handlers = trapPropertyFn.db.get(owner);
+            return handlers?.get(prop);
+        };
+        trapPropertyFn.getter = (owner, prop) => {
+            const entry = trapPropertyFn.entryFromContext(owner, prop);
+            if ( entry === undefined ) { return; }
+            let r = entry.value;
+            for ( const desc of entry.stack ) {
+                try { r = desc.get(); } catch (e) {
+                    if ( entry.canThrow ) { throw e; }
+                }
+            }
+            return r;
+        };
+        trapPropertyFn.setter = (owner, prop, value) => {
+            const entry = trapPropertyFn.entryFromContext(owner, prop);
+            if ( entry === undefined ) { return; }
+            entry.value = value;
+            for ( const desc of entry.stack ) {
+                try { desc.set(value); } catch (e) {
+                    if ( entry.canThrow ) { throw e; }
+                }
+            }
+        };
+    }
+    const { db } = trapPropertyFn;
+    const handlers = db.get(owner) || new Map();
+    if ( handlers.size === 0 ) {
+        db.set(owner, handlers);
+    }
+    const entry = handlers.get(prop) || {
+        value: owner[prop],
+        stack: [],
+    };
+    entry.stack.push(handler);
+    if ( entry.stack.length > 1 ) { return entry.value; }
+    Object.assign(entry, options);
+    handlers.set(prop, entry);
+    const desc = safe.Object_getOwnPropertyDescriptor(owner, prop);
+    if ( desc instanceof safe.Object ) {
+        if ( desc.get || desc.set ) {
+            entry.stack.push(desc);
+        }
+    }
+    try {
+        safe.Object_defineProperty(owner, prop, {
+            get() {
+                return trapPropertyFn.getter(owner, prop);
+            },
+            set(value) {
+                trapPropertyFn.setter(owner, prop, value);
+            }
+        });
+    } catch {
+    }
+    return entry.value;
+}
+
+function validateConstantFn(trusted, raw, extraArgs = {}) {
+    const safe = safeSelf();
+    let value;
+    if ( raw === 'undefined' ) {
+        value = undefined;
+    } else if ( raw === 'false' ) {
+        value = false;
+    } else if ( raw === 'true' ) {
+        value = true;
+    } else if ( raw === 'null' ) {
+        value = null;
+    } else if ( raw === "''" || raw === '' ) {
+        value = '';
+    } else if ( raw === '[]' || raw === 'emptyArr' ) {
+        value = [];
+    } else if ( raw === '{}' || raw === 'emptyObj' ) {
+        value = {};
+    } else if ( raw === 'noopFunc' ) {
+        value = function(){};
+    } else if ( raw === 'trueFunc' ) {
+        value = function(){ return true; };
+    } else if ( raw === 'falseFunc' ) {
+        value = function(){ return false; };
+    } else if ( raw === 'throwFunc' ) {
+        value = function(){ throw ''; };
+    } else if ( /^-?\d+$/.test(raw) ) {
+        value = parseInt(raw);
+        if ( isNaN(raw) ) { return; }
+        if ( Math.abs(raw) > 0x7FFF ) { return; }
+    } else if ( trusted ) {
+        if ( raw.startsWith('json:') ) {
+            try { value = safe.JSON_parse(raw.slice(5)); } catch { return; }
+        } else if ( raw.startsWith('{') && raw.endsWith('}') ) {
+            try { value = safe.JSON_parse(raw).value; } catch { return; }
+        }
+    } else {
+        return;
+    }
+    if ( extraArgs.as !== undefined ) {
+        if ( extraArgs.as === 'function' ) {
+            return ( ) => value;
+        } else if ( extraArgs.as === 'callback' ) {
+            return ( ) => (( ) => value);
+        } else if ( extraArgs.as === 'resolved' ) {
+            return Promise.resolve(value);
+        } else if ( extraArgs.as === 'rejected' ) {
+            return Promise.reject(value);
+        }
+    }
+    return value;
 }
 
 /******************************************************************************/
 
 const scriptletGlobals = {}; // eslint-disable-line
 
-const $scriptletFunctions$ = /* 10 */
-[abortCurrentScript,abortOnPropertyRead,abortOnPropertyWrite,preventAddEventListener,adjustSetInterval,preventFetch,preventXhr,noEvalIf,preventSetTimeout,noWindowOpenIf];
-
-const $scriptletArgs$ = /* 28 */ ["Math.random","arv_24","SGPB_POPUP_PARAMS","MutationObserver","chp_ads_blocker_detector","document.addEventListener","window.open","getComputedStyle","","cpm","click","linkOpened","load","/adblock/i","scroll","kgSticky","$.magnificPopup.open","LieDetector","popup_custom_data","ads.google.com","adsbygoogle","clarity.ms","trafficbass.com","googlesyndication","/chp_?ad/","console","location.href","3000"];
-
-const $scriptletArglists$ = /* 22 */ "0,0,1;1,2;2,3;0,4;0,5,6;0,7,8,9;3,10,11;3,12,13;3,14,15;1,16;1,17;1,18;4;5,19;5,20;5,21;5,22;6,23;7,24;8,25;8,26,27;9";
-
-const $scriptletArglistRefs$ = /* 41 */ "15,19;13;5;21;4;1;21;21;21;21;8;3;21;21;21;17;21;16;0;21;21;18;2;12,18;21;18;7;20;10;21;6;11;18;9;21;21;21;17,21;12;14;21";
-
-const $scriptletHostnames$ = /* 41 */ ["netq.me","mudah.my","doroni.me","kiryuu.id","kuyhaa.me","dicrotin.*","igodesu.tv","indobo.com","kiryuu.org","kiryuu02.*","kompas.com","lk21semi.*","nimegami.*","njavtv.com","sukasex.tv","tutwuri.id","anichin.top","moenime.com","semprot.com","sukasex.net","westmanga.*","5.253.86.213","animekompi.*","jenismac.com","kiryuu01.com","ainzscans.net","moutogami.com","moviekhhd.biz","3gpterbaru.com","animekompi.vip","info.vebma.com","sk21.sob4t.xyz","193.142.147.230","juraganfilm.ink","kimcilonly.site","komikcast02.com","ngicstream.site","jurnalistekno.id","bahasteknologi.com","thejakartapost.com","kisahterlarang.site"];
-
-const $scriptletFromRegexes$ = /* 0 */ [];
-
+const $hasHostnames$ = true;
 const $hasEntities$ = true;
 const $hasAncestors$ = false;
 const $hasRegexes$ = false;
@@ -1273,18 +1563,22 @@ const entries = (( ) => {
         const hn1 = origin.slice(beg+3)
         const end = hn1.indexOf(':');
         const hn2 = end === -1 ? hn1 : hn1.slice(0, end);
-        const hnParts = hn2.split('.');
         if ( hn2.length === 0 ) { return; }
-        const hns = [];
-        for ( let i = 0; i < hnParts.length; i++ ) {
-            hns.push(`${hnParts.slice(i).join('.')}`);
+        const hns = [ hn2 ];
+        for ( let pos = 0; ; ) {
+            pos = hn2.indexOf('.', pos) + 1;
+            if ( pos === 0 ) { break; }
+            hns.push(hn2.slice(pos));
         }
+        hns.push('*');
         const ens = [];
         if ( $hasEntities$ ) {
-            const n = hnParts.length - 1;
-            for ( let i = 0; i < n; i++ ) {
-                for ( let j = n; j > i; j-- ) {
-                    ens.push(`${hnParts.slice(i,j).join('.')}.*`);
+            for ( let hn of hns ) {
+                for (;;) {
+                    const pos = hn.lastIndexOf('.');
+                    if ( pos === -1 ) { break; }
+                    hn = hn.slice(0, pos);
+                    ens.push(`${hn}.*`);
                 }
             }
             ens.sort((a, b) => {
@@ -1294,12 +1588,14 @@ const entries = (( ) => {
             });
         }
         return { hns, ens, i };
-    }).filter(a => a !== undefined);
+    }).filter(a => a);
 })();
 if ( entries.length === 0 ) { return; }
 
-const todoIndices = new Set();
-if ( $scriptletHostnames$.length ) {
+const todo = new Set();
+
+if ( $hasHostnames$ ) {
+    const $scriptletHostnames$ = /* 66 */ ["netq.me","mudah.my","vicek.id","01ntn.top","123av.com","doroni.me","kiryuu.id","kuyhaa.me","91porn.com","dicrotin.*","igodesu.tv","indobo.com","kiryuu.org","kiryuu02.*","lk21semi.*","nimegami.*","njavtv.com","nokephub.*","sukasex.tv","tutwuri.id","anichin.moe","anichin.top","i-jav.space","kingbokep.*","moenime.com","pemersatu.*","semprot.com","sukasex.net","westmanga.*","5.253.86.213","anichin.cafe","animekompi.*","asalunik.com","brobokep.org","jenismac.com","kimcilonly.*","kiryuu01.com","simontokx.tv","ainzscans.net","bokepindo69.*","cosmicscans.*","moutogami.com","moviekhhd.biz","streamget.win","3gpterbaru.com","animekompi.vip","info.vebma.com","kawanfilm21.co","sk21.sob4t.xyz","193.142.147.230","bokepindo24.com","juraganfilm.ink","komikcast02.com","komikdewasa.art","ngicstream.site","indoporntube.com","jurnalistekno.id","tantecentil.fans","websitebokep.com","02.cosmicscans.to","luciferdonghua.in","bahasteknologi.com","thejakartapost.com","tv1.lk21official.*","gudangmovies21.chat","kisahterlarang.site"];
     const collectArglistRefIndices = (out, hn, r) => {
         let l = 0, i = 0, d = 0;
         let candidate = '';
@@ -1334,6 +1630,7 @@ if ( $scriptletHostnames$.length ) {
             }
         }
     };
+    const todoIndices = new Set();
     indicesFromHostname(todoIndices, entries[0]);
     if ( $hasAncestors$ ) {
         for ( const entry of entries ) {
@@ -1341,20 +1638,20 @@ if ( $scriptletHostnames$.length ) {
             indicesFromHostname(todoIndices, entry, '>>');
         }
     }
-    $scriptletHostnames$.length = 0;
-}
-
-// Collect arglist references
-const todo = new Set();
-if ( todoIndices.size !== 0 ) {
-    const arglistRefs = $scriptletArglistRefs$.split(';');
-    for ( const i of todoIndices ) {
-        for ( const ref of JSON.parse(`[${arglistRefs[i]}]`) ) {
-            todo.add(ref);
+    // Collect arglist references
+    if ( todoIndices.size ) {
+        const $scriptletArglistRefs$ = /* 66 */ "20,25;18;28;8;27;7;27;6;8;2;27;27;27;27;5;27;27;2;27;22;27;27;29;4,27;21;29;1;27;27;24;27;3;23;27;17,24;27;27;16,27;24;27;27;12;26;27;14;27;9;27;15;24;8;13;27;11;27;27,30;22,27;27;10;8;8;17;19;27;2;27";
+        const arglistRefs = $scriptletArglistRefs$.split(';');
+        for ( const i of todoIndices ) {
+            for ( const ref of JSON.parse(`[${arglistRefs[i]}]`) ) {
+                todo.add(ref);
+            }
         }
     }
 }
+
 if ( $hasRegexes$ ) {
+    const $scriptletFromRegexes$ = /* 0 */ [];
     const { hns } = entries[0];
     for ( let i = 0, n = $scriptletFromRegexes$.length; i < n; i += 3 ) {
         const needle = $scriptletFromRegexes$[i+0];
@@ -1371,10 +1668,13 @@ if ( $hasRegexes$ ) {
         }
     }
 }
-if ( todo.size === 0 ) { return; }
 
-// Execute scriplets
-{
+// Execute scriptlets
+if ( todo.size && todo.has(0) === false ) {
+    const $scriptletFunctions$ = /* 12 */
+[abortCurrentScript,abortOnPropertyRead,abortOnPropertyWrite,preventAddEventListener,adjustSetInterval,preventFetch,preventXhr,preventBab,noEvalIf,preventSetTimeout,noWindowOpenIf,setConstant];
+    const $scriptletArgs$ = /* 34 */ ["Math.random","arv_24","SGPB_POPUP_PARAMS","MutationObserver","checkAdsStatus","chp_ads_blocker_detector","document.addEventListener","window.open","getComputedStyle","","cpm","click","linkOpened","player.seeking","tampilkanUrl","load","/adblock/i","$.magnificPopup.open","LieDetector","popup_custom_data","ujiPopups","ads.google.com","adsbygoogle","clarity.ms","trafficbass.com","googlesyndication","/chp_?ad/","console","location.href","3000","VK_DIRECT_AD","undefined","document.body.innerHTML","document.querySelector"];
+    const $scriptletArglists$ = /* 31 */ ";0,0,1;1,2;2,3;0,4;0,5;0,6,7;0,8,9,10;3;3,11,12;3,11,13;3,11,14;3,15,16;1,17;1,18;1,19;1,20;4;5,21;5,22;5,23;5,24;6,25;7;8,26;9,27;9,28,29;10;11,30,31;2,32;0,33,22";
     const arglists = $scriptletArglists$.split(';');
     const args = $scriptletArgs$;
     for ( const ref of todo ) {
