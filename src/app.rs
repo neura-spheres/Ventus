@@ -2911,20 +2911,24 @@ fn crash_reload_aborted_nav(
     })
 }
 
+fn crash_starved(active: bool, url: &str, reloads: u8, since_crash_ms: Option<u128>) -> bool {
+    active
+        && url.starts_with("http")
+        && reloads < CRASH_RELOAD_MAX
+        && since_crash_ms
+            .map(|ms| ms < CRASH_RELOAD_WINDOW_MS)
+            .unwrap_or(false)
+}
+
 fn load_starved_by_crash(state: &AppState, tab_id: &str, url: &str) -> bool {
-    if state.tab_manager.active_tab_id.as_deref() != Some(tab_id) {
-        return false;
-    }
-    if !url.starts_with("http") {
-        return false;
-    }
-    if state.crash_reloads.get(tab_id).copied().unwrap_or(0) >= CRASH_RELOAD_MAX {
-        return false;
-    }
-    state
-        .last_subprocess_crash
-        .map(|at| at.elapsed().as_millis() < CRASH_RELOAD_WINDOW_MS)
-        .unwrap_or(false)
+    crash_starved(
+        state.tab_manager.active_tab_id.as_deref() == Some(tab_id),
+        url,
+        state.crash_reloads.get(tab_id).copied().unwrap_or(0),
+        state
+            .last_subprocess_crash
+            .map(|at| at.elapsed().as_millis()),
+    )
 }
 
 fn nav_superseded(current: Option<&String>, aborted: &str) -> bool {
@@ -5125,6 +5129,41 @@ mod tests {
         should_record_replace_as_visit,
     };
     use std::collections::HashMap;
+
+    #[test]
+    fn crash_starved_load_reloads_inside_the_window() {
+        assert!(super::crash_starved(
+            true,
+            "https://github.com/",
+            0,
+            Some(435)
+        ));
+    }
+
+    #[test]
+    fn crash_starved_ignores_healthy_and_stale_loads() {
+        assert!(!super::crash_starved(true, "https://github.com/", 0, None));
+        assert!(!super::crash_starved(
+            true,
+            "https://github.com/",
+            0,
+            Some(9_000)
+        ));
+        assert!(!super::crash_starved(
+            false,
+            "https://github.com/",
+            0,
+            Some(435)
+        ));
+        assert!(!super::crash_starved(true, "neura://newtab", 0, Some(435)));
+    }
+
+    #[test]
+    fn crash_starved_stops_after_the_retry_cap() {
+        assert!(super::crash_starved(true, "https://a.test/", 1, Some(100)));
+        assert!(!super::crash_starved(true, "https://a.test/", 2, Some(100)));
+        assert!(!super::crash_starved(true, "https://a.test/", 9, Some(100)));
+    }
 
     #[test]
     fn oauth_redirect_handoff_is_not_retried() {
