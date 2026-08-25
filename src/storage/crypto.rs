@@ -12,13 +12,16 @@ const KEY_LEN: usize = 32;
 const NONCE_LEN: usize = 12;
 const PREFIX: &str = "v1:";
 
+pub fn random_key() -> [u8; KEY_LEN] {
+    let mut key = [0u8; KEY_LEN];
+    OsRng.fill_bytes(&mut key);
+    key
+}
+
 pub fn store_key(data_dir: &Path) -> Result<[u8; KEY_LEN]> {
     let path = data_dir.join("Local State.json");
-    let mut state = match std::fs::read_to_string(&path) {
-        Ok(text) => serde_json::from_str::<Value>(&text).unwrap_or_else(|_| serde_json::json!({})),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => serde_json::json!({}),
-        Err(err) => return Err(err.into()),
-    };
+    let mut state =
+        crate::utils::platform::read_json(&path)?.unwrap_or_else(|| serde_json::json!({}));
     if let Some(text) = state
         .get("os_crypt")
         .and_then(|v| v.get("encrypted_key"))
@@ -32,18 +35,14 @@ pub fn store_key(data_dir: &Path) -> Result<[u8; KEY_LEN]> {
             return Ok(out);
         }
     }
-    let mut key = [0u8; KEY_LEN];
-    OsRng.fill_bytes(&mut key);
+    let key = random_key();
     let protected = protect(&key)?;
     let root = object_child(&mut state, "os_crypt");
     root.insert(
         "encrypted_key".into(),
         Value::String(STANDARD.encode(protected)),
     );
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    std::fs::write(path, serde_json::to_vec(&state)?)?;
+    crate::utils::platform::write_json_atomic(&path, &state)?;
     Ok(key)
 }
 

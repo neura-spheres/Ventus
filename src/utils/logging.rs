@@ -14,7 +14,7 @@ pub fn init() {
 
     // Mirror logs to a file in the data dir so they can be inspected even in release
     // builds (which have no console because of `windows_subsystem = "windows"`).
-    // Path: %APPDATA%\com\neura\NeuraBrowser\data\ventus.log (truncated each run).
+    // Path: %APPDATA%\neura\NeuraBrowser\data\ventus.log (appended to, never truncated).
     let file_layer = open_log_file().map(|file| {
         fmt::layer()
             .with_ansi(false)

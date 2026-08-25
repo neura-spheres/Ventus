@@ -273,7 +273,10 @@ pub fn run() {
 
     let profile_cookie_db_found = webview_cookie_db_exists(&data_dir);
     let startup_cookies: Vec<cookie_store::CookieRecord> = if profile_cookie_db_found {
-        tracing::info!("cookie_store: profile cookie DB found, skipping backup cookie heal");
+        tracing::info!(
+            target: "ventus::profile",
+            "[PROFILE] WebView2 cookie DB present, skipping the backup heal"
+        );
         vec![]
     } else {
         match cookie_store::open(&data_dir) {
@@ -287,7 +290,11 @@ pub fn run() {
                 cookies
             }
             Err(e) => {
-                tracing::warn!("cookie_store: failed to open for startup read: {}", e);
+                tracing::error!(
+                    target: "ventus::autolog",
+                    error = %e,
+                    "cookie_store: backup unreadable at startup — cannot heal missing logins"
+                );
                 vec![]
             }
         }
@@ -682,8 +689,6 @@ pub fn run() {
     std::fs::create_dir_all(&webview_data_dir).expect("create WebView2 profile");
     encrypt_app_storage(&webview_data_dir);
     #[cfg(windows)]
-    sync_webview_secure_dns_prefs(&webview_data_dir, &state.settings);
-    #[cfg(windows)]
     if !new_window
         && !wait_for_webview_profiles_released(
             &[webview_data_dir.as_path()],
@@ -695,6 +700,9 @@ pub fn run() {
             "[STARTUP] WebView2 profile still locked after waiting; chrome build will retry"
         );
     }
+    log_profile_health(&data_dir, &webview_data_dir);
+    #[cfg(windows)]
+    sync_webview_secure_dns_prefs(&webview_data_dir, &state.settings);
     let mut content_web_context = Some(wry::WebContext::new(Some(webview_data_dir.clone())));
 
     let chrome = {
