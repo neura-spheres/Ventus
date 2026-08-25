@@ -355,12 +355,25 @@ async fn run_cookie_save_task(
             return;
         }
     };
-    tracing::debug!("cookie_store save task: running");
+    tracing::info!(
+        target: "ventus::profile",
+        stored = cookie_store::count(&conn),
+        "[PROFILE] cookie backup task running"
+    );
     while let Some(cookies) = rx.recv().await {
         if let Err(e) = cookie_store::save(&conn, &cookies) {
-            tracing::warn!("cookie_store: save failed: {}", e);
+            tracing::error!(
+                target: "ventus::autolog",
+                error = %e,
+                "cookie_store: backup save failed — logins will not survive a profile reset"
+            );
         } else {
-            tracing::debug!("cookie_store: saved {} cookies", cookies.len());
+            tracing::info!(
+                target: "ventus::profile",
+                snapshot = cookies.len(),
+                stored = cookie_store::count(&conn),
+                "[PROFILE] cookie backup saved"
+            );
         }
         // Purge stale entries as part of each save cycle.
         if let Ok(n) = cookie_store::purge_expired(&conn) {

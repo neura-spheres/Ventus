@@ -1231,6 +1231,77 @@ fn doh_feature_arg(url: &str, mode: &config::SecureDnsMode) -> String {
     format!("DnsOverHttps:Fallback/{fallback}/Templates/{encoded_url}")
 }
 
+fn file_size(path: &std::path::Path) -> Option<u64> {
+    std::fs::metadata(path).ok().map(|m| m.len())
+}
+
+fn log_profile_health(data_dir: &std::path::Path, profile_root: &std::path::Path) {
+    let local_state = profile_root.join("EBWebView").join("Local State");
+    let cookies_db = profile_root
+        .join("EBWebView")
+        .join("Default")
+        .join("Network")
+        .join("Cookies");
+    let bytes = file_size(&local_state);
+    let cookies_bytes = file_size(&cookies_db);
+    let backup_bytes = file_size(&data_dir.join("cookie_store.db"));
+
+    match utils::platform::read_json(&local_state) {
+        Ok(None) => tracing::info!(
+            target: "ventus::profile",
+            cookies_db_bytes = ?cookies_bytes,
+            backup_db_bytes = ?backup_bytes,
+            "[PROFILE] no WebView2 Local State yet — fresh profile, WebView2 will mint a cookie key"
+        ),
+        Ok(Some(state)) => {
+            let has_os_crypt = state.get("os_crypt").is_some();
+            let keys = state.as_object().map(|o| o.len()).unwrap_or(0);
+            if has_os_crypt {
+                tracing::info!(
+                    target: "ventus::profile",
+                    bytes = ?bytes,
+                    keys,
+                    cookies_db_bytes = ?cookies_bytes,
+                    backup_db_bytes = ?backup_bytes,
+                    "[PROFILE] WebView2 Local State healthy — cookie key present"
+                );
+            } else {
+                tracing::error!(
+                    target: "ventus::autolog",
+                    bytes = ?bytes,
+                    keys,
+                    cookies_db_bytes = ?cookies_bytes,
+                    backup_db_bytes = ?backup_bytes,
+                    "[PROFILE] WebView2 Local State has NO os_crypt — every saved cookie is about to become undecryptable"
+                );
+            }
+        }
+        Err(err) => tracing::error!(
+            target: "ventus::autolog",
+            bytes = ?bytes,
+            cookies_db_bytes = ?cookies_bytes,
+            backup_db_bytes = ?backup_bytes,
+            error = %err,
+            "[PROFILE] WebView2 Local State unreadable — leaving it alone so the cookie key survives"
+        ),
+    }
+
+    let key_file = data_dir.join("Local State.json");
+    match utils::platform::read_json(&key_file) {
+        Ok(None) => tracing::info!(target: "ventus::profile", "[PROFILE] no Ventus key file yet"),
+        Ok(Some(state)) => tracing::info!(
+            target: "ventus::profile",
+            has_key = state.get("os_crypt").is_some(),
+            "[PROFILE] Ventus key file readable"
+        ),
+        Err(err) => tracing::error!(
+            target: "ventus::autolog",
+            error = %err,
+            "[PROFILE] Ventus key file unreadable — cookie backups and saved passwords stay locked this session"
+        ),
+    }
+}
+
 fn sync_webview_secure_dns_prefs(profile_root: &std::path::Path, settings: &config::AppSettings) {
     if let Err(err) = write_webview_secure_dns_prefs(profile_root, settings) {
         tracing::error!(
