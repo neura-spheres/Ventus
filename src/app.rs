@@ -2911,6 +2911,22 @@ fn crash_reload_aborted_nav(
     })
 }
 
+fn load_starved_by_crash(state: &AppState, tab_id: &str, url: &str) -> bool {
+    if state.tab_manager.active_tab_id.as_deref() != Some(tab_id) {
+        return false;
+    }
+    if !url.starts_with("http") {
+        return false;
+    }
+    if state.crash_reloads.get(tab_id).copied().unwrap_or(0) >= CRASH_RELOAD_MAX {
+        return false;
+    }
+    state
+        .last_subprocess_crash
+        .map(|at| at.elapsed().as_millis() < CRASH_RELOAD_WINDOW_MS)
+        .unwrap_or(false)
+}
+
 fn nav_superseded(current: Option<&String>, aborted: &str) -> bool {
     current
         .map(|current| !same_nav(current, aborted))
@@ -3926,7 +3942,14 @@ pub fn handle_app_event_inner(
                 state.native_loads.remove(&tab_id);
                 state.native_nav_ids.remove(&tab_id);
                 state.load_recoveries.remove(&load_key(&tab_id, &clean_url));
-                state.crash_reloads.remove(&tab_id);
+                let starved = load_starved_by_crash(state, &tab_id, &clean_url);
+                if starved {
+                    let count = state.crash_reloads.get(&tab_id).copied().unwrap_or(0);
+                    state.crash_reloads.insert(tab_id.clone(), count + 1);
+                    state.last_subprocess_crash = None;
+                } else {
+                    state.crash_reloads.remove(&tab_id);
+                }
                 state.load_progress.remove(&tab_id);
                 if let Some(started) = state.nav_started_at.remove(&tab_id) {
                     let dur_ms = started.elapsed().as_millis() as u64;
@@ -3959,6 +3982,18 @@ pub fn handle_app_event_inner(
                         .evaluate_script("window.__neura && window.__neura.finishLoadProgress()");
                 }
                 state.push_state_to_chrome(chrome);
+                if starved {
+                    tracing::warn!(
+                        target: "ventus::autolog",
+                        tab = %tab_id,
+                        url = %crate::utils::url::log_url(&clean_url),
+                        "page finished loading while the network process was restarting — reloading so its styles and scripts arrive"
+                    );
+                    return Some(TabAction::ReloadContent {
+                        tab_id,
+                        url: clean_url,
+                    });
+                }
                 return None;
             }
             None
