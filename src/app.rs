@@ -3838,7 +3838,14 @@ pub fn handle_app_event_inner(
             if let Some(tab) = state.tab_manager.get_tab(&tab_id) {
                 state.load_recoveries.remove(&load_key(&tab_id, &tab.url));
             }
-            state.crash_reloads.remove(&tab_id);
+            let starved = load_starved_by_crash(state, &tab_id, &clean_url);
+            if starved {
+                let count = state.crash_reloads.get(&tab_id).copied().unwrap_or(0);
+                state.crash_reloads.insert(tab_id.clone(), count + 1);
+                state.last_subprocess_crash = None;
+            } else {
+                state.crash_reloads.remove(&tab_id);
+            }
             state.fresh_abort_retries.remove(&tab_id);
             state.native_loads.remove(&tab_id);
             state.native_nav_ids.remove(&tab_id);
@@ -3879,6 +3886,18 @@ pub fn handle_app_event_inner(
                     chrome.evaluate_script("window.__neura && window.__neura.finishLoadProgress()");
             }
             state.push_state_to_chrome(chrome);
+            if starved {
+                tracing::warn!(
+                    target: "ventus::autolog",
+                    tab = %tab_id,
+                    url = %crate::utils::url::log_url(&clean_url),
+                    "page finished loading while the network process was restarting — reloading so its styles and scripts arrive"
+                );
+                return Some(TabAction::ReloadContent {
+                    tab_id,
+                    url: clean_url,
+                });
+            }
             translate_probe_action(&tab_id, &clean_url, state)
         }
         AppEvent::ContentLoadProgress {
