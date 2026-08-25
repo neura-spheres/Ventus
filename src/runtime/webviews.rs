@@ -1233,10 +1233,11 @@ fn doh_feature_arg(url: &str, mode: &config::SecureDnsMode) -> String {
 
 fn sync_webview_secure_dns_prefs(profile_root: &std::path::Path, settings: &config::AppSettings) {
     if let Err(err) = write_webview_secure_dns_prefs(profile_root, settings) {
-        tracing::warn!(
-            "secure_dns: failed to update WebView2 prefs at {}: {}",
-            profile_root.display(),
-            err
+        tracing::error!(
+            target: "ventus::autolog",
+            profile = %profile_root.display(),
+            error = %err,
+            "secure_dns: left WebView2 Local State untouched — it holds the cookie encryption key"
         );
     }
 }
@@ -1245,19 +1246,17 @@ fn write_webview_secure_dns_prefs(
     profile_root: &std::path::Path,
     settings: &config::AppSettings,
 ) -> anyhow::Result<()> {
-    let profile_dir = profile_root.join("EBWebView");
-    std::fs::create_dir_all(&profile_dir)?;
-    let local_state_path = profile_dir.join("Local State");
-    let mut local_state = match std::fs::read_to_string(&local_state_path) {
-        Ok(json) => serde_json::from_str::<serde_json::Value>(&json)
-            .unwrap_or_else(|_| serde_json::json!({})),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => serde_json::json!({}),
-        Err(err) => return Err(err.into()),
-    };
+    let local_state_path = profile_root.join("EBWebView").join("Local State");
+    let existing = utils::platform::read_json(&local_state_path)?;
+    let mut local_state = existing
+        .clone()
+        .unwrap_or_else(|| serde_json::json!({}));
     apply_secure_dns_local_state(&mut local_state, settings);
     apply_webview_privacy_local_state(&mut local_state, settings);
-    std::fs::write(local_state_path, serde_json::to_vec(&local_state)?)?;
-    Ok(())
+    if existing.as_ref() == Some(&local_state) {
+        return Ok(());
+    }
+    utils::platform::write_json_atomic(&local_state_path, &local_state)
 }
 
 fn apply_secure_dns_local_state(

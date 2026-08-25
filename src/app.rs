@@ -234,7 +234,14 @@ impl AppState {
             auth: None,
             user_profile: None,
             history_last_saved: HashMap::new(),
-            pwd_key: crate::storage::crypto::store_key(data_dir).unwrap_or([0u8; 32]),
+            pwd_key: crate::storage::crypto::store_key(data_dir).unwrap_or_else(|e| {
+                tracing::error!(
+                    target: "ventus::autolog",
+                    error = %e,
+                    "password key unavailable — saved passwords stay locked and this session uses a throwaway key"
+                );
+                crate::storage::crypto::random_key()
+            }),
             pending_pwd_save: None,
             requested_permissions: HashMap::new(),
             download_samples: HashMap::new(),

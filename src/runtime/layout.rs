@@ -712,11 +712,12 @@ fn restore_startup_cookies(
         .filter(|c| !have_keys.contains(&(c.domain.clone(), c.path.clone(), c.name.clone())))
         .cloned()
         .collect();
-    tracing::info!(
-        "cookie heal: webview loaded {} cookies, backup has {}, injecting {} missing",
-        have.len(),
-        cookies.len(),
-        missing.len()
+    tracing::warn!(
+        target: "ventus::autolog",
+        loaded = have.len(),
+        backup = cookies.len(),
+        injecting = missing.len(),
+        "cookie heal: WebView2 profile had no cookie DB, replaying the backup"
     );
     if !missing.is_empty() {
         browser::cookie_manager::restore_cookies(wv, &missing);

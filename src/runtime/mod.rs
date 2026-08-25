@@ -682,8 +682,6 @@ pub fn run() {
     std::fs::create_dir_all(&webview_data_dir).expect("create WebView2 profile");
     encrypt_app_storage(&webview_data_dir);
     #[cfg(windows)]
-    sync_webview_secure_dns_prefs(&webview_data_dir, &state.settings);
-    #[cfg(windows)]
     if !new_window
         && !wait_for_webview_profiles_released(
             &[webview_data_dir.as_path()],
@@ -695,6 +693,8 @@ pub fn run() {
             "[STARTUP] WebView2 profile still locked after waiting; chrome build will retry"
         );
     }
+    #[cfg(windows)]
+    sync_webview_secure_dns_prefs(&webview_data_dir, &state.settings);
     let mut content_web_context = Some(wry::WebContext::new(Some(webview_data_dir.clone())));
 
     let chrome = {

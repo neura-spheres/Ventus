@@ -119,7 +119,6 @@ fn claim_instance(
     data_dir: &std::path::Path,
 ) -> windows::Win32::Foundation::HANDLE {
     use windows::Win32::Foundation::HANDLE;
-    // Secondary windows skip the single-instance guard — they share the same profile.
     if new_window {
         return HANDLE(0);
     }
@@ -495,14 +494,15 @@ fn drain_message_queue_ms(ms: u64) {
 
 #[cfg(windows)]
 fn process_running(pid: u32) -> bool {
-    use windows::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0};
+    use windows::core::HRESULT;
+    use windows::Win32::Foundation::{CloseHandle, ERROR_INVALID_PARAMETER, WAIT_OBJECT_0};
     use windows::Win32::System::Threading::{
         OpenProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE,
     };
 
-    let handle = unsafe { OpenProcess(PROCESS_SYNCHRONIZE, false, pid) };
-    let Ok(handle) = handle else {
-        return false;
+    let handle = match unsafe { OpenProcess(PROCESS_SYNCHRONIZE, false, pid) } {
+        Ok(handle) => handle,
+        Err(err) => return err.code() != HRESULT::from_win32(ERROR_INVALID_PARAMETER.0),
     };
     if handle.is_invalid() {
         return false;

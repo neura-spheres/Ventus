@@ -635,6 +635,105 @@ mod webview_arg_tests {
         let _ = std::fs::remove_dir_all(&root);
     }
 
+    fn local_state_test_root(name: &str) -> std::path::PathBuf {
+        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join("tmp")
+            .join(format!("{}-{}", name, std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("EBWebView")).unwrap();
+        root
+    }
+
+    #[test]
+    fn corrupt_local_state_is_never_overwritten() {
+        let root = local_state_test_root("local-state-corrupt");
+        let path = root.join("EBWebView").join("Local State");
+        let corrupt = r#"{"os_crypt":{"encrypted_key":"RFBBUEl"#;
+        std::fs::write(&path, corrupt).unwrap();
+
+        let mut settings = config::AppSettings::default();
+        settings.privacy.secure_dns_enabled = true;
+
+        assert!(write_webview_secure_dns_prefs(&root, &settings).is_err());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), corrupt);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn empty_local_state_is_never_overwritten() {
+        let root = local_state_test_root("local-state-empty");
+        let path = root.join("EBWebView").join("Local State");
+        std::fs::write(&path, b"").unwrap();
+
+        let settings = config::AppSettings::default();
+        assert!(write_webview_secure_dns_prefs(&root, &settings).is_err());
+        assert_eq!(std::fs::metadata(&path).unwrap().len(), 0);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn local_state_write_keeps_os_crypt_and_skips_when_unchanged() {
+        let root = local_state_test_root("local-state-os-crypt");
+        let path = root.join("EBWebView").join("Local State");
+        std::fs::write(
+            &path,
+            r#"{"os_crypt":{"encrypted_key":"c2VjcmV0"},"variations_seed":"x"}"#,
+        )
+        .unwrap();
+
+        let settings = config::AppSettings::default();
+        write_webview_secure_dns_prefs(&root, &settings).unwrap();
+
+        let state = serde_json::from_str::<serde_json::Value>(
+            &std::fs::read_to_string(&path).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(state["os_crypt"]["encrypted_key"], "c2VjcmV0");
+        assert_eq!(state["variations_seed"], "x");
+        assert_eq!(state["dns_over_https"]["mode"], "off");
+
+        let before = std::fs::metadata(&path).unwrap().modified().unwrap();
+        write_webview_secure_dns_prefs(&root, &settings).unwrap();
+        assert_eq!(std::fs::metadata(&path).unwrap().modified().unwrap(), before);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn undecryptable_cookie_backups_are_dropped_not_blanked() {
+        let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join("tmp")
+            .join(format!("cookie-store-decrypt-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let store = storage::cookie_store::open(&dir).unwrap();
+        storage::cookie_store::save(
+            &store,
+            &[storage::cookie_store::CookieRecord {
+                name: "SID".into(),
+                value: "real-session".into(),
+                domain: ".example.com".into(),
+                path: "/".into(),
+                expires: -1.0,
+                is_secure: true,
+                is_http_only: true,
+                same_site: "Lax".into(),
+            }],
+        )
+        .unwrap();
+        assert_eq!(storage::cookie_store::load_all(&store).unwrap().len(), 1);
+        drop(store);
+
+        std::fs::remove_file(dir.join("Local State.json")).unwrap();
+        let rekeyed = storage::cookie_store::open(&dir).unwrap();
+        let loaded = storage::cookie_store::load_all(&rekeyed).unwrap();
+        assert!(loaded.is_empty());
+        drop(rekeyed);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[cfg(windows)]
     #[test]
     fn webview_profile_lock_paths_include_real_webview2_lockfile() {
