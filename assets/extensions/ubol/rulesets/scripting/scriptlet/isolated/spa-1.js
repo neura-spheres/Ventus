@@ -72,6 +72,8 @@ function getSafeCookieValuesFn() {
         'decline', 'declined',
         'closed', 'next', 'mandatory',
         'disagree', 'agree',
+        'set', 'unset',
+        'given',
     ];
 }
 
@@ -280,13 +282,14 @@ function removeNodeText(
 function replaceNodeTextFn(
     nodeName = '',
     pattern = '',
-    replacement = ''
+    replacement = '',
+    ...varargs
 ) {
     const safe = safeSelf();
     const logPrefix = safe.makeLogPrefix('replace-node-text.fn', ...Array.from(arguments));
     const reNodeName = safe.patternToRegex(nodeName, 'i', true);
     const rePattern = safe.patternToRegex(pattern, 'gms');
-    const extraArgs = safe.getExtraArgs(Array.from(arguments), 3);
+    const extraArgs = safe.parseVarargs(varargs);
     const reIncludes = extraArgs.includes || extraArgs.condition
         ? safe.patternToRegex(extraArgs.includes || extraArgs.condition, 'ms')
         : null;
@@ -409,8 +412,8 @@ function runAt(fn, when) {
 }
 
 function safeSelf() {
-    if ( scriptletGlobals.safeSelf ) {
-        return scriptletGlobals.safeSelf;
+    if ( safeSelf.safe ) {
+        return safeSelf.safe;
     }
     const self = globalThis;
     const safe = {
@@ -515,21 +518,20 @@ function safeSelf() {
             }
             return /^/;
         },
-        getExtraArgs(args, offset = 0) {
-            const entries = args.slice(offset).reduce((out, v, i, a) => {
-                if ( (i & 1) === 0 ) {
-                    const rawValue = a[i+1];
-                    const value = /^\d+$/.test(rawValue)
-                        ? parseInt(rawValue, 10)
-                        : rawValue;
-                    out.push([ a[i], value ]);
-                }
+        parseVarargs(varargs) {
+            const entries = varargs.reduce((out, v, i, a) => {
+                if ( i & 1 ) { return out; }
+                const rawValue = a[i+1];
+                const value = /^\d+$/.test(rawValue)
+                    ? parseInt(rawValue, 10)
+                    : rawValue;
+                out.push([ a[i], value ]);
                 return out;
             }, []);
             return this.Object_fromEntries(entries);
         },
     };
-    scriptletGlobals.safeSelf = safe;
+    safeSelf.safe = safe;
     if ( scriptletGlobals.bcSecret === undefined ) { return safe; }
     // This is executed only when the logger is opened
     safe.logLevel = scriptletGlobals.logLevel || 1;
@@ -590,7 +592,8 @@ function safeSelf() {
 function setAttr(
     selector = '',
     attr = '',
-    value = ''
+    value = '',
+    ...varargs
 ) {
     const safe = safeSelf();
     const logPrefix = safe.makeLogPrefix('set-attr', selector, attr, value);
@@ -604,7 +607,7 @@ function setAttr(
             return;
         }
     }
-    const options = safe.getExtraArgs(Array.from(arguments), 3);
+    const options = safe.parseVarargs(varargs);
     setAttrFn(false, logPrefix, selector, attr, value, options);
 }
 
@@ -671,10 +674,9 @@ function setAttrFn(
     const start = ( ) => {
         if ( applySetAttr() === false ) { return; }
         observer = new MutationObserver(onDomChanged);
-        observer.observe(document.body, {
-            subtree: true,
-            childList: true,
-        });
+        const root = document.documentElement;
+        if ( root instanceof self.Node === false ) { return; }
+        observer.observe(root, { subtree: true, childList: true });
     };
     runAt(( ) => { start(); }, options.runAt || 'idle');
 }
@@ -682,7 +684,8 @@ function setAttrFn(
 function setCookie(
     name = '',
     value = '',
-    path = ''
+    path = '',
+    ...varargs
 ) {
     if ( name === '' ) { return; }
     const safe = safeSelf();
@@ -703,7 +706,7 @@ function setCookie(
         value,
         '',
         path,
-        safe.getExtraArgs(Array.from(arguments), 3)
+        safe.parseVarargs(varargs)
     );
 
     if ( done ) {
@@ -782,9 +785,9 @@ function setCookieReload(name, value, path, ...args) {
     setCookie(name, value, path, 'reload', '1', ...args);
 }
 
-function setLocalStorageItem(key = '', value = '') {
+function setLocalStorageItem(key = '', value = '', ...varargs) {
     const safe = safeSelf();
-    const options = safe.getExtraArgs(Array.from(arguments), 2)
+    const options = safe.parseVarargs(varargs)
     setLocalStorageItemFn('local', false, key, value, options);
 }
 
@@ -866,9 +869,9 @@ function setLocalStorageItemFn(
     }
 }
 
-function setSessionStorageItem(key = '', value = '') {
+function setSessionStorageItem(key = '', value = '', ...varargs) {
     const safe = safeSelf();
-    const options = safe.getExtraArgs(Array.from(arguments), 2)
+    const options = safe.parseVarargs(varargs)
     setLocalStorageItemFn('session', false, key, value, options);
 }
 
@@ -965,19 +968,7 @@ function urlSkip(url, blocked, steps) {
 
 const scriptletGlobals = {}; // eslint-disable-line
 
-const $scriptletFunctions$ = /* 9 */
-[setLocalStorageItem,setCookie,setSessionStorageItem,removeNodeText,setCookieReload,hrefSanitizer,removeClass,preventRefresh,setAttr];
-
-const $scriptletArgs$ = /* 37 */ ["/^adblock/","$remove$","unlock","1","modalVisited","true","adsCompleted","finalReloadDone","script","modifiedParagraphs.add","force_ad","2","visited","last_ads","yes","Ads","clicked_ads","adtura","modal_promo",".download-links a[href^=\"https://unlock.uberxviral.com/#\"]","[href]","base64decode","_theme-banner-upper","html","bgPartners2019",".videoContainer > div.beachPartners + div","CLI_02_Dxxxxxxxxxxxxxxx","a[href*=\"://ouo.io/\"]","?s","adwallLocked","nf_done_clicks_v3_new","3","a[data-stream][target=\"_blank\"]","data-clicks","ads-popup","url_popup","player"];
-
-const $scriptletArglists$ = /* 27 */ "0,0,1;1,2,3;1,4,5;1,6,3;2,7,3;0,7,3;3,8,9;1,10,11;1,12,3;0,13,14;1,15,11;1,16,11;4,17,3;1,18,3;5,19,20,21;6,22,23;6,24,25;1,12,14;1,26,3;7;5,27,28;0,29,1;2,30,31;8,32,33,11;3,8,34;3,8,35;1,36,3";
-
-const $scriptletArglistRefs$ = /* 60 */ "11;19;19;19;19;19;24;19;25;13;26;15;1;26;26;26;9;26;20;26;12;14,26;23;2,3,4,5;19;26;26;7;26;10;9;26;2,3,4,5;16;19;0;9;26;26;7;6;26;9;26;22;8;9;18;9;22;9;8;9;9;17;9;9;21;9;17";
-
-const $scriptletHostnames$ = /* 60 */ ["1i1.in","4br.me","enrt.eu","ent4.net","fir3.net","cl1ca.com","elpais.bo","seulink.*","animeid.tv","estacio.br","pelis1.com","canalnet.tv","fgtd.online","homecine.cc","homecine.to","homecine.tv","maxvip.site","pornhot.net","hentai-id.tv","iputitas.net","pelisflix2.*","pelismart.tv","plplayer.com","redecanais.*","encurtalink.*","pelispedia.is","smartpelis.tv","techdiniz.com","flixseries.org","guiasaude.info","infoinvest.org","malfollado.com","redecanaistv.*","beachcam.meo.pt","dev.encurta.app","devilnovels.com","gastroponto.com","metroseries.net","seriesmetro.net","trueliketop.org","cursomecanet.com","papayaseries.net","saudeecomida.com","seriesbanana.com","esportesdavez.com","guiacripto.online","meufinanceiro.org","portecnologia.com","receitastop.click","redirectnflix.com","guiavidaesaude.com","sabornutritivo.com","blog.whatsappgb.top","comidaefamilia.food","nutricaohoje.website","fomedereceitas.online","receitasdocheff.online","diariodocomercio.com.br","investimentosfacil.online","receitasoncaseiras.online"];
-
-const $scriptletFromRegexes$ = /* 0 */ [];
-
+const $hasHostnames$ = true;
 const $hasEntities$ = true;
 const $hasAncestors$ = false;
 const $hasRegexes$ = false;
@@ -996,18 +987,22 @@ const entries = (( ) => {
         const hn1 = origin.slice(beg+3)
         const end = hn1.indexOf(':');
         const hn2 = end === -1 ? hn1 : hn1.slice(0, end);
-        const hnParts = hn2.split('.');
         if ( hn2.length === 0 ) { return; }
-        const hns = [];
-        for ( let i = 0; i < hnParts.length; i++ ) {
-            hns.push(`${hnParts.slice(i).join('.')}`);
+        const hns = [ hn2 ];
+        for ( let pos = 0; ; ) {
+            pos = hn2.indexOf('.', pos) + 1;
+            if ( pos === 0 ) { break; }
+            hns.push(hn2.slice(pos));
         }
+        hns.push('*');
         const ens = [];
         if ( $hasEntities$ ) {
-            const n = hnParts.length - 1;
-            for ( let i = 0; i < n; i++ ) {
-                for ( let j = n; j > i; j-- ) {
-                    ens.push(`${hnParts.slice(i,j).join('.')}.*`);
+            for ( let hn of hns ) {
+                for (;;) {
+                    const pos = hn.lastIndexOf('.');
+                    if ( pos === -1 ) { break; }
+                    hn = hn.slice(0, pos);
+                    ens.push(`${hn}.*`);
                 }
             }
             ens.sort((a, b) => {
@@ -1017,12 +1012,14 @@ const entries = (( ) => {
             });
         }
         return { hns, ens, i };
-    }).filter(a => a !== undefined);
+    }).filter(a => a);
 })();
 if ( entries.length === 0 ) { return; }
 
-const todoIndices = new Set();
-if ( $scriptletHostnames$.length ) {
+const todo = new Set();
+
+if ( $hasHostnames$ ) {
+    const $scriptletHostnames$ = /* 61 */ ["1i1.in","4br.me","enrt.eu","ent4.net","fir3.net","cl1ca.com","elpais.bo","seulink.*","animeid.tv","estacio.br","pelis1.com","canalnet.tv","fgtd.online","homecine.cc","homecine.to","homecine.tv","maxvip.site","pornhot.net","hentai-id.tv","iputitas.net","pelisflix2.*","pelismart.tv","plplayer.com","redecanais.*","encurtalink.*","pelispedia.is","smartpelis.tv","techdiniz.com","flixseries.org","guiasaude.info","infoinvest.org","malfollado.com","redecanaistv.*","beachcam.meo.pt","dev.encurta.app","devilnovels.com","gastroponto.com","metroseries.net","seriesmetro.net","trueliketop.org","cursomecanet.com","papayaseries.net","saudeecomida.com","seriesbanana.com","esportesdavez.com","guiacripto.online","meufinanceiro.org","portecnologia.com","receitastop.click","redirectnflix.com","guiavidaesaude.com","sabornutritivo.com","blog.whatsappgb.top","comidaefamilia.food","saopaulosecreto.com","nutricaohoje.website","fomedereceitas.online","receitasdocheff.online","diariodocomercio.com.br","investimentosfacil.online","receitasoncaseiras.online"];
     const collectArglistRefIndices = (out, hn, r) => {
         let l = 0, i = 0, d = 0;
         let candidate = '';
@@ -1057,6 +1054,7 @@ if ( $scriptletHostnames$.length ) {
             }
         }
     };
+    const todoIndices = new Set();
     indicesFromHostname(todoIndices, entries[0]);
     if ( $hasAncestors$ ) {
         for ( const entry of entries ) {
@@ -1064,20 +1062,20 @@ if ( $scriptletHostnames$.length ) {
             indicesFromHostname(todoIndices, entry, '>>');
         }
     }
-    $scriptletHostnames$.length = 0;
-}
-
-// Collect arglist references
-const todo = new Set();
-if ( todoIndices.size !== 0 ) {
-    const arglistRefs = $scriptletArglistRefs$.split(';');
-    for ( const i of todoIndices ) {
-        for ( const ref of JSON.parse(`[${arglistRefs[i]}]`) ) {
-            todo.add(ref);
+    // Collect arglist references
+    if ( todoIndices.size ) {
+        const $scriptletArglistRefs$ = /* 61 */ "13;21;21;21;21;21;26;21;27;15;28;17;2;28;28;28;11;28;22;28;14;16,28;25;3,4,5,6;21;28;28;8;28;12;11;28;3,4,5,6;18;21;1;11;28;28;8;7;28;11;28;24;9;11;20;11;24;11;9;11;11;10;19;11;11;23;11;19";
+        const arglistRefs = $scriptletArglistRefs$.split(';');
+        for ( const i of todoIndices ) {
+            for ( const ref of JSON.parse(`[${arglistRefs[i]}]`) ) {
+                todo.add(ref);
+            }
         }
     }
 }
+
 if ( $hasRegexes$ ) {
+    const $scriptletFromRegexes$ = /* 0 */ [];
     const { hns } = entries[0];
     for ( let i = 0, n = $scriptletFromRegexes$.length; i < n; i += 3 ) {
         const needle = $scriptletFromRegexes$[i+0];
@@ -1094,10 +1092,13 @@ if ( $hasRegexes$ ) {
         }
     }
 }
-if ( todo.size === 0 ) { return; }
 
-// Execute scriplets
-{
+// Execute scriptlets
+if ( todo.size && todo.has(0) === false ) {
+    const $scriptletFunctions$ = /* 9 */
+[setLocalStorageItem,setCookie,setSessionStorageItem,removeNodeText,hrefSanitizer,setCookieReload,removeClass,preventRefresh,setAttr];
+    const $scriptletArgs$ = /* 39 */ ["/^adblock/","$remove$","unlock","1","modalVisited","true","adsCompleted","finalReloadDone","script","modifiedParagraphs.add","force_ad","2","visited","a[href^=\"https://adesampa.com.br/\"]","[href]","removeParam","last_ads","yes","Ads","clicked_ads","adtura","modal_promo",".download-links a[href^=\"https://unlock.uberxviral.com/#\"]","base64decode","_theme-banner-upper","html","bgPartners2019",".videoContainer > div.beachPartners + div","CLI_02_Dxxxxxxxxxxxxxxx","a[href*=\"://ouo.io/\"]","?s","adwallLocked","nf_done_clicks_v3_new","3","a[data-stream][target=\"_blank\"]","data-clicks","ads-popup","url_popup","player"];
+    const $scriptletArglists$ = /* 29 */ ";0,0,1;1,2,3;1,4,5;1,6,3;2,7,3;0,7,3;3,8,9;1,10,11;1,12,3;4,13,14,15;0,16,17;1,18,11;1,19,11;5,20,3;1,21,3;4,22,14,23;6,24,25;6,26,27;1,12,17;1,28,3;7;4,29,30;0,31,1;2,32,33;8,34,35,11;3,8,36;3,8,37;1,38,3";
     const arglists = $scriptletArglists$.split(';');
     const args = $scriptletArgs$;
     for ( const ref of todo ) {

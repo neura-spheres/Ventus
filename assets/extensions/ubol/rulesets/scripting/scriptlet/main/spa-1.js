@@ -78,28 +78,7 @@ function abortCurrentScriptFn(
     const logPrefix = safe.makeLogPrefix('abort-current-script', target, needle, context);
     const reNeedle = safe.patternToRegex(needle);
     const reContext = safe.patternToRegex(context);
-    const extraArgs = safe.getExtraArgs(Array.from(arguments), 3);
     const thisScript = document.currentScript;
-    const chain = safe.String_split.call(target, '.');
-    let owner = window;
-    let prop;
-    for (;;) {
-        prop = chain.shift();
-        if ( chain.length === 0 ) { break; }
-        if ( prop in owner === false ) { break; }
-        owner = owner[prop];
-        if ( owner instanceof Object === false ) { return; }
-    }
-    let value;
-    let desc = Object.getOwnPropertyDescriptor(owner, prop);
-    if (
-        desc instanceof Object === false ||
-        desc.get instanceof Function === false
-    ) {
-        value = owner[prop];
-        desc = undefined;
-    }
-    const debug = shouldDebug(extraArgs);
     const exceptionToken = getExceptionTokenFn();
     const scriptTexts = new WeakMap();
     const textContentGetter = Object.getOwnPropertyDescriptor(Node.prototype, 'textContent').get;
@@ -107,8 +86,7 @@ function abortCurrentScriptFn(
         let text = textContentGetter.call(elem);
         if ( text.trim() !== '' ) { return text; }
         if ( scriptTexts.has(elem) ) { return scriptTexts.get(elem); }
-        const [ , mime, content ] =
-            /^data:([^,]*),(.+)$/.exec(elem.src.trim()) ||
+        const [ , mime, content ] = /^data:([^,]*),(.+)$/.exec(elem.src.trim()) ||
             [ '', '', '' ];
         try {
             switch ( true ) {
@@ -128,50 +106,28 @@ function abortCurrentScriptFn(
         const e = document.currentScript;
         if ( e instanceof HTMLScriptElement === false ) { return; }
         if ( e === thisScript ) { return; }
-        if ( context !== '' && reContext.test(e.src) === false ) {
-            // eslint-disable-next-line no-debugger
-            if ( debug === 'nomatch' || debug === 'all' ) { debugger; }
-            return;
-        }
+        if ( context !== '' && reContext.test(e.src) === false ) { return; }
         if ( safe.logLevel > 1 && context !== '' ) {
             safe.uboLog(logPrefix, `Matched src\n${e.src}`);
         }
         const scriptText = getScriptText(e);
-        if ( reNeedle.test(scriptText) === false ) {
-            // eslint-disable-next-line no-debugger
-            if ( debug === 'nomatch' || debug === 'all' ) { debugger; }
-            return;
-        }
+        if ( reNeedle.test(scriptText) === false ) { return; }
         if ( safe.logLevel > 1 ) {
             safe.uboLog(logPrefix, `Matched text\n${scriptText}`);
         }
-        // eslint-disable-next-line no-debugger
-        if ( debug === 'match' || debug === 'all' ) { debugger; }
         safe.uboLog(logPrefix, 'Aborted');
         throw new ReferenceError(exceptionToken);
     };
-    // eslint-disable-next-line no-debugger
-    if ( debug === 'install' ) { debugger; }
-    try {
-        Object.defineProperty(owner, prop, {
-            get: function() {
-                validate();
-                return desc instanceof Object
-                    ? desc.get.call(owner)
-                    : value;
-            },
-            set: function(a) {
-                validate();
-                if ( desc instanceof Object ) {
-                    desc.set.call(owner, a);
-                } else {
-                    value = a;
-                }
-            }
-        });
-    } catch(ex) {
-        safe.uboErr(logPrefix, `Error: ${ex}`);
-    }
+    let currentValue = trapPropertyFn(target, {
+        get: function() {
+            validate();
+            return currentValue;
+        },
+        set: function(a) {
+            validate();
+            currentValue = a;
+        }
+    }, { canThrow: true });
 }
 
 function abortOnPropertyRead(
@@ -248,12 +204,13 @@ function abortOnPropertyWrite(
 
 function abortOnStackTrace(
     chain = '',
-    needle = ''
+    needle = '',
+    ...varargs
 ) {
     if ( typeof chain !== 'string' ) { return; }
     const safe = safeSelf();
     const needleDetails = safe.initPattern(needle, { canNegate: true });
-    const extraArgs = safe.getExtraArgs(Array.from(arguments), 2);
+    const extraArgs = safe.parseVarargs(varargs);
     if ( needle === '' ) { extraArgs.log = 'all'; }
     const makeProxy = function(owner, chain) {
         const pos = chain.indexOf('.');
@@ -478,12 +435,13 @@ function getRandomTokenFn() {
 function jsonPrune(
     rawPrunePaths = '',
     rawNeedlePaths = '',
-    stackNeedle = ''
+    stackNeedle = '',
+    ...varargs
 ) {
     const safe = safeSelf();
     const logPrefix = safe.makeLogPrefix('json-prune', rawPrunePaths, rawNeedlePaths, stackNeedle);
     const stackNeedleDetails = safe.initPattern(stackNeedle, { canNegate: true });
-    const extraArgs = safe.getExtraArgs(Array.from(arguments), 3);
+    const extraArgs = safe.parseVarargs(varargs);
     proxyApplyFn('JSON.parse', function(context) {
         const objBefore = context.reflect();
         if ( rawPrunePaths === '' ) {
@@ -980,10 +938,11 @@ function parsePropertiesToMatchFn(propsToMatch, implicit = '') {
 
 function preventAddEventListener(
     type = '',
-    pattern = ''
+    pattern = '',
+    ...varargs
 ) {
     const safe = safeSelf();
-    const extraArgs = safe.getExtraArgs(Array.from(arguments), 2);
+    const extraArgs = safe.parseVarargs(varargs);
     const logPrefix = safe.makeLogPrefix('prevent-addEventListener', type, pattern);
     const reType = safe.patternToRegex(type, undefined, true);
     const rePattern = safe.patternToRegex(pattern);
@@ -1050,22 +1009,23 @@ function preventAddEventListener(
         }
         return context.reflect();
     };
+    const protect = owner => {
+        const { addEventListener } = owner;
+        Object.defineProperty(owner, 'addEventListener', {
+            set() { },
+            get() { return addEventListener; }
+        });
+    };
     runAt(( ) => {
         proxyApplyFn('EventTarget.prototype.addEventListener', proxyFn);
-        if ( extraArgs.protect ) {
-            const { addEventListener } = EventTarget.prototype;
-            Object.defineProperty(EventTarget.prototype, 'addEventListener', {
-                set() { },
-                get() { return addEventListener; }
-            });
+        if ( extraArgs.protect ) { protect(EventTarget.prototype); }
+        if ( Object.hasOwn(document, 'addEventListener') ) {
+            proxyApplyFn('document.addEventListener', proxyFn);
+            if ( extraArgs.protect ) { protect(document); }
         }
-        proxyApplyFn('document.addEventListener', proxyFn);
-        if ( extraArgs.protect ) {
-            const { addEventListener } = document;
-            Object.defineProperty(document, 'addEventListener', {
-                set() { },
-                get() { return addEventListener; }
-            });
+        if ( Object.hasOwn(window, 'addEventListener') ) {
+            proxyApplyFn('window.addEventListener', proxyFn);
+            if ( extraArgs.protect ) { protect(window); }
         }
     }, extraArgs.runAt);
 }
@@ -1078,7 +1038,8 @@ function preventFetchFn(
     trusted = false,
     propsToMatch = '',
     responseBody = '',
-    responseType = ''
+    responseType = '',
+    ...varargs
 ) {
     const safe = safeSelf();
     const setTimeout = self.setTimeout;
@@ -1089,7 +1050,7 @@ function preventFetchFn(
         responseBody,
         responseType
     );
-    const extraArgs = safe.getExtraArgs(Array.from(arguments), 4);
+    const extraArgs = safe.parseVarargs(varargs);
     const propNeedles = parsePropertiesToMatchFn(propsToMatch, 'url');
     const validResponseProps = {
         ok: [ false, true ],
@@ -1232,7 +1193,7 @@ function preventSetTimeout(
 }
 
 function preventXhr(...args) {
-    return preventXhrFn(false, ...args);
+    preventXhrFn(false, ...args);
 }
 
 function preventXhrFn(
@@ -1405,7 +1366,8 @@ function preventXhrFn(
 
 function proxyApplyFn(
     target = '',
-    handler = ''
+    handler = '',
+    options = {}
 ) {
     let context = globalThis;
     let prop = target;
@@ -1466,20 +1428,22 @@ function proxyApplyFn(
         };
         proxyApplyFn.isCtor = new Map();
         proxyApplyFn.proxies = new WeakMap();
-        proxyApplyFn.nativeToString = Function.prototype.toString;
-        const proxiedToString = new Proxy(Function.prototype.toString, {
-            apply(target, thisArg) {
-                let proxied = thisArg;
-                for(;;) {
-                    const fn = proxyApplyFn.proxies.get(proxied);
-                    if ( fn === undefined ) { break; }
-                    proxied = fn;
+        if ( (options.skipToString || proxyApplyFn.skipToString) !== true ) {
+            proxyApplyFn.nativeToString = Function.prototype.toString;
+            const proxiedToString = new Proxy(Function.prototype.toString, {
+                apply(target, thisArg) {
+                    let proxied = thisArg;
+                    for(;;) {
+                        const fn = proxyApplyFn.proxies.get(proxied);
+                        if ( fn === undefined ) { break; }
+                        proxied = fn;
+                    }
+                    return proxyApplyFn.nativeToString.call(proxied);
                 }
-                return proxyApplyFn.nativeToString.call(proxied);
-            }
-        });
-        proxyApplyFn.proxies.set(proxiedToString, proxyApplyFn.nativeToString);
-        Function.prototype.toString = proxiedToString;
+            });
+            proxyApplyFn.proxies.set(proxiedToString, proxyApplyFn.nativeToString);
+            Function.prototype.toString = proxiedToString;
+        }
     }
     if ( proxyApplyFn.isCtor.has(target) === false ) {
         proxyApplyFn.isCtor.set(target, fn.prototype?.constructor === fn);
@@ -1613,8 +1577,8 @@ function runAtHtmlElementFn(fn) {
 }
 
 function safeSelf() {
-    if ( scriptletGlobals.safeSelf ) {
-        return scriptletGlobals.safeSelf;
+    if ( safeSelf.safe ) {
+        return safeSelf.safe;
     }
     const self = globalThis;
     const safe = {
@@ -1719,21 +1683,20 @@ function safeSelf() {
             }
             return /^/;
         },
-        getExtraArgs(args, offset = 0) {
-            const entries = args.slice(offset).reduce((out, v, i, a) => {
-                if ( (i & 1) === 0 ) {
-                    const rawValue = a[i+1];
-                    const value = /^\d+$/.test(rawValue)
-                        ? parseInt(rawValue, 10)
-                        : rawValue;
-                    out.push([ a[i], value ]);
-                }
+        parseVarargs(varargs) {
+            const entries = varargs.reduce((out, v, i, a) => {
+                if ( i & 1 ) { return out; }
+                const rawValue = a[i+1];
+                const value = /^\d+$/.test(rawValue)
+                    ? parseInt(rawValue, 10)
+                    : rawValue;
+                out.push([ a[i], value ]);
                 return out;
             }, []);
             return this.Object_fromEntries(entries);
         },
     };
-    scriptletGlobals.safeSelf = safe;
+    safeSelf.safe = safe;
     if ( scriptletGlobals.bcSecret === undefined ) { return safe; }
     // This is executed only when the logger is opened
     safe.logLevel = scriptletGlobals.logLevel || 1;
@@ -1800,12 +1763,13 @@ function setConstant(
 function setConstantFn(
     trusted = false,
     chain = '',
-    rawValue = ''
+    rawValue = '',
+    ...varargs
 ) {
     if ( chain === '' ) { return; }
     const safe = safeSelf();
     const logPrefix = safe.makeLogPrefix('set-constant', chain, rawValue);
-    const extraArgs = safe.getExtraArgs(Array.from(arguments), 3);
+    const extraArgs = safe.parseVarargs(varargs);
     function setConstant(chain, rawValue) {
         const trappedProp = (( ) => {
             const pos = chain.lastIndexOf('.');
@@ -1947,9 +1911,77 @@ function setConstantFn(
     }, extraArgs.runAt);
 }
 
-function shouldDebug(details) {
-    if ( details instanceof Object === false ) { return false; }
-    return scriptletGlobals.canDebug && details.debug;
+function trapPropertyFn(propChain, handler, options = {}) {
+    if ( propChain === '' ) { return; }
+    let owner = self;
+    let prop = propChain;
+    for (;;) {
+        const pos = prop.indexOf('.');
+        if ( pos === -1 ) { break; }
+        owner = owner[prop.slice(0, pos)];
+        if ( owner instanceof Object === false ) { return; }
+        prop = prop.slice(pos + 1);
+    }
+    const safe = safeSelf();
+    if ( trapPropertyFn.db === undefined ) {
+        trapPropertyFn.db = new WeakMap();
+        trapPropertyFn.entryFromContext = (owner, prop) => {
+            const handlers = trapPropertyFn.db.get(owner);
+            return handlers?.get(prop);
+        };
+        trapPropertyFn.getter = (owner, prop) => {
+            const entry = trapPropertyFn.entryFromContext(owner, prop);
+            if ( entry === undefined ) { return; }
+            let r = entry.value;
+            for ( const desc of entry.stack ) {
+                try { r = desc.get(); } catch (e) {
+                    if ( entry.canThrow ) { throw e; }
+                }
+            }
+            return r;
+        };
+        trapPropertyFn.setter = (owner, prop, value) => {
+            const entry = trapPropertyFn.entryFromContext(owner, prop);
+            if ( entry === undefined ) { return; }
+            entry.value = value;
+            for ( const desc of entry.stack ) {
+                try { desc.set(value); } catch (e) {
+                    if ( entry.canThrow ) { throw e; }
+                }
+            }
+        };
+    }
+    const { db } = trapPropertyFn;
+    const handlers = db.get(owner) || new Map();
+    if ( handlers.size === 0 ) {
+        db.set(owner, handlers);
+    }
+    const entry = handlers.get(prop) || {
+        value: owner[prop],
+        stack: [],
+    };
+    entry.stack.push(handler);
+    if ( entry.stack.length > 1 ) { return entry.value; }
+    Object.assign(entry, options);
+    handlers.set(prop, entry);
+    const desc = safe.Object_getOwnPropertyDescriptor(owner, prop);
+    if ( desc instanceof safe.Object ) {
+        if ( desc.get || desc.set ) {
+            entry.stack.push(desc);
+        }
+    }
+    try {
+        safe.Object_defineProperty(owner, prop, {
+            get() {
+                return trapPropertyFn.getter(owner, prop);
+            },
+            set(value) {
+                trapPropertyFn.setter(owner, prop, value);
+            }
+        });
+    } catch {
+    }
+    return entry.value;
 }
 
 function validateConstantFn(trusted, raw, extraArgs = {}) {
@@ -2007,14 +2039,15 @@ function validateConstantFn(trusted, raw, extraArgs = {}) {
 function xmlPrune(
     selector = '',
     selectorCheck = '',
-    urlPattern = ''
+    urlPattern = '',
+    ...varargs
 ) {
     if ( typeof selector !== 'string' ) { return; }
     if ( selector === '' ) { return; }
     const safe = safeSelf();
     const logPrefix = safe.makeLogPrefix('xml-prune', selector, selectorCheck, urlPattern);
     const reUrl = safe.patternToRegex(urlPattern);
-    const extraArgs = safe.getExtraArgs(Array.from(arguments), 3);
+    const extraArgs = safe.parseVarargs(varargs);
     const queryAll = (xmlDoc, selector) => {
         const isXpath = /^xpath\(.+\)$/.test(selector);
         if ( isXpath === false ) {
@@ -2147,19 +2180,7 @@ function xmlPrune(
 
 const scriptletGlobals = {}; // eslint-disable-line
 
-const $scriptletFunctions$ = /* 19 */
-[preventFetch,preventSetTimeout,abortOnStackTrace,preventAddEventListener,abortCurrentScript,setConstant,preventXhr,abortOnPropertyWrite,noEvalIf,preventRequestAnimationFrame,adjustSetTimeout,adjustSetInterval,abortOnPropertyRead,removeAttr,preventSetInterval,noWindowOpenIf,jsonPrune,m3uPrune,xmlPrune];
-
-const $scriptletArgs$ = /* 332 */ ["cloudfront.net","offsetHeight","300","doubleclick","document.createElement","detect","load","innerHTML","Image","error","/ads/banner","popunders","noopFunc","/\\.offsetHeight\\s*?===\\s*?0/","adsBlocked","false","adblock","EventTarget.prototype.addEventListener","detectAdBlock","scriptObj","DOMContentLoaded","bait","detected","googlesyndication","checkAdBlock","_wp_chunks","offsetHeight === 0","pagead2.googlesyndication.com","/=window\\.setInterval\\([\\s\\S]*?\\.push\\(/","document.getElementById","showAdblockAlert","/adsbygoogle.js","__ANTI_ADBLOCK_CORE__","/detect|\\.onerror|window\\.open/","decodeURIComponent(atob","advanced_ads_check_adblocker","googleads.g.doubleclick.net","googletagmanager.com","connect.facebook.net","static.ads-twitter.com","google-analytics.com","ULTIMATE_BAIT_REMOVED","adsbygoogle","click","overlay-notification","break;case",".offsetParent===","/window\\.getComputedStyle|adblock-/","unlock","*","0.001","seconds","popads.net","blockAdBlock","method:HEAD","isAdBlocked","String.fromCharCode(_0x","_an.ABMode","undefined","href","a[href]#clickfakeplayer","_0x","500","mode:no-cors","adClickCount","0","close","atob","wp-content/","checkAdsStatus","DHAntiAdBlocker","true","/pagead2\\.googlesyndication.com/ method:HEAD","www3.doubleclick.net","siteAccessPopup()","Por favor","console[_0x","widgets.outbrain.com","window.getComputedStyle","pagead2.googlesyndication.com/pagead/js/adsbygoogle.js","widgets.outbrain.com/outbrain.js","hasAdblock","contador","adsbygoogle.js","detectedAdblock","ad blocker","/mopinion\\.com|iubenda\\.com|bannersnack\\.com|unblockia\\.com|googlesyndication\\.com/","block_ads","fetch","/alert|bloqueador|\\.catch|\\.type/","adBlockerOn","hasAdblocker","banner-ads",".clientHeight","setNptTechAdblockerCookie","possivelAdblockDetectado","eazyAdUnBlockerHttp","antiAdBlockerStyle","Promise[\\'all\\'](urls","/googlesyndication\\.com|iubenda\\.com|unblockia\\.com|bannersnack\\.com|mopinion\\.com/",".html(","/adBlock|\\.height\\(\\)/","playFunction","imasdk.googleapis.com","AdBlockDetector.prototype.test","falseFunc","detect-modal","googletag","{}","googletag._loaded_","securepubads.g.doubleclick.net/pagead/ppub_config","canRunAds","blockAdBlock._options","checkAdblockUser","addEventListener","displayMessage","adManagerBlocked","call-zone-adxs","adBlockFunction","document.getElementsByTagName","$MICROSITE_INFO.blockAdBlock","","adblock.check","app.AdBlock.init","/pagead2\\.googlesyndication\\.com|ads-api\\.twitter\\.com/","alert","eval","history.go","$","blockWall","/^(?!.*(chrome-extension:)).*$/ method:HEAD","Por favor, desative","/adblock|Por favor, desative|adsbygoogle\\.js/","cdo","document.addEventListener",".innerHTML","!document.getElementById(","ads-twitter.com","Object.prototype.autoRecov","/Adblock|\\.height\\(\\)/","jQuery","/Adblock|dummy|detect/","]]=== 0",".adsbygoogle",".offsetHeight === 0","adregain_wall","ad_nodes","hb_now","Object.prototype.adblockerEnabled","0=== _0x","adsbygoogle.loaded","adBlockCheck","pp_show_popupmessage","easySettings.adblock","onload","AdBlock","adblockDetected","null","gothamBatAdblock","/hasAdblock|window\\.getComputedStyle/","PLAYER LIBERADO","/hasAdblock|detectadb|ad-placement/","/outbrain\\.com|adligature\\.com|quantserve\\.com|srvtrck\\.com/","//cdn.taboola.com/libtrc/unpkg/tfa.js","Bl0ckAdBl0ckCo","ppAdblocks","mMCheckAgainBlock","daadb_get_data","adsbygoogle.length","WSL2.config.enableAdblockEcommerce","ads_unblocked","Adblock","ai_front","cicklow_","better_ads_adblock","adBlockDetected","isAdsDisplayed","ATESTADO","1","Lata","/;return \\{clear:function\\(\\)\\{/","/Tamamo_Blocker|aadb_recheck/","loadingAds","dclm_ajax_var.disclaimer_redirect_url","e(!0)","popunder","ShowRewards","window.open","userout","String.prototype.concat","popup","resumeVideoFromAd","initPopunder","URL_VAST_YOUTUBE","__configuredDFPTags","vast_meta_url","ads","ads.policy.skipMode","vmap_ad_breaks interstitials","type=ad",".m3u8","xpath(//*[name()=\"Period\"][.//*[name()=\"BaseURL\" and contains(text(),\".mp.lura.live/prod/\")]] | //*[name()=\"MPD\"]/@mediaPresentationDuration | //*[name()=\"Period\"][.//SegmentList[@presentationTimeOffset=\"0\"]])",".mpd","getid","initPu","adJsView","redirectpage","*.media.*.advertisement_id","contadorClics","enlace","document.write","li[onclick^=\"go_to_player\"] > a[target=\"_blank\"][href]","Object.prototype.adSlot","google.ima.OmidVerificationVendor","exopop","protData","cJsEdge","countdown","acdl","window.location.href","notficationAd","open","excludeDomains","global.noobMaxTry","player.preroll","lolaop","pUrlArray","adsdirect","videoliberado","0.02","anunciotag",".style.display","loadXMLDoc","PLAYER","liberaDownload","create_","!/download\\/|link|atomtt\\.com\\//","adk_pdisp","Loading...","adsHandle_noclick","ads breaks cuepoints times","10000","popurl","the_crakien","allclick_Public","checkCookieClick","onclick","?key=","clickd","_impspcabe","xxxStore","/_0x[\\s\\S]*?parentNode[\\s\\S]*?appendChild/","vidorev_jav_plugin_video_ads_object.vid_ads_m_video_ads","redirect","rot_url pop_type","videoTag","passeura","scriptwz_url","host","window.btoa","smrtSB","asgPopScript",".one(\"click\"","smrtSP","_cpp","a_consola","pub","redirdx.in/go/","Pub2","/atualizar|hided/","_blank","SmartAdsSafeStorage","NEW_LINK","trigger","preventDefault","redirigi","sg_gabarito_ads_config.adFrequency","1000","adUrl","openAdOnce","playerAds ads","puTS","__SMARTLINKS__","random","pumConfig","vast popup adblock","about:blank","JSON.stringify","data:text/javascript","noopener noreferrer","LieDetector","Popunder","a[data-stream][href][target=\"_blank\"]","window.gpp","__PRELOADED_STATE__.view.components.player.playbackContext.ads","adn_placement components.player.playbackContext.ads","PopunderData","showPopunder","clickCount","adpreload","vastPlayer.completed","sourceAd","start_preroll","anuncioConfig","setRandomBanner","Node.prototype.insertBefore","popns","VASTVideoPlayer","go_to_playerVast","/abrirVentanasEmergentes|abrirNuevaVentana|Popunder/","pop[_0x","Storage","/interstitial|redirectCount/","setInterval","doTabUnder","cnt1max","ifrconta","clickmax","#frm > a[href][onclick]","manejar","setTimeout","#fakeplayer > a","JSON.parse","showPopup","redirigido","redirigir","w-content","a.elementor-icon[target=\"_blank\"][rel][href]","window.location;","anuncios","/Popunder|Popup/","area51"];
-
-const $scriptletArglists$ = /* 327 */ "0,0;1,1,2;0,3;2,4,5;3,6,7;4,8,9;0,10;5,11,12;1,13;5,14,15;4,4,16;4,17,18;1,19;3,20,21;1,16;1,22;0,23;1,21;5,24,12;1,25;3,20,26;0,27;1,28;2,29,30;6,27;3,20,31;4,4,5;7,32;4,17,33;3,6,27;4,17,16;1,7;8,34;5,35,12;0,36;0,37;0,38;0,39;0,40;9,41;4,17,42;3,43,44;8,45;4,17,46;3,20,47;10,48,49,50;11,51,49,50;0,52;12,53;0,54;2,29,55;12,55;8,56;5,57,58;13,59,60;1,61,62;0,63;5,64,65;5,66,58;2,67,68;7,69;5,70,71;0,72;0,73;1,74;1,75;14,76;6,77;1,78;0,79;6,80;1,81;10,82,49,50;4,4,83;2,4,61;5,84,12;1,85;0,86;12,87;4,88,89;3,90;5,91,15;3,6,92;9,93;12,94;4,17,83;12,95;12,96;12,97;1,98;0,99;10,100,49,50;1,101;10,102,49,50;0,103;5,104,105;3,6,106;5,107,108;5,109,71;0,110;5,111,71;0,42;5,112,12;1,113;4,114,115;5,116,58;0,117;12,118;4,119,83;5,120,15;1,61;3,121,61;5,122,12;5,123,12;0,124;2,125,126;2,127,126;4,128,129;0,130;1,131;14,132;5,133,65;4,134,135;4,128,136;0,137;12,138;1,139;4,140,141;1,142;6,110;1,143;1,144;7,145;12,146;1,42;12,147;5,148,15;1,149;5,150,71;12,16;5,151,71;5,152,12;5,153,65;4,154,155;0,31;12,156;5,154,157;12,158;6,52;1,159;4,88,61;10,160,49,50;1,161;0,162;6,163;12,164;3,18;12,165;12,166;7,16;3,6,167;5,168,58;5,169,65;5,170,71;4,128,171;7,172;1,173;5,16,71;5,174,71;5,175,15;5,176,71;5,177,178;5,179,178;4,134,180;1,181;5,182,71;5,183,121;10,184,49,50;12,185;5,186,12;4,134,187;15;12,188;4,189,190;10,191,49,50;5,192,12;5,193,108;5,194,108;16,49,195;16,196,197;16,198;17,199,200;18,201,121,202;11,203,49,50;4,17,187;12,204;1,205;7,206;16,49,207;5,208,178;4,128,187;4,209,210;3,20,210;13,59,211;5,212,121;5,213,108;7,214;7,215;3,6,61;12,216;11,217,49,50;5,218,12;1,219;4,128,220;4,221,29;4,134,222;5,223,65;5,224,12;12,225;7,226;1,227;10,228,49,229;5,230,12;11,231,49,229;3,43,232;10,233,49,229;10,234,49,229;5,182,58;4,134,235;15,236;12,237;11,238,121,229;11,239,121,229;16,240,196;10,160,241,229;12,242;12,243;12,244;12,245;4,119,246;15,247;5,43,178;5,248,178;8,249;5,250,58;3,6,251;5,252,121;10,253,49,229;16,254;3,20,255;15,256;12,257;4,258,259;12,260;12,261;4,128,262;12,263;12,264;5,265,12;12,266;15,267;12,268;10,269,49,50;15,270;15,121,178;7,271;7,192;3,20,272;4,17,273;3,121,273;3,43,274;3,43,275;5,276,277;4,134,278;3,43,279;16,280;4,154,281;5,282,58;3,20,282;3,43,283;12,284;16,285;3,43,286;2,287,288;4,17,289;12,290;2,4,291;13,59,292;4,17,293;5,294,58;16,295;12,296;5,297,12;3,43,298;1,299;5,300,71;3,20,301;3,43,291;11,302,49,50;7,303;7,304;3,121,185;4,305,306;5,307,12;5,308,12;3,121,309;4,17,310;4,311,312;4,313,314;5,315,65;5,316,65;5,317,65;13,59,318;3,43,319;4,320,270;13,59,321;2,322,323;4,134,323;3,43,187;5,324,71;5,325,12;10,326,49,50;13,59,327;4,134,328;4,88,329;4,17,330;12,331";
-
-const $scriptletArglistRefs$ = /* 454 */ "158;97,98,99;100;21;181,209;33;181;97,98,99;188,189,190,191,192;239;216;171;11,181;181,208,209;82;68,69;21;115,116,181;216;181;63;232;17,24,185;216;75,151,152,153,154;229;229;97,98,99;54,253,254;139;123;181,209;181,209;163;204;130;218;95;181;202;203;5;21;21;3;42;125;256;295;260;97,98,99;216;21,118,119,120,121,122;21,118,119,120,121,122,211,212,213,214;49,95;186,187;97,98,99;81;200;197;75,151,152,153,154;43;229;51;8;303,304;181;81;258;45,46,47;150;67,172;81;166;281;66;102;42;31;114;181;230;318;160,161;206,207;42;27,28;135;81;216;26,181;68,69,302;285;181,194;283;24;21;97,98,99;23;11,181;163;181,194,195;49;105;154;181;68,69;21,216;255;181,194;143;181,268,269;18;159;181,199,305;42;117;181,241,242;20;73;181,285,286,287;54;54,55,56,57,58;97,98,99;251,252;63;184;138;318;181;16;81;210;49,95;212;168;235;181,248,250;68,69;68,69;68,69;154;233;141;273,274;162;136;264;54;71;181,231;40;21,25,181;11,181;163;68,69,154;84;181,293;60,305;21;21;21;181,292,293;207;29;247;78,79;88;307;34,35,36,37,38,39;216;181;42;6;109,205;181;14;181,200,201;200;315;181;181;100;21;94;198;227,228;88,316,317;9;81;81;318;68,69,302;181,279;97,98,99;81;221;1,2;284;100;80,97,98,99;237;236;18,54;298;49;72;170;164;97,98,99;21;49;21;75,107,108,151,152,153;16;275;16;78,79;165;215;64;13,271;76,77,182,183;297;309,310,311,312;210;181,209;54,55,56,57,58;176;181,306;313,314,319;21;41;323;307;324;216;291;81;81;110,111,112;59;103;17;297;173;62;54;276;30;131;21;246;238;296;140;134;4;61;16;100;54;21;181,277,278,279;162;86;81;30;50;7;89,90,313,314,320;181;181,209;181;54;244;288;21,118,119,120,121,122,211;318;147;128;96;81;54;181;81;321,322;257;65;154;40;81,162;263;156;21,22;70;54,181,325;54,181,325;137;97,98,99;21,174,175;144;37,95;68,69;210;181,222;223;220;263;101;49;21,106;146;145;307;81;81;49;326;68,69;97,98,99;48;179;75,151,152,153,154;81;181,209;74,280;16;21,71,148;216;113;134;181;92,93;32;245;262;52;265;21;21;270;216;49,95;142;157,169;54;210;210;263,282;12;226;21,106;49;95;174,175;181;181;262;267;81;81;21;154;10;53;19;148,149;126,127;44;88;21;141;100;262;177;21,71,91;15;272;261;132,133;308;178;181;167,249;216;72;160,161;40;49,95;196;266;100,129;162;0;181;162;97,98,99;128;83;240;40;87;181;124;75;157;162;81,162;10;53;181;234;289,290;181;40;148,149;71;240;243;224;299,300;0;21,106;181;210;81;99;21;301;217;54;21;294;24,219;94;54;259;289,290;289,290;210;148,149;100;21,225;155;73,180;181;85,193;21;85;181;21;85;104";
-
-const $scriptletHostnames$ = /* 454 */ ["1i1.in","atv.pe","mdr.ar","r7.com","gnula.*","leak.pt","rde.lat","tn23.tv","vix.com","movidy.*","safez.es","anitube.*","arlx.site","cuevana.*","depor.com","goyabu.us","los40.com","netcine.*","payad.lat","redisex.*","tivify.tv","topflix.*","3xyaoi.com","acortaz.es","anitube.us","atomixhq.*","atomtt.com","c9n.com.py","cinetux.to","comando.to","csrevo.com","cuevana2.*","cuevana3.*","doceru.com","elmundo.es","escplus.es","fiuxy2.com","fotise.com","futemax.at","g37.com.br","gnula.club","gnulahd.nu","istigo.net","listas.pro","nartag.com","netcinez.*","pcworld.es","pirlotv.es","playdede.*","redirdx.in","rqp.com.bo","solopc.net","suaads.com","suaurl.com","tulink.org","uol.com.br","vtv.com.hn","xataka.com","zpaste.net","animesbr.cc","anitube.vip","askflix.biz","atomohd.com","autotop.net","cinehax.com","embed69.org","eshentai.tv","espinof.com","fakings.com","fgtd.online","file4go.com","file4go.net","genbeta.com","hartico.com","hentaila.tv","kumanga.com","meocloud.pt","netcinetv.*","novizer.com","nptmedia.tv","okpeliz.com","pelispop.me","pornsub.org","satcesc.com","superhq.net","yyyx.online","zonaaps.com","20minutos.es","3djuegos.com","adclicker.io","anime-jl.net","animefire.io","animeflv.net","animeocs.com","anitube.news","aqualapp.com","casperhd.com","chapintv.com","darkmahou.io","deemixer.com","docer.com.ar","embedder.net","enlacito.com","fichajes.com","gashita.info","geeknetic.es","goanimes.vip","gourlpro.com","hentai-id.tv","hentaijl.com","illamadas.es","legendei.net","luggames.com","manga-mx.com","megafire.net","netccine.lat","oliberal.com","otakustv.com","perisxxx.com","playertv.org","plplayer.com","pobreflix.do","redecanais.*","repretel.com","seireshd.com","sussytoons.*","terra.com.br","texto.kom.gt","tioeroge.com","vernaruto.tv","viciados.net","vitonica.com","xupalace.org","acortados.com","acortalink.me","adslayuda.com","allfeeds.live","animeblix.com","animesup.info","animeyabu.net","animeyabu.org","anitube22.vip","app.prende.tv","bandab.com.br","barmonrey.com","bebesymas.com","cadenaser.com","canale-tv.net","cinemitas.org","cozinhabr.top","cuevana-3.wtf","culinaria.top","darkmahou.org","deemixweb.com","docero.com.br","drstonebr.com","elespanol.com","erosanime.com","firepaste.com","firesload.com","ggames.com.br","gourlcero.com","hentai-ia.com","hentaikai.com","latamtoon.com","lectulandia.*","luratoons.com","mangacrab.com","mangacrab.org","manhastro.net","mundopolo.net","muyzorras.com","netcinebs.lat","nexustc18.com","niusdiario.es","pelismart.com","pkproject.net","playpaste.com","playpaste.net","pobreflix.foo","repelisgt.net","servertwo.xyz","skynovels.net","softwarepc.es","southpark.lat","sub100.com.br","tiohentai.xyz","toonscrab.com","unlimplay.com","vidaextra.com","3djuegospc.com","allcalidad.pro","animefire.plus","animepelix.net","antena7.com.do","applesfera.com","arnolds.com.br","azuretoons.com","blizzpaste.com","botinnifit.com","canal12.com.sv","cine-calidad.*","cinecalidad2.*","cinelatino.net","compucalitv.tv","cuitonline.com","dicasgeeks.net","doramasmp4.com","ecartelera.com","elcomercio.com","expertplay.net","gadgetzona.net","gourlpaste.com","hinatasoul.com","informacion.es","isekaitube.cfd","laprovincia.es","lura-toons.com","meuwindows.com","multipaste.org","mundolucha.com","novelaplay.com","packsmega.info","peliplayhd.org","peliseries.xyz","player.gnula.*","poseidonhd2.co","redecanaistv.*","ricoysuave.com","seriesflix.onl","seriesperu.com","short.7hd.club","starckfilmes.*","todo-anime.net","topmanhuas.org","tubeonline.net","uberxviral.com","veo-hentai.com","xatakafoto.com","xatakahome.com","xerifetech.com","yomucomics.com","zona-leros.com","animenew.com.br","animeonline.lat","animeshouse.net","atresplayer.com","cineplus123.org","comunidades.net","devilnovels.com","documaniatv.com","emperorscan.com","hentaiporno.xxx","hentaistube.com","hentaitokyo.net","infojobs.com.br","it-swarm-es.com","kitsuneyako.com","latinpornhd.com","levante-emv.com","luchaonline.com","megafilmeshd.si","meutimao.com.br","monoschino2.com","motorpasion.com","mundodevalor.me","mundoxiaomi.com","oceans14.com.br","panelacheia.top","paste4free.site","peliculas8k.com","pelismarthd.com","pelispedia.life","pelisxporno.net","pepeliculas.org","pornolandia.xxx","readhunters.xyz","reidoplacar.com","seriesmaxhd.com","seriesretro.com","smartdoing.tech","softwareany.net","trendencias.com","verpelis.gratis","warezstream.net","xatakamovil.com","anime-latino.com","aquariumgays.com","cursomecanet.com","dattebayo-br.com","dicasreceita.com","elblogsalmon.com","embedplayer2.xyz","guideautoweb.com","infomatricula.pt","isekaibrasil.com","latinohentai.com","latinohentai.vip","manchetehoje.xyz","monumental.co.cr","mundodonghua.com","netmovies.com.br","notipostingt.com","otakuanimess.net","player.cuevana.*","playnewserie.xyz","sejasaudavel.net","seriesgratis.biz","superflixapi.fit","teleculinaria.pt","todoandroid.live","todostartups.com","tribunaavila.com","tvplusgratis.com","twobluescans.com","xatakandroid.com","3djuegosguias.com","acortame-esto.com","animeonline.ninja","animesonlinecc.us","canal13mexico.com","cinemastervip.com","clickjogos.com.br","coempregos.com.br","compradiccion.com","cuevana2espanol.*","daemon-hentai.com","diaridegirona.cat","dicasgostosas.com","eldiario24hrs.com","futbolfantasy.com","genshinpro.com.br","googleapis.com.do","guiacripto.online","hostingunlock.com","irmaosdotados.net","jogoscompleto.xyz","lectorhub.j5z.xyz","manhwa-latino.com","modescanlator.com","modescanlator.net","mundoperfecto.net","myfirstdollar.org","neworldtravel.com","ouniversodatv.com","outerspace.com.br","paraveronline.org","player.cuevana2.*","player.cuevana3.*","playerflixapi.com","pornoenspanish.es","portecnologia.com","puromarketing.com","qwanturankpro.com","qwanturankpro.net","seriesdonghua.com","superflixapi.buzz","url.firepaste.com","vejaideias.com.br","verfutbollibre.pe","xatakaciencia.com","xatakawindows.com","alarmadefraude.com","animesonliner4.com","baixedetudo.net.br","elcorreogallego.es","flacdownloader.com","foodiesgallery.com","guianoticiario.net","guiavidaesaude.com","httpmangacrab2.com","link-descarga.site","maringapost.com.br","minhasdelicias.com","modsimuladores.com","mundodeportivo.com","sabornutritivo.com","sushianimes.com.br","todamateria.com.br","tuhentaionline.com","tunovelaligera.com","tvserieslatino.com","brjogostorrents.com","chinesetubex.com.es","comandotorrents.org","constanteonline.com","dicasdereceitas.net","empregoestagios.com","financasdeouro.info","financialtrust.info","forodecostarica.com","hentailegendado.com","minhaconexao.com.br","motorpasionmoto.com","multicanaistt.space","player.pelisgod.com","pymesyautonomos.com","redbolivision.tv.bo","resenhasglobais.com","seriesemcena.com.br","torrentjogos.com.br","tudoesportes.online","aquiyahorajuegos.net","colegialasdeverdad.*","costumbresmexico.com","descargaseriestv.com","diariodegoias.com.br","diariodelviajero.com","directoalpaladar.com","inuyashadowns.com.br","laopiniondezamora.es","megaseriesonline.pro","nutricaohoje.website","play.mercadolibre.cl","player.seriesgod.com","receitascaseiras.xyz","receitasdaora.online","ricasdelicias.online","verdragonball.online","comicspornohentai.com","descargarhentaimf.xyz","dragonball.sullca.com","meuplayeronlinehd.com","negociosecommerce.com","player.malfollado.com","player.poseidonhd2.co","trendenciashombre.com","independentespanol.com","informetecnologico.com","mundohentaioficial.com","player.hentaistube.com","serieslatinoamerica.tv","lawebdelprogramador.com","mrvideospornogratis.xxx","raulprietofernandez.net","southparkstudios.com.br","assistirfilmeshdgratis.*","descargaranimehentai.com","play.mercadolibre.com.ar","play.mercadolivre.com.br","player.cuevana2espanol.*","caroloportunidades.com.br","impactoespananoticias.com","receitasoncaseiras.online","cozinha.minhasdelicias.com","gamesperu2021.blogspot.com","jilliandescribecompany.com","infohojeonline.blogspot.com","jornaldacidadeonline.com.br","gamesteelstudio.blogspot.com","videos.mrvideospornogratis.xxx","descargas2024gratis.blogspot.com","gamesteelstudioplus.blogspot.com","canalnatelinhaonline.blogspot.com"];
-
-const $scriptletFromRegexes$ = /* 0 */ [];
-
+const $hasHostnames$ = true;
 const $hasEntities$ = true;
 const $hasAncestors$ = false;
 const $hasRegexes$ = false;
@@ -2178,18 +2199,22 @@ const entries = (( ) => {
         const hn1 = origin.slice(beg+3)
         const end = hn1.indexOf(':');
         const hn2 = end === -1 ? hn1 : hn1.slice(0, end);
-        const hnParts = hn2.split('.');
         if ( hn2.length === 0 ) { return; }
-        const hns = [];
-        for ( let i = 0; i < hnParts.length; i++ ) {
-            hns.push(`${hnParts.slice(i).join('.')}`);
+        const hns = [ hn2 ];
+        for ( let pos = 0; ; ) {
+            pos = hn2.indexOf('.', pos) + 1;
+            if ( pos === 0 ) { break; }
+            hns.push(hn2.slice(pos));
         }
+        hns.push('*');
         const ens = [];
         if ( $hasEntities$ ) {
-            const n = hnParts.length - 1;
-            for ( let i = 0; i < n; i++ ) {
-                for ( let j = n; j > i; j-- ) {
-                    ens.push(`${hnParts.slice(i,j).join('.')}.*`);
+            for ( let hn of hns ) {
+                for (;;) {
+                    const pos = hn.lastIndexOf('.');
+                    if ( pos === -1 ) { break; }
+                    hn = hn.slice(0, pos);
+                    ens.push(`${hn}.*`);
                 }
             }
             ens.sort((a, b) => {
@@ -2199,12 +2224,14 @@ const entries = (( ) => {
             });
         }
         return { hns, ens, i };
-    }).filter(a => a !== undefined);
+    }).filter(a => a);
 })();
 if ( entries.length === 0 ) { return; }
 
-const todoIndices = new Set();
-if ( $scriptletHostnames$.length ) {
+const todo = new Set();
+
+if ( $hasHostnames$ ) {
+    const $scriptletHostnames$ = /* 466 */ ["1i1.in","atv.pe","mdr.ar","r7.com","gnula.*","leak.pt","rde.lat","tn23.tv","vix.com","movidy.*","safez.es","anitube.*","arlx.site","cuevana.*","depor.com","goyabu.us","los40.com","netcine.*","payad.lat","redisex.*","tivify.tv","topflix.*","3xyaoi.com","acortaz.es","anitube.us","atomixhq.*","atomtt.com","c9n.com.py","cinetux.to","comando.to","csrevo.com","cuevana2.*","cuevana3.*","doceru.com","elmundo.es","escplus.es","fiuxy2.com","fotise.com","futemax.at","g37.com.br","gnula.club","gnulahd.nu","istigo.net","listas.pro","nartag.com","netcinez.*","pcworld.es","pirlotv.es","playdede.*","redirdx.in","rqp.com.bo","solopc.net","suaads.com","suaurl.com","tulink.org","uol.com.br","vtv.com.hn","xataka.com","zpaste.net","animesbr.cc","anitube.vip","askflix.biz","atomohd.com","autotop.net","brazzpw.xyz","cinehax.com","embed69.org","eshentai.tv","espinof.com","fakings.com","fgtd.online","file4go.com","file4go.net","genbeta.com","hartico.com","hentaila.tv","htforum.net","kumanga.com","meocloud.pt","netcinetv.*","novizer.com","nptmedia.tv","okpeliz.com","pelispop.me","pornsub.org","satcesc.com","superhq.net","yyyx.online","zonaaps.com","20minutos.es","3djuegos.com","adclicker.io","anime-jl.net","anime-jl.top","animefire.io","animeflv.net","animeocs.com","anitube.news","aqualapp.com","casperhd.com","chapintv.com","darkmahou.io","deemixer.com","docer.com.ar","embedder.net","enlacito.com","fichajes.com","gashita.info","geeknetic.es","goanimes.vip","gourlpro.com","hentai-id.tv","hentaijl.com","illamadas.es","legendei.net","lineup11.net","luggames.com","manga-mx.com","megafire.net","miukt.com.br","netccine.lat","oliberal.com","otakustv.com","perisxxx.com","playertv.org","plplayer.com","pobreflix.do","redecanais.*","repretel.com","seireshd.com","sussytoons.*","terra.com.br","texto.kom.gt","tioeroge.com","vernaruto.tv","viciados.net","videosad.net","vitonica.com","xupalace.org","acortados.com","acortalink.me","adslayuda.com","allfeeds.live","animeblix.com","animesup.info","animeyabu.net","animeyabu.org","anitube22.vip","app.prende.tv","bandab.com.br","barmonrey.com","bebesymas.com","cadenaser.com","canale-tv.net","cinemitas.org","cozinhabr.top","cuevana-3.wtf","culinaria.top","darkmahou.org","deemixweb.com","docero.com.br","drstonebr.com","elespanol.com","erosanime.com","firepaste.com","firesload.com","ggames.com.br","gourlcero.com","hentai-ia.com","hentaikai.com","latamtoon.com","lectulandia.*","luratoons.com","mangacrab.com","mangacrab.org","manhastro.net","mundopolo.net","muyzorras.com","netcinebs.lat","nexustc18.com","niusdiario.es","pelismart.com","pkproject.net","playpaste.com","playpaste.net","pobreflix.foo","repelisgt.net","servertwo.xyz","skynovels.net","softwarepc.es","southpark.lat","sub100.com.br","tiohentai.xyz","toonscrab.com","unlimplay.com","vidaextra.com","3djuegospc.com","allcalidad.pro","animefire.plus","animepelix.net","antena7.com.do","applesfera.com","arnolds.com.br","azuretoons.com","blizzpaste.com","botinnifit.com","canal12.com.sv","cine-calidad.*","cinecalidad2.*","cinelatino.net","compucalitv.tv","cuitonline.com","devoracine.com","dicasgeeks.net","doramasmp4.com","ecartelera.com","elcomercio.com","expertplay.net","gadgetzona.net","gourlpaste.com","hinatasoul.com","informacion.es","isekaitube.cfd","laprovincia.es","lura-toons.com","lycantoons.com","meuwindows.com","multipaste.org","mundolucha.com","novelaplay.com","packsmega.info","peliplayhd.org","peliseries.xyz","player.gnula.*","poseidonhd2.co","redecanaistv.*","ricoysuave.com","seriesflix.onl","seriesperu.com","short.7hd.club","sololatino.net","starckfilmes.*","streamx-hd.com","todo-anime.net","topmanhuas.org","tubeonline.net","uberxviral.com","veo-hentai.com","xatakafoto.com","xatakahome.com","xerifetech.com","yomucomics.com","zona-leros.com","animenew.com.br","animeonline.lat","animeshouse.net","atresplayer.com","cineplus123.org","comunidades.net","devilnovels.com","documaniatv.com","emperorscan.com","hentaiporno.xxx","hentaistube.com","hentaitokyo.net","infojobs.com.br","it-swarm-es.com","kitsuneyako.com","latinpornhd.com","levante-emv.com","luchaonline.com","megafilmeshd.si","meutimao.com.br","monoschino2.com","motorpasion.com","mundodevalor.me","mundoxiaomi.com","oceans14.com.br","otakufilmes.org","panelacheia.top","paste4free.site","peliculas8k.com","pelismarthd.com","pelispedia.life","pelisxporno.net","pepeliculas.org","pornolandia.xxx","readhunters.xyz","reidoplacar.com","seriesmaxhd.com","seriesretro.com","smartdoing.tech","softwareany.net","trendencias.com","verpelis.gratis","warezstream.net","xatakamovil.com","anime-latino.com","aquariumgays.com","cursomecanet.com","dattebayo-br.com","dicasreceita.com","elblogsalmon.com","embedplayer2.xyz","guideautoweb.com","infomatricula.pt","isekaibrasil.com","latinohentai.com","latinohentai.vip","monumental.co.cr","mundodonghua.com","netmovies.com.br","notipostingt.com","otakuanimess.net","player.cuevana.*","playnewserie.xyz","sejasaudavel.net","seriesgratis.biz","superflixapi.fit","superflixapi.pro","teleculinaria.pt","todoandroid.live","todostartups.com","tribunaavila.com","tvplusgratis.com","twobluescans.com","xatakandroid.com","3djuegosguias.com","acortame-esto.com","animeonline.ninja","animesonlinecc.us","canal13mexico.com","cinemastervip.com","clickjogos.com.br","coempregos.com.br","compradiccion.com","cuevana2espanol.*","daemon-hentai.com","diaridegirona.cat","dicasgostosas.com","eldiario24hrs.com","futbolfantasy.com","genshinpro.com.br","googleapis.com.do","guiacripto.online","hostingunlock.com","irmaosdotados.net","jogoscompleto.xyz","lectorhub.j5z.xyz","manhwa-latino.com","modescanlator.com","modescanlator.net","mundoperfecto.net","myfirstdollar.org","neworldtravel.com","ouniversodatv.com","outerspace.com.br","paraveronline.org","player.cuevana2.*","player.cuevana3.*","playerflixapi.com","pornoenspanish.es","portecnologia.com","puromarketing.com","qwanturankpro.com","qwanturankpro.net","redeflixapi.store","seriesdonghua.com","superflixapi.buzz","url.firepaste.com","vejaideias.com.br","verfutbollibre.pe","xatakaciencia.com","xatakawindows.com","alarmadefraude.com","animesonliner4.com","baixedetudo.net.br","elcorreogallego.es","foodiesgallery.com","guianoticiario.net","guiavidaesaude.com","httpmangacrab2.com","link-descarga.site","maringapost.com.br","minhasdelicias.com","modsimuladores.com","mundodeportivo.com","sabornutritivo.com","sushianimes.com.br","todamateria.com.br","tuhentaionline.com","tunovelaligera.com","tvserieslatino.com","brjogostorrents.com","chinesetubex.com.es","comandotorrents.org","constanteonline.com","dicasdereceitas.net","empregoestagios.com","financasdeouro.info","financialtrust.info","forodecostarica.com","hentailegendado.com","minhaconexao.com.br","motorpasionmoto.com","multicanaistt.space","player.pelisgod.com","pymesyautonomos.com","redbolivision.tv.bo","resenhasglobais.com","seriesemcena.com.br","torrentjogos.com.br","tudoesportes.online","aquiyahorajuegos.net","colegialasdeverdad.*","costumbresmexico.com","descargaseriestv.com","diariodegoias.com.br","diariodelviajero.com","directoalpaladar.com","inuyashadowns.com.br","laopiniondezamora.es","megaseriesonline.pro","nutricaohoje.website","play.mercadolibre.cl","player.seriesgod.com","receitascaseiras.xyz","receitasdaora.online","ricasdelicias.online","verdragonball.online","comicspornohentai.com","descargarhentaimf.xyz","dragonball.sullca.com","meuplayeronlinehd.com","negociosecommerce.com","player.malfollado.com","player.poseidonhd2.co","trendenciashombre.com","independentespanol.com","informetecnologico.com","mundohentaioficial.com","player.hentaistube.com","serieslatinoamerica.tv","lawebdelprogramador.com","mrvideospornogratis.xxx","raulprietofernandez.net","southparkstudios.com.br","assistirfilmeshdgratis.*","descargaranimehentai.com","play.mercadolibre.com.ar","play.mercadolivre.com.br","player.cuevana2espanol.*","caroloportunidades.com.br","impactoespananoticias.com","receitasoncaseiras.online","cozinha.minhasdelicias.com","gamesperu2021.blogspot.com","jilliandescribecompany.com","infohojeonline.blogspot.com","jornaldacidadeonline.com.br","gamesteelstudio.blogspot.com","videos.mrvideospornogratis.xxx","xn--kcksk7a2bl5le7b6doc1h3f.com","descargas2024gratis.blogspot.com","gamesteelstudioplus.blogspot.com","canalnatelinhaonline.blogspot.com"];
     const collectArglistRefIndices = (out, hn, r) => {
         let l = 0, i = 0, d = 0;
         let candidate = '';
@@ -2239,6 +2266,7 @@ if ( $scriptletHostnames$.length ) {
             }
         }
     };
+    const todoIndices = new Set();
     indicesFromHostname(todoIndices, entries[0]);
     if ( $hasAncestors$ ) {
         for ( const entry of entries ) {
@@ -2246,20 +2274,20 @@ if ( $scriptletHostnames$.length ) {
             indicesFromHostname(todoIndices, entry, '>>');
         }
     }
-    $scriptletHostnames$.length = 0;
-}
-
-// Collect arglist references
-const todo = new Set();
-if ( todoIndices.size !== 0 ) {
-    const arglistRefs = $scriptletArglistRefs$.split(';');
-    for ( const i of todoIndices ) {
-        for ( const ref of JSON.parse(`[${arglistRefs[i]}]`) ) {
-            todo.add(ref);
+    // Collect arglist references
+    if ( todoIndices.size ) {
+        const $scriptletArglistRefs$ = /* 466 */ "167;107,108,109;110;31;190,224;43;190;107,108,109;197,198,199,200,201,202,203,204,205,206,207;254;231;180;22,190;190,223,224;92;78,79;31;125,126,190;231;190;73;247;28,34,194;231;85,160,161,162,163;244;244;107,108,109;64,268,269;148;133;190,224;190,224;172;219;140;233;105;190;217;218;16;31;31;14;52;135;271;314;275;107,108,109;231;31,128,129,130,131,132;31,128,129,130,131,132,226,227,228,229;59,105;195,196;107,108,109;4,91;215;212;85,160,161,162,163;53;244;61;312;19;322,323;190;91;273;55,56,57;159;77,181;91;175;300;2;76;112;52;41;124;190;245;337;169,170;221,222;52;37,38;145;91;231;36,190;278;78,79,321;304;190,209;302;34;31;107,108,109;1,33;22,190;172;190,209,210;59;115;163;190;78,79;31,231;270;190,209;152;190,287,288;7,8,9;29;168;190,214,324;3;52;127;190,256,257;30;83;190,304,305,306;64;64,65,66,67,68;107,108,109;266,267;73;193;147;337;190;27;10;91;225;59,105;227;177;250;190,263,265;78,79;78,79;78,79;163;248;150;292,293;171;146;283;64;81;190,246;50;31,35,190;22,190;172;78,79,163;94;190,312;70,324;31;31;31;190,311,312;222;39;262;88,89;98;326;44,45,46,47,48,49;231;190;52;17;119,220;190;25;190,215,216;215;334;190;190;110;31;104;213;242,243;98,335,336;20;91;91;337;78,79,321;190,298;107,108,109;91;236;12,13;303;110;90,107,108,109;252;251;29,64;317;59;281;82;179;173;107,108,109;31;59;31;85,117,118,160,161,162;27;294;27;88,89;5,6;174;230;74;24,290;86,87,191,192;316;328,329,330,331;225;190,224;64,65,66,67,68;185;190,325;332,333,338;31;190,279;51;190,279;342;326;343;231;310;91;91;120,121,122;69;113;28;316;182;72;64;295;40;141;31;261;253;315;149;144;15;71;27;110;64;31;190,296,297,298;171;96;91;40;1;60;18;99,100,332,333,339;190;190,224;190;64;259;307;31,128,129,130,131,132,226;337;156;138;106;91;64;190;91;340,341;272;75;163;50;91,171;282;165;31,32;80;64,190,344;64,190,344;107,108,109;31,183,184;153;47,105;78,79;225;190,237;238;235;282;190;111;59;31,116;155;154;326;91;91;59;345;78,79;107,108,109;58;188;85,160,161,162,163;91;190,224;84,299;27;31,81,157;231;123;144;190;102,103;42;260;277;62;284;31;31;289;231;59,105;151;166,178;64;225;225;282,301;23;241;31,116;59;105;190,280;183,184;190;190;277;286;91;91;31;163;21;63;157,158;136,137;54;98;31;150;110;277;186;31,81,101;26;291;276;142,143;327;187;190;176,264;231;82;169,170;50;59,105;211;285;110,139;171;11;190;171;107,108,109;138;93;255;50;97;190;134;85;166;171;91,171;21;63;190;249;308,309;190;50;157,158;81;255;258;239;318,319;11;31,116;190;225;91;109;31;320;232;64;31;313;34,234;104;64;274;308,309;308,309;225;157,158;110;31,240;164;83,189;190;95,208;31;95;190;190;31;95;114";
+        const arglistRefs = $scriptletArglistRefs$.split(';');
+        for ( const i of todoIndices ) {
+            for ( const ref of JSON.parse(`[${arglistRefs[i]}]`) ) {
+                todo.add(ref);
+            }
         }
     }
 }
+
 if ( $hasRegexes$ ) {
+    const $scriptletFromRegexes$ = /* 0 */ [];
     const { hns } = entries[0];
     for ( let i = 0, n = $scriptletFromRegexes$.length; i < n; i += 3 ) {
         const needle = $scriptletFromRegexes$[i+0];
@@ -2276,10 +2304,13 @@ if ( $hasRegexes$ ) {
         }
     }
 }
-if ( todo.size === 0 ) { return; }
 
-// Execute scriplets
-{
+// Execute scriptlets
+if ( todo.size && todo.has(0) === false ) {
+    const $scriptletFunctions$ = /* 19 */
+[preventAddEventListener,removeAttr,preventSetTimeout,preventFetch,preventSetInterval,abortCurrentScript,abortOnStackTrace,setConstant,preventXhr,abortOnPropertyWrite,noEvalIf,preventRequestAnimationFrame,adjustSetTimeout,adjustSetInterval,abortOnPropertyRead,noWindowOpenIf,jsonPrune,m3uPrune,xmlPrune];
+    const $scriptletArgs$ = /* 348 */ ["DOMContentLoaded","adblock","onerror","script[src*=\"googlesyndication.com\"]","asap",".offsetHeight === 0","offsetHeight===0","/google-analytics\\.com|pubadx\\.one/","offsetHeight","visibilitychange","bs()","document.getElementById","/pagead2\\.googlesyndication\\.com|adsbygoogle/","cloudfront.net","300","doubleclick","document.createElement","detect","load","innerHTML","Image","error","/ads/banner","popunders","noopFunc","/\\.offsetHeight\\s*?===\\s*?0/","adsBlocked","false","EventTarget.prototype.addEventListener","detectAdBlock","scriptObj","bait","detected","googlesyndication","checkAdBlock","offsetHeight === 0","pagead2.googlesyndication.com","/=window\\.setInterval\\([\\s\\S]*?\\.push\\(/","showAdblockAlert","/adsbygoogle.js","__ANTI_ADBLOCK_CORE__","/detect|\\.onerror|window\\.open/","decodeURIComponent(atob","advanced_ads_check_adblocker","googleads.g.doubleclick.net","googletagmanager.com","connect.facebook.net","static.ads-twitter.com","google-analytics.com","ULTIMATE_BAIT_REMOVED","adsbygoogle","click","overlay-notification","break;case",".offsetParent===","/window\\.getComputedStyle|adblock-/","unlock","*","0.001","seconds","popads.net","blockAdBlock","method:HEAD","isAdBlocked","String.fromCharCode(_0x","_an.ABMode","undefined","href","a[href]#clickfakeplayer","_0x","500","mode:no-cors","adClickCount","0","close","atob","wp-content/","checkAdsStatus","DHAntiAdBlocker","true","/pagead2\\.googlesyndication.com/ method:HEAD","www3.doubleclick.net","siteAccessPopup()","Por favor","console[_0x","widgets.outbrain.com","window.getComputedStyle","pagead2.googlesyndication.com/pagead/js/adsbygoogle.js","widgets.outbrain.com/outbrain.js","hasAdblock","contador","adsbygoogle.js","detectedAdblock","ad blocker","/mopinion\\.com|iubenda\\.com|bannersnack\\.com|unblockia\\.com|googlesyndication\\.com/","block_ads","fetch","/alert|bloqueador|\\.catch|\\.type/","adBlockerOn","hasAdblocker","banner-ads",".clientHeight","setNptTechAdblockerCookie","possivelAdblockDetectado","eazyAdUnBlockerHttp","antiAdBlockerStyle","Promise[\\'all\\'](urls","/googlesyndication\\.com|iubenda\\.com|unblockia\\.com|bannersnack\\.com|mopinion\\.com/",".html(","/adBlock|\\.height\\(\\)/","playFunction","imasdk.googleapis.com","AdBlockDetector.prototype.test","falseFunc","detect-modal","googletag","{}","googletag._loaded_","securepubads.g.doubleclick.net/pagead/ppub_config","canRunAds","blockAdBlock._options","checkAdblockUser","addEventListener","displayMessage","adManagerBlocked","call-zone-adxs","adBlockFunction","document.getElementsByTagName","$MICROSITE_INFO.blockAdBlock","","adblock.check","app.AdBlock.init","/pagead2\\.googlesyndication\\.com|ads-api\\.twitter\\.com/","alert","eval","history.go","$","blockWall","/^(?!.*(chrome-extension:)).*$/ method:HEAD","Por favor, desative","/adblock|Por favor, desative|adsbygoogle\\.js/","cdo","document.addEventListener",".innerHTML","!document.getElementById(","ads-twitter.com","Object.prototype.autoRecov","/Adblock|\\.height\\(\\)/","jQuery","/Adblock|dummy|detect/","]]=== 0",".adsbygoogle","adregain_wall","ad_nodes","hb_now","Object.prototype.adblockerEnabled","adsbygoogle.loaded","adBlockCheck","pp_show_popupmessage","easySettings.adblock","onload","AdBlock","adblockDetected","null","gothamBatAdblock","/hasAdblock|window\\.getComputedStyle/","PLAYER LIBERADO","/hasAdblock|detectadb|ad-placement/","/outbrain\\.com|adligature\\.com|quantserve\\.com|srvtrck\\.com/","//cdn.taboola.com/libtrc/unpkg/tfa.js","Bl0ckAdBl0ckCo","ppAdblocks","mMCheckAgainBlock","daadb_get_data","adsbygoogle.length","WSL2.config.enableAdblockEcommerce","ads_unblocked","Adblock","ai_front","cicklow_","better_ads_adblock","adBlockDetected","isAdsDisplayed","ATESTADO","1","Lata","/;return \\{clear:function\\(\\)\\{/","/Tamamo_Blocker|aadb_recheck/","loadingAds","dclm_ajax_var.disclaimer_redirect_url","e(!0)","popunder","ShowRewards","window.open","userout","String.prototype.concat","popup","resumeVideoFromAd","initPopunder","URL_VAST_YOUTUBE","__configuredDFPTags","vast_meta_url","ads","ads.policy.skipMode","vmap_ad_breaks interstitials","vmap_ad_breaks preroll","vmap_ad_breaks midroll-1","vmap_ad_breaks midroll-2","vmap_ad_breaks midroll-3","vmap_ad_breaks midroll-4","vmap_ad_breaks midroll-5","type=ad",".m3u8","xpath(//*[name()=\"Period\"][.//*[name()=\"BaseURL\" and contains(text(),\".mp.lura.live/prod/\")]] | //*[name()=\"MPD\"]/@mediaPresentationDuration | //*[name()=\"Period\"][.//SegmentList[@presentationTimeOffset=\"0\"]])",".mpd","getid","initPu","adJsView","redirectpage","*.media.*.advertisement_id","contadorClics","enlace","document.write","li[onclick^=\"go_to_player\"] > a[target=\"_blank\"][href]","Object.prototype.adSlot","google.ima.OmidVerificationVendor","exopop","protData","cJsEdge","countdown","acdl","window.location.href","notficationAd","open","excludeDomains","global.noobMaxTry","player.preroll","lolaop","pUrlArray","adsdirect","videoliberado","0.02","anunciotag",".style.display","loadXMLDoc","PLAYER","liberaDownload","create_","!/download\\/|link|atomtt\\.com\\//","adk_pdisp","Loading...","adsHandle_noclick","ads breaks cuepoints times","10000","popurl","the_crakien","allclick_Public","checkCookieClick","onclick","?key=","clickd","_impspcabe","xxxStore","/_0x[\\s\\S]*?parentNode[\\s\\S]*?appendChild/","vidorev_jav_plugin_video_ads_object.vid_ads_m_video_ads","redirect","rot_url pop_type","videoTag","passeura","scriptwz_url","host","window.btoa","smrtSB","asgPopScript",".one(\"click\"","smrtSP","_cpp","a_consola","pub","redirdx.in/go/","Pub2","/atualizar|hided/","openEnlace","localStorage","openFullscreenAdOnce","overlay","_blank","SmartAdsSafeStorage","NEW_LINK","trigger","preventDefault","redirigi","sg_gabarito_ads_config.adFrequency","1000","adUrl","openAdOnce","playerAds ads","puTS","__SMARTLINKS__","random","pumConfig","vast popup adblock","about:blank","JSON.stringify","data:text/javascript","noopener noreferrer","LieDetector","Popunder","a[data-stream][href][target=\"_blank\"]","window.gpp","__PRELOADED_STATE__.view.components.player.playbackContext.ads","adn_placement components.player.playbackContext.ads","PopunderData","showPopunder","clickCount","adpreload","vastPlayer.completed","sourceAd","start_preroll","anuncioConfig","setRandomBanner","Node.prototype.insertBefore","popns","VASTVideoPlayer","go_to_playerVast","/abrirVentanasEmergentes|abrirNuevaVentana|Popunder/","pop[_0x","Storage","/interstitial|redirectCount/","setInterval","doTabUnder","cnt1max","ifrconta","clickmax","#frm > a[href][onclick]","manejar","setTimeout","#fakeplayer > a","JSON.parse","showPopup","redirigido","redirigir","w-content","a.elementor-icon[target=\"_blank\"][rel][href]","window.location;","anuncios","/Popunder|Popup/","area51"];
+    const $scriptletArglists$ = /* 346 */ ";0,0,1;1,2,3,4;0,0,5;2,6;3,7;2,8;0,9,10;2,10;4,10;5,11,12;3,13;2,8,14;3,15;6,16,17;0,18,19;5,20,21;3,22;7,23,24;2,25;7,26,27;5,16,1;5,28,29;2,30;0,0,31;2,1;2,32;3,33;2,31;7,34,24;0,0,35;3,36;2,37;6,11,38;8,36;0,0,39;5,16,17;9,40;5,28,41;0,18,36;5,28,1;2,19;10,42;7,43,24;3,44;3,45;3,46;3,47;3,48;11,49;5,28,50;0,51,52;10,53;5,28,54;0,0,55;12,56,57,58;13,59,57,58;3,60;14,61;3,62;6,11,63;14,63;10,64;7,65,66;1,67,68;2,69,70;3,71;7,72,73;7,74,66;6,75,76;9,77;7,78,79;3,80;3,81;2,82;2,83;4,84;8,85;2,86;3,87;8,88;2,89;12,90,57,58;5,16,91;6,16,69;7,92,24;2,93;3,94;14,95;5,96,97;0,98;7,99,27;0,18,100;11,101;14,102;5,28,91;14,103;14,104;14,105;2,106;3,107;12,108,57,58;2,109;12,110,57,58;3,111;7,112,113;0,18,114;7,115,116;7,117,79;3,118;7,119,79;3,50;7,120,24;2,121;5,122,123;7,124,66;3,125;14,126;5,127,91;7,128,27;2,69;0,129,69;7,130,24;7,131,24;3,132;6,133,134;6,135,134;5,136,137;3,138;2,139;4,140;7,141,73;5,142,143;5,136,144;3,145;14,146;2,147;5,148,149;2,150;8,118;2,151;2,5;9,152;14,153;2,50;14,154;7,155,27;7,156,79;14,1;7,157,79;7,158,24;7,159,73;5,160,161;3,39;14,162;7,160,163;14,164;8,60;2,165;5,96,69;12,166,57,58;2,167;3,168;8,169;14,170;0,29;14,171;14,172;9,1;0,18,173;7,174,66;7,175,73;7,176,79;5,136,177;9,178;2,179;7,1,79;7,180,79;7,181,27;7,182,79;7,183,184;7,185,184;5,142,186;2,187;7,188,79;7,189,129;12,190,57,58;14,191;7,192,24;5,142,193;15;14,194;5,195,196;12,197,57,58;7,198,24;7,199,116;7,200,116;16,57,201;16,202,203;16,204;16,205;16,206;16,207;16,208;16,209;16,210;17,211,212;18,213,129,214;13,215,57,58;5,28,193;14,216;2,217;9,218;16,57,219;7,220,184;5,136,193;5,221,222;0,0,222;1,67,223;7,224,129;7,225,116;9,226;9,227;0,18,69;14,228;13,229,57,58;7,230,24;2,231;5,136,232;5,233,11;5,142,234;7,235,73;7,236,24;14,237;9,238;2,239;12,240,57,241;7,242,24;13,243,57,241;0,51,244;12,245,57,241;12,246,57,241;7,188,66;5,142,247;15,248;14,249;13,250,129,241;13,251,129,241;16,252,202;12,166,253,241;14,254;14,255;14,256;14,257;5,127,258;15,259;7,51,184;7,260,184;10,261;7,262,66;0,18,263;7,264,129;12,265,57,241;16,266;0,0,267;15,268;14,269;5,270,271;14,272;14,273;5,136,274;14,275;14,276;7,277,24;14,278;15,279;14,280;12,281,57,58;6,233,282;0,51,283;0,51,284;0,0,285;15,286;15,129,184;9,287;9,198;0,0,288;5,28,289;0,129,289;0,51,290;0,51,291;7,292,293;5,142,294;0,51,295;16,296;5,160,297;7,298,66;0,0,298;0,51,299;14,300;16,301;0,51,302;6,303,304;5,28,305;14,306;6,16,307;1,67,308;5,28,309;7,310,66;16,311;14,312;7,313,24;0,51,314;2,315;7,316,79;0,0,317;0,51,307;13,318,57,58;9,319;9,320;0,129,191;5,321,322;7,323,24;7,324,24;0,129,325;5,28,326;5,327,328;5,329,330;7,331,73;7,332,73;7,333,73;1,67,334;0,51,335;5,336,286;1,67,337;6,338,339;5,142,339;0,51,193;7,340,79;7,341,24;12,342,57,58;1,67,343;5,142,344;5,96,345;5,28,346;14,347";
     const arglists = $scriptletArglists$.split(';');
     const args = $scriptletArgs$;
     for ( const ref of todo ) {

@@ -274,11 +274,11 @@ fn attach_client_hints_rewrite(wv: &WebView) {
         Err(_) => return,
     };
 
-    let (_, _, major) = chromium_versions();
+    let (_, reduced, major) = chromium_versions();
     let sec_ch_ua =
         format!("\"Not)A;Brand\";v=\"24\", \"Chromium\";v=\"{major}\", \"Google Chrome\";v=\"{major}\"");
     let sec_ch_ua_full = format!(
-        "\"Not)A;Brand\";v=\"24.0.0.0\", \"Chromium\";v=\"{major}.0.0.0\", \"Google Chrome\";v=\"{major}.0.0.0\""
+        "\"Not)A;Brand\";v=\"24.0.0.0\", \"Chromium\";v=\"{reduced}\", \"Google Chrome\";v=\"{reduced}\""
     );
 
     let filter: Vec<u16> = "*".encode_utf16().chain(std::iter::once(0)).collect();
@@ -316,6 +316,14 @@ fn attach_client_hints_rewrite(wv: &WebView) {
             };
             set_header_if_present(&headers, "Sec-CH-UA", &sec_ch_ua);
             set_header_if_present(&headers, "Sec-CH-UA-Full-Version-List", &sec_ch_ua_full);
+            set_header_if_present(&headers, "Sec-CH-UA-Full-Version", &format!("\"{reduced}\""));
+            set_header_if_present(&headers, "Sec-CH-UA-Platform", "\"Windows\"");
+            set_header_if_present(&headers, "Sec-CH-UA-Platform-Version", "\"10.0.0\"");
+            set_header_if_present(&headers, "Sec-CH-UA-Arch", "\"x86\"");
+            set_header_if_present(&headers, "Sec-CH-UA-Bitness", "\"64\"");
+            set_header_if_present(&headers, "Sec-CH-UA-WoW64", "?0");
+            set_header_if_present(&headers, "Sec-CH-UA-Mobile", "?0");
+            set_header_if_present(&headers, "Sec-CH-UA-Model", "\"\"");
         }
         Ok(())
     }));

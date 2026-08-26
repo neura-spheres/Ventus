@@ -17,7 +17,12 @@ body.loading {
 h3 {
     margin: 1em 0;
     }
-
+input, select {
+    min-height: 30px;
+    }
+aside {
+    margin-block-start: 1em;
+    }
 label + legend {
     color: color-mix(in srgb, currentColor 69%, transparent);
     font-size: var(--font-size-smaller);
@@ -140,6 +145,9 @@ section[data-pane="rulesets"] > div:first-of-type > p:last-of-type {
 .listEntry[data-role="rootnode"] > .detailbar > *:not(.listExpander) {
     pointer-events: none;
     }
+.listEntry[data-role="rootnode"]:not([data-nodeid="imported"]):has(> .listEntries:empty) {
+    display: none;
+    }
 .listEntry .detailbar .count {
     align-self: flex-end;
     color: var(--ink-3);
@@ -198,9 +206,23 @@ section[data-pane="rulesets"] > div:first-of-type > p:last-of-type {
 .listEntry .fa-icon:hover {
     transform: scale(1.25);
     }
-.listEntry .iconbar a.support[href="#"] {
+.listEntry[data-role="leaf"] .iconbar {
+    display: inline-flex;
+    gap: 0.25em;
+    }
+.listEntry[data-role="leaf"] .iconbar a.support[href="#"] {
     display: none;
     }
+.listEntry[data-role="leaf"]:not([data-imported]) .doRemove,
+.listEntry[data-role="leaf"]:not([data-imported]) .undoRemove,
+.listEntry[data-role="leaf"][data-imported][data-remove] .doRemove,
+.listEntry[data-role="leaf"][data-imported]:not([data-remove]) .undoRemove {
+    display: none;
+    }
+.listEntry[data-role="leaf"][data-imported][data-remove] {
+    text-decoration: line-through 2px red;
+    }
+
 
 body.noMoreRuleset .listEntry:has(> .detailbar input:not(:checked)) {
     opacity: 0.5;
@@ -221,7 +243,6 @@ body.noMoreRuleset .listEntry:has(> .detailbar input:not(:checked)) {
 /* touch-screen devices */
 :root.mobile .listEntry .fa-icon {
     font-size: 120%;
-    margin: 0 0.5em 0 0;
     }
 :root.mobile .listEntries {
     margin-inline-start: 0;
@@ -241,6 +262,31 @@ body.noMoreRuleset .listEntry:has(> .detailbar input:not(:checked)) {
     }
 :root.mobile .li.listEntry .iconbar {
     margin-top: 0.2em;
+    }
+
+body:not([data-supports~="compiled-filters"]) section[data-pane="rulesets"] aside,
+body:not([data-supports~="compiled-filters"]) section[data-pane="rulesets"] #lists [data-role="rootnode"][data-nodeid="imported"] {
+    display: none;
+    }
+section[data-pane="rulesets"] #lists:has([data-nodeid="imported"].hideUnused) + aside {
+    display: none;
+}
+body .userScriptsInfo {
+    color: var(--ink-2);
+    font-size: small;
+    }
+body[data-supports~="user-scripts"] .userScriptsInfo {
+    display: none;
+    }
+body section[data-pane="rulesets"] .importRulesetURL > p {
+    display: flex;
+    gap: 1em;
+    }
+body section[data-pane="rulesets"] .importRulesetURL input {
+    flex-grow: 1;
+    }
+body section[data-pane="rulesets"] .importRulesetURL input:is(:placeholder-shown,:invalid) ~ button {
+    display: none;
     }
 
 body section[data-pane="filters"] {
@@ -324,7 +370,6 @@ section[data-pane="filters"] aside details {
     padding: 1em 0;
     }
 section[data-pane="filters"] aside summary {
-    cursor: default;
     line-height: 2;
     }
 section[data-pane="filters"] aside .importFromText {
@@ -348,7 +393,7 @@ section[data-pane="filters"] aside .importFromText:not(:has(textarea:placeholder
 section[data-pane="filters"] aside .importFromText:not(:has(textarea:placeholder-shown)) button:has([data-i18n="exportButton"]) {
     display: none;
     }
-section[data-pane="filters"] aside p {
+section[data-pane="filters"] aside .importFromText p {
     display: flex;
     flex-wrap: wrap;
     gap: 1em;
@@ -356,14 +401,12 @@ section[data-pane="filters"] aside p {
 section[data-pane="filters"] li.error[data-pretty] > div span[contenteditable] {
     color: var(--info3-ink);
     }
-body:not([data-supports~="user-scripts"]) section[data-pane="filters"] aside#sandboxEditor {
+body:not([data-supports~="compiled-filters"]) section[data-pane="filters"] aside#sandboxEditor {
     display: none;
     }
 section[data-pane="filters"] aside#sandboxEditor .cm-scroller {
+    min-height: 120px;
     max-height: 480px;
-    }
-body:not([data-develop="true"]) section[data-pane="filters"] aside#sandboxEditor {
-    display: none;
     }
 
 @media (max-width: 480px) {

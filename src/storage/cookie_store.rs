@@ -97,20 +97,38 @@ pub fn load_all(store: &CookieStore) -> Result<Vec<CookieRecord>> {
          ORDER BY domain, path, name",
     )?;
     let rows = stmt.query_map(params![now_secs], |row| {
-        let value: String = row.get(3)?;
-        Ok(CookieRecord {
+        let stored: String = row.get(3)?;
+        let Ok(value) = crypto::decrypt_text(&store.key, &stored) else {
+            return Ok(None);
+        };
+        Ok(Some(CookieRecord {
             domain: row.get(0)?,
             path: row.get(1)?,
             name: row.get(2)?,
-            value: crypto::decrypt_text(&store.key, &value).unwrap_or_default(),
+            value,
             expires: row.get(4)?,
             is_secure: row.get::<_, i32>(5)? != 0,
             is_http_only: row.get::<_, i32>(6)? != 0,
             same_site: row.get(7)?,
-        })
+        }))
     })?;
-    rows.collect::<rusqlite::Result<Vec<_>>>()
-        .map_err(Into::into)
+    let mut cookies = Vec::new();
+    let mut undecryptable = 0usize;
+    for row in rows {
+        match row? {
+            Some(cookie) => cookies.push(cookie),
+            None => undecryptable += 1,
+        }
+    }
+    if undecryptable > 0 {
+        tracing::error!(
+            target: "ventus::autolog",
+            undecryptable,
+            kept = cookies.len(),
+            "cookie backup: records would not decrypt, dropping them instead of restoring blank logins"
+        );
+    }
+    Ok(cookies)
 }
 
 pub fn purge_expired(store: &CookieStore) -> Result<usize> {

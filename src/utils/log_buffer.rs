@@ -102,6 +102,32 @@ impl<S: Subscriber> Layer<S> for BufferLayer {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::dangerous_warning;
+
+    #[test]
+    fn webview2_process_crashes_are_reported() {
+        assert!(dangerous_warning(
+            "ventus::content",
+            "webview2 processfailed kind=4 reason=\"crashed\" process=network service"
+        ));
+        assert!(dangerous_warning(
+            "ventus::content",
+            "content process failed"
+        ));
+    }
+
+    #[test]
+    fn ordinary_warnings_stay_quiet() {
+        assert!(!dangerous_warning(
+            "ventus::perf",
+            "main-thread handler slow"
+        ));
+        assert!(!dangerous_warning("ventus::content", "tab went to sleep"));
+    }
+}
+
 fn trim(text: &mut String, max: usize) {
     if text.len() <= max {
         return;
@@ -118,7 +144,9 @@ fn dangerous_warning(target: &str, message: &str) -> bool {
         return true;
     }
     let text = message.to_ascii_lowercase();
-    if target == "ventus::content" && text.contains("content process failed") {
+    if target == "ventus::content"
+        && (text.contains("content process failed") || text.contains("webview2 processfailed"))
+    {
         return true;
     }
     if target == "ventus::shutdown" && text.contains("profile still busy") {

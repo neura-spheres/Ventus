@@ -57,6 +57,13 @@ mod tests {
     }
 
     #[test]
+    fn onboarding_includes_ecosia_search_engine() {
+        let html = chrome_html();
+        assert!(html.contains("id=\"ob-engine-ecosia\""));
+        assert!(html.contains("obSelectEngine('ecosia',this)"));
+    }
+
+    #[test]
     fn address_bar_disables_spellcheck() {
         let html = chrome_html();
         assert!(html.contains(
@@ -141,5 +148,14 @@ mod tests {
             "const H_TAB_ADD = `<button class=\"horizontal-new-tab\" onclick=\"send('NewTab')\""
         ));
         assert!(html.contains("class=\"sidebar-brand-add\" onclick=\"openNewTabSpotlight()\""));
+    }
+
+    #[test]
+    fn internal_newtab_tabs_can_start_reorder_drag() {
+        let html = chrome_html();
+        assert!(html.contains("const isTabDragSource = el.classList.contains('tab-item');"));
+        assert!(html.contains("if (!isTabDragSource && (!url || url.startsWith('neura://')))"));
+        assert!(html.contains("e.dataTransfer.setData('application/x-ventus-tab', dragId);"));
+        assert!(html.contains("if (url && !url.startsWith('neura://'))"));
     }
 }

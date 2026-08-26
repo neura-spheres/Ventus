@@ -506,6 +506,7 @@ button,input,select,textarea{font-family:var(--font)}
   box-shadow:var(--sidebar-shadow);
 }
 #app:not(.sidebar-auto-hide).sidebar-collapsed #sidebar{width:52px}
+#app:not(.sidebar-auto-hide):not(.sidebar-collapsed) #sidebar{width:var(--sidebar-w,240px)}
 
 #content-area{
   grid-area:content;
@@ -1018,16 +1019,23 @@ button,input,select,textarea{font-family:var(--font)}
 @media (max-width: 900px) {
   #toolbar{gap:2px;padding:0 4px}
   #toolbar-nav,#toolbar-actions{gap:2px}
+  #toolbar-url-area{position:relative;left:auto;right:auto;top:auto;bottom:auto;flex:1 1 auto;min-width:0;height:100%;padding:0 4px}
+  #url-group{width:100%;min-width:0;margin:0}
+  #address-bar{width:auto;min-width:0;flex:1 1 auto}
+  #toolbar-actions{margin-left:0}
+}
+@media (max-width: 760px) {
+  #toolbar-custom-actions{display:none}
 }
 @media (max-width: 740px) {
   #btn-forward{display:none}
 }
 @media (max-width: 600px) {
-  #toolbar-custom-actions{display:none}
   .tb-btn{width:28px}
 }
 @media (max-width: 500px) {
   #btn-reload{display:none}
+  #address-bar #btn-bookmark,#address-bar #btn-adblock{display:none}
   #address-bar{padding:0 6px;gap:4px}
 }
 @media (max-width: 420px) {
@@ -1043,7 +1051,7 @@ button,input,select,textarea{font-family:var(--font)}
   position:fixed;z-index:9999;
   background:transparent;
 }
-.resize-handle[data-edge="left"]  {left:0;top:0;width:5px;height:100%;cursor:ew-resize}
+.resize-handle[data-edge="left"]  {left:0;top:0;width:5px;height:100%;cursor:ew-resize;z-index:160}
 .resize-handle[data-edge="right"] {right:0;top:0;width:5px;height:100%;cursor:ew-resize}
 .resize-handle[data-edge="bottom"]{bottom:0;left:0;width:100%;height:5px;cursor:s-resize}
 .resize-handle[data-edge="topleft"]    {left:0;top:0;width:12px;height:12px;cursor:nwse-resize}
@@ -4060,6 +4068,12 @@ html.reduce-motion .ai-thinking-summary.streaming.gpt .ai-thinking-title{animati
   background:var(--bg-elevated);z-index:10;pointer-events:none;opacity:0;visibility:hidden;
 }
 #content-loading.visible{opacity:1;visibility:visible}
+#content-loading .content-spinner{
+  width:26px;height:26px;border-radius:50%;
+  border:3px solid var(--border);border-top-color:var(--text-muted);
+  animation:spin 0.8s linear infinite;
+}
+html.reduce-motion #content-loading .content-spinner{animation:spin 1.4s linear infinite}
 
 #apps-placeholder{
   position:absolute;top:0;right:0;bottom:0;
@@ -4724,7 +4738,7 @@ svg{display:block;flex-shrink:0}
     </div>
   </div>
   <div id="apps-placeholder"></div>
-  <div id="content-loading"></div>
+  <div id="content-loading"><div class="content-spinner"></div></div>
   <div id="content-blur"></div>
 </div>
 
@@ -5319,9 +5333,9 @@ svg{display:block;flex-shrink:0}
           <div class="toggle-switch on" id="toggle-ad-blocker-enabled" onclick="toggleSetting('ad_blocker_enabled')"></div>
         </div>
         <div id="adblock-exceptions-section" style="margin:0 0 12px;padding:10px 12px;background:var(--bg);border-radius:var(--radius-sm);border:1px solid var(--border-subtle)">
-          <div style="font-size:11px;font-weight:600;color:var(--text-dim);letter-spacing:.04em;margin-bottom:6px">SITE EXCEPTIONS</div>
+          <div style="font-size:11px;font-weight:600;color:var(--text-dim);letter-spacing:.04em;margin-bottom:6px">CUSTOM SITE EXCEPTIONS</div>
           <div id="adblock-exceptions-list" style="display:flex;flex-direction:column;gap:4px">
-            <div style="font-size:12px;color:var(--text-muted);font-style:italic">No exceptions, blocker is active on all sites</div>
+            <div style="font-size:12px;color:var(--text-muted);font-style:italic">No custom exceptions</div>
           </div>
         </div>
         <div class="settings-toggle">
@@ -5698,6 +5712,10 @@ svg{display:block;flex-shrink:0}
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
             Google
           </button>
+          <button class="ob-engine-btn" id="ob-engine-ecosia" onclick="obSelectEngine('ecosia',this)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 4 13c0-5 7-9 16-9 0 9-4 16-9 16z"/><path d="M4 13c3 0 6 1 7 7"/></svg>
+            Ecosia
+          </button>
           <button class="ob-engine-btn" id="ob-engine-duckduckgo" onclick="obSelectEngine('duckduckgo',this)">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 0 20"/></svg>
             DuckDuckGo
@@ -5823,10 +5841,9 @@ svg{display:block;flex-shrink:0}
 </div>
 
 <!-- Window edge resize handles — transparent hit zones, trigger native Win32 resize.
-     LEFT edge is intentionally omitted: it conflicts with #sidebar-float-trigger.
-     Left/bottom/right are handled by the content WebView initialization script instead.
-     Chrome handles only the right edge (when AI panel is open) and top corners
-     (which are always inside the toolbar clip region). -->
+     The LEFT handle sits above the sidebar (z:160) so it grabs the window edge even while
+     the auto-hide sidebar is peeking; its mouseenter still opens the sidebar so both work. -->
+<div class="resize-handle" data-edge="left"        onmousedown="send('BeginResize',{edge:'left'})" onmouseenter="leftEdgePeek()" onmouseleave="leftEdgePeekLeave(event)"></div>
 <div class="resize-handle" data-edge="right"       onmousedown="send('BeginResize',{edge:'right'})"></div>
 <div class="resize-handle" data-edge="bottom"      onmousedown="send('BeginResize',{edge:'bottom'})"></div>
 <div class="resize-handle" data-edge="topleft"     onmousedown="send('BeginResize',{edge:'topleft'})"></div>
@@ -6507,6 +6524,7 @@ function renderAdBlockBtn() {
   if (!btn || !iconOn || !iconOff) return;
   const active = !!state.ad_blocker_active;
   const excepted = !!state.ad_blocker_site_excepted;
+  const builtIn = !!state.ad_blocker_builtin_excepted;
   const compat = !!state.x_login_compat_active;
   if (compat) {
     btn.style.color = 'var(--warning)';
@@ -6518,6 +6536,11 @@ function renderAdBlockBtn() {
     btn.title = 'Ad blocker - click for info';
     iconOn.style.display = 'none';
     iconOff.style.display = '';
+  } else if (builtIn) {
+    btn.style.color = 'var(--warning)';
+    btn.title = 'Ad blocker allows Ecosia ads - click for info';
+    iconOn.style.display = '';
+    iconOff.style.display = 'none';
   } else if (excepted) {
     btn.style.color = 'var(--warning)';
     btn.title = 'Ad blocker paused for this site - click for info';
@@ -6645,6 +6668,7 @@ function _syncAdBlockModal() {
   if (!modal || !modal.classList.contains('open')) return;
   const active = !!state.ad_blocker_active;
   const excepted = !!state.ad_blocker_site_excepted;
+  const builtIn = !!state.ad_blocker_builtin_excepted;
   const compat = !!state.x_login_compat_active;
   const xSite = isXSiteUrl(currentTabUrl());
   const dot = document.getElementById('abm-dot');
@@ -6668,6 +6692,12 @@ function _syncAdBlockModal() {
     if (statusText) { statusText.className = 'abm-status-label muted'; statusText.textContent = 'Disabled globally'; }
     if (toggle) { toggle.className = 'abm-action-btn off'; toggle.disabled = true; }
     if (toggleText) toggleText.textContent = 'Pause for this site';
+  } else if (builtIn) {
+    if (statusRow) statusRow.className = 'abm-status-row warn';
+    if (dot) dot.className = 'abm-status-dot warn';
+    if (statusText) { statusText.className = 'abm-status-label'; statusText.textContent = 'Allowed for Ecosia'; }
+    if (toggle) { toggle.className = 'abm-action-btn off'; toggle.disabled = true; }
+    if (toggleText) toggleText.textContent = 'Always allowed';
   } else if (excepted) {
     if (statusRow) statusRow.className = 'abm-status-row warn';
     if (dot) dot.className = 'abm-status-dot warn';
@@ -6687,7 +6717,7 @@ function renderAdBlockExceptions(exceptions) {
   const list = document.getElementById('adblock-exceptions-list');
   if (!list) return;
   if (!exceptions || exceptions.length === 0) {
-    list.innerHTML = '<div style="font-size:12px;color:var(--text-muted);font-style:italic">No exceptions, blocker is active on all sites</div>';
+    list.innerHTML = '<div style="font-size:12px;color:var(--text-muted);font-style:italic">No custom exceptions</div>';
     return;
   }
   list.innerHTML = exceptions.map(host => `
@@ -8820,6 +8850,20 @@ function hideFloatingSidebar(force) {
   if (sidebarPinned && !force) return;
   cancelSidebarHide();
   _doHideSidebar();
+}
+
+function leftEdgePeek() {
+  const app = document.getElementById('app');
+  if (!app.classList.contains('sidebar-auto-hide') || app.classList.contains('sidebar-pinned')) return;
+  showFloatingSidebar(false);
+}
+function leftEdgePeekLeave(e) {
+  const app = document.getElementById('app');
+  if (!app.classList.contains('sidebar-auto-hide')) return;
+  const sidebar = document.getElementById('sidebar');
+  const to = e && e.relatedTarget;
+  if (to && (to === sidebar || sidebar.contains(to))) return;
+  scheduledHide();
 }
 
 function saveSetting(key, value) {
@@ -16206,7 +16250,13 @@ function tabContextMenu(ev, tabId) {
   // ── Open in new window (web URLs only) ──────────────────────────────────â”€
   if (isWeb) {
     items.push({sep: true});
-    items.push({label: 'Open in new window', action: () => send('OpenInNewWindow', {url: tab.url})});
+    items.push({
+      label: 'Open to new window',
+      action: () => {
+        send('OpenInNewWindow', {url: tab.url});
+        send('CloseTab', {id: tabId});
+      }
+    });
   }
 
   // ── Bulk-close (only when there is something to close) ──────────────────â”€
@@ -16812,10 +16862,12 @@ document.addEventListener('dragstart', function(e) {
   }
   const el = e.target.closest('[data-nav-url]');
   if (!el) { e.preventDefault(); return; }
-  const url = el.dataset.navUrl;
-  if (!url || url.startsWith('neura://')) { e.preventDefault(); return; }
-  if (el.classList.contains('tab-item')) {
+  const url = el.dataset.navUrl || '';
+  const isTabDragSource = el.classList.contains('tab-item');
+  if (!isTabDragSource && (!url || url.startsWith('neura://'))) { e.preventDefault(); return; }
+  if (isTabDragSource) {
     dragKind = 'tab'; dragId = el.dataset.reorderId; dragPinned = el.classList.contains('pinned');
+    if (!dragId) { e.preventDefault(); return; }
     const t = (state.tabs || []).find((x) => x.id === dragId);
     dragTitle = (t && t.title) || '';
   } else if (el.dataset.reorderId && (el.classList.contains('bm-item') || el.classList.contains('bm-bar-item') || el.classList.contains('fm-item'))) {
@@ -16831,8 +16883,11 @@ document.addEventListener('dragstart', function(e) {
     dragTitle = el.closest('#address-bar') ? (state.active_title || '') : '';
   }
   e.dataTransfer.effectAllowed = dragKind === 'url' ? 'copy' : 'copyMove';
-  e.dataTransfer.setData('text/uri-list', url);
-  e.dataTransfer.setData('text/plain', url);
+  if (dragKind === 'tab') e.dataTransfer.setData('application/x-ventus-tab', dragId);
+  if (url && !url.startsWith('neura://')) {
+    e.dataTransfer.setData('text/uri-list', url);
+    e.dataTransfer.setData('text/plain', url);
+  }
   if (dragKind === 'tab') startTabDrag(el, e);
   if (dragKind === 'bookmark') startBookmarkDrag(el, e);
   el.classList.add('dragging-url');

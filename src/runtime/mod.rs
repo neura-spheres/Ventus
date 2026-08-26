@@ -83,7 +83,6 @@ const SESSION_SAVE_DELAY: Duration = Duration::from_secs(3);
 const WEBVIEW_PROFILE_RELEASE_TIMEOUT: Duration = Duration::from_secs(12);
 const WEBVIEW_PROFILE_RELEASE_POLL: u64 = 50;
 const CONTENT_BG: (u8, u8, u8, u8) = (255, 255, 255, 255);
-const CONTENT_BG_DARK: (u8, u8, u8, u8) = (26, 26, 26, 255);
 #[cfg(windows)]
 const APP_ID: &str = "NeuraSpheres.Ventus";
 const COOKIE_SAVE_EVERY: Duration = Duration::from_secs(5 * 60);
@@ -103,17 +102,14 @@ fn webview_theme(theme: &config::Theme) -> WebViewTheme {
     }
 }
 
-fn content_bg_for_theme(theme: WebViewTheme) -> (u8, u8, u8, u8) {
-    let dark = match theme {
-        WebViewTheme::Dark => true,
-        WebViewTheme::Light => false,
-        _ => crate::utils::sysinfo::os_prefers_dark(),
-    };
-    if dark {
-        CONTENT_BG_DARK
-    } else {
-        CONTENT_BG
-    }
+// Base background for content WebViews. Always the standard white canvas, exactly like real
+// browsers: every page paints its OWN background, and Chromium already picks a dark canvas per-page
+// for sites that opt in via `color-scheme: dark`. An older "white-flash" fix forced this dark
+// whenever the app theme was dark, which removed a brief load flash on genuinely-dark sites but
+// BROKE every light-only page — e.g. notebooklm.google renders its dark text and, having no
+// explicit page background, inherited the forced-dark canvas → dark-on-dark and unreadable.
+fn content_bg_for_theme(_theme: WebViewTheme) -> (u8, u8, u8, u8) {
+    CONTENT_BG
 }
 
 fn window_backing_colorref(theme: WebViewTheme) -> u32 {
@@ -277,7 +273,10 @@ pub fn run() {
 
     let profile_cookie_db_found = webview_cookie_db_exists(&data_dir);
     let startup_cookies: Vec<cookie_store::CookieRecord> = if profile_cookie_db_found {
-        tracing::info!("cookie_store: profile cookie DB found, skipping backup cookie heal");
+        tracing::info!(
+            target: "ventus::profile",
+            "[PROFILE] WebView2 cookie DB present, skipping the backup heal"
+        );
         vec![]
     } else {
         match cookie_store::open(&data_dir) {
@@ -291,7 +290,11 @@ pub fn run() {
                 cookies
             }
             Err(e) => {
-                tracing::warn!("cookie_store: failed to open for startup read: {}", e);
+                tracing::error!(
+                    target: "ventus::autolog",
+                    error = %e,
+                    "cookie_store: backup unreadable at startup — cannot heal missing logins"
+                );
                 vec![]
             }
         }
@@ -461,7 +464,7 @@ pub fn run() {
     let window = WindowBuilder::new()
         .with_title("Ventus")
         .with_inner_size(LogicalSize::new(win_w, win_h))
-        .with_min_inner_size(LogicalSize::new(800u32, 500u32))
+        .with_min_inner_size(LogicalSize::new(460u32, 420u32))
         .with_window_icon(window_icon)
         .with_decorations(false)
         .with_visible(false)
@@ -636,6 +639,17 @@ pub fn run() {
                 "[STARTUP] previous session ended WITHOUT clean shutdown (running.lock present) — waiting for its WebView2 profile lock to release before building content WebViews"
             );
             let wait_started = Instant::now();
+            #[cfg(windows)]
+            {
+                let reaped = reap_orphan_webview2(&p);
+                if reaped > 0 {
+                    tracing::warn!(
+                        target: "ventus::startup",
+                        reaped,
+                        "[STARTUP] terminated orphaned msedgewebview2.exe left by the previous crash before building WebViews"
+                    );
+                }
+            }
             wait_for_previous_instance(&p, &roots);
             tracing::info!(
                 target: "ventus::startup",
@@ -675,8 +689,6 @@ pub fn run() {
     std::fs::create_dir_all(&webview_data_dir).expect("create WebView2 profile");
     encrypt_app_storage(&webview_data_dir);
     #[cfg(windows)]
-    sync_webview_secure_dns_prefs(&webview_data_dir, &state.settings);
-    #[cfg(windows)]
     if !new_window
         && !wait_for_webview_profiles_released(
             &[webview_data_dir.as_path()],
@@ -688,6 +700,9 @@ pub fn run() {
             "[STARTUP] WebView2 profile still locked after waiting; chrome build will retry"
         );
     }
+    log_profile_health(&data_dir, &webview_data_dir);
+    #[cfg(windows)]
+    sync_webview_secure_dns_prefs(&webview_data_dir, &state.settings);
     let mut content_web_context = Some(wry::WebContext::new(Some(webview_data_dir.clone())));
 
     let chrome = {

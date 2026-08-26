@@ -381,6 +381,15 @@ fn content_initialization_script(
   };
 
   sendProgress(0.12);
+  const sendFirstPaint = () => {
+    if (!isTop || isErrorDoc()) return;
+    try {
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        post({cmd:'content_first_paint', url: location.href});
+      }));
+    } catch (_) {}
+  };
+  sendFirstPaint();
   document.addEventListener('readystatechange', () => {
     if (document.readyState === 'interactive') {
       sendProgress(0.65);

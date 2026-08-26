@@ -78,28 +78,7 @@ function abortCurrentScriptFn(
     const logPrefix = safe.makeLogPrefix('abort-current-script', target, needle, context);
     const reNeedle = safe.patternToRegex(needle);
     const reContext = safe.patternToRegex(context);
-    const extraArgs = safe.getExtraArgs(Array.from(arguments), 3);
     const thisScript = document.currentScript;
-    const chain = safe.String_split.call(target, '.');
-    let owner = window;
-    let prop;
-    for (;;) {
-        prop = chain.shift();
-        if ( chain.length === 0 ) { break; }
-        if ( prop in owner === false ) { break; }
-        owner = owner[prop];
-        if ( owner instanceof Object === false ) { return; }
-    }
-    let value;
-    let desc = Object.getOwnPropertyDescriptor(owner, prop);
-    if (
-        desc instanceof Object === false ||
-        desc.get instanceof Function === false
-    ) {
-        value = owner[prop];
-        desc = undefined;
-    }
-    const debug = shouldDebug(extraArgs);
     const exceptionToken = getExceptionTokenFn();
     const scriptTexts = new WeakMap();
     const textContentGetter = Object.getOwnPropertyDescriptor(Node.prototype, 'textContent').get;
@@ -107,8 +86,7 @@ function abortCurrentScriptFn(
         let text = textContentGetter.call(elem);
         if ( text.trim() !== '' ) { return text; }
         if ( scriptTexts.has(elem) ) { return scriptTexts.get(elem); }
-        const [ , mime, content ] =
-            /^data:([^,]*),(.+)$/.exec(elem.src.trim()) ||
+        const [ , mime, content ] = /^data:([^,]*),(.+)$/.exec(elem.src.trim()) ||
             [ '', '', '' ];
         try {
             switch ( true ) {
@@ -128,50 +106,28 @@ function abortCurrentScriptFn(
         const e = document.currentScript;
         if ( e instanceof HTMLScriptElement === false ) { return; }
         if ( e === thisScript ) { return; }
-        if ( context !== '' && reContext.test(e.src) === false ) {
-            // eslint-disable-next-line no-debugger
-            if ( debug === 'nomatch' || debug === 'all' ) { debugger; }
-            return;
-        }
+        if ( context !== '' && reContext.test(e.src) === false ) { return; }
         if ( safe.logLevel > 1 && context !== '' ) {
             safe.uboLog(logPrefix, `Matched src\n${e.src}`);
         }
         const scriptText = getScriptText(e);
-        if ( reNeedle.test(scriptText) === false ) {
-            // eslint-disable-next-line no-debugger
-            if ( debug === 'nomatch' || debug === 'all' ) { debugger; }
-            return;
-        }
+        if ( reNeedle.test(scriptText) === false ) { return; }
         if ( safe.logLevel > 1 ) {
             safe.uboLog(logPrefix, `Matched text\n${scriptText}`);
         }
-        // eslint-disable-next-line no-debugger
-        if ( debug === 'match' || debug === 'all' ) { debugger; }
         safe.uboLog(logPrefix, 'Aborted');
         throw new ReferenceError(exceptionToken);
     };
-    // eslint-disable-next-line no-debugger
-    if ( debug === 'install' ) { debugger; }
-    try {
-        Object.defineProperty(owner, prop, {
-            get: function() {
-                validate();
-                return desc instanceof Object
-                    ? desc.get.call(owner)
-                    : value;
-            },
-            set: function(a) {
-                validate();
-                if ( desc instanceof Object ) {
-                    desc.set.call(owner, a);
-                } else {
-                    value = a;
-                }
-            }
-        });
-    } catch(ex) {
-        safe.uboErr(logPrefix, `Error: ${ex}`);
-    }
+    let currentValue = trapPropertyFn(target, {
+        get: function() {
+            validate();
+            return currentValue;
+        },
+        set: function(a) {
+            validate();
+            currentValue = a;
+        }
+    }, { canThrow: true });
 }
 
 function abortOnPropertyRead(
@@ -266,10 +222,11 @@ function getRandomTokenFn() {
 
 function preventAddEventListener(
     type = '',
-    pattern = ''
+    pattern = '',
+    ...varargs
 ) {
     const safe = safeSelf();
-    const extraArgs = safe.getExtraArgs(Array.from(arguments), 2);
+    const extraArgs = safe.parseVarargs(varargs);
     const logPrefix = safe.makeLogPrefix('prevent-addEventListener', type, pattern);
     const reType = safe.patternToRegex(type, undefined, true);
     const rePattern = safe.patternToRegex(pattern);
@@ -336,22 +293,23 @@ function preventAddEventListener(
         }
         return context.reflect();
     };
+    const protect = owner => {
+        const { addEventListener } = owner;
+        Object.defineProperty(owner, 'addEventListener', {
+            set() { },
+            get() { return addEventListener; }
+        });
+    };
     runAt(( ) => {
         proxyApplyFn('EventTarget.prototype.addEventListener', proxyFn);
-        if ( extraArgs.protect ) {
-            const { addEventListener } = EventTarget.prototype;
-            Object.defineProperty(EventTarget.prototype, 'addEventListener', {
-                set() { },
-                get() { return addEventListener; }
-            });
+        if ( extraArgs.protect ) { protect(EventTarget.prototype); }
+        if ( Object.hasOwn(document, 'addEventListener') ) {
+            proxyApplyFn('document.addEventListener', proxyFn);
+            if ( extraArgs.protect ) { protect(document); }
         }
-        proxyApplyFn('document.addEventListener', proxyFn);
-        if ( extraArgs.protect ) {
-            const { addEventListener } = document;
-            Object.defineProperty(document, 'addEventListener', {
-                set() { },
-                get() { return addEventListener; }
-            });
+        if ( Object.hasOwn(window, 'addEventListener') ) {
+            proxyApplyFn('window.addEventListener', proxyFn);
+            if ( extraArgs.protect ) { protect(window); }
         }
     }, extraArgs.runAt);
 }
@@ -407,7 +365,8 @@ function preventSetTimeout(
 
 function proxyApplyFn(
     target = '',
-    handler = ''
+    handler = '',
+    options = {}
 ) {
     let context = globalThis;
     let prop = target;
@@ -468,20 +427,22 @@ function proxyApplyFn(
         };
         proxyApplyFn.isCtor = new Map();
         proxyApplyFn.proxies = new WeakMap();
-        proxyApplyFn.nativeToString = Function.prototype.toString;
-        const proxiedToString = new Proxy(Function.prototype.toString, {
-            apply(target, thisArg) {
-                let proxied = thisArg;
-                for(;;) {
-                    const fn = proxyApplyFn.proxies.get(proxied);
-                    if ( fn === undefined ) { break; }
-                    proxied = fn;
+        if ( (options.skipToString || proxyApplyFn.skipToString) !== true ) {
+            proxyApplyFn.nativeToString = Function.prototype.toString;
+            const proxiedToString = new Proxy(Function.prototype.toString, {
+                apply(target, thisArg) {
+                    let proxied = thisArg;
+                    for(;;) {
+                        const fn = proxyApplyFn.proxies.get(proxied);
+                        if ( fn === undefined ) { break; }
+                        proxied = fn;
+                    }
+                    return proxyApplyFn.nativeToString.call(proxied);
                 }
-                return proxyApplyFn.nativeToString.call(proxied);
-            }
-        });
-        proxyApplyFn.proxies.set(proxiedToString, proxyApplyFn.nativeToString);
-        Function.prototype.toString = proxiedToString;
+            });
+            proxyApplyFn.proxies.set(proxiedToString, proxyApplyFn.nativeToString);
+            Function.prototype.toString = proxiedToString;
+        }
     }
     if ( proxyApplyFn.isCtor.has(target) === false ) {
         proxyApplyFn.isCtor.set(target, fn.prototype?.constructor === fn);
@@ -543,8 +504,8 @@ function runAtHtmlElementFn(fn) {
 }
 
 function safeSelf() {
-    if ( scriptletGlobals.safeSelf ) {
-        return scriptletGlobals.safeSelf;
+    if ( safeSelf.safe ) {
+        return safeSelf.safe;
     }
     const self = globalThis;
     const safe = {
@@ -649,21 +610,20 @@ function safeSelf() {
             }
             return /^/;
         },
-        getExtraArgs(args, offset = 0) {
-            const entries = args.slice(offset).reduce((out, v, i, a) => {
-                if ( (i & 1) === 0 ) {
-                    const rawValue = a[i+1];
-                    const value = /^\d+$/.test(rawValue)
-                        ? parseInt(rawValue, 10)
-                        : rawValue;
-                    out.push([ a[i], value ]);
-                }
+        parseVarargs(varargs) {
+            const entries = varargs.reduce((out, v, i, a) => {
+                if ( i & 1 ) { return out; }
+                const rawValue = a[i+1];
+                const value = /^\d+$/.test(rawValue)
+                    ? parseInt(rawValue, 10)
+                    : rawValue;
+                out.push([ a[i], value ]);
                 return out;
             }, []);
             return this.Object_fromEntries(entries);
         },
     };
-    scriptletGlobals.safeSelf = safe;
+    safeSelf.safe = safe;
     if ( scriptletGlobals.bcSecret === undefined ) { return safe; }
     // This is executed only when the logger is opened
     safe.logLevel = scriptletGlobals.logLevel || 1;
@@ -730,12 +690,13 @@ function setConstant(
 function setConstantFn(
     trusted = false,
     chain = '',
-    rawValue = ''
+    rawValue = '',
+    ...varargs
 ) {
     if ( chain === '' ) { return; }
     const safe = safeSelf();
     const logPrefix = safe.makeLogPrefix('set-constant', chain, rawValue);
-    const extraArgs = safe.getExtraArgs(Array.from(arguments), 3);
+    const extraArgs = safe.parseVarargs(varargs);
     function setConstant(chain, rawValue) {
         const trappedProp = (( ) => {
             const pos = chain.lastIndexOf('.');
@@ -877,9 +838,77 @@ function setConstantFn(
     }, extraArgs.runAt);
 }
 
-function shouldDebug(details) {
-    if ( details instanceof Object === false ) { return false; }
-    return scriptletGlobals.canDebug && details.debug;
+function trapPropertyFn(propChain, handler, options = {}) {
+    if ( propChain === '' ) { return; }
+    let owner = self;
+    let prop = propChain;
+    for (;;) {
+        const pos = prop.indexOf('.');
+        if ( pos === -1 ) { break; }
+        owner = owner[prop.slice(0, pos)];
+        if ( owner instanceof Object === false ) { return; }
+        prop = prop.slice(pos + 1);
+    }
+    const safe = safeSelf();
+    if ( trapPropertyFn.db === undefined ) {
+        trapPropertyFn.db = new WeakMap();
+        trapPropertyFn.entryFromContext = (owner, prop) => {
+            const handlers = trapPropertyFn.db.get(owner);
+            return handlers?.get(prop);
+        };
+        trapPropertyFn.getter = (owner, prop) => {
+            const entry = trapPropertyFn.entryFromContext(owner, prop);
+            if ( entry === undefined ) { return; }
+            let r = entry.value;
+            for ( const desc of entry.stack ) {
+                try { r = desc.get(); } catch (e) {
+                    if ( entry.canThrow ) { throw e; }
+                }
+            }
+            return r;
+        };
+        trapPropertyFn.setter = (owner, prop, value) => {
+            const entry = trapPropertyFn.entryFromContext(owner, prop);
+            if ( entry === undefined ) { return; }
+            entry.value = value;
+            for ( const desc of entry.stack ) {
+                try { desc.set(value); } catch (e) {
+                    if ( entry.canThrow ) { throw e; }
+                }
+            }
+        };
+    }
+    const { db } = trapPropertyFn;
+    const handlers = db.get(owner) || new Map();
+    if ( handlers.size === 0 ) {
+        db.set(owner, handlers);
+    }
+    const entry = handlers.get(prop) || {
+        value: owner[prop],
+        stack: [],
+    };
+    entry.stack.push(handler);
+    if ( entry.stack.length > 1 ) { return entry.value; }
+    Object.assign(entry, options);
+    handlers.set(prop, entry);
+    const desc = safe.Object_getOwnPropertyDescriptor(owner, prop);
+    if ( desc instanceof safe.Object ) {
+        if ( desc.get || desc.set ) {
+            entry.stack.push(desc);
+        }
+    }
+    try {
+        safe.Object_defineProperty(owner, prop, {
+            get() {
+                return trapPropertyFn.getter(owner, prop);
+            },
+            set(value) {
+                trapPropertyFn.setter(owner, prop, value);
+            }
+        });
+    } catch {
+    }
+    return entry.value;
 }
 
 function trustedSetConstant(
@@ -944,19 +973,7 @@ function validateConstantFn(trusted, raw, extraArgs = {}) {
 
 const scriptletGlobals = {}; // eslint-disable-line
 
-const $scriptletFunctions$ = /* 8 */
-[preventAddEventListener,abortOnPropertyRead,setConstant,abortCurrentScript,abortOnPropertyWrite,preventRequestAnimationFrame,trustedSetConstant,preventSetTimeout];
-
-const $scriptletArgs$ = /* 59 */ ["load","function(){if(s.readyState==XMLHttpRequest.DONE","__cmpGdprAppliesGlobally","cookieconsent.Popup","cicc.cookie_cat_statistic","true","config.requireCookieConsent","false","cookie_alert_overlay","noopFunc","document.createElement","admiral","cookieManager","{}","cookieManager.initialize","cookieManager.needsConsentBanner","falseFunc","BrockmanAllowedCookies.functional","BrockmanAllowedCookies.targeting","FrodoPV","settings.consent","HB.CookieSettings.init","WHT.ShowConsentForm","trueFunc","CookiePolicy","CookiePolicy.init","useGDPR","xv.disclaimer.displayCookiePopup","Didomi","catch","realCookieBanner","undefined","window.cmpmngr.setConsentViaBtn","tcfAllowUseCookies","cicc.cookie_cat_functional","cicc.cookie_cat_marketing","tweakersConfig.userConfiguredConsent.googlemaps.approved","tweakersConfig.userConfiguredConsent.knightlab.approved","tweakersConfig.userConfiguredConsent.omny.approved","tweakersConfig.userConfiguredConsent.pcnltelecom.approved","tweakersConfig.userConfiguredConsent.soundcloud.approved","tweakersConfig.userConfiguredConsent.streamable.approved","tweakersConfig.userConfiguredConsent.youtube.approved","yleConsentSdk._consentSdk._embedded_social_media","yleConsentSdk.show","cockieConsentManagement","window.scrollTo","flagTcfLoaded","dataLayer","{\"value\":[{\"signals\":[\"remixd\"]},{\"event\":\"remixd_gtm_fire\"}]}","_iub.cs.options.callback.onConsentRejected","_iub.cs.options.callback.onConsentFirstRejected","__tcfapi_user_acctepted","cmp_importvendors","{\"value\": [\"s23\",\"s2564\"]}","_gtm.consent.cm.strategy.options.cmpay.enabled","Object.prototype.hasConsent","cmp_autoreject","checkPURLayerMustBeShown"];
-
-const $scriptletArglists$ = /* 48 */ "0,0,1;1,2;1,3;2,4,5;2,6,7;2,8,9;3,10,11;2,12,13;2,14,9;2,15,16;2,17,5;2,18,5;4,19;2,20,5;2,21,9;2,22,23;2,24,13;2,25,9;2,26,7;2,27,9;2,28,9;5,29;2,30,31;2,32,9;2,33,5;2,34,5;2,35,5;2,36,5;2,37,5;2,38,5;2,39,5;2,40,5;2,41,5;2,42,5;2,43,5;2,44,9;2,45,9;2,46,9;2,47,5;6,48,49;2,50,9;2,51,9;2,52,5;6,53,54;2,55,7;2,56,23;2,57,5;7,58";
-
-const $scriptletArglistRefs$ = /* 610 */ "22;1;45,46;0;22;34,35;24;22;22;1;22;22;22;22;22;22;22;22;6;22;22;22;22;22;22;22;22;22;22;22;22;22;22;22;22;22;22;20;22;21;22;22;22;3,25,26;42;22;22;22;22;22;22;22;22;22;22;22;22;22;22;22;22;12;6;22;22;22;22;22;22;22;1;22;14;22;10,11;19;22;22;22;22;22;22;6;22;22;22;5;20;22;22;22;20;22;6;22;22;22;22;37;22;22;18;22;22;22;22;22;22;22;22;22;22;22;22;1;22;2;22;22;22;22;22;22;1;21,22;3;22;22;22;22;22;22;22;22;22;22;22;22;1;22;16,17;22;22;22;6;22;21,22;22;22;22;22;19;22;22;22;22;22;22;22;22;22;22;22;22;22;22;22;22;10,11;10,11;10,11;22;22;22;22;6;22;22;22;22;22;22;22;22;1;22;22;39;22;22;22;22;22;22;22;22;22;27,28,29,30,31,32,33;7,8,9;22;22;22;45,46,47;22;22;22;22;22;22;22;22;1;22;22;22;22;3;3;10,11;20;38;22;22;22;22;22;22;22;22;22;22;22;22;22;1;22;22;1;22;22;22;22;22;22;6;22;22;22;22;22;22;22;22;22;22;22;22;22;22;22;22;6;22;22;22;1;22;1;22;22;22;22;4;22;22;22;22;22;3,25,26;40,41;22;22;22;22;22;22;22;22;5;22;5;22;22;22;22;22;22;1;22;22;22;22;22;22;22;22;22;22;22;22;22;1;22;22;22;22;22;22;22;15;22;22;22;22;40,41;40,41;22;22;22;22;22;22;22;22;44;22;22;22;22;22;22;6;36;22;5;22;1;23;22;21;22;22;22;6;6;22;22;22;1;1;22;6;22;22;22;22;22;22;22;22;22;22;22;22;22;22;22;22;22;22;22;20;22;22;22;22;22;22;22;6;22;43;22;22;22;22;22;22;22;22;21;22;20;22;22;22;22;22;22;22;22;22;22;22;22;22;22;22;22;22;5;22;22;22;1,6;22;22;22;22;22;22;22;1;22;22;22;22;22;22;22;22;22;22;22;22;22;20;22;22;22;1;22;22;22;22;22;22;22;1;22;22;6;22;22;1;22;22;1;22;22;22;22;1;22;22;22;22;22;1;22;1;22;22;22;22;22;22;1;22;22;22;22;22;22;22;22;22;6;22;22;22;22;22;22;22;22;22;22;22;22;22;22;22;10,11;22;22;22;1;22;22;1;22;22;22;22;6;22;22;22;22;22;22;21;22;22;22;22;22;22;13;22;22;22;22;22;22;22;22;22;1;22;22;22;22;22;22;22;22;22;22;22;22;22;22;22;22;22;22;22;22;22;22;22;22;22;22;22;22;22;1;22;13;22;22;22;22;22;22;22;22;6;22;22;22;22;22;22;22;22;22;22;22;22;22;22;22;22;22;22;22";
-
-const $scriptletHostnames$ = /* 610 */ ["do.de","al.com","dw.com","sss.fi","vzm.de","yle.fi","anna.fi","asga.ch","blhv.de","ccn.com","ciss.de","devm.io","engl.it","fild.de","gcol.de","grid.de","host.pl","igvm.de","ijr.com","itv4.de","ivfp.de","iway.ch","kmsw.de","naku.at","noaf.de","ojas.de","osmc.de","popp.eu","bbfun.de","beeze.de","betec.de","dg-pw.de","ekiwi.de","gosch.de","htvb.org","m-m-m.de","m38a1.de","melty.fr","nmmn.com","pdfa.org","pi3g.com","pinel.de","pulpe.eu","tieku.fi","tvn24.pl","yplay.de","accace.cz","accace.hu","accace.ro","accace.sk","artkon.de","asfour.ch","aspies.de","b757.info","baycix.de","carbon.ag","cargoe.at","dacsa.com","devowl.io","ejwleo.de","erp-up.de","farmer.pl","freep.com","gooloo.de","jadent.de","kjr-pi.de","klsys.com","kohlkg.de","maniac.de","medit.com","mlive.com","online.ch","stewes.de","ubisys.de","vg247.com","xv-ru.com","zipfer.at","4kfilme.de","accace.com","adzurro.de","aeotec.com","bestwig.de","boston.com","c-parts.de","epages.com","fobizz.com","foodker.hu","gamepro.de","goesser.at","hookahx.de","hypnose.ac","jofogas.hu","jpgames.de","legacy.com","maxkoch.de","olmatic.de","ousuca.com","patria.net","podimo.com","prodopa.de","profiel.de","qastack.fr","ridee.bike","softedu.pl","stilweb.it","suitapp.de","tecsafe.de","tiesse.com","toplink.de","upreply.de","vivoil.com","wp-loft.de","24hessen.de","afi-ipl.org","allkpop.com","bierspot.de","claritin.ca","compari.net","crazeuk.com","europace.de","fahrstil.cc","fakturia.de","gamenite.de","gamepur.com","getaawp.com","gigantti.fi","hs-soft.com","ilyabiz.com","imprints.de","krefindo.de","lang-ag.com","lemarit.com","ltmemory.de","luegeten.ch","mikanews.de","myclim8.com","oculyze.net","ontuscia.it","pgatour.com","proofing.de","saos.org.pl","smiley.blue","subitec.com","theoblog.de","titantv.com","topblogs.de","tuhlteim.de","tutonaut.de","tv-sport.de","wildbits.de","winlocal.de","xvideos.com","yurishop.it","actrento.com","arsdigita.de","base-chat.de","basta.berlin","berberin.net","brancaia.com","brill-art.de","bs-achern.de","cornhub.army","cranimax.com","desser.co.uk","drhorvath.de","duft-werk.de","ellasblog.de","esderaiz.com","eurogamer.es","eurogamer.pl","eurogamer.pt","everbloom.eu","frohreich.de","hopfner.info","ilonpolku.fi","inquirer.net","jankarres.de","knoblauch.de","komm-mit.com","lightcon.com","manyanet.org","move-ment.at","mummelito.de","narrwalla.de","newatlas.com","patchbox.com","photofloh.de","radiox.co.uk","roschmann.de","rosgovas.com","salzerkfz.de","saunahuus.de","savvista.com","spherity.com","spytunes.com","thingybob.de","tulipize.com","tweakers.net","uncrossy.com","vapecoco.com","webtapete.de","wichmann.biz","winfuture.de","wp-ninjas.de","yenivatan.at","abcteile24.de","ac-grimmen.de","antik-shop.de","bklm-ahaus.de","blindbild.com","canvascga.com","cleveland.com","cloudiway.com","dasmagazin.de","efg-passau.de","ekiwi-blog.de","elgiganten.dk","elgiganten.se","eurogamer.net","euromaster.de","express.co.uk","feuerhexen.de","ffzblossin.de","forwardis.com","freegossip.gr","frixtender.de","fuckyeah.shop","gaming-pc.net","hof-droste.de","horizonte.com","hundewelpe.de","infobroker.de","inicionet.com","iqskitchen.de","keengamer.com","linzerbier.at","ls-service.at","mandatory.com","mario-kaps.de","mmo-sankar.de","picockpit.com","plzenoviny.cz","puntigamer.at","rossoft.co.uk","savvytime.com","signisalc.org","skiweltcup.tv","symposium.org","vectorsoft.de","visitmedia.de","vitalplus.com","wallygusto.de","weber-senf.at","webtimiser.de","wind-craft.eu","wunderpen.com","zouboulis.com","audiovision.de","balsamico.shop","bitreporter.de","bricksforge.io","britannica.com","brodbeck-dd.de","brunozimmer.de","cleverpush.com","comicsands.com","dayspamainz.de","duffelblog.com","elisazunder.de","euranetplus.de","farbenherz.com","fasteninfos.de","fimfiction.net","financeads.com","flughafen.tips","frickeldave.de","goldpreis24.de","grupo-loma.com","historianet.fi","ilsecoloxix.it","istdasvegan.eu","it-koehler.com","josefbergs.com","kiyoua-news.de","kwerfeldein.de","levne-sauny.cz","mannschaft.com","meinstream.net","milestone66.hu","odw-journal.de","paplanvilag.hu","playcentral.de","randombrick.de","roemermann.com","rotlichtaus.de","schwechater.at","senckenberg.de","sportsnaut.com","supereight.net","udo-lermann.de","vcfrankfurt.de","wzl-zwickau.de","youngimages.de","zabel-group.de","zertificon.com","zumkutscher.de","zur-glocke.com","aachen50plus.de","angelmagazin.de","babiceurican.cz","burzaucebnic.sk","cinemablend.com","createchange.me","derklassiker.de","domaintools.com","drive4brands.de","eventhotels.com","exitroom.berlin","flow-in-yoga.de","gadgethacks.com","goessential.com","hans-engelke.de","hauspanorama.de","hundgemacht.net","ilgazzettino.it","ilmessaggero.it","imprimare3d.com","istaf-indoor.de","kaiser-mania.de","karlhoeffkes.de","kasteninblau.de","kbmv-matting.de","kd-slovenija.de","lenovocampus.de","linternaute.com","locandazita.com","mack-design.com","music-on-net.de","neuneinhalb.org","nordlicht-ev.de","openforests.com","order-order.com","philips-hue.com","railwebcams.net","reformsziget.hu","salzstreuner.de","sevenforums.com","sourceforge.net","swg-chemnitz.de","t-challenge.com","tango-flores.de","tc-equipment.de","tecalliance.net","techlicious.com","technicpack.net","techniknews.net","terra-natur.com","testefiorite.it","toledoblade.com","totalbeauty.com","windowspower.de","wrestlezone.com","zaunbau-koch.de","zimmerwetter.de","autobrinkmann.de","barracred.com.br","baumarkt-vogl.at","bildung-ab-50.de","danielederosa.de","denk-doch-mal.de","draisinenbahn.de","edr-software.com","englishradar.com","estudio-nous.com","foto-shooting.ch","gerdes-reisen.de","hotelkristall.it","insidetrading.de","klicks-kaufen.de","kuechenboerse.de","lameerooftop.com","lavanguardia.com","lazyinvestors.de","lichttraeumer.de","lobetalarbeit.de","louisreynier.com","miriamkreativ.de","missinfogeek.net","neumarkt-egna.it","nofilmschool.com","oakbeardcare.com","octopusenergy.de","pinel-medizin.de","pureselfmade.com","reise-zikaden.de","reisekontakte.at","running-green.de","schreiners-it.de","seifriz-preis.de","sonderversum.com","stadtreporter.de","stonk-market.com","strefabiznesu.pl","sv-langenfeld.de","thegeekfreaks.de","timo-bernhard.de","torinostoria.com","webfactory-i4.de","animalwebcams.net","blogyourthing.com","boeser-chinese.de","bsk-consulting.de","campingbuddies.de","compact-online.de","donostiroller.com","frigge-dinstak.de","gaming-grounds.de","goerlach-gmbh.com","guiademayores.com","knauer-galabau.de","laptophardware.hu","leben-mit-ohne.de","locafrique-sf.com","mixingmonster.com","musicfeeds.com.au","nachbelichtet.com","phpconference.com","pndracingteam.net","rolandgermany.com","schuetzendepot.de","schulebruetten.ch","stw-langenfeld.de","superherohype.com","tuhlteim-pedia.de","verstehepferde.de","viel-unterwegs.de","visconti.partners","airportwebcams.net","akzent-magazin.com","arabesque-essen.de","ausfraukesfeder.de","brauerei-strate.de","classic-emaille.de","cocktailsworld.net","derhoerbuchblog.de","egon-w-kreutzer.de","elconfidencial.com","evkirche-eilsen.de","floristasgarcia.es","forum-koepenick.de","gamerevolution.com","gefahrgutjaeger.de","hannover-living.de","hardware-helden.de","industriemedien.at","juwelier-dringo.de","karver-systems.com","lb-consultores.com","listenonrepeat.com","mfu-pilotenclub.at","motivationstipp.de","nationalreview.com","notebook-doktor.de","pentadoc-radar.com","readlightnovel.org","stadt-schoeneck.de","suedafrika-wein.de","thefashionspot.com","therapiewerk-io.de","tsg6209weinheim.de","weingut-knipser.de","welte-glasuren.com","westernjournal.com","wrestling-point.de","yogainspires.co.uk","zahnarzt-kuboth.de","blueoceangaming.com","boheme-schwabing.de","calendarpedia.co.uk","feuerwehr-oberau.de","foxvalleyfoodie.com","herrlichergarten.de","immobilien-skiba.de","katzenbaumdesign.de","kieruneknorwegia.pl","madame-lenormand.de","media-consulting.ch","merriam-webster.com","pizzeria-algusto.de","readyforboarding.pl","reinhardstrempel.de","samenbank-berlin.de","stefan-froescher.eu","stefke-heilbronn.de","stricken-online.com","supertipp-online.de","tanzschulebogner.de","thedraftnetwork.com","thinkingwithyou.com","thomasschlechter.de","vienna-interiors.at","von-zinsen-leben.de","199-euro-computer.de","automatiksysteme.com","bewusstes-zentrum.de","blog.ipc-computer.de","der-windows-papst.de","die-werbeschmiede.de","erbsenprinzessin.com","flaviamelissa.com.br","holzkisten-fabrik.de","lichtempfindlich.org","piazzadeimestieri.it","rockpapershotgun.com","spieltraum-berlin.de","splendid-internet.de","teilzeitreisender.de","theodysseyonline.com","tkm-systemtechnik.de","trettin-apotheken.de","windows101tricks.com","wt-onlineakademie.de","brachmannofficial.com","compagniefruitiere.fr","coworkingrepublic.com","download.mokeedev.com","egro-direktwerbung.de","feucht-obsttechnik.de","gymnasium-hochdahl.de","haarausfall-stopp.com","janamaenz.photography","klangmassage-moser.de","mhmscreenprinting.com","philosophenlexikon.de","pocket-pirates-prt.de","schneelaeuferzunft.de","stefaniegoldmarie.com","technik-hauptstadt.de","tonispizza-rastatt.de","vadhander.kramfors.se","wildpark-ortenburg.de","wolfgangallgaeuer.com","zahnarzt-dr-henkel.de","1000-haushaltstipps.de","akademie-management.de","autoverwertung-berk.de","flugschule-hochries.de","fschemie-goettingen.de","goeltzschtal-reisen.de","interestingengineering","naturseifen-moosmed.de","nebenwerte-magazin.com","prodottidellapiazza.it","tourismus-uckermark.de","trirhena-consulting.de","volksfest-nuernberg.de","alquilerordenadores.com","annabeauty-stuttgart.de","blu-ray-rezensionen.net","caucasus-naturefund.org","frauzuckerbroetchen.com","gasthaus-schmidmayer.de","lacasadavantialsole.org","marketing-strategen.com","music-service-geiger.de","pandore-gendarmerie.org","rissland-kunststoffe.de","smorfianapoletanaweb.it","steinway-park-seesen.de","weiterbildungsfinder.de","accademiainformatica.com","continentale-hannover.de","crossculture-academy.com","dollenberg-isolierung.de","fitnesscenter-schardt.de","lattinepersonalizzate.it","mallorca-unternehmen.com","pferde-hunde-therapie.de","philosophia-perennis.com","playstationlifestyle.net","rechtsanwalt-nierfeld.de","vadhander.hogakusten.com","elektrotechnik-schabus.de","fabian-heinz-webdesign.de","hallesches-fotoatelier.de","kunstmuseum-heidenheim.de","lepetitmarchedauvergne.fr","presto-personaldienste.de","restaurantsbrighton.co.uk","von-neindorff-stiftung.de","worldpopulationreview.com","gesundheitsladen-online.de","manneskraft-gesteigert.com","schnittmuster-datenbank.de","tiermasseur-mannsberger.at","energiemetropole-leipzig.de","erlebnispark-ziegenhagen.de","grafische-visualisierung.de","schiffe-und-kreuzfahrten.de","sl-landschaftsgestaltung.de","erfurt-touristinformation.de","gutshaus-neuendorf-usedom.de","weimar-touristinformation.de","wohnmobilcenter-drechsler.de","china-central-consultants.com","nahrungsmittel-intoleranz.com","transport-versicherungen.info","bilderberg-bellevue-dresden.de","ichbindochnichthierumbeliebtzusein.com","versicherungsmakler-leistenschneider.de"];
-
-const $scriptletFromRegexes$ = /* 0 */ [];
-
+const $hasHostnames$ = true;
 const $hasEntities$ = false;
 const $hasAncestors$ = false;
 const $hasRegexes$ = false;
@@ -975,18 +992,22 @@ const entries = (( ) => {
         const hn1 = origin.slice(beg+3)
         const end = hn1.indexOf(':');
         const hn2 = end === -1 ? hn1 : hn1.slice(0, end);
-        const hnParts = hn2.split('.');
         if ( hn2.length === 0 ) { return; }
-        const hns = [];
-        for ( let i = 0; i < hnParts.length; i++ ) {
-            hns.push(`${hnParts.slice(i).join('.')}`);
+        const hns = [ hn2 ];
+        for ( let pos = 0; ; ) {
+            pos = hn2.indexOf('.', pos) + 1;
+            if ( pos === 0 ) { break; }
+            hns.push(hn2.slice(pos));
         }
+        hns.push('*');
         const ens = [];
         if ( $hasEntities$ ) {
-            const n = hnParts.length - 1;
-            for ( let i = 0; i < n; i++ ) {
-                for ( let j = n; j > i; j-- ) {
-                    ens.push(`${hnParts.slice(i,j).join('.')}.*`);
+            for ( let hn of hns ) {
+                for (;;) {
+                    const pos = hn.lastIndexOf('.');
+                    if ( pos === -1 ) { break; }
+                    hn = hn.slice(0, pos);
+                    ens.push(`${hn}.*`);
                 }
             }
             ens.sort((a, b) => {
@@ -996,12 +1017,14 @@ const entries = (( ) => {
             });
         }
         return { hns, ens, i };
-    }).filter(a => a !== undefined);
+    }).filter(a => a);
 })();
 if ( entries.length === 0 ) { return; }
 
-const todoIndices = new Set();
-if ( $scriptletHostnames$.length ) {
+const todo = new Set();
+
+if ( $hasHostnames$ ) {
+    const $scriptletHostnames$ = /* 611 */ ["do.de","al.com","dw.com","sss.fi","vzm.de","yle.fi","anna.fi","asga.ch","blhv.de","ccn.com","ciss.de","devm.io","engl.it","fild.de","gcol.de","grid.de","host.pl","igvm.de","ijr.com","itv4.de","ivfp.de","iway.ch","kmsw.de","naku.at","noaf.de","ojas.de","osmc.de","popp.eu","bbfun.de","beeze.de","betec.de","dg-pw.de","ekiwi.de","gosch.de","htvb.org","m-m-m.de","m38a1.de","melty.fr","nmmn.com","pdfa.org","pi3g.com","pinel.de","pulpe.eu","tieku.fi","tvn24.pl","yplay.de","accace.cz","accace.hu","accace.ro","accace.sk","artkon.de","asfour.ch","aspies.de","b757.info","baycix.de","carbon.ag","cargoe.at","dacsa.com","devowl.io","ejwleo.de","erp-up.de","farmer.pl","freep.com","gooloo.de","jadent.de","kjr-pi.de","klsys.com","kohlkg.de","ksp.co.il","maniac.de","medit.com","mlive.com","online.ch","stewes.de","ubisys.de","vg247.com","xv-ru.com","zipfer.at","4kfilme.de","accace.com","adzurro.de","aeotec.com","bestwig.de","boston.com","c-parts.de","epages.com","fobizz.com","foodker.hu","gamepro.de","goesser.at","hookahx.de","hypnose.ac","jofogas.hu","jpgames.de","legacy.com","maxkoch.de","olmatic.de","ousuca.com","patria.net","podimo.com","prodopa.de","profiel.de","qastack.fr","ridee.bike","softedu.pl","stilweb.it","suitapp.de","tecsafe.de","tiesse.com","toplink.de","upreply.de","vivoil.com","wp-loft.de","24hessen.de","afi-ipl.org","allkpop.com","bierspot.de","claritin.ca","compari.net","crazeuk.com","europace.de","fahrstil.cc","fakturia.de","gamenite.de","gamepur.com","getaawp.com","gigantti.fi","hs-soft.com","ilyabiz.com","imprints.de","krefindo.de","lang-ag.com","lemarit.com","ltmemory.de","luegeten.ch","mikanews.de","myclim8.com","oculyze.net","ontuscia.it","pgatour.com","proofing.de","saos.org.pl","smiley.blue","subitec.com","theoblog.de","titantv.com","topblogs.de","tuhlteim.de","tutonaut.de","tv-sport.de","wildbits.de","winlocal.de","xvideos.com","yurishop.it","actrento.com","arsdigita.de","base-chat.de","basta.berlin","berberin.net","brancaia.com","brill-art.de","bs-achern.de","cornhub.army","cranimax.com","desser.co.uk","drhorvath.de","duft-werk.de","ellasblog.de","esderaiz.com","eurogamer.es","eurogamer.pl","eurogamer.pt","everbloom.eu","frohreich.de","hopfner.info","ilonpolku.fi","inquirer.net","jankarres.de","knoblauch.de","komm-mit.com","lightcon.com","manyanet.org","move-ment.at","mummelito.de","narrwalla.de","newatlas.com","patchbox.com","photofloh.de","radiox.co.uk","roschmann.de","rosgovas.com","salzerkfz.de","saunahuus.de","savvista.com","spherity.com","spytunes.com","thingybob.de","tulipize.com","tweakers.net","uncrossy.com","vapecoco.com","webtapete.de","wichmann.biz","winfuture.de","wp-ninjas.de","yenivatan.at","abcteile24.de","ac-grimmen.de","antik-shop.de","bklm-ahaus.de","blindbild.com","canvascga.com","cleveland.com","cloudiway.com","dasmagazin.de","efg-passau.de","ekiwi-blog.de","elgiganten.dk","elgiganten.se","eurogamer.net","euromaster.de","express.co.uk","feuerhexen.de","ffzblossin.de","forwardis.com","freegossip.gr","frixtender.de","fuckyeah.shop","gaming-pc.net","hof-droste.de","horizonte.com","hundewelpe.de","infobroker.de","inicionet.com","iqskitchen.de","keengamer.com","linzerbier.at","ls-service.at","mandatory.com","mario-kaps.de","mmo-sankar.de","picockpit.com","plzenoviny.cz","puntigamer.at","rossoft.co.uk","savvytime.com","signisalc.org","skiweltcup.tv","symposium.org","vectorsoft.de","visitmedia.de","vitalplus.com","wallygusto.de","weber-senf.at","webtimiser.de","wind-craft.eu","wunderpen.com","zouboulis.com","audiovision.de","balsamico.shop","bitreporter.de","bricksforge.io","britannica.com","brodbeck-dd.de","brunozimmer.de","cleverpush.com","comicsands.com","dayspamainz.de","duffelblog.com","elisazunder.de","euranetplus.de","farbenherz.com","fasteninfos.de","fimfiction.net","financeads.com","flughafen.tips","frickeldave.de","goldpreis24.de","grupo-loma.com","historianet.fi","ilsecoloxix.it","istdasvegan.eu","it-koehler.com","josefbergs.com","kiyoua-news.de","kwerfeldein.de","levne-sauny.cz","mannschaft.com","meinstream.net","milestone66.hu","odw-journal.de","paplanvilag.hu","playcentral.de","randombrick.de","roemermann.com","rotlichtaus.de","schwechater.at","senckenberg.de","sportsnaut.com","supereight.net","udo-lermann.de","vcfrankfurt.de","wzl-zwickau.de","youngimages.de","zabel-group.de","zertificon.com","zumkutscher.de","zur-glocke.com","aachen50plus.de","angelmagazin.de","babiceurican.cz","burzaucebnic.sk","cinemablend.com","createchange.me","derklassiker.de","domaintools.com","drive4brands.de","eventhotels.com","exitroom.berlin","flow-in-yoga.de","gadgethacks.com","goessential.com","hans-engelke.de","hauspanorama.de","hundgemacht.net","ilgazzettino.it","ilmessaggero.it","imprimare3d.com","istaf-indoor.de","kaiser-mania.de","karlhoeffkes.de","kasteninblau.de","kbmv-matting.de","kd-slovenija.de","lenovocampus.de","linternaute.com","locandazita.com","mack-design.com","music-on-net.de","neuneinhalb.org","nordlicht-ev.de","openforests.com","order-order.com","philips-hue.com","railwebcams.net","reformsziget.hu","salzstreuner.de","sevenforums.com","sourceforge.net","swg-chemnitz.de","t-challenge.com","tango-flores.de","tc-equipment.de","tecalliance.net","techlicious.com","technicpack.net","techniknews.net","terra-natur.com","testefiorite.it","toledoblade.com","totalbeauty.com","windowspower.de","wrestlezone.com","zaunbau-koch.de","zimmerwetter.de","autobrinkmann.de","barracred.com.br","baumarkt-vogl.at","bildung-ab-50.de","danielederosa.de","denk-doch-mal.de","draisinenbahn.de","edr-software.com","englishradar.com","estudio-nous.com","foto-shooting.ch","gerdes-reisen.de","hotelkristall.it","insidetrading.de","klicks-kaufen.de","kuechenboerse.de","lameerooftop.com","lavanguardia.com","lazyinvestors.de","lichttraeumer.de","lobetalarbeit.de","louisreynier.com","miriamkreativ.de","missinfogeek.net","neumarkt-egna.it","nofilmschool.com","oakbeardcare.com","octopusenergy.de","pinel-medizin.de","pureselfmade.com","reise-zikaden.de","reisekontakte.at","running-green.de","schreiners-it.de","seifriz-preis.de","sonderversum.com","stadtreporter.de","stonk-market.com","strefabiznesu.pl","sv-langenfeld.de","thegeekfreaks.de","timo-bernhard.de","torinostoria.com","webfactory-i4.de","animalwebcams.net","blogyourthing.com","boeser-chinese.de","bsk-consulting.de","campingbuddies.de","compact-online.de","donostiroller.com","frigge-dinstak.de","gaming-grounds.de","goerlach-gmbh.com","guiademayores.com","knauer-galabau.de","laptophardware.hu","leben-mit-ohne.de","locafrique-sf.com","mixingmonster.com","musicfeeds.com.au","nachbelichtet.com","phpconference.com","pndracingteam.net","rolandgermany.com","schuetzendepot.de","schulebruetten.ch","stw-langenfeld.de","superherohype.com","tuhlteim-pedia.de","verstehepferde.de","viel-unterwegs.de","visconti.partners","airportwebcams.net","akzent-magazin.com","arabesque-essen.de","ausfraukesfeder.de","brauerei-strate.de","classic-emaille.de","cocktailsworld.net","derhoerbuchblog.de","egon-w-kreutzer.de","elconfidencial.com","evkirche-eilsen.de","floristasgarcia.es","forum-koepenick.de","gamerevolution.com","gefahrgutjaeger.de","hannover-living.de","hardware-helden.de","industriemedien.at","juwelier-dringo.de","karver-systems.com","lb-consultores.com","listenonrepeat.com","mfu-pilotenclub.at","motivationstipp.de","nationalreview.com","notebook-doktor.de","pentadoc-radar.com","readlightnovel.org","stadt-schoeneck.de","suedafrika-wein.de","thefashionspot.com","therapiewerk-io.de","tsg6209weinheim.de","weingut-knipser.de","welte-glasuren.com","westernjournal.com","wrestling-point.de","yogainspires.co.uk","zahnarzt-kuboth.de","blueoceangaming.com","boheme-schwabing.de","calendarpedia.co.uk","feuerwehr-oberau.de","foxvalleyfoodie.com","herrlichergarten.de","immobilien-skiba.de","katzenbaumdesign.de","kieruneknorwegia.pl","madame-lenormand.de","media-consulting.ch","merriam-webster.com","pizzeria-algusto.de","readyforboarding.pl","reinhardstrempel.de","samenbank-berlin.de","stefan-froescher.eu","stefke-heilbronn.de","stricken-online.com","supertipp-online.de","tanzschulebogner.de","thedraftnetwork.com","thinkingwithyou.com","thomasschlechter.de","vienna-interiors.at","von-zinsen-leben.de","199-euro-computer.de","automatiksysteme.com","bewusstes-zentrum.de","blog.ipc-computer.de","der-windows-papst.de","die-werbeschmiede.de","erbsenprinzessin.com","flaviamelissa.com.br","holzkisten-fabrik.de","lichtempfindlich.org","piazzadeimestieri.it","rockpapershotgun.com","spieltraum-berlin.de","splendid-internet.de","teilzeitreisender.de","theodysseyonline.com","tkm-systemtechnik.de","trettin-apotheken.de","windows101tricks.com","wt-onlineakademie.de","brachmannofficial.com","compagniefruitiere.fr","coworkingrepublic.com","download.mokeedev.com","egro-direktwerbung.de","feucht-obsttechnik.de","gymnasium-hochdahl.de","haarausfall-stopp.com","janamaenz.photography","klangmassage-moser.de","mhmscreenprinting.com","philosophenlexikon.de","pocket-pirates-prt.de","schneelaeuferzunft.de","stefaniegoldmarie.com","technik-hauptstadt.de","tonispizza-rastatt.de","vadhander.kramfors.se","wildpark-ortenburg.de","wolfgangallgaeuer.com","zahnarzt-dr-henkel.de","1000-haushaltstipps.de","akademie-management.de","autoverwertung-berk.de","flugschule-hochries.de","fschemie-goettingen.de","goeltzschtal-reisen.de","interestingengineering","naturseifen-moosmed.de","nebenwerte-magazin.com","prodottidellapiazza.it","tourismus-uckermark.de","trirhena-consulting.de","volksfest-nuernberg.de","alquilerordenadores.com","annabeauty-stuttgart.de","blu-ray-rezensionen.net","caucasus-naturefund.org","frauzuckerbroetchen.com","gasthaus-schmidmayer.de","lacasadavantialsole.org","marketing-strategen.com","music-service-geiger.de","pandore-gendarmerie.org","rissland-kunststoffe.de","smorfianapoletanaweb.it","steinway-park-seesen.de","weiterbildungsfinder.de","accademiainformatica.com","continentale-hannover.de","crossculture-academy.com","dollenberg-isolierung.de","fitnesscenter-schardt.de","lattinepersonalizzate.it","mallorca-unternehmen.com","pferde-hunde-therapie.de","philosophia-perennis.com","playstationlifestyle.net","rechtsanwalt-nierfeld.de","vadhander.hogakusten.com","elektrotechnik-schabus.de","fabian-heinz-webdesign.de","hallesches-fotoatelier.de","kunstmuseum-heidenheim.de","lepetitmarchedauvergne.fr","presto-personaldienste.de","restaurantsbrighton.co.uk","von-neindorff-stiftung.de","worldpopulationreview.com","gesundheitsladen-online.de","manneskraft-gesteigert.com","schnittmuster-datenbank.de","tiermasseur-mannsberger.at","energiemetropole-leipzig.de","erlebnispark-ziegenhagen.de","grafische-visualisierung.de","schiffe-und-kreuzfahrten.de","sl-landschaftsgestaltung.de","erfurt-touristinformation.de","gutshaus-neuendorf-usedom.de","weimar-touristinformation.de","wohnmobilcenter-drechsler.de","china-central-consultants.com","nahrungsmittel-intoleranz.com","transport-versicherungen.info","bilderberg-bellevue-dresden.de","ichbindochnichthierumbeliebtzusein.com","versicherungsmakler-leistenschneider.de"];
     const collectArglistRefIndices = (out, hn, r) => {
         let l = 0, i = 0, d = 0;
         let candidate = '';
@@ -1036,6 +1059,7 @@ if ( $scriptletHostnames$.length ) {
             }
         }
     };
+    const todoIndices = new Set();
     indicesFromHostname(todoIndices, entries[0]);
     if ( $hasAncestors$ ) {
         for ( const entry of entries ) {
@@ -1043,20 +1067,20 @@ if ( $scriptletHostnames$.length ) {
             indicesFromHostname(todoIndices, entry, '>>');
         }
     }
-    $scriptletHostnames$.length = 0;
-}
-
-// Collect arglist references
-const todo = new Set();
-if ( todoIndices.size !== 0 ) {
-    const arglistRefs = $scriptletArglistRefs$.split(';');
-    for ( const i of todoIndices ) {
-        for ( const ref of JSON.parse(`[${arglistRefs[i]}]`) ) {
-            todo.add(ref);
+    // Collect arglist references
+    if ( todoIndices.size ) {
+        const $scriptletArglistRefs$ = /* 611 */ "24;2;49,50;1;24;36,37;26;24;24;2;24;24;24;24;24;24;24;24;7;24;24;24;24;24;24;24;24;24;24;24;24;24;24;24;24;24;24;22;24;23;24;24;24;4,27,28;46;24;24;24;24;24;24;24;24;24;24;24;24;24;24;24;24;14;7;24;24;24;24;24;40,41;24;24;2;24;16;24;12,13;21;24;24;24;24;24;24;7;24;24;24;6;22;24;24;24;22;24;7;24;24;24;24;39;24;24;20;24;24;24;24;24;24;24;24;24;24;24;24;2;24;3;24;24;24;24;24;24;2;23,24;4;24;24;24;24;24;24;24;24;24;24;24;24;2;24;18,19;24;24;24;7;24;23,24;24;24;24;24;11,21;24;24;24;24;24;24;24;24;24;24;24;24;24;24;24;24;12,13;12,13;12,13;24;24;24;24;7;24;24;24;24;24;24;24;24;2;24;24;43;24;24;24;24;24;24;24;24;24;29,30,31,32,33,34,35;8,9,10;24;24;24;49,50,51;24;24;24;24;24;24;24;24;2;24;24;24;24;4;4;12,13;22;42;24;24;24;24;24;24;24;24;24;24;24;24;24;2;24;24;2;24;24;24;24;24;24;7;24;24;24;24;24;24;24;24;24;24;24;24;24;24;24;24;7;24;24;24;2;24;2;24;24;24;24;5;24;24;24;24;24;4,27,28;44,45;24;24;24;24;24;24;24;24;6;24;6;24;24;24;24;24;24;2;24;24;24;24;24;24;24;24;24;24;24;24;24;2;24;24;24;24;24;24;24;17;24;24;24;24;44,45;44,45;24;24;24;24;24;24;24;24;48;24;24;24;24;24;24;7;38;24;6;24;2;25;24;23;24;24;24;7;7;24;24;24;2;2;24;7;24;24;24;24;24;24;24;24;24;24;24;24;24;24;24;24;24;24;24;22;24;24;24;24;24;24;24;7;24;47;24;24;24;24;24;24;24;24;23;24;22;24;24;24;24;24;24;24;24;24;24;24;24;24;24;24;24;24;6;24;24;24;2,7;24;24;24;24;24;24;24;2;24;24;24;24;24;24;24;24;24;24;24;24;24;22;24;24;24;2;24;24;24;24;24;24;24;2;24;24;7;24;24;2;24;24;2;24;24;24;24;2;24;24;24;24;24;2;24;2;24;24;24;24;24;24;2;24;24;24;24;24;24;24;24;24;7;24;24;24;24;24;24;24;24;24;24;24;24;24;24;24;12,13;24;24;24;2;24;24;2;24;24;24;24;7;24;24;24;24;24;24;23;24;24;24;24;24;24;15;24;24;24;24;24;24;24;24;24;2;24;24;24;24;24;24;24;24;24;24;24;24;24;24;24;24;24;24;24;24;24;24;24;24;24;24;24;24;24;2;24;15;24;24;24;24;24;24;24;24;7;24;24;24;24;24;24;24;24;24;24;24;24;24;24;24;24;24;24;24";
+        const arglistRefs = $scriptletArglistRefs$.split(';');
+        for ( const i of todoIndices ) {
+            for ( const ref of JSON.parse(`[${arglistRefs[i]}]`) ) {
+                todo.add(ref);
+            }
         }
     }
 }
+
 if ( $hasRegexes$ ) {
+    const $scriptletFromRegexes$ = /* 0 */ [];
     const { hns } = entries[0];
     for ( let i = 0, n = $scriptletFromRegexes$.length; i < n; i += 3 ) {
         const needle = $scriptletFromRegexes$[i+0];
@@ -1073,10 +1097,13 @@ if ( $hasRegexes$ ) {
         }
     }
 }
-if ( todo.size === 0 ) { return; }
 
-// Execute scriplets
-{
+// Execute scriptlets
+if ( todo.size && todo.has(0) === false ) {
+    const $scriptletFunctions$ = /* 8 */
+[preventAddEventListener,abortOnPropertyRead,setConstant,abortCurrentScript,abortOnPropertyWrite,preventRequestAnimationFrame,trustedSetConstant,preventSetTimeout];
+    const $scriptletArgs$ = /* 62 */ ["load","function(){if(s.readyState==XMLHttpRequest.DONE","__cmpGdprAppliesGlobally","cookieconsent.Popup","cicc.cookie_cat_statistic","true","config.requireCookieConsent","false","cookie_alert_overlay","noopFunc","document.createElement","admiral","cookieManager","{}","cookieManager.initialize","cookieManager.needsConsentBanner","falseFunc","xv.disclaimer.displayNewCookiePopup","BrockmanAllowedCookies.functional","BrockmanAllowedCookies.targeting","FrodoPV","settings.consent","HB.CookieSettings.init","WHT.ShowConsentForm","trueFunc","CookiePolicy","CookiePolicy.init","useGDPR","xv.disclaimer.displayCookiePopup","Didomi","catch","realCookieBanner","undefined","window.cmpmngr.setConsentViaBtn","tcfAllowUseCookies","cicc.cookie_cat_functional","cicc.cookie_cat_marketing","tweakersConfig.userConfiguredConsent.googlemaps.approved","tweakersConfig.userConfiguredConsent.knightlab.approved","tweakersConfig.userConfiguredConsent.omny.approved","tweakersConfig.userConfiguredConsent.pcnltelecom.approved","tweakersConfig.userConfiguredConsent.soundcloud.approved","tweakersConfig.userConfiguredConsent.streamable.approved","tweakersConfig.userConfiguredConsent.youtube.approved","yleConsentSdk._consentSdk._embedded_social_media","yleConsentSdk.show","cockieConsentManagement","window.scrollTo","dataLayer","[]","gtag","flagTcfLoaded","{\"value\":[{\"signals\":[\"remixd\"]},{\"event\":\"remixd_gtm_fire\"}]}","_iub.cs.options.callback.onConsentRejected","_iub.cs.options.callback.onConsentFirstRejected","__tcfapi_user_acctepted","cmp_importvendors","{\"value\": [\"s23\",\"s2564\"]}","_gtm.consent.cm.strategy.options.cmpay.enabled","Object.prototype.hasConsent","cmp_autoreject","checkPURLayerMustBeShown"];
+    const $scriptletArglists$ = /* 52 */ ";0,0,1;1,2;1,3;2,4,5;2,6,7;2,8,9;3,10,11;2,12,13;2,14,9;2,15,16;2,17,9;2,18,5;2,19,5;4,20;2,21,5;2,22,9;2,23,24;2,25,13;2,26,9;2,27,7;2,28,9;2,29,9;5,30;2,31,32;2,33,9;2,34,5;2,35,5;2,36,5;2,37,5;2,38,5;2,39,5;2,40,5;2,41,5;2,42,5;2,43,5;2,44,5;2,45,9;2,46,9;2,47,9;2,48,49;2,50,9;2,51,5;6,48,52;2,53,9;2,54,9;2,55,5;6,56,57;2,58,7;2,59,24;2,60,5;7,61";
     const arglists = $scriptletArglists$.split(';');
     const args = $scriptletArgs$;
     for ( const ref of todo ) {
