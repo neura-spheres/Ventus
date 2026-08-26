@@ -19,6 +19,7 @@
    "newsletter.beautydea.it",
    "ping.contactpigeon.com",
    "subscription-forms.smsbump.com",
+   "vlan.qualifioapp.com",
    "wheelioapp.azureedge.net",
    "widget.smsinfo.io"
   ],
@@ -27,6 +28,22 @@
   ]
  },
  "id": 1,
+ "priority": 29
+},
+{
+ "action": {
+  "redirect": {
+   "regexSubstitution": "/strictblock.html#\\0"
+  },
+  "type": "redirect"
+ },
+ "condition": {
+  "regexFilter": "^[^:]+:\\/\\/([^:/]+\\.)?awebstories\\.com\\/wp-content\\/plugins\\/secure-copy-content-protection[^%.0-9a-z_-]?.*",
+  "resourceTypes": [
+   "main_frame"
+  ]
+ },
+ "id": 2,
  "priority": 29
 }
 ]

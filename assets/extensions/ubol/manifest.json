@@ -63,11 +63,6 @@
         "path": "/rulesets/main/block-lan.json"
       },
       {
-        "id": "dpollock-0",
-        "enabled": false,
-        "path": "/rulesets/main/dpollock-0.json"
-      },
-      {
         "id": "adguard-spyware-url",
         "enabled": false,
         "path": "/rulesets/main/adguard-spyware-url.json"
@@ -248,6 +243,11 @@
         "path": "/rulesets/main/pol-0.json"
       },
       {
+        "id": "pol-3",
+        "enabled": false,
+        "path": "/rulesets/main/pol-3.json"
+      },
+      {
         "id": "rou-1",
         "enabled": false,
         "path": "/rulesets/main/rou-1.json"
@@ -322,17 +322,19 @@
   "options_page": "dashboard.html",
   "permissions": [
     "activeTab",
+    "alarms",
     "declarativeNetRequest",
     "offscreen",
     "scripting",
     "storage",
+    "unlimitedStorage",
     "userScripts"
   ],
   "short_name": "uBO Lite",
   "storage": {
     "managed_schema": "managed_storage.json"
   },
-  "version": "2026.614.1502",
+  "version": "2026.820.1159",
   "web_accessible_resources": [
     {
       "resources": [
@@ -408,8 +410,7 @@
         "web_accessible_resources/nitropay_ads.js",
         "web_accessible_resources/chartbeat.js",
         "web_accessible_resources/noop.json",
-        "web_accessible_resources/noeval-silent.js",
-        "web_accessible_resources/click2load.html"
+        "web_accessible_resources/noeval-silent.js"
       ],
       "matches": [
         "<all_urls>"

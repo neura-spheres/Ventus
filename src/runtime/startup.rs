@@ -119,7 +119,6 @@ fn claim_instance(
     data_dir: &std::path::Path,
 ) -> windows::Win32::Foundation::HANDLE {
     use windows::Win32::Foundation::HANDLE;
-    // Secondary windows skip the single-instance guard — they share the same profile.
     if new_window {
         return HANDLE(0);
     }
@@ -356,12 +355,25 @@ async fn run_cookie_save_task(
             return;
         }
     };
-    tracing::debug!("cookie_store save task: running");
+    tracing::info!(
+        target: "ventus::profile",
+        stored = cookie_store::count(&conn),
+        "[PROFILE] cookie backup task running"
+    );
     while let Some(cookies) = rx.recv().await {
         if let Err(e) = cookie_store::save(&conn, &cookies) {
-            tracing::warn!("cookie_store: save failed: {}", e);
+            tracing::error!(
+                target: "ventus::autolog",
+                error = %e,
+                "cookie_store: backup save failed — logins will not survive a profile reset"
+            );
         } else {
-            tracing::debug!("cookie_store: saved {} cookies", cookies.len());
+            tracing::info!(
+                target: "ventus::profile",
+                snapshot = cookies.len(),
+                stored = cookie_store::count(&conn),
+                "[PROFILE] cookie backup saved"
+            );
         }
         // Purge stale entries as part of each save cycle.
         if let Ok(n) = cookie_store::purge_expired(&conn) {
@@ -495,14 +507,15 @@ fn drain_message_queue_ms(ms: u64) {
 
 #[cfg(windows)]
 fn process_running(pid: u32) -> bool {
-    use windows::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0};
+    use windows::core::HRESULT;
+    use windows::Win32::Foundation::{CloseHandle, ERROR_INVALID_PARAMETER, WAIT_OBJECT_0};
     use windows::Win32::System::Threading::{
         OpenProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE,
     };
 
-    let handle = unsafe { OpenProcess(PROCESS_SYNCHRONIZE, false, pid) };
-    let Ok(handle) = handle else {
-        return false;
+    let handle = match unsafe { OpenProcess(PROCESS_SYNCHRONIZE, false, pid) } {
+        Ok(handle) => handle,
+        Err(err) => return err.code() != HRESULT::from_win32(ERROR_INVALID_PARAMETER.0),
     };
     if handle.is_invalid() {
         return false;

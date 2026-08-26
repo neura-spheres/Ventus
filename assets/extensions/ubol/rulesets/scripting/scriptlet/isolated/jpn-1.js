@@ -72,6 +72,8 @@ function getSafeCookieValuesFn() {
         'decline', 'declined',
         'closed', 'next', 'mandatory',
         'disagree', 'agree',
+        'set', 'unset',
+        'given',
     ];
 }
 
@@ -280,13 +282,14 @@ function removeNodeText(
 function replaceNodeTextFn(
     nodeName = '',
     pattern = '',
-    replacement = ''
+    replacement = '',
+    ...varargs
 ) {
     const safe = safeSelf();
     const logPrefix = safe.makeLogPrefix('replace-node-text.fn', ...Array.from(arguments));
     const reNodeName = safe.patternToRegex(nodeName, 'i', true);
     const rePattern = safe.patternToRegex(pattern, 'gms');
-    const extraArgs = safe.getExtraArgs(Array.from(arguments), 3);
+    const extraArgs = safe.parseVarargs(varargs);
     const reIncludes = extraArgs.includes || extraArgs.condition
         ? safe.patternToRegex(extraArgs.includes || extraArgs.condition, 'ms')
         : null;
@@ -409,8 +412,8 @@ function runAt(fn, when) {
 }
 
 function safeSelf() {
-    if ( scriptletGlobals.safeSelf ) {
-        return scriptletGlobals.safeSelf;
+    if ( safeSelf.safe ) {
+        return safeSelf.safe;
     }
     const self = globalThis;
     const safe = {
@@ -515,21 +518,20 @@ function safeSelf() {
             }
             return /^/;
         },
-        getExtraArgs(args, offset = 0) {
-            const entries = args.slice(offset).reduce((out, v, i, a) => {
-                if ( (i & 1) === 0 ) {
-                    const rawValue = a[i+1];
-                    const value = /^\d+$/.test(rawValue)
-                        ? parseInt(rawValue, 10)
-                        : rawValue;
-                    out.push([ a[i], value ]);
-                }
+        parseVarargs(varargs) {
+            const entries = varargs.reduce((out, v, i, a) => {
+                if ( i & 1 ) { return out; }
+                const rawValue = a[i+1];
+                const value = /^\d+$/.test(rawValue)
+                    ? parseInt(rawValue, 10)
+                    : rawValue;
+                out.push([ a[i], value ]);
                 return out;
             }, []);
             return this.Object_fromEntries(entries);
         },
     };
-    scriptletGlobals.safeSelf = safe;
+    safeSelf.safe = safe;
     if ( scriptletGlobals.bcSecret === undefined ) { return safe; }
     // This is executed only when the logger is opened
     safe.logLevel = scriptletGlobals.logLevel || 1;
@@ -590,7 +592,8 @@ function safeSelf() {
 function setAttr(
     selector = '',
     attr = '',
-    value = ''
+    value = '',
+    ...varargs
 ) {
     const safe = safeSelf();
     const logPrefix = safe.makeLogPrefix('set-attr', selector, attr, value);
@@ -604,7 +607,7 @@ function setAttr(
             return;
         }
     }
-    const options = safe.getExtraArgs(Array.from(arguments), 3);
+    const options = safe.parseVarargs(varargs);
     setAttrFn(false, logPrefix, selector, attr, value, options);
 }
 
@@ -671,10 +674,9 @@ function setAttrFn(
     const start = ( ) => {
         if ( applySetAttr() === false ) { return; }
         observer = new MutationObserver(onDomChanged);
-        observer.observe(document.body, {
-            subtree: true,
-            childList: true,
-        });
+        const root = document.documentElement;
+        if ( root instanceof self.Node === false ) { return; }
+        observer.observe(root, { subtree: true, childList: true });
     };
     runAt(( ) => { start(); }, options.runAt || 'idle');
 }
@@ -682,7 +684,8 @@ function setAttrFn(
 function setCookie(
     name = '',
     value = '',
-    path = ''
+    path = '',
+    ...varargs
 ) {
     if ( name === '' ) { return; }
     const safe = safeSelf();
@@ -703,7 +706,7 @@ function setCookie(
         value,
         '',
         path,
-        safe.getExtraArgs(Array.from(arguments), 3)
+        safe.parseVarargs(varargs)
     );
 
     if ( done ) {
@@ -875,19 +878,7 @@ function urlSkip(url, blocked, steps) {
 
 const scriptletGlobals = {}; // eslint-disable-line
 
-const $scriptletFunctions$ = /* 7 */
-[removeNodeText,setCookie,removeClass,hrefSanitizer,preventRefresh,setCookieReload,setAttr];
-
-const $scriptletArgs$ = /* 49 */ ["script","detectAdBlocker","detectAdBlock","adset","off","adset2","visited","#oRslt li a.visited","stay","#text","/スポンサードリンク：?|楽天広告：/","selectRandomProduct","PR:","関連動画","【広告】","/\\[vkExUnit_ad area=(after|before)\\]/","with-ad","section.main","/スポンサード?リンク/","has-topbanner","body > header.has-topbanner","a[href^=\"https://app.adjust.com/\"]","?redirect","/^PR\\s$/","a[href*=\"a8ejpredirect\"]","?a8ejpredirect","/^\\s*PR\\s*$/","a[href^=\"/link?fallback_url=\"]","?fallback_url","a[href^=\"https://al.dmm.com/?lurl=\"]","?lurl","a[href^=\"https://affiliate.suruga-ya.jp/modules/af/af_jump.php?\"]","?goods_url","a[href*=\"hb.afl.rakuten.co.jp/\"][href*=\"pc=\"]","?pc","a[href*=\"ck.jp.ap.valuecommerce.com/servlet/referral?\"][href*=\"&vc_url=\"]","?vc_url","a[href^=\"https://al.fanza.co.jp/?lurl=\"]","discarded-search-interstitial-cta-banner","true","is-collaboration-jack","body","okwave_rwd","/^\\s*PR$/","a[href^=\"https://adclick.g.doubleclick.net/\"][href*=\"adurl=\"]","?adurl","span[class] img.lazyload[width]","src","[data-src]"];
-
-const $scriptletArglists$ = /* 31 */ "0,0,1;0,0,2;1,3,4;1,5,4;2,6,7,8;0,9,10;0,0,11;0,9,12;0,9,13;0,9,14;0,9,15;2,16,17;0,9,18;2,19,20;3,21,22;0,9,23;3,24,25;0,9,26;3,27,28;3,29,30;3,31,32;3,33,34;3,35,36;4;3,37,30;5,38,39;2,40,41;5,42,39;0,9,43;3,44,45;6,46,47,48";
-
-const $scriptletArglistRefs$ = /* 55 */ "23;12;4;27;12;8;24;1;21,22;19,20,21,22;25,26;22;18,21,22;12;13,30;15;24;12;24;24;2,3;9;28;19;2,3;11;12;2,3;10;12;12;14;6;16;12;5;2,3;12;2,3;2,3;12;16;7;2,3;16,21,22;12;17;24;12;2,3;2,3;2,3;12;0;29";
-
-const $scriptletHostnames$ = /* 55 */ ["ebbs.jp","aikru.com","o-dan.net","okwave.jp","aidoly.net","dvdrev.com","moez-m.com","rxlife.net","chimolog.co","figsoku.net","gamewith.jp","livefans.jp","my-best.com","negisoku.com","phileweb.com","sinsimmd.com","ura-akiba.jp","ch-review.net","idol-blog.com","okazurand.net","tapestry.work","fm.sekkaku.net","geinoukame.com","hobbylabon.com","nailcolor.work","video.laxd.com","arty-matome.com","bridalgown.work","lifematome.blog","rank1-media.com","resizer.myct.jp","www.yahoo.co.jp","blog.livedoor.jp","figure-times.com","kabegami.jpn.org","kasegeru.blog.jp","studioglass.work","tcg-bloglife.com","teaceremony.work","weddinghall.work","ranky-ranking.net","ba-goods-search.com","betweenjpandkr.blog","contents-group.work","hayamimi-gunpla.com","seikeidouga.blog.jp","tyoieronews.blog.jp","nihon-bijo-zukan.com","ideal2ch.livedoor.biz","inkbrushpainting.work","liquidfoundation.work","heisei-housewarming.work","gametohkenranbu.sakuraweb.com","pretravel.kawasaki-create.com","safeframe.googlesyndication.com"];
-
-const $scriptletFromRegexes$ = /* 0 */ [];
-
+const $hasHostnames$ = true;
 const $hasEntities$ = false;
 const $hasAncestors$ = false;
 const $hasRegexes$ = false;
@@ -906,18 +897,22 @@ const entries = (( ) => {
         const hn1 = origin.slice(beg+3)
         const end = hn1.indexOf(':');
         const hn2 = end === -1 ? hn1 : hn1.slice(0, end);
-        const hnParts = hn2.split('.');
         if ( hn2.length === 0 ) { return; }
-        const hns = [];
-        for ( let i = 0; i < hnParts.length; i++ ) {
-            hns.push(`${hnParts.slice(i).join('.')}`);
+        const hns = [ hn2 ];
+        for ( let pos = 0; ; ) {
+            pos = hn2.indexOf('.', pos) + 1;
+            if ( pos === 0 ) { break; }
+            hns.push(hn2.slice(pos));
         }
+        hns.push('*');
         const ens = [];
         if ( $hasEntities$ ) {
-            const n = hnParts.length - 1;
-            for ( let i = 0; i < n; i++ ) {
-                for ( let j = n; j > i; j-- ) {
-                    ens.push(`${hnParts.slice(i,j).join('.')}.*`);
+            for ( let hn of hns ) {
+                for (;;) {
+                    const pos = hn.lastIndexOf('.');
+                    if ( pos === -1 ) { break; }
+                    hn = hn.slice(0, pos);
+                    ens.push(`${hn}.*`);
                 }
             }
             ens.sort((a, b) => {
@@ -927,12 +922,14 @@ const entries = (( ) => {
             });
         }
         return { hns, ens, i };
-    }).filter(a => a !== undefined);
+    }).filter(a => a);
 })();
 if ( entries.length === 0 ) { return; }
 
-const todoIndices = new Set();
-if ( $scriptletHostnames$.length ) {
+const todo = new Set();
+
+if ( $hasHostnames$ ) {
+    const $scriptletHostnames$ = /* 62 */ ["ebbs.jp","icon.jp","game8.jp","aikru.com","o-dan.net","okwave.jp","aidoly.net","dvdrev.com","eromon.net","moez-m.com","rxlife.net","chimolog.co","figsoku.net","gamewith.jp","livefans.jp","my-best.com","negisoku.com","phileweb.com","sinsimmd.com","ura-akiba.jp","ch-review.net","idol-blog.com","kimootoko.net","mantan-web.jp","okazurand.net","tapestry.work","fm.sekkaku.net","geinoukame.com","hobbylabon.com","nailcolor.work","video.laxd.com","arty-matome.com","bridalgown.work","lifematome.blog","rank1-media.com","resizer.myct.jp","www.yahoo.co.jp","blog.livedoor.jp","figure-times.com","kabegami.jpn.org","kasegeru.blog.jp","studioglass.work","tcg-bloglife.com","teaceremony.work","vk.sportsbull.jp","weddinghall.work","ranky-ranking.net","ba-goods-search.com","betweenjpandkr.blog","contents-group.work","hayamimi-gunpla.com","seikeidouga.blog.jp","tyoieronews.blog.jp","nihon-bijo-zukan.com","ideal2ch.livedoor.biz","inkbrushpainting.work","liquidfoundation.work","lovelive-petitsoku.com","heisei-housewarming.work","gametohkenranbu.sakuraweb.com","pretravel.kawasaki-create.com","safeframe.googlesyndication.com"];
     const collectArglistRefIndices = (out, hn, r) => {
         let l = 0, i = 0, d = 0;
         let candidate = '';
@@ -967,6 +964,7 @@ if ( $scriptletHostnames$.length ) {
             }
         }
     };
+    const todoIndices = new Set();
     indicesFromHostname(todoIndices, entries[0]);
     if ( $hasAncestors$ ) {
         for ( const entry of entries ) {
@@ -974,20 +972,20 @@ if ( $scriptletHostnames$.length ) {
             indicesFromHostname(todoIndices, entry, '>>');
         }
     }
-    $scriptletHostnames$.length = 0;
-}
-
-// Collect arglist references
-const todo = new Set();
-if ( todoIndices.size !== 0 ) {
-    const arglistRefs = $scriptletArglistRefs$.split(';');
-    for ( const i of todoIndices ) {
-        for ( const ref of JSON.parse(`[${arglistRefs[i]}]`) ) {
-            todo.add(ref);
+    // Collect arglist references
+    if ( todoIndices.size ) {
+        const $scriptletArglistRefs$ = /* 62 */ "26;18;24;13;5;30;13;9;27;27;2;24,25;22,23,24,25;28,29;25;20,24,25;13;14,33;17;27;13;27;27;21,22;27;3,4;10;31;22;3,4;12;13;3,4;11;13;13;16;7;18;13;6;3,4;13;3,4;34;3,4;13;18;8;3,4;18,24,25;13;19;27;13;3,4;3,4;15;3,4;13;1;32";
+        const arglistRefs = $scriptletArglistRefs$.split(';');
+        for ( const i of todoIndices ) {
+            for ( const ref of JSON.parse(`[${arglistRefs[i]}]`) ) {
+                todo.add(ref);
+            }
         }
     }
 }
+
 if ( $hasRegexes$ ) {
+    const $scriptletFromRegexes$ = /* 0 */ [];
     const { hns } = entries[0];
     for ( let i = 0, n = $scriptletFromRegexes$.length; i < n; i += 3 ) {
         const needle = $scriptletFromRegexes$[i+0];
@@ -1004,10 +1002,13 @@ if ( $hasRegexes$ ) {
         }
     }
 }
-if ( todo.size === 0 ) { return; }
 
-// Execute scriplets
-{
+// Execute scriptlets
+if ( todo.size && todo.has(0) === false ) {
+    const $scriptletFunctions$ = /* 7 */
+[removeNodeText,setCookie,removeClass,hrefSanitizer,preventRefresh,setCookieReload,setAttr];
+    const $scriptletArgs$ = /* 54 */ ["script","detectAdBlocker","detectAdBlock","adset","off","adset2","visited","#oRslt li a.visited","stay","#text","/スポンサードリンク：?|楽天広告：/","selectRandomProduct","PR:","関連動画","【広告】","/\\[vkExUnit_ad area=(after|before)\\]/","with-ad","section.main","/スポンサード?リンク/","has-topbanner","body > header.has-topbanner","[PR]","a[href^=\"https://app.adjust.com/\"]","?redirect","/^PR\\s$/","a[href*=\"a8ejpredirect\"]","?a8ejpredirect","/^\\s*PR\\s*$/","a[href^=\"/link?fallback_url=\"]","?fallback_url","a[href^=\"https://af.moshimo.com/af/c/click?\"][href*=\"&url=\"]","?url","a[href^=\"https://al.dmm.com/?lurl=\"]","?lurl","a[href^=\"https://affiliate.suruga-ya.jp/modules/af/af_jump.php?\"]","?goods_url","a[href*=\"hb.afl.rakuten.co.jp/\"][href*=\"pc=\"]","?pc","a[href*=\"ck.jp.ap.valuecommerce.com/servlet/referral?\"][href*=\"&vc_url=\"]","?vc_url","a[href^=\"https://al.fanza.co.jp/?lurl=\"]","discarded-search-interstitial-cta-banner","true","is-collaboration-jack","body","okwave_rwd","/^\\s*PR$/","a[href^=\"https://adclick.g.doubleclick.net/\"][href*=\"adurl=\"]","?adurl","span[class] img.lazyload[width]","src","[data-src]","hidden-by-ima","#vid1_html5_api"];
+    const $scriptletArglists$ = /* 35 */ ";0,0,1;0,0,2;1,3,4;1,5,4;2,6,7,8;0,9,10;0,0,11;0,9,12;0,9,13;0,9,14;0,9,15;2,16,17;0,9,18;2,19,20;0,9,21;3,22,23;0,9,24;3,25,26;0,9,27;3,28,29;3,30,31;3,32,33;3,34,35;3,36,37;3,38,39;4;3,40,33;5,41,42;2,43,44;5,45,42;0,9,46;3,47,48;6,49,50,51;2,52,53";
     const arglists = $scriptletArglists$.split(';');
     const args = $scriptletArgs$;
     for ( const ref of todo ) {

@@ -234,7 +234,14 @@ impl AppState {
             auth: None,
             user_profile: None,
             history_last_saved: HashMap::new(),
-            pwd_key: crate::storage::crypto::store_key(data_dir).unwrap_or([0u8; 32]),
+            pwd_key: crate::storage::crypto::store_key(data_dir).unwrap_or_else(|e| {
+                tracing::error!(
+                    target: "ventus::autolog",
+                    error = %e,
+                    "password key unavailable — saved passwords stay locked and this session uses a throwaway key"
+                );
+                crate::storage::crypto::random_key()
+            }),
             pending_pwd_save: None,
             requested_permissions: HashMap::new(),
             download_samples: HashMap::new(),
@@ -2904,6 +2911,32 @@ fn crash_reload_aborted_nav(
     })
 }
 
+fn crash_starved(active: bool, url: &str, reloads: u8, since_crash_ms: Option<u128>) -> bool {
+    active
+        && url.starts_with("http")
+        && reloads < CRASH_RELOAD_MAX
+        && since_crash_ms
+            .map(|ms| ms < CRASH_RELOAD_WINDOW_MS)
+            .unwrap_or(false)
+}
+
+fn load_starved_by_crash(state: &AppState, tab_id: &str, url: &str) -> bool {
+    crash_starved(
+        state.tab_manager.active_tab_id.as_deref() == Some(tab_id),
+        url,
+        state.crash_reloads.get(tab_id).copied().unwrap_or(0),
+        state
+            .last_subprocess_crash
+            .map(|at| at.elapsed().as_millis()),
+    )
+}
+
+fn nav_superseded(current: Option<&String>, aborted: &str) -> bool {
+    current
+        .map(|current| !same_nav(current, aborted))
+        .unwrap_or(false)
+}
+
 fn retry_fresh_aborted_nav(
     state: &mut AppState,
     tab_id: &str,
@@ -3809,7 +3842,14 @@ pub fn handle_app_event_inner(
             if let Some(tab) = state.tab_manager.get_tab(&tab_id) {
                 state.load_recoveries.remove(&load_key(&tab_id, &tab.url));
             }
-            state.crash_reloads.remove(&tab_id);
+            let starved = load_starved_by_crash(state, &tab_id, &clean_url);
+            if starved {
+                let count = state.crash_reloads.get(&tab_id).copied().unwrap_or(0);
+                state.crash_reloads.insert(tab_id.clone(), count + 1);
+                state.last_subprocess_crash = None;
+            } else {
+                state.crash_reloads.remove(&tab_id);
+            }
             state.fresh_abort_retries.remove(&tab_id);
             state.native_loads.remove(&tab_id);
             state.native_nav_ids.remove(&tab_id);
@@ -3850,6 +3890,18 @@ pub fn handle_app_event_inner(
                     chrome.evaluate_script("window.__neura && window.__neura.finishLoadProgress()");
             }
             state.push_state_to_chrome(chrome);
+            if starved {
+                tracing::warn!(
+                    target: "ventus::autolog",
+                    tab = %tab_id,
+                    url = %crate::utils::url::log_url(&clean_url),
+                    "page finished loading while the network process was restarting — reloading so its styles and scripts arrive"
+                );
+                return Some(TabAction::ReloadContent {
+                    tab_id,
+                    url: clean_url,
+                });
+            }
             translate_probe_action(&tab_id, &clean_url, state)
         }
         AppEvent::ContentLoadProgress {
@@ -3913,7 +3965,14 @@ pub fn handle_app_event_inner(
                 state.native_loads.remove(&tab_id);
                 state.native_nav_ids.remove(&tab_id);
                 state.load_recoveries.remove(&load_key(&tab_id, &clean_url));
-                state.crash_reloads.remove(&tab_id);
+                let starved = load_starved_by_crash(state, &tab_id, &clean_url);
+                if starved {
+                    let count = state.crash_reloads.get(&tab_id).copied().unwrap_or(0);
+                    state.crash_reloads.insert(tab_id.clone(), count + 1);
+                    state.last_subprocess_crash = None;
+                } else {
+                    state.crash_reloads.remove(&tab_id);
+                }
                 state.load_progress.remove(&tab_id);
                 if let Some(started) = state.nav_started_at.remove(&tab_id) {
                     let dur_ms = started.elapsed().as_millis() as u64;
@@ -3946,6 +4005,18 @@ pub fn handle_app_event_inner(
                         .evaluate_script("window.__neura && window.__neura.finishLoadProgress()");
                 }
                 state.push_state_to_chrome(chrome);
+                if starved {
+                    tracing::warn!(
+                        target: "ventus::autolog",
+                        tab = %tab_id,
+                        url = %crate::utils::url::log_url(&clean_url),
+                        "page finished loading while the network process was restarting — reloading so its styles and scripts arrive"
+                    );
+                    return Some(TabAction::ReloadContent {
+                        tab_id,
+                        url: clean_url,
+                    });
+                }
                 return None;
             }
             None
@@ -4003,11 +4074,22 @@ pub fn handle_app_event_inner(
                 if should_show_blocked_page(state, &tab_id, &clean_url, status) {
                     return show_blocked_page(tab_id, clean_url, state, chrome);
                 }
-                if let Some(action) = crash_reload_aborted_nav(state, &tab_id, &clean_url) {
-                    return Some(action);
+                let superseded = nav_superseded(state.native_loads.get(&tab_id), &clean_url);
+                if superseded {
+                    tracing::debug!(
+                        target: "ventus::nav",
+                        tab = %tab_id,
+                        aborted = %crate::utils::url::log_url(&clean_url),
+                        "abort was a redirect handoff — leaving the new navigation alone"
+                    );
                 }
-                if let Some(action) = retry_fresh_aborted_nav(state, &tab_id, &clean_url) {
-                    return Some(action);
+                if !superseded {
+                    if let Some(action) = crash_reload_aborted_nav(state, &tab_id, &clean_url) {
+                        return Some(action);
+                    }
+                    if let Some(action) = retry_fresh_aborted_nav(state, &tab_id, &clean_url) {
+                        return Some(action);
+                    }
                 }
                 // An explicit abort (ERR_ABORTED / canceled) of an uncommitted load is almost
                 // always the site superseding its own navigation — an SPA/redirect handoff
@@ -5047,6 +5129,58 @@ mod tests {
         should_record_replace_as_visit,
     };
     use std::collections::HashMap;
+
+    #[test]
+    fn crash_starved_load_reloads_inside_the_window() {
+        assert!(super::crash_starved(
+            true,
+            "https://github.com/",
+            0,
+            Some(435)
+        ));
+    }
+
+    #[test]
+    fn crash_starved_ignores_healthy_and_stale_loads() {
+        assert!(!super::crash_starved(true, "https://github.com/", 0, None));
+        assert!(!super::crash_starved(
+            true,
+            "https://github.com/",
+            0,
+            Some(9_000)
+        ));
+        assert!(!super::crash_starved(
+            false,
+            "https://github.com/",
+            0,
+            Some(435)
+        ));
+        assert!(!super::crash_starved(true, "neura://newtab", 0, Some(435)));
+    }
+
+    #[test]
+    fn crash_starved_stops_after_the_retry_cap() {
+        assert!(super::crash_starved(true, "https://a.test/", 1, Some(100)));
+        assert!(!super::crash_starved(true, "https://a.test/", 2, Some(100)));
+        assert!(!super::crash_starved(true, "https://a.test/", 9, Some(100)));
+    }
+
+    #[test]
+    fn oauth_redirect_handoff_is_not_retried() {
+        let initiate =
+            "https://github.com/sessions/social/google/initiate?return_to=&disable_signup=false"
+                .to_string();
+        let google =
+            "https://accounts.google.com/o/oauth2/v2/auth?client_id=x&state=abc".to_string();
+        assert!(super::nav_superseded(Some(&google), &initiate));
+    }
+
+    #[test]
+    fn genuine_fresh_abort_is_still_retried() {
+        let url = "https://example.com/page".to_string();
+        assert!(!super::nav_superseded(Some(&url), &url));
+        assert!(!super::nav_superseded(None, &url));
+    }
 
     #[test]
     fn csp_hides_translate_on_strict_sites() {

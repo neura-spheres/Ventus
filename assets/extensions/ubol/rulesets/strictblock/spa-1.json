@@ -41,14 +41,17 @@
    "ak-ads-ns.prisasd.com",
    "analytic.337.com",
    "anunciospatrocinados.com",
+   "azureedge-global-fastly-cloudfront-ondigitalocean-stackpathcdn.buzz",
    "banners.emol.com",
    "banners.inforchannel.com.br",
    "banners.todoconsolas.com",
+   "bivogrvfyoj.in",
    "bowedcounty.com",
    "bserver.gp-guia.net",
    "byfoongusor.com",
    "cdn-4k-webp.site",
    "ceremonyjogglecling.com",
+   "chorumebbbbgoza.xyz",
    "classic-bonus.com",
    "clicks.abril.com.br",
    "comprargratis.com.br",
@@ -66,6 +69,7 @@
    "landings.zcoptry.com",
    "mathilde-ads.com",
    "navdmp.com",
+   "otzads.net",
    "p.lasexta.com",
    "parceria.americanas.com.br",
    "ppi.terra.com.br",
@@ -100,6 +104,22 @@
   ]
  },
  "id": 1,
+ "priority": 29
+},
+{
+ "action": {
+  "redirect": {
+   "regexSubstitution": "/strictblock.html#\\0"
+  },
+  "type": "redirect"
+ },
+ "condition": {
+  "regexFilter": "^[^:]+:\\/\\/([^:/]+\\.)?cuevana\\.fm\\/register.*",
+  "resourceTypes": [
+   "main_frame"
+  ]
+ },
+ "id": 2,
  "priority": 29
 }
 ]

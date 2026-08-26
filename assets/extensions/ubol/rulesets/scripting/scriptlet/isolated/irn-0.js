@@ -60,6 +60,8 @@ function getSafeCookieValuesFn() {
         'decline', 'declined',
         'closed', 'next', 'mandatory',
         'disagree', 'agree',
+        'set', 'unset',
+        'given',
     ];
 }
 
@@ -169,12 +171,13 @@ function onIdleFn(fn, options) {
 }
 
 function removeCookie(
-    needle = ''
+    needle = '',
+    ...varargs
 ) {
     if ( typeof needle !== 'string' ) { return; }
     const safe = safeSelf();
     const reName = safe.patternToRegex(needle);
-    const extraArgs = safe.getExtraArgs(Array.from(arguments), 1);
+    const extraArgs = safe.parseVarargs(varargs);
     const throttle = (fn, ms = 500) => {
         if ( throttle.timer !== undefined ) { return; }
         throttle.timer = setTimeout(( ) => {
@@ -251,13 +254,14 @@ function removeNodeText(
 function replaceNodeTextFn(
     nodeName = '',
     pattern = '',
-    replacement = ''
+    replacement = '',
+    ...varargs
 ) {
     const safe = safeSelf();
     const logPrefix = safe.makeLogPrefix('replace-node-text.fn', ...Array.from(arguments));
     const reNodeName = safe.patternToRegex(nodeName, 'i', true);
     const rePattern = safe.patternToRegex(pattern, 'gms');
-    const extraArgs = safe.getExtraArgs(Array.from(arguments), 3);
+    const extraArgs = safe.parseVarargs(varargs);
     const reIncludes = extraArgs.includes || extraArgs.condition
         ? safe.patternToRegex(extraArgs.includes || extraArgs.condition, 'ms')
         : null;
@@ -380,8 +384,8 @@ function runAt(fn, when) {
 }
 
 function safeSelf() {
-    if ( scriptletGlobals.safeSelf ) {
-        return scriptletGlobals.safeSelf;
+    if ( safeSelf.safe ) {
+        return safeSelf.safe;
     }
     const self = globalThis;
     const safe = {
@@ -486,21 +490,20 @@ function safeSelf() {
             }
             return /^/;
         },
-        getExtraArgs(args, offset = 0) {
-            const entries = args.slice(offset).reduce((out, v, i, a) => {
-                if ( (i & 1) === 0 ) {
-                    const rawValue = a[i+1];
-                    const value = /^\d+$/.test(rawValue)
-                        ? parseInt(rawValue, 10)
-                        : rawValue;
-                    out.push([ a[i], value ]);
-                }
+        parseVarargs(varargs) {
+            const entries = varargs.reduce((out, v, i, a) => {
+                if ( i & 1 ) { return out; }
+                const rawValue = a[i+1];
+                const value = /^\d+$/.test(rawValue)
+                    ? parseInt(rawValue, 10)
+                    : rawValue;
+                out.push([ a[i], value ]);
                 return out;
             }, []);
             return this.Object_fromEntries(entries);
         },
     };
-    scriptletGlobals.safeSelf = safe;
+    safeSelf.safe = safe;
     if ( scriptletGlobals.bcSecret === undefined ) { return safe; }
     // This is executed only when the logger is opened
     safe.logLevel = scriptletGlobals.logLevel || 1;
@@ -561,7 +564,8 @@ function safeSelf() {
 function setAttr(
     selector = '',
     attr = '',
-    value = ''
+    value = '',
+    ...varargs
 ) {
     const safe = safeSelf();
     const logPrefix = safe.makeLogPrefix('set-attr', selector, attr, value);
@@ -575,7 +579,7 @@ function setAttr(
             return;
         }
     }
-    const options = safe.getExtraArgs(Array.from(arguments), 3);
+    const options = safe.parseVarargs(varargs);
     setAttrFn(false, logPrefix, selector, attr, value, options);
 }
 
@@ -642,17 +646,16 @@ function setAttrFn(
     const start = ( ) => {
         if ( applySetAttr() === false ) { return; }
         observer = new MutationObserver(onDomChanged);
-        observer.observe(document.body, {
-            subtree: true,
-            childList: true,
-        });
+        const root = document.documentElement;
+        if ( root instanceof self.Node === false ) { return; }
+        observer.observe(root, { subtree: true, childList: true });
     };
     runAt(( ) => { start(); }, options.runAt || 'idle');
 }
 
-function setLocalStorageItem(key = '', value = '') {
+function setLocalStorageItem(key = '', value = '', ...varargs) {
     const safe = safeSelf();
-    const options = safe.getExtraArgs(Array.from(arguments), 2)
+    const options = safe.parseVarargs(varargs)
     setLocalStorageItemFn('local', false, key, value, options);
 }
 
@@ -734,9 +737,9 @@ function setLocalStorageItemFn(
     }
 }
 
-function setSessionStorageItem(key = '', value = '') {
+function setSessionStorageItem(key = '', value = '', ...varargs) {
     const safe = safeSelf();
-    const options = safe.getExtraArgs(Array.from(arguments), 2)
+    const options = safe.parseVarargs(varargs)
     setLocalStorageItemFn('session', false, key, value, options);
 }
 
@@ -833,19 +836,7 @@ function urlSkip(url, blocked, steps) {
 
 const scriptletGlobals = {}; // eslint-disable-line
 
-const $scriptletFunctions$ = /* 6 */
-[removeNodeText,hrefSanitizer,setLocalStorageItem,setAttr,removeCookie,setSessionStorageItem];
-
-const $scriptletArgs$ = /* 32 */ ["script","document.oncontextmenu =","a[href^=\"/goto/\"]","?url -base64","a[href^=\"https://hamtamovie.nl/dl/?url=\"]","?url","document.oncontextmenu=","/popTimes_|document\\.onkeydown|'contextmenu'/","window.location=","displayCountryInConsole","VisitedCompanies","$remove$","img[data-src]","src","[data-src]","tracker_visitor_id","popTimes_","ad.setAttribute","showScrollAlert","/captcha_key|last_file|_scrs_/","Event.MOUSEDOWN","a[href^=\"https://l.vrgl.ir/r?\"][href*=\"&l=http\"]","?l","videoPlayedCount","videoWatchCount","a[href^=\"/api/click?dest=\"]","?dest -base64","a[href^=\"https://offerdaily.ir/index.php?do=go&url=\"]","?url -base64 ?b64 -base64","a[href^=\"https://dgkl.io/api/v1/Click/b/\"][href*=\"?b64=\"]","?b64 -base64","a[data-original-url]"];
-
-const $scriptletArglists$ = /* 22 */ "0,0,1;1,2,3;1,4,5;0,0,6;0,0,7;0,0,8;0,0,9;2,10,11;3,12,13,14;4,15;0,0,16;0,0,17;0,0,18;4,19;0,0,20;1,21,22;2,23,11;5,24,11;1,25,26;1,27,28;1,29,30;1,31,5";
-
-const $scriptletArglistRefs$ = /* 22 */ "7;11;3;16,17;0;14;15;1;9;0;5;2;4;19,20;6;12;13;21;10;8;18;0";
-
-const $scriptletHostnames$ = /* 22 */ ["rasm.io","tgju.org","kihanb.ir","aparat.com","sclinic.ir","vaamfaa.ir","virgool.io","fontchi.com","tamasha.com","delta3da.cam","najiremix.ir","hamtamovie.nl","musiceman.net","offerdaily.ir","persian-fa.ir","tarafdari.com","uploadboy.com","web.eitaa.com","iran-music.com","shahanmusic.ir","search.bertina.ir","public-psychology.ir"];
-
-const $scriptletFromRegexes$ = /* 0 */ [];
-
+const $hasHostnames$ = true;
 const $hasEntities$ = false;
 const $hasAncestors$ = false;
 const $hasRegexes$ = false;
@@ -864,18 +855,22 @@ const entries = (( ) => {
         const hn1 = origin.slice(beg+3)
         const end = hn1.indexOf(':');
         const hn2 = end === -1 ? hn1 : hn1.slice(0, end);
-        const hnParts = hn2.split('.');
         if ( hn2.length === 0 ) { return; }
-        const hns = [];
-        for ( let i = 0; i < hnParts.length; i++ ) {
-            hns.push(`${hnParts.slice(i).join('.')}`);
+        const hns = [ hn2 ];
+        for ( let pos = 0; ; ) {
+            pos = hn2.indexOf('.', pos) + 1;
+            if ( pos === 0 ) { break; }
+            hns.push(hn2.slice(pos));
         }
+        hns.push('*');
         const ens = [];
         if ( $hasEntities$ ) {
-            const n = hnParts.length - 1;
-            for ( let i = 0; i < n; i++ ) {
-                for ( let j = n; j > i; j-- ) {
-                    ens.push(`${hnParts.slice(i,j).join('.')}.*`);
+            for ( let hn of hns ) {
+                for (;;) {
+                    const pos = hn.lastIndexOf('.');
+                    if ( pos === -1 ) { break; }
+                    hn = hn.slice(0, pos);
+                    ens.push(`${hn}.*`);
                 }
             }
             ens.sort((a, b) => {
@@ -885,12 +880,14 @@ const entries = (( ) => {
             });
         }
         return { hns, ens, i };
-    }).filter(a => a !== undefined);
+    }).filter(a => a);
 })();
 if ( entries.length === 0 ) { return; }
 
-const todoIndices = new Set();
-if ( $scriptletHostnames$.length ) {
+const todo = new Set();
+
+if ( $hasHostnames$ ) {
+    const $scriptletHostnames$ = /* 22 */ ["rasm.io","tgju.org","kihanb.ir","aparat.com","sclinic.ir","vaamfaa.ir","virgool.io","fontchi.com","tamasha.com","delta3da.cam","najiremix.ir","hamtamovie.nl","musiceman.net","offerdaily.ir","persian-fa.ir","tarafdari.com","uploadboy.com","web.eitaa.com","iran-music.com","shahanmusic.ir","search.bertina.ir","public-psychology.ir"];
     const collectArglistRefIndices = (out, hn, r) => {
         let l = 0, i = 0, d = 0;
         let candidate = '';
@@ -925,6 +922,7 @@ if ( $scriptletHostnames$.length ) {
             }
         }
     };
+    const todoIndices = new Set();
     indicesFromHostname(todoIndices, entries[0]);
     if ( $hasAncestors$ ) {
         for ( const entry of entries ) {
@@ -932,20 +930,20 @@ if ( $scriptletHostnames$.length ) {
             indicesFromHostname(todoIndices, entry, '>>');
         }
     }
-    $scriptletHostnames$.length = 0;
-}
-
-// Collect arglist references
-const todo = new Set();
-if ( todoIndices.size !== 0 ) {
-    const arglistRefs = $scriptletArglistRefs$.split(';');
-    for ( const i of todoIndices ) {
-        for ( const ref of JSON.parse(`[${arglistRefs[i]}]`) ) {
-            todo.add(ref);
+    // Collect arglist references
+    if ( todoIndices.size ) {
+        const $scriptletArglistRefs$ = /* 22 */ "8;12;4;17,18;1;15;16;2;10;1;6;3;5;20,21;7;13;14;22;11;9;19;1";
+        const arglistRefs = $scriptletArglistRefs$.split(';');
+        for ( const i of todoIndices ) {
+            for ( const ref of JSON.parse(`[${arglistRefs[i]}]`) ) {
+                todo.add(ref);
+            }
         }
     }
 }
+
 if ( $hasRegexes$ ) {
+    const $scriptletFromRegexes$ = /* 0 */ [];
     const { hns } = entries[0];
     for ( let i = 0, n = $scriptletFromRegexes$.length; i < n; i += 3 ) {
         const needle = $scriptletFromRegexes$[i+0];
@@ -962,10 +960,13 @@ if ( $hasRegexes$ ) {
         }
     }
 }
-if ( todo.size === 0 ) { return; }
 
-// Execute scriplets
-{
+// Execute scriptlets
+if ( todo.size && todo.has(0) === false ) {
+    const $scriptletFunctions$ = /* 6 */
+[removeNodeText,hrefSanitizer,setLocalStorageItem,setAttr,removeCookie,setSessionStorageItem];
+    const $scriptletArgs$ = /* 32 */ ["script","document.oncontextmenu =","a[href^=\"/goto/\"]","?url -base64","a[href^=\"https://hamtamovie.nl/dl/?url=\"]","?url","document.oncontextmenu=","/popTimes_|document\\.onkeydown|'contextmenu'/","window.location=","displayCountryInConsole","VisitedCompanies","$remove$","img[data-src]","src","[data-src]","tracker_visitor_id","popTimes_","ad.setAttribute","showScrollAlert","/captcha_key|last_file|_scrs_/","Event.MOUSEDOWN","a[href^=\"https://l.vrgl.ir/r?\"][href*=\"&l=http\"]","?l","videoPlayedCount","videoWatchCount","a[href^=\"/api/click?dest=\"]","?dest -base64","a[href^=\"https://offerdaily.ir/index.php?do=go&url=\"]","?url -base64 ?b64 -base64","a[href^=\"https://dgkl.io/api/v1/Click/b/\"][href*=\"?b64=\"]","?b64 -base64","a[data-original-url]"];
+    const $scriptletArglists$ = /* 23 */ ";0,0,1;1,2,3;1,4,5;0,0,6;0,0,7;0,0,8;0,0,9;2,10,11;3,12,13,14;4,15;0,0,16;0,0,17;0,0,18;4,19;0,0,20;1,21,22;2,23,11;5,24,11;1,25,26;1,27,28;1,29,30;1,31,5";
     const arglists = $scriptletArglists$.split(';');
     const args = $scriptletArgs$;
     for ( const ref of todo ) {

@@ -23,7 +23,7 @@
 // Isolate from global scope
 (function uBOL_preventPopup() {
 
-    const details = {"id":"swe-1","block":{"hostnames":[],"regexes":["i/offer?","\\/offer\\?prod"]},"allow":{"hostnames":[],"regexes":[]}};
+    const details = {"id":"swe-1","block":{"hostnames":[],"regexes":["/aftonb","[{\"re\":\"\\\\/aftonbladet\\\\/crypt\\\\/\\\\?lpkey\",\"f\":\"i\"}]","/expres","[{\"re\":\"\\\\/expressen\\\\/crypt\\\\/\\\\?lpkey\",\"f\":\"i\"}]","/offer?","[{\"re\":\"\\\\/offer\\\\?prod\",\"f\":\"i\"}]","/prylgu","[{\"re\":\"\\\\/prylguiden-expressen\",\"f\":\"i\"}]","/www.sw","[{\"re\":\"\\\\/www\\\\.swedbank-.*?\\\\/telegram\",\"f\":\"i\"}]","best-pr","[{\"re\":\"^[^:]+:\\\\/\\\\/([^:/]+\\\\.)?best-prizes-now\\\\.\",\"f\":\"i\"}]","online.","[{\"re\":\"^[^:]+:\\\\/\\\\/([^:/]+\\\\.)?online\\\\.swedbank\\\\.se\\\\.swedd\\\\.\",\"f\":\"i\"}]","s.arclk","[{\"re\":\"^[^:]+:\\\\/\\\\/([^:/]+\\\\.)?s\\\\.arclk\\\\.net\\\\/tr\\\\?\",\"f\":\"i\"}]"]},"allow":{"hostnames":[],"regexes":[]}};
 
     self.preventPopupDetails = self.preventPopupDetails || [];
     self.preventPopupDetails.push(details);
