@@ -46,7 +46,7 @@ os-webview = [
 tracing = [ "dep:tracing" ]
 
 [build-dependencies]
-cfg_aliases = "0.1"
+cfg_aliases = "0.2"
 
 [dependencies]
 tracing = { version = "0.1", optional = true }

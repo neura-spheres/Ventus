@@ -8,6 +8,7 @@ The project is early but usable. The goal is a clean, fast, practical browser th
 
 - Chromium-based browsing through Microsoft Edge WebView2
 - Custom frameless desktop browser shell
+- Integrated Developer Tools with element inspection, Console, Network, and Sources
 - Tabs, tab search, pinned tabs, and workspace navigation
 - Address bar search with built-in search shortcuts
 - New tab experience with feed and quick-link shortcuts
@@ -17,6 +18,12 @@ The project is early but usable. The goal is a clean, fast, practical browser th
 - Local settings stored in SQLite
 - API keys stored in the OS keychain
 - Windows app icon and GUI release build
+
+## Developer Tools
+
+Press **F12** or **Ctrl+Shift+I** to toggle the bottom panel. Right-click a page element and choose **Inspect** to reveal its DOM tag, or use **Ctrl+Shift+C** to pick an element. Drag the divider to resize the panel.
+
+The actual DevTools frontend runs in a child WebView inside Ventus and connects through native WebView2 protocol calls. Its first load needs access to Microsoft’s DevTools asset server. See [the integration notes](docs/DEVTOOLS.md) for implementation and compatibility details.
 
 ## Status
 

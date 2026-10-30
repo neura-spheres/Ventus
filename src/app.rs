@@ -63,6 +63,8 @@ pub struct AppState {
     pub current_ai_provider: String,
     pub sidebar_collapsed: bool,
     pub ai_sidebar_open: bool,
+    pub devtools_tabs: HashSet<String>,
+    pub devtools_height: u32,
     pub app_sidebar_open: bool,
     pub app_panel_active: Option<String>,
     pub chrome_overlay_open: bool,
@@ -195,6 +197,8 @@ impl AppState {
             current_ai_provider: ai_provider,
             sidebar_collapsed,
             ai_sidebar_open: false,
+            devtools_tabs: HashSet::new(),
+            devtools_height: 320,
             app_sidebar_open: false,
             app_panel_active: None,
             chrome_overlay_open: false,
@@ -1579,9 +1583,12 @@ pub fn handle_chrome_command(
             }
             None
         }
-        // OpenDevtools is handled directly in main.rs (calls wv.open_devtools() on
-        // the active content WebView). Nothing to do here at the app-state level.
-        ChromeCommand::OpenDevtools => None,
+        // The runtime owns native DevTools and the inspected WebView.
+        ChromeCommand::OpenDevtools
+        | ChromeCommand::InspectElement { .. }
+        | ChromeCommand::InspectPicker
+        | ChromeCommand::CloseDevtools
+        | ChromeCommand::ResizeDevtools { .. } => None,
         ChromeCommand::RestartForWebSecurity => Some(TabAction::ApplyWebSecurity),
         ChromeCommand::DevRestart => Some(TabAction::ApplyWebSecurity),
         ChromeCommand::DevOpenDataFolder => {
@@ -4846,13 +4853,14 @@ pub fn handle_app_event_inner(
             let img_js = serde_json::to_string(&image_src).unwrap_or_default();
             let text_js = serde_json::to_string(&selected_text).unwrap_or_default();
             let page_js = serde_json::to_string(&page_url).unwrap_or_default();
+            let tab_js = serde_json::to_string(&tab_id).unwrap_or_default();
             let zoom = tab_zoom(state, &tab_id);
             let (off_x, off_y) = content_css_origin(state);
             let adj_x = off_x + x * zoom;
             let adj_y = off_y + y * zoom;
             let _ = chrome.evaluate_script(&format!(
-                "window.__neura && window.__neura.showContextMenu({{x:{:.1},y:{:.1},linkUrl:{},imageSrc:{},selectedText:{},pageUrl:{},canBack:{},canFwd:{}}})",
-                adj_x, adj_y, link_js, img_js, text_js, page_js, can_back, can_fwd
+                "window.__neura && window.__neura.showContextMenu({{x:{:.1},y:{:.1},tabId:{},linkUrl:{},imageSrc:{},selectedText:{},pageUrl:{},canBack:{},canFwd:{}}})",
+                adj_x, adj_y, tab_js, link_js, img_js, text_js, page_js, can_back, can_fwd
             ));
             None
         }

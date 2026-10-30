@@ -248,7 +248,9 @@
             // trigger a system resize loop from a frameless window without NC hit testing.
             Event::UserEvent(AppEvent::Chrome(ChromeCommand::BeginResize { edge })) => {
                 #[cfg(windows)]
-                begin_window_resize(window.hwnd() as isize, &edge);
+                if !state.content_fullscreen && window.fullscreen().is_none() {
+                    begin_window_resize(window.hwnd() as isize, &edge);
+                }
             }
 
             // Execute JS in the active content WebView on behalf of the AI agent loop
@@ -394,25 +396,61 @@
                 }
             }
 
-            // F12 / OpenDevtools — open Chrome DevTools for the active content WebView.
-            // `open_devtools()` may create a new child HWND inside the main window that
-            // initially appears black while loading.  Re-applying the layout immediately
-            // after restores the Chrome WebView Z-order so the browser UI stays visible.
-            Event::UserEvent(AppEvent::Chrome(ChromeCommand::OpenDevtools)) => {
-                tracing::info!(target: "ventus::feature", action = "open_devtools", "feature action");
-                if let Some(ref id) = state.tab_manager.active_tab_id.clone() {
-                    if let Some(wv) = content_views.get(id) {
-                        wv.open_devtools();
+            Event::UserEvent(AppEvent::DevtoolsCommand { tab_id, generation, message }) => {
+                #[cfg(windows)]
+                native_inspector::command(&tab_id, &generation, &message, &proxy_main);
+            }
+            Event::UserEvent(AppEvent::DevtoolsEvent { tab_id, generation, message }) => {
+                #[cfg(windows)]
+                native_inspector::receive(&tab_id, &generation, &message);
+            }
+            Event::UserEvent(AppEvent::DevtoolsReady { tab_id, generation }) => {
+                #[cfg(windows)]
+                native_inspector::ready(&tab_id, &generation, &proxy_main);
+            }
+
+            Event::UserEvent(AppEvent::Chrome(ChromeCommand::CloseDevtools)) => {
+                if let Some(tab_id) = state.tab_manager.active_tab_id.clone() {
+                    #[cfg(windows)]
+                    native_inspector::close(&tab_id);
+                    state.devtools_tabs.remove(&tab_id);
+                }
+                apply_layout(&chrome, chrome_hwnd, &content_views, &state, &layout_config, &window);
+            }
+
+            Event::UserEvent(AppEvent::Chrome(ChromeCommand::ResizeDevtools { height })) => {
+                if height.is_finite() {
+                    state.devtools_height = height.clamp(160.0, 1600.0).round() as u32;
+                    apply_layout(&chrome, chrome_hwnd, &content_views, &state, &layout_config, &window);
+                }
+            }
+
+            // The actual DevTools frontend is a child WebView connected through native CDP.
+            Event::UserEvent(AppEvent::Chrome(command @ (ChromeCommand::OpenDevtools | ChromeCommand::InspectPicker | ChromeCommand::InspectElement { .. }))) => {
+                let tab_id = state.tab_manager.active_tab_id.clone().unwrap_or_default();
+                if let ChromeCommand::InspectElement { tab_id: requested } = &command {
+                    if requested != &tab_id { return; }
+                }
+                if matches!(command, ChromeCommand::OpenDevtools) && state.devtools_tabs.remove(&tab_id) {
+                    #[cfg(windows)]
+                    native_inspector::close(&tab_id);
+                    apply_layout(&chrome, chrome_hwnd, &content_views, &state, &layout_config, &window);
+                    return;
+                }
+                let internal = state.tab_manager.active_tab().map(|tab| tab.is_neura_page()).unwrap_or(true);
+                let target = if internal { Some(&chrome) } else { content_views.get(&tab_id) };
+                #[cfg(windows)]
+                if let Some(wv) = target {
+                    match native_inspector::open(wv, &window, &tab_id, content_web_context.as_mut().unwrap(), &proxy_main,
+                        matches!(command, ChromeCommand::InspectElement { .. }), matches!(command, ChromeCommand::InspectPicker)) {
+                        Ok(()) => { state.devtools_tabs.insert(tab_id); }
+                        Err(error) => {
+                            tracing::warn!(target: "ventus::devtools", %error, "could not create DevTools component");
+                            let _ = chrome.evaluate_script("window.__neura&&window.__neura.showError('Developer tools could not be opened')");
+                        }
                     }
                 }
-                apply_layout(
-                    &chrome,
-                    chrome_hwnd,
-                    &content_views,
-                    &state,
-                    &layout_config,
-                    &window,
-                );
+                apply_layout(&chrome, chrome_hwnd, &content_views, &state, &layout_config, &window);
             }
 
             Event::UserEvent(AppEvent::Chrome(ChromeCommand::WindowDragStart)) => {
@@ -2782,6 +2820,17 @@
             }
 
             Event::MainEventsCleared => {
+                #[cfg(windows)]
+                {
+                    let stale = native_inspector::stale_tabs(&state, &content_hwnds, chrome_hwnd);
+                    if !stale.is_empty() {
+                        for tab_id in stale {
+                            native_inspector::close(&tab_id);
+                            state.devtools_tabs.remove(&tab_id);
+                        }
+                        apply_layout(&chrome, chrome_hwnd, &content_views, &state, &layout_config, &window);
+                    }
+                }
                 // Build at most one deferred wake-tab per drained event batch, and only if it is
                 // still the active tab. Rapid tab switching enqueues several requests; they all
                 // overwrite `pending_wake_build`, so here we pay the ~400 ms WebView2 build once,
@@ -3167,6 +3216,8 @@
                 ..
             } => {
                 let _ = window.set_visible(false);
+                #[cfg(windows)]
+                native_inspector::close_all();
                 if !new_window {
                     save_window_size(&window, &mut state, custom_maximized);
                     save_session(&state);

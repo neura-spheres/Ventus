@@ -59,6 +59,7 @@ const SC_TAB_9: usize = 30;
 const SC_FIND: usize = 31;
 const SC_NEXT_TAB: usize = 32;
 const SC_PREV_TAB: usize = 33;
+const SC_INSPECT: usize = 34;
 const LOAD_STALL_AFTER: u64 = 6;
 const BLACK_PROBE_AFTER: u64 = 3;
 const SPA_STALL_AFTER: u64 = 10;
@@ -407,6 +408,9 @@ pub fn run() {
             let is_down = (*msg).message == WM_KEYDOWN || (*msg).message == WM_SYSKEYDOWN;
             let is_up = (*msg).message == WM_KEYUP || (*msg).message == WM_SYSKEYUP;
             let vk = (*msg).wParam.0 as u32;
+            if native_inspector::owns_message_window(msg_hwnd) && vk != 0x7b {
+                return false;
+            }
             if is_down || is_up {
                 update_msg_mods(&msg_mods_hook, vk, is_down);
             }
@@ -703,6 +707,8 @@ pub fn run() {
     log_profile_health(&data_dir, &webview_data_dir);
     #[cfg(windows)]
     sync_webview_secure_dns_prefs(&webview_data_dir, &state.settings);
+    // Refresh unpacked extensions after profile cleanup, before WebView2 loads them.
+    let ubol_dir = ubol_dir(&data_dir);
     let mut content_web_context = Some(wry::WebContext::new(Some(webview_data_dir.clone())));
 
     let chrome = {
@@ -842,7 +848,6 @@ pub fn run() {
     let mut save_id = 0u64;
     let mut sync_id = 0u64;
     let mut sync_dirty = (false, false, false);
-    let ubol_dir = ubol_dir(&data_dir);
     let mut incognito_ubol = UbolGate::default();
     let mut ubol_done = false;
     let mut ubol_enabled: Option<bool> = None;
@@ -1033,3 +1038,4 @@ include!("services.rs");
 include!("assistant.rs");
 include!("search_answers.rs");
 include!("system.rs");
+include!("devtools.rs");

@@ -1971,6 +1971,7 @@
    "kolites.com",
    "kolitter.com",
    "koluty.com",
+   "kontentpage.pro",
    "korenizsemi.net",
    "kotofotto.ru",
    "koviovius.com",
@@ -3410,6 +3411,7 @@
    "spookystitch.com",
    "spoonsilk.com",
    "sport.hudaem.ru",
+   "sportrg.ru",
    "sportsnearby.com",
    "sportyforum.com",
    "spotlessstamp.com",
@@ -4034,7 +4036,6 @@
    "vpbyl.com",
    "vq1qi.pw",
    "vtizr.com",
-   "vtochku.net",
    "vtomate.biz",
    "vutatik.ru",
    "vvmblock.ru",
@@ -4330,6 +4331,38 @@
   ]
  },
  "id": 6,
+ "priority": 29
+},
+{
+ "action": {
+  "redirect": {
+   "regexSubstitution": "/strictblock.html#\\0"
+  },
+  "type": "redirect"
+ },
+ "condition": {
+  "regexFilter": "^[^:]+:\\/\\/([^:/]+\\.)?hdmnm\\.link[^%.0-9a-z_-].*?2ip\\..*",
+  "resourceTypes": [
+   "main_frame"
+  ]
+ },
+ "id": 7,
+ "priority": 29
+},
+{
+ "action": {
+  "redirect": {
+   "regexSubstitution": "/strictblock.html#\\0"
+  },
+  "type": "redirect"
+ },
+ "condition": {
+  "regexFilter": "^[^:]+:\\/\\/([^:/]+\\.)?rsv\\.today\\/promo\\/2ipchange.*",
+  "resourceTypes": [
+   "main_frame"
+  ]
+ },
+ "id": 8,
  "priority": 29
 }
 ]

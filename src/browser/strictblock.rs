@@ -265,11 +265,29 @@ mod tests {
     use super::*;
 
     #[test]
-    fn bundled_rules_match_youku_not_gmail() {
-        assert!(matches("https://youku.tv/"));
-        assert!(matches("https://www.youku.tv/"));
+    fn bundled_rules_block_listed_domains_not_mail() {
+        let rules = rules();
+        let domain = rules
+            .domains
+            .iter()
+            .find(|domain| matches!(url::Host::parse(domain), Ok(url::Host::Domain(_))))
+            .unwrap();
+        assert!(matches(&format!("https://{domain}/")));
+        assert!(matches(&format!("https://www.{domain}/")));
         assert!(!matches("https://gmail.com/"));
         assert!(!matches("https://mail.google.com/mail/u/0/#inbox"));
+    }
+
+    #[test]
+    fn domain_rules_match_subdomains_not_similar_names() {
+        let rules = StrictBlockRules {
+            domains: vec!["tracking.example".into()],
+            regex_rules: Vec::new(),
+        };
+        assert!(rules.matches("https://tracking.example/"));
+        assert!(rules.matches("https://sub.tracking.example/"));
+        assert!(!rules.matches("https://nottracking.example/"));
+        assert!(!rules.matches("https://tracking.example.safe.example/"));
     }
 
     #[test]

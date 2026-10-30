@@ -101,6 +101,7 @@
    "addb.interpark.com",
    "addc.dcinside.com",
    "adex.ednplus.com",
+   "adflow.kr",
    "adfork.co.kr",
    "adg.dawin.tv",
    "adgirl.yes24.com",
@@ -117,6 +118,7 @@
    "admixer.co.kr",
    "admize.io",
    "admonseller.com",
+   "adn.admixer.co.kr",
    "adpacker.net",
    "adplex.co.kr",
    "adpnut.com",
@@ -127,6 +129,7 @@
    "ads-partners.coupang.com",
    "ads-twitter.com",
    "ads.aceplanet.co.kr",
+   "ads.adaptv.advertising.com",
    "ads.admaru.com",
    "ads.adoffice.11st.co.kr",
    "ads.ahnlab.com",
@@ -213,6 +216,7 @@
    "contextweb.com",
    "cp.edl.co.kr",
    "cpa.greenp.kr",
+   "creative.mayzaent.com",
    "criteo.net",
    "cyad.nate.com",
    "cyad1.nate.com",
@@ -229,6 +233,7 @@
    "delivery.pryzmads.com",
    "deployads.com",
    "dhgywazgeek0d.cloudfront.net",
+   "display.admonseller.com",
    "displayad.lotteon.com",
    "displayad.zum.com",
    "displayadimg.zumst.com",
@@ -241,6 +246,7 @@
    "fastview.co.kr",
    "finead.o00.kr",
    "g.doubleclick.net",
+   "go.trvdp.com",
    "googleadservices.com",
    "googletagservices.com",
    "gwx.adnext.co",
@@ -269,12 +275,14 @@
    "megadata.co.kr",
    "mini.m-able.app",
    "minishop.linkprice.com",
+   "mixtower.net",
    "mman.kr",
    "mmnneo.com",
    "mobon.net",
    "mobwithad.com",
    "ms.applvn.com",
    "msadsense.com",
+   "mtag.mman.kr",
    "n4403ad.doubleclick.net",
    "nad.tf.co.kr",
    "naverpa-phinf.pstatic.net",
@@ -291,6 +299,7 @@
    "optad360.io",
    "optbeacon.net",
    "pagead2.googlesyndication.com",
+   "partner.googleadservices.com",
    "piclick.kr",
    "planad.net",
    "pltapad.com",
@@ -301,6 +310,7 @@
    "realclick.co.kr",
    "realssp.co.kr",
    "recoshopping.naver.com",
+   "reebr.com",
    "reqde.sooplive.com",
    "safeframe.googlesyndication.com",
    "screen.buzzvil.com",
@@ -343,7 +353,7 @@
    "vntsm.com",
    "vrixon.com",
    "vungle.com",
-   "whoas.xyz",
+   "wmars-client.wemakeprice.com",
    "worker.gsr-ads.co.kr",
    "wtg-ads.com",
    "wwwads.seoul.co.kr",
@@ -351,7 +361,8 @@
    "xdsp.snadx.com",
    "xlviirdr.com",
    "xn--s-4z5e652a53k.com",
-   "z.o00.kr"
+   "z.o00.kr",
+   "zumads.vrixon.com"
   ],
   "resourceTypes": [
    "main_frame"
@@ -368,7 +379,7 @@
   "type": "redirect"
  },
  "condition": {
-  "regexFilter": "^[^:]+:\\/\\/([^:/]+\\.)?go\\.bandisoft\\.com\\/coupang\\.bandizip$",
+  "regexFilter": "^[^:]+:\\/\\/([^:/]+\\.)?prod\\.danawa\\.com\\/bridge\\/loadingbridgepowerclick\\.php.*",
   "resourceTypes": [
    "main_frame"
   ]
@@ -384,7 +395,7 @@
   "type": "redirect"
  },
  "condition": {
-  "regexFilter": "^[^:]+:\\/\\/([^:/]+\\.)?mjmedi\\.com\\/bannerpop\\/popup\\.html.*",
+  "regexFilter": "^[^:]+:\\/\\/([^:/]+\\.)?go\\.bandisoft\\.com\\/coupang\\.bandizip$",
   "resourceTypes": [
    "main_frame"
   ]
@@ -400,7 +411,7 @@
   "type": "redirect"
  },
  "condition": {
-  "regexFilter": "^[^:]+:\\/\\/([^:/]+\\.)?cultureland\\.co\\.kr\\/etc\\/main_ad_.*",
+  "regexFilter": "^[^:]+:\\/\\/([^:/]+\\.)?mjmedi\\.com\\/bannerpop\\/popup\\.html.*",
   "resourceTypes": [
    "main_frame"
   ]
@@ -416,7 +427,7 @@
   "type": "redirect"
  },
  "condition": {
-  "regexFilter": "^[^:]+:\\/\\/([^:/]+\\.)?ppomppu\\.co\\.kr\\/inform_ad_click\\.php.*",
+  "regexFilter": "^[^:]+:\\/\\/([^:/]+\\.)?playwares\\.com\\/api\\/redirectad\\.php.*",
   "resourceTypes": [
    "main_frame"
   ]
@@ -432,7 +443,7 @@
   "type": "redirect"
  },
  "condition": {
-  "regexFilter": "^[^:]+:\\/\\/([^:/]+\\.)?prod\\.danawa\\.com\\/bridge\\/loadingbridgepowerclick\\.php.*",
+  "regexFilter": "^[^:]+:\\/\\/([^:/]+\\.)?cultureland\\.co\\.kr\\/etc\\/main_ad_.*",
   "resourceTypes": [
    "main_frame"
   ]
@@ -448,7 +459,7 @@
   "type": "redirect"
  },
  "condition": {
-  "regexFilter": "^[^:]+:\\/\\/([^:/]+\\.)?news\\.imaeil\\.com\\/wcms_ad\\.php.*",
+  "regexFilter": "^[^:]+:\\/\\/([^:/]+\\.)?ppomppu\\.co\\.kr\\/inform_ad_click\\.php.*",
   "resourceTypes": [
    "main_frame"
   ]
@@ -464,7 +475,7 @@
   "type": "redirect"
  },
  "condition": {
-  "regexFilter": "^[^:]+:\\/\\/([^:/]+\\.)?bodnara\\.co\\.kr\\/advert\\/click\\.php.*",
+  "regexFilter": "^[^:]+:\\/\\/([^:/]+\\.)?news\\.imaeil\\.com\\/wcms_ad\\.php.*",
   "resourceTypes": [
    "main_frame"
   ]
@@ -480,12 +491,28 @@
   "type": "redirect"
  },
  "condition": {
-  "regexFilter": "^[^:]+:\\/\\/([^:/]+\\.)?dothome\\.co\\.kr\\/ad\\/ad_windowsforum\\.php.*",
+  "regexFilter": "^[^:]+:\\/\\/([^:/]+\\.)?bodnara\\.co\\.kr\\/advert\\/click\\.php.*",
   "resourceTypes": [
    "main_frame"
   ]
  },
  "id": 9,
+ "priority": 29
+},
+{
+ "action": {
+  "redirect": {
+   "regexSubstitution": "/strictblock.html#\\0"
+  },
+  "type": "redirect"
+ },
+ "condition": {
+  "regexFilter": "^[^:]+:\\/\\/([^:/]+\\.)?dothome\\.co\\.kr\\/ad\\/ad_windowsforum\\.php.*",
+  "resourceTypes": [
+   "main_frame"
+  ]
+ },
+ "id": 10,
  "priority": 29
 }
 ]

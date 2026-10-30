@@ -19,13 +19,4 @@
     Home: https://github.com/gorhill/uBlock
 */
 
-// Important!
-// Isolate from global scope
-(function uBOL_preventPopup() {
-
-    const details = {"id":"kor-1","block":{"hostnames":[],"regexes":["goodmor","[{\"re\":\"^[^:]+:\\\\/\\\\/([^:/]+\\\\.)?goodmorningcc\\\\.com\\\\/bannerpop\\\\/\",\"f\":\"i\"}]"]},"allow":{"hostnames":[],"regexes":[]}};
-
-    self.preventPopupDetails = self.preventPopupDetails || [];
-    self.preventPopupDetails.push(details);
-
-})();
+export const deferredTasks = new Set();

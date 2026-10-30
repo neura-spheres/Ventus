@@ -1051,6 +1051,14 @@ button,input,select,textarea{font-family:var(--font)}
   position:fixed;z-index:9999;
   background:transparent;
 }
+body.content-fullscreen .resize-handle{display:none!important}
+#devtools-dock-header{display:none;position:fixed;height:32px;z-index:200;background:var(--bg-elevated);color:var(--text);align-items:center;gap:8px;padding:0 8px;border-top:1px solid var(--border);font-size:12px}
+#devtools-dock-header .devtools-title{flex:1;font-weight:600}
+#devtools-dock-header button{height:26px;padding:0 8px;border:0;border-radius:4px;background:transparent;color:inherit;cursor:pointer}
+#devtools-dock-header button:hover{background:var(--bg-hover)}
+#devtools-divider{display:none;position:fixed;height:5px;z-index:201;background:var(--border);cursor:ns-resize;touch-action:none}
+#devtools-divider:hover,#devtools-divider.dragging{background:var(--accent)}
+body.content-fullscreen #devtools-dock-header,body.content-fullscreen #devtools-divider{display:none!important}
 .resize-handle[data-edge="left"]  {left:0;top:0;width:5px;height:100%;cursor:ew-resize;z-index:160}
 .resize-handle[data-edge="right"] {right:0;top:0;width:5px;height:100%;cursor:ew-resize}
 .resize-handle[data-edge="bottom"]{bottom:0;left:0;width:100%;height:5px;cursor:s-resize}
@@ -4401,6 +4409,11 @@ svg{display:block;flex-shrink:0}
     </div>
   </div>
   <div class="more-sep"></div>
+  <button class="more-item" id="more-item-devtools" onclick="closeMoreMenu();send('OpenDevtools')" role="menuitem">
+    <span class="more-item-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m8 5-7 7 7 7m8-14 7 7-7 7M14 3l-4 18"/></svg></span>
+    <span class="more-item-label">Developer tools</span>
+    <span class="more-item-kbd">Ctrl+Shift+I</span>
+  </button>
   <button class="more-item" onclick="closeMoreMenu();openSettings('account')" role="menuitem">
     <span class="more-item-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>
     <span class="more-item-label">Account</span>
@@ -5843,6 +5856,12 @@ svg{display:block;flex-shrink:0}
 <!-- Window edge resize handles — transparent hit zones, trigger native Win32 resize.
      The LEFT handle sits above the sidebar (z:160) so it grabs the window edge even while
      the auto-hide sidebar is peeking; its mouseenter still opens the sidebar so both work. -->
+<div id="devtools-divider" role="separator" aria-label="Resize developer tools" aria-orientation="horizontal" tabindex="0" onpointerdown="startDevtoolsResize(event)"></div>
+<div id="devtools-dock-header">
+  <span class="devtools-title">Developer tools</span>
+  <button onclick="send('InspectPicker')" title="Select an element (Ctrl+Shift+C)">Select element</button>
+  <button onclick="send('CloseDevtools')" title="Close developer tools (F12)" aria-label="Close developer tools">✕</button>
+</div>
 <div class="resize-handle" data-edge="left"        onmousedown="send('BeginResize',{edge:'left'})" onmouseenter="leftEdgePeek()" onmouseleave="leftEdgePeekLeave(event)"></div>
 <div class="resize-handle" data-edge="right"       onmousedown="send('BeginResize',{edge:'right'})"></div>
 <div class="resize-handle" data-edge="bottom"      onmousedown="send('BeginResize',{edge:'bottom'})"></div>
@@ -6081,6 +6100,36 @@ function clearChromeOverlay(owner) {
 
 function nav(action) { send(action); }
 
+function startDevtoolsResize(event) {
+  if (event.button !== 0 || !window.__ventusDevtoolsLayout) return;
+  event.preventDefault();
+  const divider = event.currentTarget;
+  divider.setPointerCapture(event.pointerId);
+  divider.classList.add('dragging');
+  const move = e => {
+    const layout = window.__ventusDevtoolsLayout;
+    if (layout) send('ResizeDevtools', {height: layout.bottom - e.clientY});
+  };
+  const stop = () => {
+    divider.classList.remove('dragging');
+    divider.removeEventListener('pointermove', move);
+    divider.removeEventListener('pointerup', stop);
+    divider.removeEventListener('pointercancel', stop);
+    divider.removeEventListener('lostpointercapture', stop);
+  };
+  divider.addEventListener('pointermove', move);
+  divider.addEventListener('pointerup', stop);
+  divider.addEventListener('pointercancel', stop);
+  divider.addEventListener('lostpointercapture', stop);
+}
+
+document.getElementById('devtools-divider').addEventListener('keydown', event => {
+  const layout = window.__ventusDevtoolsLayout;
+  if (!layout || !['ArrowUp','ArrowDown'].includes(event.key)) return;
+  event.preventDefault();
+  send('ResizeDevtools', {height: layout.bottom - layout.dividerY + (event.key === 'ArrowUp' ? 20 : -20)});
+});
+
 // ============================================================
 // RUST -> JS INTERFACE
 // ============================================================
@@ -6089,6 +6138,19 @@ let _liveRatesTs = 0;    // Date.now() when last fetched
 const _RATES_TTL = 3600_000; // 1 hour
 
 window.__neura = {
+  setDevtoolsLayout(layout) {
+    const header = document.getElementById('devtools-dock-header');
+    const divider = document.getElementById('devtools-divider');
+    window.__ventusDevtoolsLayout = layout;
+    header.style.display = layout ? 'flex' : 'none';
+    divider.style.display = layout ? 'block' : 'none';
+    if (!layout) return;
+    header.style.left = divider.style.left = layout.x + 'px';
+    header.style.width = divider.style.width = layout.width + 'px';
+    header.style.top = layout.y + 'px';
+    divider.style.top = layout.dividerY + 'px';
+    divider.setAttribute('aria-valuenow', Math.round(layout.bottom - layout.dividerY));
+  },
   setState(s) {
     const prevTab = state.active_tab_id;
     const prevUrl = state.active_url;
@@ -6353,6 +6415,7 @@ window.__neura = {
     showFloatingSidebar(false);
   },
   setContentFullscreen(active) {
+    document.body.classList.toggle('content-fullscreen', active);
     const app = document.getElementById('app');
     if (active) {
       app.classList.add('content-fullscreen');
@@ -14547,6 +14610,11 @@ function _fallbackCopy(text) {
 function ctxAction(action) {
   const d = __ctxData;
   if (!d) return;
+  if (action === 'inspect') {
+    closeContextMenu();
+    send('InspectElement', {tab_id: d.tabId});
+    return;
+  }
   closeContextMenu();
   switch (action) {
     case 'open_link_tab':   send('OpenInNewTab', {url: d.linkUrl}); break;
@@ -14566,7 +14634,7 @@ function ctxAction(action) {
     case 'forward': send('Forward'); break;
     case 'reload':  send('Reload'); break;
     case 'copy_page_url': copyToClipboard(d.pageUrl); break;
-    case 'view_source': send('OpenDevtools'); break;
+    case 'devtools': send('OpenDevtools'); break;
   }
 }
 
@@ -14608,7 +14676,8 @@ function showBrowserContextMenu(data) {
   item('reload', 'Reload');
   sep();
   item('copy_page_url', 'Copy page URL');
-  item('view_source',   'View page source');
+  item('devtools', 'Developer tools');
+  item('inspect', 'Inspect');
 
   menu.innerHTML = rows.join('');
 
@@ -16677,7 +16746,9 @@ function syncFindOverlay() {
 document.addEventListener('keydown', e => {
   const ctrl = e.ctrlKey || e.metaKey;
   const key = e.key.toLowerCase();
-  if (ctrl && e.shiftKey && key === 't') { e.preventDefault(); send('ReopenTab'); }
+  if (ctrl && e.shiftKey && key === 'i') { e.preventDefault(); send('OpenDevtools'); }
+  else if (ctrl && e.shiftKey && key === 'c') { e.preventDefault(); send('InspectPicker'); }
+  else if (ctrl && e.shiftKey && key === 't') { e.preventDefault(); send('ReopenTab'); }
   else if (ctrl && e.shiftKey && key === 'n') { e.preventDefault(); send('OpenIncognito'); }
   else if (ctrl && key === 'n') { e.preventDefault(); send('OpenInNewWindow', {url: 'neura://newtab'}); }
   else if (ctrl && !e.shiftKey && /^[1-9]$/.test(e.key)) { e.preventDefault(); switchToTabIndex(parseInt(e.key, 10) - 1); }
@@ -16726,7 +16797,7 @@ document.addEventListener('keydown', e => {
   else if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); nav('Back'); }
   else if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); nav('Forward'); }
   else if (e.key === 'F11') { e.preventDefault(); send('ToggleFullscreen'); }
-  else if (e.key === 'F12') { send('OpenDevtools'); }
+  else if (e.key === 'F12') { e.preventDefault(); send('OpenDevtools'); }
 });
 window.addEventListener('resize', () => {
   refreshSuggestionOverlayBounds();

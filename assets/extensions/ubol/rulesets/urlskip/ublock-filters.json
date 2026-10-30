@@ -181,6 +181,13 @@
   ]
  },
  {
+  "re": "^[^:]+://(?:[^/]+\\.)?dlaf\\.jp/home/dlaf/=/aid/.*?/url/",
+  "steps": [
+   "/\\/url\\/(http.+)/",
+   "-uricomponent"
+  ]
+ },
+ {
   "re": "^[^:]+://(?:[^/]+\\.)?prod\\.outgoing\\.prod\\.webservices\\.mozgcp\\.net/v1/",
   "steps": [
    "/\\/v1\\/\\w+\\/(http.+)$/",
@@ -190,6 +197,12 @@
  },
  {
   "re": "^[^:]+://(?:[^/]+\\.)?www\\.google\\.com/url\\?q=",
+  "steps": [
+   "?q"
+  ]
+ },
+ {
+  "re": "^[^:]+://(?:[^/]+\\.)?www\\.google\\.com/url\\?.*?q=",
   "steps": [
    "?q"
   ]
@@ -272,6 +285,35 @@
   "steps": [
    "/\\/url\\/(http.+)/",
    "-uricomponent"
+  ]
+ },
+ {
+  "re": "^[^:]+://(?:[^/]+\\.)?h\\.f1\\.impact-ad\\.jp/pub_click/",
+  "steps": [
+   "/\\/\\d{6}\\/\\d{6}\\/(https.+)/",
+   "-uricomponent"
+  ]
+ },
+ {
+  "re": "^[^:]+://(?:[^/]+\\.)?igorslab\\.de/\\?ilgha_jump=",
+  "steps": [
+   "/\\?ilgha_jump=(ey[^.]+)\\..+/",
+   "-base64",
+   "/\"u\":\"(https?:[^\"]+)\"/"
+  ]
+ },
+ {
+  "re": "^[^:]+://(?:[^/]+\\.)?cinefreak\\.net/generate\\.php\\?id=",
+  "steps": [
+   "?id",
+   "-base64"
+  ]
+ },
+ {
+  "re": "^[^:]+://(?:[^/]+\\.)?securepaste\\.top/\\?url=",
+  "steps": [
+   "?url",
+   "-base64"
   ]
  },
  {
@@ -1380,7 +1422,13 @@
   "re": "^https:\\/\\/link\\.theverge\\.com\\/click\\/[0-9]+\\.[0-9]+\\/aHR0c",
   "steps": [
    "/(aHR0c[a-zA-Z0-9%_-]+)/",
-   "-base64"
+   "-safebase64"
+  ]
+ },
+ {
+  "re": "^[^:]+://(?:[^/]+\\.)?s\\.click\\.aliexpress\\.com/deep_link\\..*?(?:[^%.0-9a-z_-]|$)dl_target_url=http",
+  "steps": [
+   "?dl_target_url"
   ]
  },
  {
@@ -1540,14 +1588,6 @@
   "re": "^[^:]+://(?:[^/]+\\.)?tracking\\.inflection\\.io/.*?/redirect\\?redirect=",
   "steps": [
    "?redirect"
-  ]
- },
- {
-  "re": "^[^:]+://(?:[^/]+\\.)?pornhub\\..*?/redirect/",
-  "steps": [
-   "/(https%253A%252F%252F[^?#]+)/",
-   "-uricomponent",
-   "-uricomponent"
   ]
  },
  {

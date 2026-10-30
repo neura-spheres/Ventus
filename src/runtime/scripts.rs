@@ -514,6 +514,7 @@ fn content_initialization_script(
   }, false);
 
   const fsChange = function() {
+    __clearResizeEdge();
     post({cmd: 'content_fullscreen_change', active: !!document.fullscreenElement || !!document.webkitFullscreenElement});
   };
   const fsNames = ['requestFullscreen', 'webkitRequestFullscreen', 'webkitRequestFullScreen', 'msRequestFullscreen'];
@@ -588,6 +589,13 @@ fn content_initialization_script(
   // Also tracks cursor proximity to the window edge so resize handles work.
   const RESIZE_ZONE = 6; // px from edge to show resize cursor
   let __resizeEdge = null;
+  const __resizeBlocked = function() {
+    return !!(window.__neuraContentFullscreen || document.fullscreenElement || document.webkitFullscreenElement);
+  };
+  const __clearResizeEdge = function() {
+    if (__resizeEdge !== null) document.documentElement.style.cursor = '';
+    __resizeEdge = null;
+  };
   let __sbThrottle = false;
   document.addEventListener('mousemove', function(e) {
     // Sidebar auto-close throttle
@@ -597,11 +605,16 @@ fn content_initialization_script(
       setTimeout(function() { __sbThrottle = false; }, 300);
     }
     // Window-edge resize cursor detection
+    if (__resizeBlocked()) {
+      __clearResizeEdge();
+      return;
+    }
     var W = document.documentElement.clientWidth;
     var H = document.documentElement.clientHeight;
     var x = e.clientX, y = e.clientY;
     var onR = x >= W - RESIZE_ZONE;
-    var onB = y >= H - RESIZE_ZONE;
+    var __wbe = (typeof window.__vBottomEdge === 'number') ? window.__vBottomEdge : 0;
+    var onB = y >= H - RESIZE_ZONE && __wbe <= RESIZE_ZONE;
     // __vLeftEdge is the content WebView's left offset in window coords, injected by Rust
     // via evaluate_script on every layout change + page load. When a sidebar is visible
     // content_x > 0, so the content's left edge is NOT the window's left edge — adding
@@ -623,7 +636,7 @@ fn content_initialization_script(
   }, {passive: true, capture: true});
 
   document.addEventListener('mousedown', function(e) {
-    if (__resizeEdge && e.button === 0) {
+    if (__resizeEdge && e.button === 0 && !__resizeBlocked()) {
       try { post({cmd: 'begin_resize', edge: __resizeEdge}); } catch(_) {}
       // Don't preventDefault — let the page also handle it normally
     }
@@ -634,8 +647,9 @@ fn content_initialization_script(
   }, {capture: true});
 
   const __neuraPostContextMenu = function(e) {
-    const target = e.target;
+    const target = (e.composedPath && e.composedPath()[0]) || e.target;
     const el = target && target.nodeType === 1 ? target : (target && target.parentElement ? target.parentElement : null);
+    window.__ventusInspectTarget = el;
     const linkEl = el && el.closest ? el.closest('a[href]') : null;
     const linkUrl = linkEl ? (linkEl.href || '') : '';
     let imageSrc = '';

@@ -32,6 +32,9 @@ struct AppLayout {
     frame_side_css: f64,
     frame_bottom_css: f64,
     content: Rect,
+    devtools: Option<Rect>,
+    devtools_header: Option<Rect>,
+    devtools_divider: Option<Rect>,
 }
 
 const INCOGNITO_UBOL_SYNC_TIMEOUT_MS: u64 = 5000;
@@ -74,6 +77,9 @@ impl AppLayout {
                     width: size.width.max(1),
                     height: size.height.max(1),
                 },
+                devtools: None,
+                devtools_header: None,
+                devtools_divider: None,
             };
         }
 
@@ -184,11 +190,51 @@ impl AppLayout {
             .saturating_sub(content_offset)
             .saturating_sub(frame_side) // right frame strip
             .max(1);
-        let content_h = size
+        let mut content_h = size
             .height
             .saturating_sub(toolbar_h)
             .saturating_sub(frame_bottom)
             .max(1);
+
+        let devtools_open = state
+            .tab_manager
+            .active_tab_id
+            .as_ref()
+            .is_some_and(|id| state.devtools_tabs.contains(id));
+        let (devtools, devtools_header, devtools_divider) = if devtools_open {
+            let dock_h = logical_to_physical(state.devtools_height as f64, scale)
+                .min(content_h.saturating_sub(logical_to_physical(140.0, scale)));
+            let header_h = logical_to_physical(32.0, scale);
+            let divider_h = logical_to_physical(5.0, scale);
+            if dock_h > header_h + divider_h {
+                content_h -= dock_h;
+                let y = toolbar_h + content_h;
+                (
+                    Some(Rect {
+                        x: content_x,
+                        y: (y + divider_h + header_h) as i32,
+                        width: content_w,
+                        height: dock_h - header_h - divider_h,
+                    }),
+                    Some(Rect {
+                        x: content_x,
+                        y: (y + divider_h) as i32,
+                        width: content_w,
+                        height: header_h,
+                    }),
+                    Some(Rect {
+                        x: content_x,
+                        y: y as i32,
+                        width: content_w,
+                        height: divider_h,
+                    }),
+                )
+            } else {
+                (None, None, None)
+            }
+        } else {
+            (None, None, None)
+        };
 
         let app_body_chrome_owned = state.app_sidebar_open && state.app_panel_active.is_none();
         let app_panel_body = if state.app_sidebar_open && state.app_panel_active.is_some() {
@@ -232,6 +278,9 @@ impl AppLayout {
                 width: content_w,
                 height: content_h,
             },
+            devtools,
+            devtools_header,
+            devtools_divider,
         }
     }
 }
@@ -444,7 +493,10 @@ fn ubol_manifests_match(source: &std::path::Path, dest: &std::path::Path) -> boo
     if !dst.exists() {
         return false;
     }
-    std::fs::read(src).ok() == std::fs::read(dst).ok()
+    match (std::fs::read(src), std::fs::read(dst)) {
+        (Ok(src), Ok(dst)) => src == dst,
+        _ => false,
+    }
 }
 
 fn copy_dir(source: &std::path::Path, dest: &std::path::Path) -> anyhow::Result<()> {
@@ -461,6 +513,43 @@ fn copy_dir(source: &std::path::Path, dest: &std::path::Path) -> anyhow::Result<
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod ubol_update_tests {
+    use super::*;
+
+    #[test]
+    fn extension_refresh_replaces_rules_and_removes_obsolete_files() {
+        let root = std::env::temp_dir().join(format!("ventus-ubol-{}", uuid::Uuid::new_v4()));
+        let source = root.join("bundle");
+        let data = root.join("data");
+        std::fs::create_dir_all(&source).unwrap();
+        std::fs::write(source.join("manifest.json"), r#"{"version":"1"}"#).unwrap();
+        std::fs::write(source.join("rules.json"), "old rules").unwrap();
+
+        let dest = runtime_ubol_dir(&data, &source).unwrap();
+        assert!(ubol_manifests_match(&source, &dest));
+        std::fs::write(dest.join("obsolete.json"), "obsolete rules").unwrap();
+        std::fs::write(source.join("manifest.json"), r#"{"version":"2"}"#).unwrap();
+        std::fs::write(source.join("rules.json"), "new rules").unwrap();
+        assert!(!ubol_manifests_match(&source, &dest));
+
+        assert_eq!(runtime_ubol_dir(&data, &source).unwrap(), dest);
+        assert_eq!(
+            std::fs::read_to_string(dest.join("rules.json")).unwrap(),
+            "new rules"
+        );
+        assert!(!dest.join("obsolete.json").exists());
+        assert!(ubol_manifests_match(&source, &dest));
+
+        std::fs::remove_file(source.join("manifest.json")).unwrap();
+        std::fs::remove_file(dest.join("manifest.json")).unwrap();
+        std::fs::create_dir(source.join("manifest.json")).unwrap();
+        std::fs::create_dir(dest.join("manifest.json")).unwrap();
+        assert!(!ubol_manifests_match(&source, &dest));
+        std::fs::remove_dir_all(root).unwrap();
+    }
 }
 
 fn active_ubol_enabled(state: &AppState) -> bool {
@@ -616,12 +705,7 @@ fn load_url_or_gate_incognito_ubol(
             tracing::warn!(target: "ventus::ubol", tab = %tab_id, url = %url, "ubol: incognito sync unavailable; loading immediately");
         }
     }
-    let _ = (
-        window,
-        incognito_web_context,
-        shared_dl_dir,
-        browser_args,
-    );
+    let _ = (window, incognito_web_context, shared_dl_dir, browser_args);
     let _ = load_url_and_watch(views, tab_id, url, rt, proxy, watches, next);
 }
 
@@ -795,6 +879,8 @@ fn apply_layout(
     sync_chrome(chrome, chrome_hwnd, state, layout);
     #[cfg(windows)]
     sync_content_z_order(content_views, chrome_hwnd, state, true);
+    #[cfg(windows)]
+    native_inspector::sync_hosted(state, layout, chrome_hwnd);
 }
 
 fn action_content_cover(
@@ -924,20 +1010,16 @@ fn msg_shortcut(vk: u32, mods: usize, repeat: bool) -> usize {
     if alt && !ctrl {
         return SC_NONE;
     }
-    if ctrl && matches!(vk, 0x42 | 0x49 | 0x55) {
+    if ctrl && (matches!(vk, 0x42 | 0x55) || (vk == 0x49 && !shift)) {
         return SC_NONE;
     }
-    if ctrl
-        && shift
-        && matches!(
-            vk,
-            0xbb | 0xbc | 0xbe | 0xe2 | 0xba | 0xdb | 0xdd | 0xbd
-        )
-    {
+    if ctrl && shift && matches!(vk, 0xbb | 0xbc | 0xbe | 0xe2 | 0xba | 0xdb | 0xdd | 0xbd) {
         return SC_NONE;
     }
     if ctrl {
         return match vk {
+            0x49 if shift => SC_DEVTOOLS,
+            0x43 if shift => SC_INSPECT,
             0x09 if shift => SC_PREV_TAB,
             0x09 => SC_NEXT_TAB,
             0x54 if shift => SC_REOPEN_TAB,
@@ -975,6 +1057,73 @@ fn msg_shortcut(vk: u32, mods: usize, repeat: bool) -> usize {
 #[cfg(test)]
 mod layout_shortcut_tests {
     use super::*;
+
+    #[test]
+    fn dock_layout_preserves_page_space_and_restores_fullscreen() {
+        let root = std::env::temp_dir().join(format!("ventus-dock-{}", uuid::Uuid::new_v4()));
+        let conn = database::in_memory().unwrap();
+        migrations::run(&conn).unwrap();
+        let mut state = AppState::new(
+            conn,
+            config::AppSettings::default(),
+            &root,
+            "test".into(),
+            "test".into(),
+        );
+        let tab_id = state.tab_manager.active_tab_id.clone().unwrap();
+        let config = LayoutConfig {
+            sidebar_expanded_w: 240,
+            sidebar_collapsed_w: 52,
+            horizontal_tabs_h: 40,
+            toolbar_h: 44,
+            ai_sidebar_w: 340,
+            min_content_w: 320,
+            min_ai_sidebar_w: 280,
+            app_sidebar_w: 380,
+            app_header_h: 46,
+        };
+        state.devtools_tabs.insert(tab_id.clone());
+        state.devtools_height = 1600;
+        for scale in [1.0, 1.25, 2.0] {
+            let size = PhysicalSize::new((1000.0 * scale) as u32, (600.0 * scale) as u32);
+            let layout = AppLayout::calculate(size, scale, &state, &config);
+            let body = layout.devtools.unwrap();
+            let header = layout.devtools_header.unwrap();
+            let divider = layout.devtools_divider.unwrap();
+            assert!(layout.content.height >= logical_to_physical(140.0, scale));
+            assert_eq!(layout.content.y + layout.content.height as i32, divider.y);
+            assert_eq!(divider.y + divider.height as i32, header.y);
+            assert_eq!(header.y + header.height as i32, body.y);
+            assert_eq!(
+                body.y + body.height as i32,
+                size.height as i32 - layout.frame_bottom_h as i32
+            );
+            assert_eq!(body.width, layout.content.width);
+            state.content_fullscreen = true;
+            let full = AppLayout::calculate(size, scale, &state, &config);
+            assert!(full.devtools.is_none());
+            assert_eq!(full.content.height, size.height);
+            state.content_fullscreen = false;
+        }
+        state.devtools_tabs.clear();
+        let closed = AppLayout::calculate(PhysicalSize::new(1000, 600), 1.0, &state, &config);
+        assert!(closed.devtools.is_none());
+        assert_eq!(
+            closed.content.height,
+            600 - closed.toolbar_h - closed.frame_bottom_h
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn devtools_shortcuts_preserve_copy_and_italic() {
+        assert_eq!(msg_shortcut(0x49, MOD_CTRL | MOD_SHIFT, false), SC_DEVTOOLS);
+        assert_eq!(msg_shortcut(0x43, MOD_CTRL | MOD_SHIFT, false), SC_INSPECT);
+        assert_eq!(msg_shortcut(0x7b, 0, false), SC_DEVTOOLS);
+        assert_eq!(msg_shortcut(0x49, MOD_CTRL, false), SC_NONE);
+        assert_eq!(msg_shortcut(0x43, MOD_CTRL, false), SC_NONE);
+        assert_eq!(msg_shortcut(0x49, MOD_CTRL | MOD_SHIFT, true), SC_NONE);
+    }
 
     #[test]
     fn text_editing_shortcuts_pass_through() {
@@ -1026,6 +1175,7 @@ fn run_shortcut(code: usize, proxy: &tao::event_loop::EventLoopProxy<AppEvent>, 
         SC_FORWARD => Some(ChromeCommand::Forward),
         SC_FULLSCREEN => Some(ChromeCommand::ToggleFullscreen),
         SC_DEVTOOLS => Some(ChromeCommand::OpenDevtools),
+        SC_INSPECT => Some(ChromeCommand::InspectPicker),
         SC_INCOGNITO => Some(ChromeCommand::OpenIncognito),
         SC_NEXT_TAB => Some(ChromeCommand::SwitchTabOffset { delta: 1 }),
         SC_PREV_TAB => Some(ChromeCommand::SwitchTabOffset { delta: -1 }),
@@ -1337,8 +1487,14 @@ fn sync_content_views(
             set_content_memory_normal(wv);
             let _ = wv.set_visible(true);
             let _ = wv.evaluate_script(&format!(
-                "window.__neuraContentFullscreen={};{}",
-                state.content_fullscreen, left_edge_js
+                "window.__neuraContentFullscreen={};window.__vBottomEdge={};{}",
+                state.content_fullscreen,
+                layout
+                    .window_h
+                    .saturating_sub((layout.content.y as u32) + layout.content.height)
+                    as f64
+                    / layout.scale_factor,
+                left_edge_js
             ));
         }
     }
@@ -1420,14 +1576,38 @@ fn sync_chrome(chrome: &WebView, chrome_hwnd: Option<isize>, state: &AppState, l
         layout.frame_bottom_css,
         layout.app_css_w
     ));
+    let dock = layout.devtools_header.map(|rect| serde_json::json!({
+        "x": rect.x as f64 / layout.scale_factor,
+        "y": rect.y as f64 / layout.scale_factor,
+        "width": rect.width as f64 / layout.scale_factor,
+        "dividerY": layout.devtools_divider.unwrap().y as f64 / layout.scale_factor,
+        "bottom": (layout.devtools.unwrap().y as f64 + layout.devtools.unwrap().height as f64) / layout.scale_factor,
+    }));
+    let _ = chrome.evaluate_script(&format!(
+        "window.__neura&&window.__neura.setDevtoolsLayout({})",
+        dock.map(|value| value.to_string())
+            .unwrap_or_else(|| "null".into())
+    ));
 
     #[cfg(windows)]
     if let Some(hwnd) = chrome_hwnd {
-        let floating_rects = state
+        let mut floating_rects = state
             .suggestion_overlay_rects
             .values()
             .map(|rect| rect.to_physical(layout.scale_factor))
             .collect::<Vec<_>>();
+        floating_rects.extend(layout.devtools_header.map(|rect| PhysicalClipRect {
+            x: rect.x,
+            y: rect.y,
+            width: rect.width as i32,
+            height: rect.height as i32,
+        }));
+        floating_rects.extend(layout.devtools_divider.map(|rect| PhysicalClipRect {
+            x: rect.x,
+            y: rect.y,
+            width: rect.width as i32,
+            height: rect.height as i32,
+        }));
         move_child_window(hwnd, 0, 0, layout.window_w, layout.window_h);
         set_chrome_clip_region(
             hwnd,
@@ -1452,11 +1632,24 @@ fn sync_chrome(chrome: &WebView, chrome_hwnd: Option<isize>, state: &AppState, l
 fn sync_chrome_clip(chrome_hwnd: Option<isize>, state: &AppState, layout: AppLayout) {
     #[cfg(windows)]
     if let Some(hwnd) = chrome_hwnd {
-        let floating_rects = state
+        let mut floating_rects = state
             .suggestion_overlay_rects
             .values()
             .map(|rect| rect.to_physical(layout.scale_factor))
             .collect::<Vec<_>>();
+        floating_rects.extend(layout.devtools_header.map(|rect| PhysicalClipRect {
+            x: rect.x,
+            y: rect.y,
+            width: rect.width as i32,
+            height: rect.height as i32,
+        }));
+        floating_rects.extend(layout.devtools_divider.map(|rect| PhysicalClipRect {
+            x: rect.x,
+            y: rect.y,
+            width: rect.width as i32,
+            height: rect.height as i32,
+        }));
+        native_inspector::sync_hosted(state, layout, Some(hwnd));
         set_chrome_clip_region(
             hwnd,
             layout.window_w,
@@ -1548,7 +1741,13 @@ fn sync_content_clip(
     } else {
         logical_to_physical(CONTENT_CORNER_LOGICAL, layout.scale_factor)
     };
-    set_content_clip_region(hwnd, layout.content.width, layout.content.height, cut, radius);
+    set_content_clip_region(
+        hwnd,
+        layout.content.width,
+        layout.content.height,
+        cut,
+        radius,
+    );
 }
 
 #[cfg(windows)]

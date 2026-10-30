@@ -238,6 +238,14 @@ pub enum ChromeCommand {
     },
     CloseSplit,
     OpenDevtools,
+    CloseDevtools,
+    ResizeDevtools {
+        height: f64,
+    },
+    InspectElement {
+        tab_id: String,
+    },
+    InspectPicker,
     RestartForWebSecurity,
     DevRestart,
     DevOpenDataFolder,
@@ -540,6 +548,10 @@ impl ChromeCommand {
             ChromeCommand::SplitView { .. } => Some("split_view"),
             ChromeCommand::CloseSplit => Some("close_split"),
             ChromeCommand::OpenDevtools => Some("open_devtools"),
+            ChromeCommand::CloseDevtools => Some("close_devtools"),
+            ChromeCommand::ResizeDevtools { .. } => None,
+            ChromeCommand::InspectElement { .. } => Some("inspect_element"),
+            ChromeCommand::InspectPicker => Some("inspect_picker"),
             ChromeCommand::RestartForWebSecurity => Some("restart_for_web_security"),
             ChromeCommand::DevRestart => Some("dev_restart"),
             ChromeCommand::DevOpenDataFolder => Some("dev_open_data_folder"),
@@ -615,6 +627,20 @@ impl ChromeCommand {
 pub enum AppEvent {
     Chrome(ChromeCommand),
     ChromeReady,
+    DevtoolsCommand {
+        tab_id: String,
+        generation: String,
+        message: String,
+    },
+    DevtoolsEvent {
+        tab_id: String,
+        generation: String,
+        message: String,
+    },
+    DevtoolsReady {
+        tab_id: String,
+        generation: String,
+    },
     SaveSession {
         id: u64,
     },
@@ -1012,6 +1038,9 @@ impl AppEvent {
         match self {
             AppEvent::Chrome(_) => "chrome_cmd",
             AppEvent::ChromeReady => "chrome_ready",
+            AppEvent::DevtoolsCommand { .. } => "devtools_command",
+            AppEvent::DevtoolsEvent { .. } => "devtools_event",
+            AppEvent::DevtoolsReady { .. } => "devtools_ready",
             AppEvent::SaveSession { .. } => "save_session",
             AppEvent::AppPanelSleep { .. } => "app_panel_sleep",
             AppEvent::CoverWatchdog { .. } => "cover_watchdog",
