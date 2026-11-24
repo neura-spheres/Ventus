@@ -5,10 +5,18 @@ use std::{collections::BTreeMap, fs, path::PathBuf};
 const SERVICE: &str = "ventus";
 const FALLBACK_FILE: &str = "api_keys.local.json";
 
+// A throwaway test profile must never reach the real account or API keys.
+fn service() -> &'static str {
+    if cfg!(debug_assertions) && std::env::var_os("VENTUS_DATA_DIR").is_some() {
+        return "ventus-test";
+    }
+    SERVICE
+}
+
 pub fn set_api_key(provider: &str, key: &str) -> Result<()> {
     let provider = canonical_provider(provider);
     let keyring_result =
-        keyring::Entry::new(SERVICE, provider).and_then(|entry| entry.set_password(key));
+        keyring::Entry::new(service(), provider).and_then(|entry| entry.set_password(key));
     let fallback_result = set_fallback_api_key(provider, key);
     if keyring_result.is_err() && fallback_result.is_err() {
         keyring_result?;
@@ -19,7 +27,7 @@ pub fn set_api_key(provider: &str, key: &str) -> Result<()> {
 pub fn get_api_key(provider: &str) -> Result<Option<String>> {
     let provider = canonical_provider(provider);
     let keyring_result =
-        keyring::Entry::new(SERVICE, provider).and_then(|entry| entry.get_password());
+        keyring::Entry::new(service(), provider).and_then(|entry| entry.get_password());
     match keyring_result {
         Ok(key) => match non_empty_key(key) {
             Some(key) => Ok(Some(key)),
@@ -36,7 +44,7 @@ pub fn get_api_key(provider: &str) -> Result<Option<String>> {
 pub fn delete_api_key(provider: &str) -> Result<()> {
     let provider = canonical_provider(provider);
     let _ = delete_fallback_api_key(provider);
-    match keyring::Entry::new(SERVICE, provider).and_then(|entry| entry.delete_password()) {
+    match keyring::Entry::new(service(), provider).and_then(|entry| entry.delete_password()) {
         Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
         Err(e) => Err(anyhow!("Keychain error: {}", e)),
     }

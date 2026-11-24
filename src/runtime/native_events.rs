@@ -126,11 +126,21 @@ fn attach_navigation_handler(
                 nav_id: id,
             });
             if let Some(http_url) = https_to_http(&url) {
-                let _ = proxy.send_event(AppEvent::HttpsUpgradeFailed {
+                let event = AppEvent::HttpsUpgradeFailed {
                     tab_id: tab_id.clone(),
                     https_url: url,
                     http_url,
-                });
+                };
+                if canceled_web_error_status(status.0) {
+                    // May be a download. DownloadNavigation clears the upgrade if so.
+                    let proxy = proxy.clone();
+                    std::thread::spawn(move || {
+                        std::thread::sleep(ABORT_RETRY_DELAY);
+                        let _ = proxy.send_event(event);
+                    });
+                } else {
+                    let _ = proxy.send_event(event);
+                }
             }
         }
         Ok(())
@@ -281,6 +291,8 @@ fn attach_client_hints_rewrite(wv: &WebView) {
         "\"Not)A;Brand\";v=\"24.0.0.0\", \"Chromium\";v=\"{reduced}\", \"Google Chrome\";v=\"{reduced}\""
     );
 
+    set_browser_identity(&webview, &reduced, &major);
+
     let filter: Vec<u16> = "*".encode_utf16().chain(std::iter::once(0)).collect();
     let filter_ptr = PCWSTR(filter.as_ptr());
     let contexts = [
@@ -330,6 +342,57 @@ fn attach_client_hints_rewrite(wv: &WebView) {
     let mut token = Default::default();
     unsafe {
         let _ = webview.add_WebResourceRequested(&handler, &mut token);
+    }
+}
+
+/// Gives CSS, scripts and images the same identity as the page. Sites like Liquipedia answer 403
+/// when they differ. Done in the engine because intercepting every request would slow pages down.
+#[cfg(windows)]
+fn set_browser_identity(
+    webview: &webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2,
+    version: &str,
+    major: &str,
+) {
+    use webview2_com::CallDevToolsProtocolMethodCompletedHandler;
+    use wv2core::PCWSTR;
+
+    let brands = |chrome: &str, filler: &str| {
+        serde_json::json!([
+            {"brand": "Not)A;Brand", "version": filler},
+            {"brand": "Chromium", "version": chrome},
+            {"brand": "Google Chrome", "version": chrome},
+        ])
+    };
+    let params = serde_json::json!({
+        "userAgent": browser_user_agent(),
+        "userAgentMetadata": {
+            "brands": brands(major, "24"),
+            "fullVersionList": brands(version, "24.0.0.0"),
+            "fullVersion": version,
+            "platform": "Windows",
+            "platformVersion": "10.0.0",
+            "architecture": "x86",
+            "bitness": "64",
+            "model": "",
+            "mobile": false,
+            "wow64": false,
+        },
+    });
+    let wide = |s: &str| s.encode_utf16().chain(Some(0)).collect::<Vec<u16>>();
+    let method = wide("Emulation.setUserAgentOverride");
+    let params = wide(&params.to_string());
+    let done = CallDevToolsProtocolMethodCompletedHandler::create(Box::new(|result, _| {
+        if let Err(error) = result {
+            tracing::warn!(target: "ventus::nav", %error, "browser identity was not set");
+        }
+        Ok(())
+    }));
+    unsafe {
+        let _ = webview.CallDevToolsProtocolMethod(
+            PCWSTR(method.as_ptr()),
+            PCWSTR(params.as_ptr()),
+            &done,
+        );
     }
 }
 
@@ -762,6 +825,7 @@ fn attach_popup_content_handlers(
         let _ = webview.add_WindowCloseRequested(&close, &mut t2);
     }
 
+    attach_download_handler(content, proxy.clone(), format!("popup:{id}"));
     // Nested new windows from inside the popup follow the same tab/popup rules.
     attach_new_window_handler(content, proxy, incognito);
 }

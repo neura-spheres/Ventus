@@ -102,17 +102,19 @@ if ( $hasHostnames$ ) {
 
 if ( $hasRegexes$ ) {
     const scriptletFromRegexes = /* 0 */ [];
-    const { hns } = scriptletGlobals.origins[0];
-    for ( let i = 0, n = scriptletFromRegexes.length; i < n; i += 3 ) {
-        const needle = scriptletFromRegexes[i+0];
-        let regex;
-        for ( const hn of hns ) {
-            if ( hn.includes(needle) === false ) { continue; }
-            if ( regex === undefined ) {
-                regex = new RegExp(scriptletFromRegexes[i+1]);
+    const { hns, path } = scriptletGlobals.origins[0];
+    for ( let i = 0, n = scriptletFromRegexes.length; i < n; i += 2 ) {
+        const { needle, hn, pn } = scriptletFromRegexes[i+0];
+        let rehn, repn;
+        for ( const target of hns ) {
+            if ( target.includes(needle) === false ) { continue; }
+            if ( rehn === undefined ) { rehn = new RegExp(hn); }
+            if ( rehn.test(target) === false ) { continue; }
+            if ( pn && path ) {
+                if ( repn === undefined ) { repn = new RegExp(pn); }
+                if ( repn.test(path) === false ) { continue; }
             }
-            if ( regex.test(hn) === false ) { continue; }
-            for ( const ref of JSON.parse(`[${scriptletFromRegexes[i+2]}]`) ) {
+            for ( const ref of JSON.parse(`[${scriptletFromRegexes[i+1]}]`) ) {
                 todo.add(ref);
             }
         }
@@ -121,7 +123,7 @@ if ( $hasRegexes$ ) {
 
 // Execute scriptlets
 if ( todo.size && todo.has(0) === false ) {
-    const arglists = /* 13 */ ["","14,0,1","12,2","19,3","11,4,5","7,6","22,7,8,9,10","23,11,12","35,13","14,14,15","2,16,8,17,18","46,19,8,20","46,21,8,22"];
+    const arglists = /* 13 */ ["","14,0,1","12,2","17,3","11,4,5","7,6","22,7,8,9,10","23,11,12","36,13","14,14,15","2,16,8,17,18","47,19,8,20","47,21,8,22"];
     const args = /* 23 */ ["f.parentNode.removeChild(f)","100","testPrebid","Object.prototype.adUnits","Object.prototype.useAds","false","props.pageProps.contentfulState.frontPage.sections.[].fields.hasCitrusAdSlot props.pageProps.contentfulState.frontPage.sections.[].fields.isCitrusAdGrid","transitionend","","elements","div[style*=\"-9999px\"][style*=\"outline-offset\"]","Animation.prototype.finished","/telsu\\.fi\\/js\\/[a-z\\d]+\\.js\\?v=\\d+/","/const\\s+([$\\w]+)=[$\\w]+\\(\\)-[$\\w]+;if\\(\\1>=[\\s\\S]*?\\x2C\\1>=[\\s\\S]*?\\)\\{[$\\w]+\\(\\);return;\\}window\\[[^\\]]+\\]\\([$\\w]+\\);/","/const\\s+([$\\w]+)=\\[(?:[$\\w]+\\x2C){3}[$\\w]+\\];for\\(let\\s+([$\\w]+)=[^;]+;\\2<\\1\\[[^\\]]+\\];\\2\\+\\+\\)if\\(!\\1\\[\\2\\]\\)return;[$\\w]+\\(\\);/","2600-3399","bumpers playbackItem.isStitched","propsToMatch","a2d.tv/play/","Ad","/fwmrm.net\\/ad\\/g/","MediaFile","fi-mtv3.videoplaza.tv/proxy/distributor"];
     const { functionRefs } = scriptletGlobals;
     for ( const ref of todo ) {
@@ -137,6 +139,6 @@ if ( todo.size && todo.has(0) === false ) {
 /******************************************************************************/
 
 // End of local scope
-})("fb7f2f86-ef87-4c15-a912-62a035b1c974");
+})("28049053-2f06-4210-9323-9d4634fd8974");
 
 void 0;

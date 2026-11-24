@@ -704,6 +704,13 @@ fn shutdown_webview2(
     incognito_web_context: &mut Option<wry::WebContext>,
 ) {
     #[cfg(windows)]
+    {
+        // Parked views and open deferrals hold the profile just like live tabs do.
+        cancel_all_downloads();
+        PARKED_VIEWS.with(|m| m.borrow_mut().clear());
+        DOWNLOAD_OPS.with(|m| m.borrow_mut().clear());
+    }
+    #[cfg(windows)]
     let t0 = Instant::now();
     #[cfg(windows)]
     let view_count = content_views.len();
@@ -748,6 +755,12 @@ fn shutdown_webview2(
             );
         }
     }
+}
+
+/// Ends the process after `shutdown_webview2`. `ControlFlow::Exit` can hang here: TAO waits for
+/// an idle message that the shutdown pump may already have taken.
+fn exit_now() -> ! {
+    std::process::exit(0);
 }
 
 fn trash_incognito_dir(dir: &std::path::Path) {

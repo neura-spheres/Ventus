@@ -110,7 +110,6 @@ fn build_content_webview_once(
     let tab_id_ipc = tab_id.to_string();
     #[cfg(not(windows))]
     let tab_id_str = tab_id.to_string();
-    #[cfg(not(windows))]
     let _ = &download_dir;
 
     let builder = WebViewBuilder::new_as_child(window)
@@ -597,7 +596,7 @@ fn build_content_webview_once(
         attach_title_handler(&wv, proxy.clone(), tab_id.to_string());
         attach_new_window_handler(&wv, proxy.clone(), incognito);
         attach_permission_handler(&wv, proxy.clone(), site_permissions.clone());
-        attach_download_handler(&wv, proxy.clone(), std::sync::Arc::clone(&download_dir));
+        attach_download_handler(&wv, proxy.clone(), tab_id.to_string());
         attach_audio_playing_handler(&wv, proxy.clone(), tab_id.to_string());
     }
 
@@ -758,6 +757,7 @@ fn trim_tab_memory(
         media_keep(tab)
             || is_comm_app(&tab.url)
             || tab_notifications_allowed(&tab.url, &state.settings)
+            || view_has_download(&tab.id)
     };
 
     if allow_idle {
@@ -999,6 +999,7 @@ fn build_woken_content_tab(
     shared_dl_dir: &std::sync::Arc<std::sync::Mutex<DownloadPrefs>>,
     browser_args: &str,
     ubol_dir: Option<&std::path::Path>,
+    normal_ubol: &mut UbolGate,
     incognito_ubol: &mut UbolGate,
     startup_cookies: &[cookie_store::CookieRecord],
     cookies_restored: &mut bool,
@@ -1073,11 +1074,12 @@ fn build_woken_content_tab(
                 url = %url,
                 "[SESSION] woke sleeping/restored tab: content WebView built OK (deferred)"
             );
-            load_url_or_gate_incognito_ubol(
+            load_url_or_gate_ubol(
                 content_views,
                 tab_id,
                 url,
                 state,
+                normal_ubol,
                 incognito_ubol,
                 ubol_dir,
                 window,
@@ -1125,7 +1127,6 @@ fn webview_args(settings: &config::AppSettings) -> String {
     // came from. Turning them off costs nothing here because the feature was never working.
     let disable_features = vec![
         "msWebOOUI".to_string(),
-        "msSmartScreenProtection".to_string(),
         "SleepingTabs".to_string(),
         "AutoDiscardTabs".to_string(),
         "CalculateNativeWinOcclusion".to_string(),
@@ -1484,27 +1485,5 @@ fn unique_download_path(download_dir: &std::path::Path, filename: &str) -> std::
     } else {
         filename
     };
-    let candidate = download_dir.join(clean_name);
-    if !candidate.exists() {
-        return candidate;
-    }
-
-    let path = std::path::Path::new(clean_name);
-    let stem = path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .filter(|s| !s.is_empty())
-        .unwrap_or("download");
-    let ext = path.extension().and_then(|e| e.to_str());
-    for i in 1..1000 {
-        let filename = match ext {
-            Some(ext) if !ext.is_empty() => format!("{} ({}).{}", stem, i, ext),
-            _ => format!("{} ({})", stem, i),
-        };
-        let candidate = download_dir.join(filename);
-        if !candidate.exists() {
-            return candidate;
-        }
-    }
-    download_dir.join(clean_name)
+    browser::downloads::unique_path(download_dir.join(clean_name))
 }

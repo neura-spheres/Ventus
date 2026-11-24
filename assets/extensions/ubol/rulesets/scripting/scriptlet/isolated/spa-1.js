@@ -46,7 +46,7 @@ const $hasRegexes$ = false;
 const todo = new Set();
 
 if ( $hasHostnames$ ) {
-    const scriptletHostnames = /* 65 */ ["1i1.in","4br.me","enrt.eu","ent4.net","fir3.net","cl1ca.com","elpais.bo","seulink.*","3xyaoi.com","animeid.tv","estacio.br","pelis1.com","canalnet.tv","fgtd.online","homecine.cc","homecine.to","homecine.tv","maxvip.site","pornhot.net","hentai-id.tv","iputitas.net","pelisflix2.*","pelismart.tv","plplayer.com","redecanais.*","encurtalink.*","pelispedia.is","smartpelis.tv","techdiniz.com","flixseries.org","guiasaude.info","infoinvest.org","malfollado.com","portalyaoi.com","redecanaistv.*","animegratis.org","beachcam.meo.pt","dev.encurta.app","devilnovels.com","gastroponto.com","metroseries.net","seriesmetro.net","trueliketop.org","cursomecanet.com","papayaseries.net","saudeecomida.com","seriesbanana.com","esportesdavez.com","guiacripto.online","meufinanceiro.org","portecnologia.com","receitastop.click","redirectnflix.com","guiavidaesaude.com","sabornutritivo.com","blog.whatsappgb.top","comidaefamilia.food","saopaulosecreto.com","nutricaohoje.website","fomedereceitas.online","www2.clubvideostv.com","receitasdocheff.online","diariodocomercio.com.br","investimentosfacil.online","receitasoncaseiras.online"];
+    const scriptletHostnames = /* 68 */ ["1i1.in","4br.me","enrt.eu","ent4.net","fir3.net","cl1ca.com","elpais.bo","seulink.*","3xyaoi.com","animeid.tv","estacio.br","pelis1.com","canalnet.tv","fgtd.online","homecine.cc","homecine.to","homecine.tv","maxvip.site","pornhot.net","hentai-id.tv","iputitas.net","pelisflix2.*","pelismart.tv","plplayer.com","redecanais.*","encurtalink.*","pelispedia.is","smartpelis.tv","techdiniz.com","flixseries.org","guiasaude.info","infoinvest.org","malfollado.com","portalyaoi.com","redecanaistv.*","seriesmp4.club","animegratis.org","beachcam.meo.pt","dev.encurta.app","devilnovels.com","gastroponto.com","metroseries.net","seriesmetro.net","trueliketop.org","cursomecanet.com","papayaseries.net","saudeecomida.com","seriesbanana.com","yandispoiler.net","doramaexpress.com","esportesdavez.com","guiacripto.online","meufinanceiro.org","portecnologia.com","receitastop.click","redirectnflix.com","guiavidaesaude.com","sabornutritivo.com","blog.whatsappgb.top","comidaefamilia.food","saopaulosecreto.com","nutricaohoje.website","fomedereceitas.online","www2.clubvideostv.com","receitasdocheff.online","diariodocomercio.com.br","investimentosfacil.online","receitasoncaseiras.online"];
     const collectArglistRefIndices = (out, hn, r) => {
         let l = 0, i = 0, d = 0;
         let candidate = '';
@@ -91,7 +91,7 @@ if ( $hasHostnames$ ) {
     }
     // Collect arglist references
     if ( todoIndices.size ) {
-        const arglistRefs = /* 65 */ ["15","23","23","23","23","23","30","23","2","31","17","32","19","4","32","32","32","13","32","24","32","16","18,32","29","5,6,7,8","23","32","32","10","32","14","13","32","25","5,6,7,8","26","20","23","3","13","32","32","10","9","32","13","32","28","11","13","22","13","28","13","11","13","13","12","21","13","1","13","27","13","21"];
+        const arglistRefs = /* 68 */ ["15","23","23","23","23","23","32","23","2","33","17","34","19","4","34","34","34","13","34","24","34","16","18,34","31","5,6,7,8","23","34","34","10","34","14","13","34","27","5,6,7,8","25","28","20","23","3","13","34","34","10","9","34","13","34","26","26","30","11","13","22","13","30","13","11","13","13","12","21","13","1","13","29","13","21"];
         for ( const i of todoIndices ) {
             for ( const ref of JSON.parse(`[${arglistRefs[i]}]`) ) {
                 todo.add(ref);
@@ -102,17 +102,19 @@ if ( $hasHostnames$ ) {
 
 if ( $hasRegexes$ ) {
     const scriptletFromRegexes = /* 0 */ [];
-    const { hns } = scriptletGlobals.origins[0];
-    for ( let i = 0, n = scriptletFromRegexes.length; i < n; i += 3 ) {
-        const needle = scriptletFromRegexes[i+0];
-        let regex;
-        for ( const hn of hns ) {
-            if ( hn.includes(needle) === false ) { continue; }
-            if ( regex === undefined ) {
-                regex = new RegExp(scriptletFromRegexes[i+1]);
+    const { hns, path } = scriptletGlobals.origins[0];
+    for ( let i = 0, n = scriptletFromRegexes.length; i < n; i += 2 ) {
+        const { needle, hn, pn } = scriptletFromRegexes[i+0];
+        let rehn, repn;
+        for ( const target of hns ) {
+            if ( target.includes(needle) === false ) { continue; }
+            if ( rehn === undefined ) { rehn = new RegExp(hn); }
+            if ( rehn.test(target) === false ) { continue; }
+            if ( pn && path ) {
+                if ( repn === undefined ) { repn = new RegExp(pn); }
+                if ( repn.test(path) === false ) { continue; }
             }
-            if ( regex.test(hn) === false ) { continue; }
-            for ( const ref of JSON.parse(`[${scriptletFromRegexes[i+2]}]`) ) {
+            for ( const ref of JSON.parse(`[${scriptletFromRegexes[i+1]}]`) ) {
                 todo.add(ref);
             }
         }
@@ -121,8 +123,8 @@ if ( $hasRegexes$ ) {
 
 // Execute scriptlets
 if ( todo.size && todo.has(0) === false ) {
-    const arglists = /* 33 */ ["","1,0,1","1,0,2","5,3,4","8,5,6","8,7,8","8,9,6","15,10,6","5,10,6","1,0,11","8,12,13","8,14,6","11,15,16,17","5,18,19","8,20,13","8,21,13","20,22,6","8,23,6","11,24,16,25","13,26,27","13,28,29","8,14,19","8,30,6","7","11,31,32","6,33,34,35","6,36,37,38","5,39,4","15,40,41","6,42,43,13","1,0,44","1,0,45","8,46,6"];
-    const args = /* 47 */ ["script","lockScreen","/_adBlockDetectorExecuted|checkForbiddenBrowsers/","/^adblock/","$remove$","unlock","1","modalVisited","true","adsCompleted","finalReloadDone","modifiedParagraphs.add","force_ad","2","visited","a[href^=\"https://adesampa.com.br/\"]","[href]","removeParam","last_ads","yes","Ads","clicked_ads","adtura","modal_promo",".download-links a[href^=\"https://unlock.uberxviral.com/#\"]","base64decode","_theme-banner-upper","html","bgPartners2019",".videoContainer > div.beachPartners + div","CLI_02_Dxxxxxxxxxxxxxxx","a[href*=\"://ouo.io/\"]","?s","a.reward_ads[data-url]","href","[data-url]","iframe[data-src]","src","[data-src]","adwallLocked","nf_done_clicks_v3_new","3","a[data-stream][target=\"_blank\"]","data-clicks","ads-popup","url_popup","player"];
+    const arglists = /* 35 */ ["","1,0,1","1,0,2","5,3,4","8,5,6","8,7,8","8,9,6","15,10,6","5,10,6","1,0,11","8,12,13","8,14,6","11,15,16,17","5,18,19","8,20,13","8,21,13","20,22,6","8,23,6","11,24,16,25","13,26,27","13,28,29","8,14,19","8,30,6","7","11,31,32","11,33,34,25","15,35,6","6,36,37,38","6,39,40,41","5,42,4","15,43,44","6,45,46,13","1,0,47","1,0,48","8,49,6"];
+    const args = /* 50 */ ["script","lockScreen","/_adBlockDetectorExecuted|checkForbiddenBrowsers/","/^adblock/","$remove$","unlock","1","modalVisited","true","adsCompleted","finalReloadDone","modifiedParagraphs.add","force_ad","2","visited","a[href^=\"https://adesampa.com.br/\"]","[href]","removeParam","last_ads","yes","Ads","clicked_ads","adtura","modal_promo",".download-links a[href^=\"https://unlock.uberxviral.com/#\"]","base64decode","_theme-banner-upper","html","bgPartners2019",".videoContainer > div.beachPartners + div","CLI_02_Dxxxxxxxxxxxxxxx","a[href*=\"://ouo.io/\"]","?s","a[href^=\"https://seriesmp4.club/dl/?go=aHR0c\"]","?go","yan_hero_ad_shown","a.reward_ads[data-url]","href","[data-url]","iframe[data-src]","src","[data-src]","adwallLocked","nf_done_clicks_v3_new","3","a[data-stream][target=\"_blank\"]","data-clicks","ads-popup","url_popup","player"];
     const { functionRefs } = scriptletGlobals;
     for ( const ref of todo ) {
         if ( ref < 0 ) { continue; }
@@ -137,6 +139,6 @@ if ( todo.size && todo.has(0) === false ) {
 /******************************************************************************/
 
 // End of local scope
-})("fb7f2f86-ef87-4c15-a912-62a035b1c974");
+})("28049053-2f06-4210-9323-9d4634fd8974");
 
 void 0;

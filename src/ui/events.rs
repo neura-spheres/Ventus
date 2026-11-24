@@ -365,6 +365,9 @@ pub enum ChromeCommand {
     ResumeDownload {
         id: String,
     },
+    KeepDownload {
+        id: String,
+    },
     CancelDownload {
         id: String,
     },
@@ -590,6 +593,7 @@ impl ChromeCommand {
             ChromeCommand::DeleteDownload { .. } => Some("delete_download"),
             ChromeCommand::PauseDownload { .. } => Some("pause_download"),
             ChromeCommand::ResumeDownload { .. } => Some("resume_download"),
+            ChromeCommand::KeepDownload { .. } => Some("keep_download"),
             ChromeCommand::CancelDownload { .. } => Some("cancel_download"),
             ChromeCommand::OpenInNewTab { .. } => Some("open_in_new_tab"),
             ChromeCommand::ContextMenuSaveImage { .. } => Some("save_image"),
@@ -717,15 +721,19 @@ pub enum AppEvent {
         tab_id: String,
         url: String,
     },
-    UbolReady {
-        tab_id: String,
-        url: String,
-    },
     UbolSyncComplete {
         generation: u64,
+        incognito: bool,
+        ready: bool,
+    },
+    UbolExtensionEnabled {
+        generation: u64,
+        incognito: bool,
+        extension_id: Option<String>,
     },
     UbolSyncTimeout {
         generation: u64,
+        incognito: bool,
     },
     HttpsUpgradeFailed {
         tab_id: String,
@@ -811,17 +819,30 @@ pub enum AppEvent {
     DownloadResume {
         id: String,
     },
-    AccelProbe {
+    /// WebView2 asked to start a download. Its deferral is parked under `id` until the save
+    /// path is known.
+    DownloadRequested {
         id: String,
-        url: String,
     },
-    AccelDecision {
+    DownloadReady {
         id: String,
-        accelerate: bool,
-        url: String,
-        final_url: String,
-        total: u64,
+        target: Option<std::path::PathBuf>,
+        overwrite: bool,
+        accel: Option<crate::browser::accel_download::ProbeResult>,
         referer: String,
+    },
+    /// The navigation in `tab_id` turned into a download, so no document will ever load.
+    /// `source` is the page the tab still shows (blank for a fresh tab).
+    DownloadNavigation {
+        tab_id: String,
+        url: String,
+        source: String,
+    },
+    /// Delayed retry of a first load that aborted. A download aborts its navigation too, so the
+    /// retry waits to learn whether one started.
+    AbortedNavRetry {
+        tab_id: String,
+        url: String,
     },
     /// A native download reached a terminal state. `canceled` distinguishes a user
     /// cancel from a real failure.
@@ -829,6 +850,9 @@ pub enum AppEvent {
         id: String,
         success: bool,
         canceled: bool,
+        path: Option<String>,
+        /// Set when a risky file waits for the user: whether keeping it replaces an old file.
+        review: Option<bool>,
     },
     DownloadCompleted {
         url: String,
@@ -1056,8 +1080,8 @@ impl AppEvent {
             AppEvent::ContentBlackProbe { .. } => "content_black_probe",
             AppEvent::ContentNavigationFailed { .. } => "content_navigation_failed",
             AppEvent::ContentStrictBlocked { .. } => "content_strict_blocked",
-            AppEvent::UbolReady { .. } => "ubol_ready",
             AppEvent::UbolSyncComplete { .. } => "ubol_sync_complete",
+            AppEvent::UbolExtensionEnabled { .. } => "ubol_extension_enabled",
             AppEvent::UbolSyncTimeout { .. } => "ubol_sync_timeout",
             AppEvent::HttpsUpgradeFailed { .. } => "https_upgrade_failed",
             AppEvent::ContentMetadata { .. } => "content_metadata",
@@ -1077,8 +1101,10 @@ impl AppEvent {
             AppEvent::DownloadProgress { .. } => "download_progress",
             AppEvent::DownloadPaused { .. } => "download_paused",
             AppEvent::DownloadResume { .. } => "download_resume",
-            AppEvent::AccelProbe { .. } => "accel_probe",
-            AppEvent::AccelDecision { .. } => "accel_decision",
+            AppEvent::DownloadRequested { .. } => "download_requested",
+            AppEvent::DownloadReady { .. } => "download_ready",
+            AppEvent::DownloadNavigation { .. } => "download_navigation",
+            AppEvent::AbortedNavRetry { .. } => "aborted_nav_retry",
             AppEvent::DownloadDone { .. } => "download_done",
             AppEvent::DownloadCompleted { .. } => "download_completed",
             AppEvent::CopyImageResult { .. } => "copy_image_result",

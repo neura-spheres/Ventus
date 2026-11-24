@@ -89,7 +89,7 @@ pub fn normalize_host(host: &str) -> String {
 pub fn host_matches_list<S: AsRef<str>>(host: &str, list: &[S]) -> bool {
     let host = normalize_host(host);
     let parts: Vec<&str> = host.split('.').collect();
-    for i in 0..parts.len().saturating_sub(1) {
+    for i in 0..parts.len().saturating_sub(1).max(1) {
         let candidate = parts[i..].join(".");
         if list.iter().any(|item| item.as_ref() == candidate) {
             return true;
@@ -134,6 +134,12 @@ pub fn is_x_auth_url(url: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn single_label_hosts_can_be_excepted() {
+        assert!(host_matches_list("localhost", &["localhost"]));
+        assert!(!host_matches_list("example.com", &["com"]));
+    }
 
     #[test]
     fn x_urls_require_real_x_hosts() {

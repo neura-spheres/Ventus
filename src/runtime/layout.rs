@@ -37,7 +37,7 @@ struct AppLayout {
     devtools_divider: Option<Rect>,
 }
 
-const INCOGNITO_UBOL_SYNC_TIMEOUT_MS: u64 = 5000;
+const UBOL_SYNC_TIMEOUT_MS: u64 = 15000;
 
 impl AppLayout {
     fn calculate(
@@ -421,8 +421,14 @@ fn webview_cookie_db_exists(data_dir: &std::path::Path) -> bool {
 struct UbolGate {
     generation: u64,
     running: bool,
+    // Startup failed: pages load unfiltered and retries run without holding them.
+    failed: bool,
     enabled: Option<bool>,
+    // Sites uBOL was told to leave alone, and the tab whose view is doing the work.
+    sites: Vec<String>,
+    owner: String,
     reloads: HashMap<String, String>,
+    probe: Option<WebView>,
 }
 
 fn ubol_dir(data_dir: &std::path::Path) -> Option<std::path::PathBuf> {
@@ -552,38 +558,35 @@ mod ubol_update_tests {
     }
 }
 
-fn active_ubol_enabled(state: &AppState) -> bool {
-    if !state.settings.privacy.ad_blocker_enabled {
-        return false;
+fn ubol_sites(state: &AppState) -> Vec<String> {
+    let mut sites: Vec<String> = crate::adblock::BUILTIN_AD_BLOCK_EXCEPTION_HOSTS
+        .iter()
+        .map(|host| host.to_string())
+        .chain(state.ad_block_engine.exceptions().iter().cloned())
+        .chain(state.session_ad_block_exceptions.iter().cloned())
+        .filter(|host| !host.is_empty())
+        .collect();
+    if !state.x_login_compat_tabs.is_empty() {
+        sites.extend(["x.com".to_string(), "twitter.com".to_string()]);
     }
-    let Some(id) = state.tab_manager.active_tab_id.as_ref() else {
-        return false;
-    };
-    let Some(tab) = state.tab_manager.get_tab(id) else {
-        return false;
-    };
-    if !tab.url.starts_with("http://") && !tab.url.starts_with("https://") {
-        return false;
-    }
-    !state.ad_blocker_site_excepted(&tab.url) && !state.x_login_compat(id, &tab.url)
+    sites.sort();
+    sites.dedup();
+    sites
 }
 
-fn incognito_ubol_enabled_for_url(state: &AppState, tab_id: &str, url: &str) -> bool {
-    if !state.tab_manager.tab_is_incognito(tab_id) {
-        return false;
-    }
-    if !state.settings.privacy.ad_blocker_enabled {
-        return false;
-    }
-    if !url.starts_with("http://") && !url.starts_with("https://") {
-        return false;
-    }
-    !state.ad_blocker_site_excepted(url) && !state.x_login_compat(tab_id, url)
+fn ubol_ready(gate: &UbolGate, sites: &[String]) -> bool {
+    !gate.running && gate.enabled == Some(true) && gate.sites == sites
+}
+
+fn is_web_url(url: &str) -> bool {
+    url.starts_with("http://") || url.starts_with("https://")
 }
 
 #[allow(clippy::too_many_arguments)]
-fn ensure_incognito_ubol_ready(
+fn ensure_ubol_ready(
     gate: &mut UbolGate,
+    incognito: bool,
+    sites: Vec<String>,
     views: &HashMap<String, WebView>,
     tab_id: &str,
     dir: Option<&std::path::Path>,
@@ -593,51 +596,204 @@ fn ensure_incognito_ubol_ready(
     let Some(dir) = dir else {
         return false;
     };
-    if gate.running || gate.enabled == Some(true) {
+    // A closed view never answers, so let another tab take over.
+    let orphaned = gate.probe.is_none() && !views.contains_key(&gate.owner);
+    if gate.running && !orphaned {
         return true;
     }
     let Some(wv) = views.get(tab_id) else {
         return false;
     };
+    // A site change needs no extension reload.
+    let refresh = gate.enabled != Some(true);
+    gate.sites = sites;
+    gate.owner = tab_id.to_string();
     gate.generation = gate.generation.wrapping_add(1).max(1);
     let generation = gate.generation;
     gate.running = true;
-    tracing::info!(target: "ventus::ubol", generation, tab = %tab_id, "ubol: incognito sync started");
+    tracing::info!(target: "ventus::ubol", generation, incognito, tab = %tab_id, "ubol: initialization started");
     let proxy_done = proxy.clone();
-    browser::extensions::sync_ubol_with_done(wv, dir, true, move || {
-        let _ = proxy_done.send_event(AppEvent::UbolSyncComplete { generation });
+    browser::extensions::sync_ubol(wv, dir, true, refresh, move |extension_id| {
+        let _ = proxy_done.send_event(AppEvent::UbolExtensionEnabled {
+            generation,
+            incognito,
+            extension_id,
+        });
     });
     let proxy_timeout = proxy.clone();
     rt.spawn(async move {
-        tokio::time::sleep(Duration::from_millis(INCOGNITO_UBOL_SYNC_TIMEOUT_MS)).await;
-        let _ = proxy_timeout.send_event(AppEvent::UbolSyncTimeout { generation });
+        tokio::time::sleep(Duration::from_millis(UBOL_SYNC_TIMEOUT_MS)).await;
+        let _ = proxy_timeout.send_event(AppEvent::UbolSyncTimeout {
+            generation,
+            incognito,
+        });
     });
     true
 }
 
-fn finish_incognito_ubol_sync(gate: &mut UbolGate, generation: u64, timeout: bool) -> bool {
+fn build_ubol_probe(
+    window: &tao::window::Window,
+    context: &mut wry::WebContext,
+    extension_id: &str,
+    sites: &[String],
+    incognito: bool,
+    generation: u64,
+    proxy: &tao::event_loop::EventLoopProxy<AppEvent>,
+) -> anyhow::Result<WebView> {
+    anyhow::ensure!(
+        !extension_id.is_empty() && extension_id.bytes().all(|b| (b'a'..=b'p').contains(&b)),
+        "invalid extension ID"
+    );
+    let url = format!("chrome-extension://{extension_id}/dashboard.html");
+    let allowed = url.clone();
+    let script = include_str!("../ui/ubol-ready.js")
+        .replace("__UBOL_SITES__", &serde_json::to_string(sites)?);
+    let proxy = proxy.clone();
+    Ok(WebViewBuilder::new_as_child(window)
+        .with_web_context(context)
+        .with_bounds(Rect {
+            x: 0,
+            y: 0,
+            width: 1,
+            height: 1,
+        })
+        .with_visible(false)
+        .with_devtools(cfg!(debug_assertions))
+        .with_initialization_script(&script)
+        .with_navigation_handler(move |target| target == allowed)
+        .with_new_window_req_handler(|_| false)
+        .with_ipc_handler(move |request| {
+            if let Ok(value) = serde_json::from_str::<serde_json::Value>(request.body()) {
+                if let Some(ready) = value.get("ready").and_then(|v| v.as_bool()) {
+                    tracing::info!(target: "ventus::ubol", incognito, details = %value, "ubol: readiness checked");
+                    let _ = proxy.send_event(AppEvent::UbolSyncComplete {
+                        generation,
+                        incognito,
+                        ready,
+                    });
+                }
+            }
+        })
+        .with_url(url)
+        .build()?)
+}
+
+fn finish_ubol_sync(gate: &mut UbolGate, generation: u64, timeout: bool) -> bool {
     if !gate.running || gate.generation != generation {
         return false;
     }
     gate.running = false;
+    gate.probe = None;
     if timeout {
         gate.enabled = None;
-        tracing::warn!(target: "ventus::ubol", generation, "ubol: incognito sync timed out");
+        gate.failed = true;
+        tracing::warn!(target: "ventus::ubol", generation, "ubol: initialization failed or timed out");
     } else {
         gate.enabled = Some(true);
-        tracing::info!(target: "ventus::ubol", generation, "ubol: incognito sync completed");
+        gate.failed = false;
+        tracing::info!(target: "ventus::ubol", generation, "ubol: rules and content scripts ready");
     }
     true
 }
 
-fn incognito_ubol_reload_after_sync(url: &str) -> bool {
-    let Ok(url) = url::Url::parse(url) else {
-        return false;
-    };
-    matches!(
-        url.host_str().unwrap_or_default(),
-        "youtube.com" | "www.youtube.com" | "m.youtube.com" | "music.youtube.com"
-    )
+// None: leave the blocker alone. Some(hold): start it, holding the page only if `hold`.
+fn ubol_start_mode(gate: &UbolGate, sites: &[String], loading: bool) -> Option<bool> {
+    if gate.running || ubol_ready(gate, sites) || (gate.failed && gate.enabled.is_none()) {
+        return None;
+    }
+    // Reloading a finished page would throw away whatever the user typed into it.
+    Some(loading && !gate.failed)
+}
+
+#[cfg(test)]
+mod ubol_startup_tests {
+    use super::*;
+
+    #[test]
+    fn failed_startup_is_not_retried_by_every_event() {
+        let mut gate = UbolGate {
+            generation: 1,
+            running: true,
+            ..Default::default()
+        };
+        assert!(finish_ubol_sync(&mut gate, 1, true));
+        assert_eq!(ubol_start_mode(&gate, &[], true), None);
+        // Turning the blocker off and on again retries without holding the page.
+        gate.enabled = Some(false);
+        assert_eq!(ubol_start_mode(&gate, &[], true), Some(false));
+        gate.running = true;
+        assert_eq!(ubol_start_mode(&gate, &[], true), None);
+        assert!(finish_ubol_sync(&mut gate, 1, false));
+        assert!(!gate.failed);
+    }
+
+    #[test]
+    fn changed_exceptions_need_a_new_sync() {
+        let gate = UbolGate {
+            enabled: Some(true),
+            sites: vec!["a.test".into()],
+            ..Default::default()
+        };
+        assert!(ubol_ready(&gate, &["a.test".to_string()]));
+        assert_eq!(ubol_start_mode(&gate, &["a.test".into()], true), None);
+        assert_eq!(ubol_start_mode(&gate, &[], true), Some(true));
+    }
+
+    #[test]
+    fn only_loading_pages_are_held() {
+        let gate = UbolGate {
+            enabled: Some(false),
+            ..Default::default()
+        };
+        assert_eq!(ubol_start_mode(&gate, &[], false), Some(false));
+        assert_eq!(ubol_start_mode(&gate, &[], true), Some(true));
+    }
+
+    #[test]
+    fn stale_completion_and_late_timeout_cannot_release_current_navigation() {
+        let mut gate = UbolGate {
+            generation: 2,
+            running: true,
+            ..Default::default()
+        };
+        assert!(!finish_ubol_sync(&mut gate, 1, false));
+        assert!(gate.running);
+        assert_eq!(gate.enabled, None);
+        assert!(finish_ubol_sync(&mut gate, 2, false));
+        assert_eq!(gate.enabled, Some(true));
+        assert!(!finish_ubol_sync(&mut gate, 2, true));
+        assert_eq!(gate.enabled, Some(true));
+    }
+
+    #[test]
+    fn failure_or_timeout_does_not_claim_protection_is_ready() {
+        let mut gate = UbolGate {
+            generation: 1,
+            running: true,
+            ..Default::default()
+        };
+        assert!(finish_ubol_sync(&mut gate, 1, true));
+        assert_eq!(gate.enabled, None);
+        assert!(!gate.running);
+    }
+
+    #[test]
+    fn normal_and_private_readiness_are_independent() {
+        let mut normal = UbolGate {
+            generation: 1,
+            running: true,
+            ..Default::default()
+        };
+        let private = UbolGate {
+            generation: 1,
+            running: true,
+            ..Default::default()
+        };
+        assert!(finish_ubol_sync(&mut normal, 1, false));
+        assert_eq!(normal.enabled, Some(true));
+        assert_eq!(private.enabled, None);
+        assert!(private.running);
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -666,12 +822,13 @@ fn load_url_and_watch(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn load_url_or_gate_incognito_ubol(
+fn load_url_or_gate_ubol(
     views: &HashMap<String, WebView>,
     tab_id: &str,
     url: &str,
     state: &AppState,
-    gate: &mut UbolGate,
+    normal_gate: &mut UbolGate,
+    incognito_gate: &mut UbolGate,
     dir: Option<&std::path::Path>,
     window: &tao::window::Window,
     proxy: &tao::event_loop::EventLoopProxy<AppEvent>,
@@ -682,34 +839,32 @@ fn load_url_or_gate_incognito_ubol(
     watches: &mut HashMap<String, u64>,
     next: &mut u64,
 ) {
-    if incognito_ubol_enabled_for_url(state, tab_id, url)
-        && gate.enabled != Some(true)
-        && dir.is_some()
-    {
-        let defer = incognito_ubol_reload_after_sync(url);
-        if defer {
-            gate.reloads.insert(tab_id.to_string(), url.to_string());
-        }
-        let sync_started = ensure_incognito_ubol_ready(gate, views, tab_id, dir, proxy, rt);
-        if defer && sync_started {
-            // Ad-heavy sites (YouTube) would otherwise load with ads during the one-time
-            // incognito uBOL install (~3-4 s), then reload ad-free — a visible ad flash. Hold
-            // the load until the sync finishes so it loads clean once. UbolSyncComplete (or the
-            // UbolSyncTimeout backstop) loads it via reload_incognito_ubol_pages.
-            tracing::info!(target: "ventus::ubol", tab = %tab_id, url = %url, "ubol: incognito load deferred until uBOL ready (no ad flash)");
+    let incognito = state.tab_manager.tab_is_incognito(tab_id);
+    let gate = if incognito {
+        incognito_gate
+    } else {
+        normal_gate
+    };
+    let sites = ubol_sites(state);
+    let wanted = state.settings.privacy.ad_blocker_enabled
+        && is_web_url(url)
+        && !ubol_ready(gate, &sites);
+    if wanted && gate.failed {
+        let _ = ensure_ubol_ready(gate, incognito, sites, views, tab_id, dir, proxy, rt);
+    } else if wanted && dir.is_some() {
+        // Queue the latest URL only; nothing reaches the network before script registration.
+        gate.reloads.insert(tab_id.to_string(), url.to_string());
+        if ensure_ubol_ready(gate, incognito, sites, views, tab_id, dir, proxy, rt) {
+            tracing::info!(target: "ventus::ubol", incognito, tab = %tab_id, "ubol: navigation held until initialization completes");
             return;
         }
-        if sync_started {
-            tracing::info!(target: "ventus::ubol", tab = %tab_id, url = %url, "ubol: incognito sync pending; loading immediately");
-        } else {
-            tracing::warn!(target: "ventus::ubol", tab = %tab_id, url = %url, "ubol: incognito sync unavailable; loading immediately");
-        }
+        gate.reloads.remove(tab_id);
     }
     let _ = (window, incognito_web_context, shared_dl_dir, browser_args);
     let _ = load_url_and_watch(views, tab_id, url, rt, proxy, watches, next);
 }
 
-fn reload_incognito_ubol_pages(
+fn load_ubol_pending_pages(
     gate: &mut UbolGate,
     views: &HashMap<String, WebView>,
     state: &AppState,
@@ -734,7 +889,7 @@ fn reload_incognito_ubol_pages(
             continue;
         }
         if load_url_and_watch(views, &tab_id, &url, rt, proxy, watches, next) {
-            tracing::info!(target: "ventus::ubol", tab = %tab_id, url = %url, "ubol: reloaded incognito page after sync");
+            tracing::info!(target: "ventus::ubol", tab = %tab_id, url = %url, "ubol: starting queued navigation after initialization");
         }
     }
 }
@@ -743,37 +898,47 @@ fn sync_active_ubol(
     views: &HashMap<String, WebView>,
     state: &AppState,
     dir: Option<&std::path::Path>,
-    done: &mut bool,
-    last: &mut Option<bool>,
-    last_id: &mut Option<String>,
-    gate: &mut UbolGate,
+    normal_gate: &mut UbolGate,
+    incognito_gate: &mut UbolGate,
+    proxy: &tao::event_loop::EventLoopProxy<AppEvent>,
+    rt: &tokio::runtime::Runtime,
 ) {
     let Some(dir) = dir else {
         return;
     };
-    let Some(id) = state.tab_manager.active_tab_id.as_ref() else {
+    let Some(tab) = state.tab_manager.active_tab() else {
         return;
     };
+    let id = &tab.id;
     let Some(wv) = views.get(id) else {
         return;
     };
-    let enabled = active_ubol_enabled(state);
-    if state.tab_manager.tab_is_incognito(id) {
-        if gate.running {
-            return;
+    let incognito = state.tab_manager.tab_is_incognito(id);
+    let gate = if incognito {
+        incognito_gate
+    } else {
+        normal_gate
+    };
+    if !state.settings.privacy.ad_blocker_enabled {
+        if !gate.running && gate.enabled != Some(false) {
+            gate.enabled = Some(false);
+            browser::extensions::sync_ubol(wv, dir, false, false, |_| {});
         }
-        if enabled {
-            return;
-        }
-        gate.enabled = Some(false);
-    }
-    if *done && *last == Some(enabled) && last_id.as_deref() == Some(id.as_str()) {
         return;
     }
-    browser::extensions::sync_ubol(wv, dir, enabled);
-    *done = true;
-    *last = Some(enabled);
-    *last_id = Some(id.clone());
+    if !is_web_url(&tab.url) {
+        return;
+    }
+    let sites = ubol_sites(state);
+    if let Some(hold) = ubol_start_mode(gate, &sites, active_tab_loading(state)) {
+        // Covers native links that start before the blocker is ready.
+        if hold {
+            gate.reloads.insert(id.clone(), tab.url.clone());
+            #[cfg(windows)]
+            let _ = unsafe { wv.controller().CoreWebView2().and_then(|core| core.Stop()) };
+        }
+        let _ = ensure_ubol_ready(gate, incognito, sites, views, id, Some(dir), proxy, rt);
+    }
 }
 
 fn restore_startup_cookies(

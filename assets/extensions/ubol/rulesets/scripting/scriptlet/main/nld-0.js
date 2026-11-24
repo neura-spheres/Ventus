@@ -102,17 +102,19 @@ if ( $hasHostnames$ ) {
 
 if ( $hasRegexes$ ) {
     const scriptletFromRegexes = /* 0 */ [];
-    const { hns } = scriptletGlobals.origins[0];
-    for ( let i = 0, n = scriptletFromRegexes.length; i < n; i += 3 ) {
-        const needle = scriptletFromRegexes[i+0];
-        let regex;
-        for ( const hn of hns ) {
-            if ( hn.includes(needle) === false ) { continue; }
-            if ( regex === undefined ) {
-                regex = new RegExp(scriptletFromRegexes[i+1]);
+    const { hns, path } = scriptletGlobals.origins[0];
+    for ( let i = 0, n = scriptletFromRegexes.length; i < n; i += 2 ) {
+        const { needle, hn, pn } = scriptletFromRegexes[i+0];
+        let rehn, repn;
+        for ( const target of hns ) {
+            if ( target.includes(needle) === false ) { continue; }
+            if ( rehn === undefined ) { rehn = new RegExp(hn); }
+            if ( rehn.test(target) === false ) { continue; }
+            if ( pn && path ) {
+                if ( repn === undefined ) { repn = new RegExp(pn); }
+                if ( repn.test(path) === false ) { continue; }
             }
-            if ( regex.test(hn) === false ) { continue; }
-            for ( const ref of JSON.parse(`[${scriptletFromRegexes[i+2]}]`) ) {
+            for ( const ref of JSON.parse(`[${scriptletFromRegexes[i+1]}]`) ) {
                 todo.add(ref);
             }
         }
@@ -121,7 +123,7 @@ if ( $hasRegexes$ ) {
 
 // Execute scriptlets
 if ( todo.size && todo.has(0) === false ) {
-    const arglists = /* 23 */ ["","12,0,1","14,2","19,3","13,4","14,5","15,6","15,7","12,0,8","15,9","46,10,11,12","15,13","22,11,14","11,15,16","19,17","12,18,19","7,20","11,21,22","50","1,23,24,25","11,26,27","1,28,24,25","7,29"];
+    const arglists = /* 23 */ ["","12,0,1","14,2","17,3","13,4","14,5","15,6","15,7","12,0,8","15,9","47,10,11,12","15,13","22,11,14","11,15,16","17,17","12,18,19","7,20","11,21,22","50","1,23,24,25","11,26,27","1,28,24,25","7,29"];
     const args = /* 30 */ ["document.createElement","adsbygoogle.js","ckad","Object.prototype.autoRecov","assets.prod.webx.talpa.digital/ad/view/",".height() === 0","securepubads.g.doubleclick.net","v.fwmrm.net","adsbygoogle","/a[ab]\\.tweakers\\.nl/","Period[id*=\"-ad-\"]","",".mpd","pubads.g.doubleclick.net/gampad/ads","Flags.autoRecov","DAB","noopFunc","Object.prototype.disableAb","Math","Flags.newInject","assets.preroll","BannerManager","undefined","function () { [native code] }","6000","0.001","cookie","true","[native code]","adUrl"];
     const { functionRefs } = scriptletGlobals;
     for ( const ref of todo ) {
@@ -137,6 +139,6 @@ if ( todo.size && todo.has(0) === false ) {
 /******************************************************************************/
 
 // End of local scope
-})("fb7f2f86-ef87-4c15-a912-62a035b1c974");
+})("28049053-2f06-4210-9323-9d4634fd8974");
 
 void 0;

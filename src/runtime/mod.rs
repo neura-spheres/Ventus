@@ -79,6 +79,8 @@ const MAX_PRESERVED_WEBVIEWS: usize = 32;
 const HEAL_CONTENT_EVERY: Duration = Duration::from_millis(750);
 const HEAL_SETTLE_REPEATS: u8 = 6;
 const MAX_DOWNLOAD_RESUMES: u32 = 8;
+// Long enough for a download to announce itself after aborting its navigation.
+const ABORT_RETRY_DELAY: Duration = Duration::from_millis(1500);
 const DOWNLOAD_RESUME_DELAY: Duration = Duration::from_secs(2);
 const SESSION_SAVE_DELAY: Duration = Duration::from_secs(3);
 const WEBVIEW_PROFILE_RELEASE_TIMEOUT: Duration = Duration::from_secs(12);
@@ -848,10 +850,8 @@ pub fn run() {
     let mut save_id = 0u64;
     let mut sync_id = 0u64;
     let mut sync_dirty = (false, false, false);
+    let mut normal_ubol = UbolGate::default();
     let mut incognito_ubol = UbolGate::default();
-    let mut ubol_done = false;
-    let mut ubol_enabled: Option<bool> = None;
-    let mut ubol_tab: Option<String> = None;
     let mut first_load_after_layout: Option<(String, String)> = None;
 
     if !first_url.starts_with("neura://") {
@@ -912,15 +912,6 @@ pub fn run() {
                 first_load_after_layout = Some((first_tab_id.clone(), first_url.clone()));
                 #[cfg(windows)]
                 track_content_hwnd(first_hwnd, &first_tab_id, &mut content_hwnds);
-                sync_active_ubol(
-                    &content_views,
-                    &state,
-                    ubol_dir.as_deref(),
-                    &mut ubol_done,
-                    &mut ubol_enabled,
-                    &mut ubol_tab,
-                    &mut incognito_ubol,
-                );
             }
             Err(e) => {
                 tracing::error!(
@@ -947,11 +938,12 @@ pub fn run() {
         &window,
     );
     if let Some((tab_id, url)) = first_load_after_layout.take() {
-        load_url_or_gate_incognito_ubol(
+        load_url_or_gate_ubol(
             &content_views,
             &tab_id,
             &url,
             &state,
+            &mut normal_ubol,
             &mut incognito_ubol,
             ubol_dir.as_deref(),
             &window,
@@ -976,6 +968,11 @@ pub fn run() {
         set_screenshot_protection(window.hwnd() as isize, is_incog && !allow_ss);
     }
 
+    // Clipboard writes must name a real owner window before EmptyClipboard.
+    #[cfg(windows)]
+    let clipboard_owner = window.hwnd() as isize;
+    #[cfg(not(windows))]
+    let clipboard_owner = 0isize;
     let proxy_main = proxy.clone();
     let ai_generation = Arc::new(AtomicUsize::new(0));
     let mut chrome_shown = true;

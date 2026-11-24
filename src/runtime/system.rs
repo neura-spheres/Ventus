@@ -243,7 +243,7 @@ async fn fetch_image_bytes(url: &str, referer: &str) -> anyhow::Result<Vec<u8>> 
 /// the Windows clipboard so the user can paste it into any application.
 /// Uses a 24-bit BGR bottom-up DIB which is universally accepted by Win32 apps.
 #[cfg(windows)]
-fn write_image_to_clipboard(bytes: &[u8]) -> anyhow::Result<()> {
+fn write_image_to_clipboard(bytes: &[u8], owner: isize) -> anyhow::Result<()> {
     use windows::Win32::System::DataExchange::{
         CloseClipboard, EmptyClipboard, RegisterClipboardFormatW,
     };
@@ -286,7 +286,7 @@ fn write_image_to_clipboard(bytes: &[u8]) -> anyhow::Result<()> {
         }
     }
 
-    open_clipboard_retry()?;
+    open_clipboard_retry(owner)?;
     let result = (|| -> anyhow::Result<()> {
         unsafe { EmptyClipboard()? };
         set_clipboard_mem(8u32, &dib)?;
@@ -303,11 +303,12 @@ fn write_image_to_clipboard(bytes: &[u8]) -> anyhow::Result<()> {
 }
 
 #[cfg(windows)]
-fn open_clipboard_retry() -> anyhow::Result<()> {
+fn open_clipboard_retry(owner: isize) -> anyhow::Result<()> {
     use windows::Win32::Foundation::HWND;
     use windows::Win32::System::DataExchange::OpenClipboard;
+    anyhow::ensure!(owner != 0, "clipboard owner is unavailable");
     for _ in 0..12 {
-        if unsafe { OpenClipboard(HWND(0)) }.is_ok() {
+        if unsafe { OpenClipboard(HWND(owner)) }.is_ok() {
             return Ok(());
         }
         std::thread::sleep(std::time::Duration::from_millis(15));
@@ -317,7 +318,7 @@ fn open_clipboard_retry() -> anyhow::Result<()> {
 
 #[cfg(windows)]
 fn set_clipboard_mem(fmt: u32, data: &[u8]) -> anyhow::Result<()> {
-    use windows::Win32::Foundation::HANDLE;
+    use windows::Win32::Foundation::{GlobalFree, HANDLE};
     use windows::Win32::System::DataExchange::SetClipboardData;
     use windows::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE};
 
@@ -325,11 +326,13 @@ fn set_clipboard_mem(fmt: u32, data: &[u8]) -> anyhow::Result<()> {
         let hmem = GlobalAlloc(GMEM_MOVEABLE, data.len())?;
         let ptr = GlobalLock(hmem) as *mut u8;
         if ptr.is_null() {
+            let _ = GlobalFree(hmem);
             return Err(anyhow::anyhow!("GlobalLock failed"));
         }
         std::ptr::copy_nonoverlapping(data.as_ptr(), ptr, data.len());
         let _ = GlobalUnlock(hmem);
         if let Err(e) = SetClipboardData(fmt, HANDLE(hmem.0 as isize)) {
+            let _ = GlobalFree(hmem);
             return Err(anyhow::anyhow!("SetClipboardData: {e}"));
         }
         Ok(())
@@ -337,7 +340,7 @@ fn set_clipboard_mem(fmt: u32, data: &[u8]) -> anyhow::Result<()> {
 }
 
 #[cfg(not(windows))]
-fn write_image_to_clipboard(_bytes: &[u8]) -> anyhow::Result<()> {
+fn write_image_to_clipboard(_bytes: &[u8], _owner: isize) -> anyhow::Result<()> {
     Err(anyhow::anyhow!(
         "clipboard write not supported on this platform"
     ))
@@ -383,37 +386,28 @@ fn read_clipboard_text() -> Option<String> {
 }
 
 #[cfg(windows)]
-fn write_clipboard_text(text: &str) -> anyhow::Result<()> {
-    use windows::Win32::Foundation::HWND;
-    use windows::Win32::System::DataExchange::{CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData};
-    use windows::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE};
-    use windows::Win32::Foundation::HANDLE;
-
-    const CF_UNICODETEXT: u32 = 13;
-    let wide: Vec<u16> = text.encode_utf16().chain(std::iter::once(0)).collect();
-    let byte_len = wide.len() * 2;
+fn write_clipboard_text(text: &str, owner: isize) -> anyhow::Result<()> {
+    use windows::Win32::System::DataExchange::{CloseClipboard, EmptyClipboard};
+    let bytes: Vec<u8> = text
+        .encode_utf16()
+        .chain(Some(0))
+        .flat_map(u16::to_le_bytes)
+        .collect();
+    open_clipboard_retry(owner)?;
+    let result = (|| -> anyhow::Result<()> {
+        unsafe {
+            EmptyClipboard()?;
+        }
+        set_clipboard_mem(13, &bytes)
+    })();
     unsafe {
-        OpenClipboard(HWND(0))?;
-        EmptyClipboard()?;
-        let hmem = GlobalAlloc(GMEM_MOVEABLE, byte_len)?;
-        let ptr = GlobalLock(hmem) as *mut u16;
-        if ptr.is_null() {
-            let _ = CloseClipboard();
-            return Err(anyhow::anyhow!("GlobalLock failed"));
-        }
-        std::ptr::copy_nonoverlapping(wide.as_ptr(), ptr, wide.len());
-        let _ = GlobalUnlock(hmem);
-        if let Err(e) = SetClipboardData(CF_UNICODETEXT, HANDLE(hmem.0 as isize)) {
-            let _ = CloseClipboard();
-            return Err(anyhow::anyhow!("SetClipboardData: {e}"));
-        }
         let _ = CloseClipboard();
-        Ok(())
     }
+    result
 }
 
 #[cfg(not(windows))]
-fn write_clipboard_text(_text: &str) -> anyhow::Result<()> {
+fn write_clipboard_text(_text: &str, _owner: isize) -> anyhow::Result<()> {
     Ok(())
 }
 
@@ -456,9 +450,16 @@ fn copy_image_fetch_script(url: &str) -> String {
   function __post(ok,data){{
     try{{ window.ipc.postMessage(JSON.stringify({{cmd:'copy_image_data',ok:ok,data:data||'',src:__u}})); }}catch(e){{}}
   }}
+  function __fetch(credentials){{
+    return fetch(__u,{{credentials:credentials}})
+      .then(function(r){{ if(!r.ok) throw new Error('status'); return r.blob(); }});
+  }}
   try{{
-    fetch(__u,{{credentials:'include'}})
-      .then(function(r){{ if(!r.ok) throw new Error('status'); return r.blob(); }})
+    var __crossOrigin = new URL(__u, location.href).origin !== location.origin;
+    // Public image CDNs (including Twitter) allow anonymous CORS, not credentialed CORS.
+    var __image = __fetch(__crossOrigin ? 'omit' : 'include');
+    if(__crossOrigin) __image = __image.catch(function(){{ return __fetch('include'); }});
+    __image
       .then(function(b){{
         if(!/^image\//.test(b.type||'')) throw new Error('type');
         var fr=new FileReader();
@@ -471,4 +472,105 @@ fn copy_image_fetch_script(url: &str) -> String {
 }})()"#,
         url = url_js
     )
+}
+
+#[cfg(all(test, windows))]
+mod clipboard_tests {
+    use super::*;
+
+    #[test]
+    fn clipboard_write_rejects_a_missing_owner() {
+        assert!(open_clipboard_retry(0).is_err());
+    }
+
+    #[test]
+    #[ignore = "temporarily writes the desktop clipboard; run with clipboard backup/restore"]
+    fn native_image_and_text_clipboard_round_trip() -> anyhow::Result<()> {
+        use image::ImageEncoder;
+        use windows::Win32::{
+            Foundation::{HGLOBAL, HINSTANCE, HWND},
+            System::{
+                DataExchange::{
+                    CloseClipboard, GetClipboardData, GetClipboardOwner, RegisterClipboardFormatW,
+                },
+                Memory::{GlobalLock, GlobalSize, GlobalUnlock},
+            },
+            UI::WindowsAndMessaging::{CreateWindowExW, DestroyWindow, HMENU, WS_OVERLAPPED},
+        };
+        let owner = unsafe {
+            CreateWindowExW(
+                Default::default(),
+                windows::core::w!("STATIC"),
+                windows::core::w!("Ventus clipboard verification"),
+                WS_OVERLAPPED,
+                0,
+                0,
+                1,
+                1,
+                HWND(0),
+                HMENU(0),
+                HINSTANCE(0),
+                None,
+            )
+        };
+        anyhow::ensure!(owner.0 != 0, "clipboard test window could not be created");
+        let result = (|| -> anyhow::Result<()> {
+            let mut png = Vec::new();
+            image::codecs::png::PngEncoder::new(&mut png).write_image(
+                &[255, 0, 0, 255, 0, 255, 0, 255],
+                2,
+                1,
+                image::ExtendedColorType::Rgba8,
+            )?;
+            let hwnd = owner.0;
+            std::thread::spawn(move || write_image_to_clipboard(&png, hwnd))
+                .join()
+                .unwrap()?;
+            open_clipboard_retry(owner.0)?;
+            let read_result = (|| -> anyhow::Result<()> {
+                assert_eq!(unsafe { GetClipboardOwner() }, owner);
+                for format in [8, unsafe {
+                    RegisterClipboardFormatW(windows::core::w!("PNG"))
+                }] {
+                    let handle = unsafe { GetClipboardData(format)? };
+                    let global = HGLOBAL(handle.0 as *mut core::ffi::c_void);
+                    let ptr = unsafe { GlobalLock(global) } as *const u8;
+                    anyhow::ensure!(!ptr.is_null(), "clipboard data could not be read");
+                    let bytes =
+                        unsafe { std::slice::from_raw_parts(ptr, GlobalSize(global)).to_vec() };
+                    unsafe {
+                        let _ = GlobalUnlock(global);
+                    }
+                    if format == 8 {
+                        assert_eq!(i32::from_le_bytes(bytes[4..8].try_into().unwrap()), 2);
+                        assert_eq!(i32::from_le_bytes(bytes[8..12].try_into().unwrap()), 1);
+                        assert_eq!(&bytes[40..46], &[0, 0, 255, 0, 255, 0]);
+                    } else {
+                        let image = image::load_from_memory(&bytes)?.to_rgba8();
+                        assert_eq!(image.dimensions(), (2, 1));
+                        assert_eq!(image.get_pixel(0, 0).0, [255, 0, 0, 255]);
+                    }
+                }
+                Ok(())
+            })();
+            unsafe {
+                let _ = CloseClipboard();
+            }
+            read_result?;
+            if let Some(path) = std::env::var_os("VENTUS_CLIPBOARD_IMAGE_FIXTURE") {
+                let bytes = std::fs::read(path)?;
+                write_image_to_clipboard(&bytes, owner.0)?;
+            }
+            write_clipboard_text("Ventus clipboard verification", owner.0)?;
+            assert_eq!(
+                read_clipboard_text().as_deref(),
+                Some("Ventus clipboard verification")
+            );
+            Ok(())
+        })();
+        unsafe {
+            let _ = DestroyWindow(owner);
+        }
+        result
+    }
 }

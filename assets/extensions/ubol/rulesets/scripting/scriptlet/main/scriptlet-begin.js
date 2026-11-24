@@ -468,12 +468,13 @@ class JSONPath {
                     path: this.path.slice(),
                 };
                 const v = this.value.obj[this.value.key];
-                if ( recursive ) {
+                if ( recursive && typeof v === 'object' && v !== null && this.seen.has(v) === false ) {
                     if ( Array.isArray(v) ) {
                         this.stack.push({ obj: v, keys: v.keys() });
-                    } else if ( typeof v === 'object' && v !== null ) {
+                    } else {
                         this.stack.push({ obj: v, keys: JSONPath.keys(v).values() });
                     }
+                    this.seen.add(v);
                 }
                 return this;
             },
@@ -481,6 +482,7 @@ class JSONPath {
             value: undefined,
             done: false,
             stack: [],
+            seen: new WeakSet(),
             [Symbol.iterator]() { return this; },
         };
         if ( Array.isArray(v) ) {
@@ -1061,7 +1063,7 @@ function editInboundObjectFn(
     const editObj = obj => {
         let clone;
         try {
-            clone = safe.JSON_parse(safe.JSON_stringify(obj));
+            clone = safe.structuredClone(obj);
         } catch {
         }
         if ( typeof clone !== 'object' || clone === null ) { return; }
@@ -1076,9 +1078,12 @@ function editInboundObjectFn(
     proxyApplyFn(propChain, function(context) {
         const i = getArgPos(context.callArgs);
         if ( i !== undefined ) {
-            const obj = editObj(context.callArgs[i]);
-            if ( obj ) {
-                context.callArgs[i] = obj;
+            const objBefore = context.callArgs[i];
+            if ( typeof objBefore === 'object' ) {
+                const objAfter = editObj(objBefore);
+                if ( objAfter ) {
+                    context.callArgs[i] = objAfter;
+                }
             }
         }
         return context.reflect();
@@ -1228,23 +1233,8 @@ function generateContentFn(trusted, directive) {
         return randomize(len | 0);
     }
     if ( directive.startsWith('war:') ) {
-        if ( scriptletGlobals.warOrigin === undefined ) { return ''; }
-        return new Promise(resolve => {
-            const warOrigin = scriptletGlobals.warOrigin;
-            const warName = directive.slice(4);
-            const fullpath = [ warOrigin, '/', warName ];
-            const warSecret = scriptletGlobals.warSecret;
-            if ( warSecret !== undefined ) {
-                fullpath.push('?secret=', warSecret);
-            }
-            const warXHR = new safe.XMLHttpRequest();
-            warXHR.responseType = 'text';
-            warXHR.onloadend = ev => {
-                resolve(ev.target.responseText || '');
-            };
-            warXHR.open('GET', fullpath.join(''));
-            warXHR.send();
-        }).catch(( ) => '');
+        // TODO: resources should be fetched by messaging ISOLATED world
+        return '';
     }
     if ( directive.startsWith('join:') ) {
         const parts = directive.slice(7)
@@ -1409,7 +1399,9 @@ function jsonEditFn(trusted = false, jsonq = '', ...varargs) {
     proxyApplyFn('JSON.parse', function(context) {
         const json = context.callArgs[0];
         const obj = context.reflect();
-        if ( pattern && safe.testPattern(pattern, json) === false ) { return obj; }
+        if ( pattern && typeof json === 'string' ) {
+            if ( safe.testPattern(pattern, json) === false ) { return obj; }
+        }
         const objAfter = jsonp.apply(obj);
         if ( objAfter === undefined ) { return obj; }
         safe.uboLog(logPrefix, 'Edited');
@@ -2744,6 +2736,7 @@ function preventClipboardWrite(matches = '', ...varargs) {
             const code = doc.createElement('code');
             const styles = [
                 'background-color: #ddc',
+                'color: inherit',
                 'display: inline-block',
                 'font-family: monospace',
                 'font-size: 100%',
@@ -3512,14 +3505,18 @@ function safeSelf() {
         'Request_clone': self.Request.prototype.clone,
         'String': self.String,
         'String_fromCharCode': String.fromCharCode,
+        'String_includes': String.prototype.includes,
         'String_split': String.prototype.split,
         'XMLHttpRequest': self.XMLHttpRequest,
+        'XMLHttpRequest_open': Function.prototype.call.bind(self.XMLHttpRequest.prototype.open),
+        'XMLHttpRequest_send': Function.prototype.call.bind(self.XMLHttpRequest.prototype.send),
         'addEventListener': self.EventTarget.prototype.addEventListener,
         'removeEventListener': self.EventTarget.prototype.removeEventListener,
         'fetch': self.fetch,
         'JSON': self.JSON,
         'JSON_parse': Function.prototype.call.bind(self.JSON.parse, self.JSON),
         'JSON_stringify': Function.prototype.call.bind(self.JSON.stringify, self.JSON),
+        'structuredClone': Function.prototype.call.bind(self.structuredClone, self),
         'log': console.log.bind(console),
         // Properties
         logLevel: 0,
@@ -3574,7 +3571,7 @@ function safeSelf() {
             if ( details.re ) {
                 return this.RegExp_test(details.re, haystack) === details.expect;
             }
-            return haystack.includes(details.pattern) === details.expect;
+            return this.String_includes.call(`${haystack}`, details.pattern) === details.expect;
         },
         patternToRegex(pattern, flags = undefined, verbatim = false) {
             if ( pattern === '' ) { return /^/; }
@@ -4079,16 +4076,18 @@ function trustedPreventDomBypass(
                     }
                 }
                 if ( targetProp !== '' ) {
+                    const chains = targetProp.split(/\s+/);
                     let me = self, it = elem.contentWindow;
-                    let chain = targetProp;
-                    for (;;) {
-                        const pos = chain.indexOf('.');
-                        if ( pos === -1 ) { break; }
-                        const prop = chain.slice(0, pos);
-                        me = me[prop]; it = it[prop];
-                        chain = chain.slice(pos+1);
+                    for ( let chain of chains ) {
+                        for (;;) {
+                            const pos = chain.indexOf('.');
+                            if ( pos === -1 ) { break; }
+                            const prop = chain.slice(0, pos);
+                            me = me[prop]; it = it[prop];
+                            chain = chain.slice(pos+1);
+                        }
+                        it[chain] = me[chain];
                     }
-                    it[chain] = me[chain];
                 } else {
                     Object.defineProperty(elem, 'contentWindow', { value: self });
                 }
@@ -4529,7 +4528,7 @@ function xmlPrune(
     });
 }
 
-function zeta_a72cc9af22ed465a81e99e78c3fead35() { // fingerprint2.js
+function zeta_77c8b410804e4a15a7cb2a3b7d57edca() { // fingerprint2.js
 // Reference:
 // https://github.com/fingerprintjs/fingerprintjs/tree/v2
 
@@ -4566,7 +4565,7 @@ function zeta_a72cc9af22ed465a81e99e78c3fead35() { // fingerprint2.js
 })();
 }
 
-function zeta_2b85f65fa6e64388aba57a01a43b7efe() { // google-ima.js
+function zeta_54552bdfa18d4308820d6be315d92476() { // google-ima.js
 'use strict';
 
 
@@ -5195,7 +5194,7 @@ if (!window.google || !window.google.ima || !window.google.ima.VERSION) {
 }
 }
 
-function zeta_4e474d1e7f8f458482cb778fe683ca68() { // nobab2.js
+function zeta_34f66a7de3ee4b8bba66c40e6e26b2cb() { // nobab2.js
 (function() {
     'use strict';
     const script = document.currentScript;
@@ -5219,7 +5218,7 @@ function zeta_4e474d1e7f8f458482cb778fe683ca68() { // nobab2.js
 })();
 }
 
-function zeta_6d60f3677d16437ba2608cf895ce269d() { // noeval.js
+function zeta_469b81e2f02f4b7aaabfba1eb926a953() { // noeval.js
 (function() {
     'use strict';
     const log = console.log.bind(console);
@@ -5231,7 +5230,7 @@ function zeta_6d60f3677d16437ba2608cf895ce269d() { // noeval.js
 })();
 }
 
-function zeta_4bbafa64714749cca0531075a6ab4203() { // nofab.js
+function zeta_b5eb93153e774be79bc519b6efd1a73e() { // nofab.js
 (function() {
     'use strict';
     const noopfn = function() {
@@ -5280,7 +5279,7 @@ function zeta_4bbafa64714749cca0531075a6ab4203() { // nofab.js
 })();
 }
 
-function zeta_f95909bd71f9407888a8930a4b62ee5a() { // popads-dummy.js
+function zeta_549e8f67a0a245f6abe3ef85a2891bdf() { // popads-dummy.js
 (function() {
     'use strict';
     delete window.PopAds;
@@ -5296,13 +5295,18 @@ function zeta_f95909bd71f9407888a8930a4b62ee5a() { // popads-dummy.js
 
 scriptletGlobals.origins = (( ) => {
     const docloc = document.location;
-    const origins = [ docloc.origin ];
-    if ( docloc.ancestorOrigins ) {
-        origins.push(...docloc.ancestorOrigins);
+    const origins = [{ origin: docloc.origin, path: docloc.pathname }];
+    if ( docloc.ancestorOrigins?.length ) {
+        const topOrigin = docloc.ancestorOrigins[docloc.ancestorOrigins.length-1];
+        if ( topOrigin !== 'null' ) {
+            origins.push({ origin: topOrigin });
+        } else if ( scriptletGlobals.topOrigin ) {
+            origins.push({ origin: scriptletGlobals.topOrigin });
+        }
     }
     const out = [];
     for ( let i = 0; i < origins.length; i++ ) {
-        const origin = origins[i];
+        const { origin, path } = origins[i];
         const beg = origin.indexOf('://') + 3;
         if ( beg === 2 ) { continue; }
         const end = origin.indexOf(':', beg);
@@ -5329,16 +5333,16 @@ scriptletGlobals.origins = (( ) => {
             if ( d !== 0 ) { return d; }
             return a > b ? -1 : 1;
         });
-        out.push({ hns, ens, i });
+        out.push({ hns, ens, path, i });
     }
     return out;
 })();
 
-scriptletGlobals.functionRefs = /* 59 */ [trustedEditInboundObject,adjustSetTimeout,jsonPruneFetchResponse,jsonPruneXhrResponse,trustedReplaceXhrResponse,trustedReplaceFetchResponse,trustedPreventDomBypass,jsonPrune,jsonEdit,jsonlEditXhrResponse,noWindowOpenIf,setConstant,abortCurrentScript,preventXhr,preventSetTimeout,preventFetch,trustedReplaceArgument,removeAttr,trustedOverrideElementMethod,abortOnPropertyRead,trustedReplaceOutboundText,trustedSuppressNativeMethod,preventAddEventListener,abortOnStackTrace,preventInnerHTML,preventSetInterval,adjustSetInterval,zeta_a72cc9af22ed465a81e99e78c3fead35,trustedSetConstant,jsonEditFetchResponse,zeta_6d60f3677d16437ba2608cf895ce269d,abortOnPropertyWrite,noWebrtc,zeta_4bbafa64714749cca0531075a6ab4203,zeta_f95909bd71f9407888a8930a4b62ee5a,preventRequestAnimationFrame,noEvalIf,preventBab,trustedPreventFetch,disableNewtabLinks,trustedJsonEditFetchResponse,editObjectOnSetter,trustedJsonEdit,trustedJsonEditXhrResponse,preventClipboardWrite,jsonEditXhrResponse,xmlPrune,m3uPrune,trustedPreventXhr,spoofCSS,zeta_2b85f65fa6e64388aba57a01a43b7efe,alertBuster,preventCanvas,mpegdashPrune,jsonEditFetchRequest,proxyApplyConfig,jsonlEditFetchResponse,evaldataPrune,zeta_4e474d1e7f8f458482cb778fe683ca68];
+scriptletGlobals.functionRefs = /* 59 */ [trustedEditInboundObject,adjustSetTimeout,jsonPruneFetchResponse,jsonPruneXhrResponse,trustedReplaceXhrResponse,trustedReplaceFetchResponse,trustedPreventDomBypass,jsonPrune,jsonEdit,jsonlEditXhrResponse,noWindowOpenIf,setConstant,abortCurrentScript,preventXhr,preventSetTimeout,preventFetch,trustedReplaceArgument,abortOnPropertyRead,removeAttr,trustedOverrideElementMethod,trustedReplaceOutboundText,trustedSuppressNativeMethod,preventAddEventListener,abortOnStackTrace,trustedPreventFetch,trustedPreventXhr,adjustSetInterval,preventSetInterval,zeta_77c8b410804e4a15a7cb2a3b7d57edca,trustedSetConstant,jsonEditFetchResponse,zeta_469b81e2f02f4b7aaabfba1eb926a953,abortOnPropertyWrite,noWebrtc,zeta_b5eb93153e774be79bc519b6efd1a73e,zeta_549e8f67a0a245f6abe3ef85a2891bdf,preventRequestAnimationFrame,noEvalIf,preventBab,disableNewtabLinks,trustedJsonEditFetchResponse,preventInnerHTML,editObjectOnSetter,trustedJsonEdit,trustedJsonEditXhrResponse,preventClipboardWrite,jsonEditXhrResponse,xmlPrune,m3uPrune,spoofCSS,zeta_54552bdfa18d4308820d6be315d92476,alertBuster,preventCanvas,mpegdashPrune,jsonEditFetchRequest,proxyApplyConfig,jsonlEditFetchResponse,evaldataPrune,zeta_34f66a7de3ee4b8bba66c40e6e26b2cb];
 
 /******************************************************************************/
 
 // End of local scope
-})("fb7f2f86-ef87-4c15-a912-62a035b1c974");
+})("28049053-2f06-4210-9323-9d4634fd8974");
 
 void 0;

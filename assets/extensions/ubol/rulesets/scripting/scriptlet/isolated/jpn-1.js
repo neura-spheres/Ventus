@@ -91,7 +91,7 @@ if ( $hasHostnames$ ) {
     }
     // Collect arglist references
     if ( todoIndices.size ) {
-        const arglistRefs = /* 72 */ ["28","20","26","15","6","32","15","10","29","14","29","3","26,27","26","24,25,26,27","30,31","27","22,26,27","15","16","19","29","15","29","29","23,24","29","4,5","1","11","33","24","4,5","13","15","4,5","12","1","15","15","18","8","24,29","20","1","15","7","27","4,5","15","4,5","35","4,5","15","20","9","4,5","20,26,27","15","21","29","15","4,5","4,5","17","1","24,29","4,5","15","2","34","1"];
+        const arglistRefs = /* 72 */ ["28","20","26","15","6","32","15","10","29","14","29","3","26,27","26","24,25,26,27","30,31","27","22,26,27","15","16","19","29","15","29","29","23,24","29","4,5","1","11","33","24","4,5","13","15","4,5","12","1","15","15","18","8","24,29","20","1","15","7","27","4,5","15","4,5","35","4,5","15","20","9","4,5","20,26,27","15","21","29","15","4,5","4,5","17","1","24,25,29","4,5","15","2","34","1"];
         for ( const i of todoIndices ) {
             for ( const ref of JSON.parse(`[${arglistRefs[i]}]`) ) {
                 todo.add(ref);
@@ -102,17 +102,19 @@ if ( $hasHostnames$ ) {
 
 if ( $hasRegexes$ ) {
     const scriptletFromRegexes = /* 0 */ [];
-    const { hns } = scriptletGlobals.origins[0];
-    for ( let i = 0, n = scriptletFromRegexes.length; i < n; i += 3 ) {
-        const needle = scriptletFromRegexes[i+0];
-        let regex;
-        for ( const hn of hns ) {
-            if ( hn.includes(needle) === false ) { continue; }
-            if ( regex === undefined ) {
-                regex = new RegExp(scriptletFromRegexes[i+1]);
+    const { hns, path } = scriptletGlobals.origins[0];
+    for ( let i = 0, n = scriptletFromRegexes.length; i < n; i += 2 ) {
+        const { needle, hn, pn } = scriptletFromRegexes[i+0];
+        let rehn, repn;
+        for ( const target of hns ) {
+            if ( target.includes(needle) === false ) { continue; }
+            if ( rehn === undefined ) { rehn = new RegExp(hn); }
+            if ( rehn.test(target) === false ) { continue; }
+            if ( pn && path ) {
+                if ( repn === undefined ) { repn = new RegExp(pn); }
+                if ( repn.test(path) === false ) { continue; }
             }
-            if ( regex.test(hn) === false ) { continue; }
-            for ( const ref of JSON.parse(`[${scriptletFromRegexes[i+2]}]`) ) {
+            for ( const ref of JSON.parse(`[${scriptletFromRegexes[i+1]}]`) ) {
                 todo.add(ref);
             }
         }
@@ -137,6 +139,6 @@ if ( todo.size && todo.has(0) === false ) {
 /******************************************************************************/
 
 // End of local scope
-})("fb7f2f86-ef87-4c15-a912-62a035b1c974");
+})("28049053-2f06-4210-9323-9d4634fd8974");
 
 void 0;

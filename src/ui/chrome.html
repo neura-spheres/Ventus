@@ -3133,6 +3133,14 @@ body.content-fullscreen #devtools-dock-header,body.content-fullscreen #devtools-
 .dl-pi-state{white-space:nowrap;font-weight:500;color:var(--text-muted)}
 .dl-pi-state.active{color:var(--accent)}
 .dl-pi-state.failed{color:var(--danger)}
+.dl-pi-state.review{color:var(--warning)}
+.dl-pi-icon-wrap.ft-review{background:var(--warning-dim);border-color:color-mix(in srgb,var(--warning) 42%,transparent);color:var(--warning)}
+.dl-pi-icon-wrap.ft-review::before{display:none}
+.dl-panel-item.review .dl-pi-actions{opacity:1;gap:4px}
+.dl-panel-item.review .dl-pi-btn{height:26px;padding:0 10px;border-radius:8px;border:1px solid transparent;font-weight:600}
+.dl-pi-btn.keep{background:var(--primary-btn-bg);color:var(--primary-btn-text);border-color:var(--primary-btn-border)!important}
+.dl-pi-btn.keep:hover{background:var(--primary-btn-bg-hover);color:var(--primary-btn-text)}
+.dl-pi-btn:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .dl-pi-sep{width:2px;height:2px;border-radius:50%;background:var(--text-dim);flex-shrink:0}
 .dl-pi-meta{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-muted)}
 .dl-pi-bar{
@@ -4409,11 +4417,6 @@ svg{display:block;flex-shrink:0}
     </div>
   </div>
   <div class="more-sep"></div>
-  <button class="more-item" id="more-item-devtools" onclick="closeMoreMenu();send('OpenDevtools')" role="menuitem">
-    <span class="more-item-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m8 5-7 7 7 7m8-14 7 7-7 7M14 3l-4 18"/></svg></span>
-    <span class="more-item-label">Developer tools</span>
-    <span class="more-item-kbd">Ctrl+Shift+I</span>
-  </button>
   <button class="more-item" onclick="closeMoreMenu();openSettings('account')" role="menuitem">
     <span class="more-item-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>
     <span class="more-item-label">Account</span>
@@ -6336,6 +6339,7 @@ window.__neura = {
     refreshMoreAttention();
   },
   flashDownloadStart() { flashDownloadStart(); },
+  flashDownloadReview() { flashDownloadReview(); },
   updateDownload(id, received, total, status, speed) {
     const d = (state.downloads || []).find(x => x.id === id);
     if (!d) return;
@@ -14079,7 +14083,7 @@ let __updateModalVersion = null;
 let updateAvailable = false;
 function refreshMoreAttention() {
   const dls = state.downloads || [];
-  const dlActive = dls.some(d => d.status === 'downloading' || d.status === 'pending' || d.status === 'paused');
+  const dlActive = dls.some(d => d.status === 'downloading' || d.status === 'pending' || d.status === 'paused' || d.status === 'review');
   const btn = document.getElementById('btn-more');
   if (btn) btn.classList.toggle('has-attention', dlActive || updateAvailable);
   const dlBtn = document.getElementById('btn-toolbar-downloads');
@@ -14541,13 +14545,14 @@ function renderDownloads() {
   list.innerHTML = dls.slice().reverse().map(d => {
     const isDone = d.status === 'complete';
     const isPaused = d.status === 'paused';
-    const isLive = dlIsActive(d) || isPaused;
+    const isReview = d.status === 'review';
+    const isLive = dlIsActive(d) || isPaused || isReview;
     const isPdf = isPdfFile(d.local_path || d.filename);
     const metaText = dlMeta(d);
-    const ftClass = dlIsActive(d) ? 'ft-active' : '';
+    const ftClass = isReview ? 'ft-review' : dlIsActive(d) ? 'ft-active' : '';
     const iconContent = dlIsActive(d)
       ? `<span class="dl-spin"></span>`
-      : `<span class="dl-pi-ext">${escHtml(dlFileExt(d.filename))}</span>`;
+      : isReview ? DL_SVG_WARN : `<span class="dl-pi-ext">${escHtml(dlFileExt(d.filename))}</span>`;
     const revealBtn = isDone && d.local_path
       ? `<button class="dl-pi-btn icon" data-reveal-file-path="${escAttr(d.local_path)}" title="Show in folder">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
@@ -14562,6 +14567,8 @@ function renderDownloads() {
       subHtml = `<button class="dl-pi-link" data-open-file-path="${escAttr(d.local_path)}">${isPdf ? 'Read PDF' : 'Open file'}</button>${metaText ? `<span class="dl-pi-sep"></span><span class="dl-pi-meta">${escHtml(metaText)}</span>` : ''}`;
     } else if (isDone) {
       subHtml = `<span class="dl-pi-state">Done</span>${metaText ? `<span class="dl-pi-sep"></span><span class="dl-pi-meta">${escHtml(metaText)}</span>` : ''}`;
+    } else if (d.status === 'review') {
+      subHtml = dlReviewSub(d);
     } else if (d.status === 'failed') {
       subHtml = '<span class="dl-pi-state failed">Download failed</span>';
     } else if (d.status === 'cancelled') {
@@ -14573,7 +14580,7 @@ function renderDownloads() {
       subHtml = `<span class="dl-pi-state active">Downloading</span>${metaText ? `<span class="dl-pi-sep"></span><span class="dl-pi-meta">${escHtml(metaText)}</span>` : ''}`;
     }
     const filePath = isDone && d.local_path ? ` data-dl-file-path="${escAttr(d.local_path)}"` : '';
-    return `<div class="dl-panel-item" data-dl-id="${escAttr(d.id)}"${filePath}>
+    return `<div class="dl-panel-item${isReview ? ' review' : ''}" data-dl-id="${escAttr(d.id)}"${filePath}>
       <div class="dl-pi-icon-wrap ${ftClass}">${iconContent}</div>
       <div class="dl-pi-body">
         <div class="dl-pi-name">${escHtml(d.filename)}</div>
@@ -14676,7 +14683,6 @@ function showBrowserContextMenu(data) {
   item('reload', 'Reload');
   sep();
   item('copy_page_url', 'Copy page URL');
-  item('devtools', 'Developer tools');
   item('inspect', 'Inspect');
 
   menu.innerHTML = rows.join('');
@@ -14872,6 +14878,15 @@ function flashDownloadStart() {
   }
 }
 
+// A risky file finished and needs an answer, so the panel stays open until dismissed.
+function flashDownloadReview() {
+  const sec = document.getElementById('section-downloads');
+  const settings = document.getElementById('settings-overlay');
+  if (settings && settings.classList.contains('open') && sec && sec.classList.contains('active')) return;
+  flashDownloadStart();
+  cancelDownloadPeek();
+}
+
 // A press landed in the live web page (relayed by the content WebView). Close the
 // download panel — it's clipped to its own rect, so the page never received the chrome's
 // own document-level click handler that would otherwise dismiss it.
@@ -14892,7 +14907,10 @@ function dlFileExt(filename) {
 }
 function renderDownloadPanel() {
   const list = document.getElementById('dl-panel-list');
-  const dls = (state.downloads || []).slice().reverse().slice(0, 6);
+  // Files waiting for an answer come first so newer downloads cannot push them out.
+  const all = (state.downloads || []).slice().reverse();
+  const asks = all.filter(d => d.status === 'review');
+  const dls = asks.concat(all.filter(d => d.status !== 'review').slice(0, Math.max(0, 6 - asks.length)));
   if (!dls.length) {
     list.innerHTML = `<div class="dl-panel-empty">
       <div class="dl-panel-empty-icon">
@@ -14906,13 +14924,14 @@ function renderDownloadPanel() {
   list.innerHTML = dls.map(d => {
     const isDone = d.status === 'complete';
     const isPaused = d.status === 'paused';
-    const isLive = dlIsActive(d) || isPaused;
+    const isReview = d.status === 'review';
+    const isLive = dlIsActive(d) || isPaused || isReview;
     const isPdf = isPdfFile(d.local_path || d.filename);
     const metaText = dlMeta(d);
-    const ftClass = dlIsActive(d) ? 'ft-active' : '';
+    const ftClass = isReview ? 'ft-review' : dlIsActive(d) ? 'ft-active' : '';
     const iconContent = dlIsActive(d)
       ? `<span class="dl-spin"></span>`
-      : `<span class="dl-pi-ext">${escHtml(dlFileExt(d.filename))}</span>`;
+      : isReview ? DL_SVG_WARN : `<span class="dl-pi-ext">${escHtml(dlFileExt(d.filename))}</span>`;
     const revealBtn = isDone && d.local_path
       ? `<button class="dl-pi-btn icon" data-reveal-file-path="${escAttr(d.local_path)}" title="Show in folder">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
@@ -14927,6 +14946,8 @@ function renderDownloadPanel() {
       subHtml = `<button class="dl-pi-link" data-open-file-path="${escAttr(d.local_path)}">${isPdf ? 'Read PDF' : 'Open file'}</button>${metaText ? `<span class="dl-pi-sep"></span><span class="dl-pi-meta">${escHtml(metaText)}</span>` : ''}`;
     } else if (isDone) {
       subHtml = `<span class="dl-pi-state">Done</span>${metaText ? `<span class="dl-pi-sep"></span><span class="dl-pi-meta">${escHtml(metaText)}</span>` : ''}`;
+    } else if (d.status === 'review') {
+      subHtml = dlReviewSub(d);
     } else if (d.status === 'failed') {
       subHtml = '<span class="dl-pi-state failed">Download failed</span>';
     } else if (d.status === 'cancelled') {
@@ -14938,7 +14959,7 @@ function renderDownloadPanel() {
       subHtml = `<span class="dl-pi-state active">Downloading</span>${metaText ? `<span class="dl-pi-sep"></span><span class="dl-pi-meta">${escHtml(metaText)}</span>` : ''}`;
     }
     const filePath = isDone && d.local_path ? ` data-dl-file-path="${escAttr(d.local_path)}"` : '';
-    return `<div class="dl-panel-item" data-dl-id="${escAttr(d.id)}"${filePath}>
+    return `<div class="dl-panel-item${isReview ? ' review' : ''}" data-dl-id="${escAttr(d.id)}"${filePath}>
       <div class="dl-pi-icon-wrap ${ftClass}">${iconContent}</div>
       <div class="dl-pi-body">
         <div class="dl-pi-name">${escHtml(d.filename)}</div>
@@ -14963,6 +14984,10 @@ document.getElementById('download-panel').addEventListener('click', e => {
   if (pauseBtn) { e.stopPropagation(); send('PauseDownload', {id: pauseBtn.dataset.dlPause}); return; }
   const resumeBtn = e.target.closest('[data-dl-resume]');
   if (resumeBtn) { e.stopPropagation(); send('ResumeDownload', {id: resumeBtn.dataset.dlResume}); return; }
+  const keepBtn = e.target.closest('[data-dl-keep]');
+  if (keepBtn) { e.stopPropagation(); send('KeepDownload', {id: keepBtn.dataset.dlKeep}); return; }
+  const retryBtn = e.target.closest('[data-dl-retry]');
+  if (retryBtn) { e.stopPropagation(); retryDownload(retryBtn.dataset.dlRetry); return; }
   const cancelBtn = e.target.closest('[data-dl-cancel]');
   if (cancelBtn) { e.stopPropagation(); send('CancelDownload', {id: cancelBtn.dataset.dlCancel}); return; }
   const delBtn = e.target.closest('[data-del-dl-id]');
@@ -15793,6 +15818,11 @@ const DL_SVG_PAUSE = '<svg width="13" height="13" viewBox="0 0 24 24" fill="curr
 const DL_SVG_PLAY = '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5l12 7-12 7z"/></svg>';
 const DL_SVG_X = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>';
 
+const DL_SVG_WARN = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>';
+
+function dlReviewSub(d) {
+  return `<span class="dl-pi-state review">Could be harmful</span><span class="dl-pi-sep"></span><span class="dl-pi-meta">${escHtml(dlMeta(d))}</span>`;
+}
 function dlIsActive(d) { return d.status === 'downloading' || d.status === 'pending'; }
 function dlPct(d) {
   return (d.total_bytes && d.total_bytes > 0)
@@ -15818,8 +15848,10 @@ function dlMeta(d) {
   if (d.status === 'complete') return d.total_bytes ? formatBytes(d.total_bytes) : (formatBytes(d.received_bytes) || 'Done');
   if (d.status === 'failed') return 'Download failed';
   if (d.status === 'cancelled') return 'Canceled';
+  if (d.status === 'review') return formatBytes(d.total_bytes || d.received_bytes);
   const pct = dlPct(d);
   const sizePart = pct !== null ? pct + '%' : formatBytes(d.received_bytes);
+  if (dlIsActive(d) && d.total_bytes && d.received_bytes >= d.total_bytes) return 'Checking file';
   if (d.status === 'paused') return ['Paused', sizePart].filter(Boolean).join(' \u00B7 ');
   return [sizePart, formatSpeed(d.speed_bps), formatEta(d)].filter(Boolean).join(' \u00B7 ');
 }
@@ -15830,8 +15862,20 @@ function dlProgressHtml(d) {
   if (pct === null && !isPaused) return '<div class="dl-pi-bar indeterminate"><div class="dl-pi-bar-fill"></div></div>';
   return `<div class="dl-pi-bar${isPaused ? ' paused' : ''}"><div class="dl-pi-bar-fill" style="width:${pct === null ? 0 : pct}%"></div></div>`;
 }
+function retryDownload(id) {
+  const d = (state.downloads || []).find(x => x.id === id);
+  if (!d) return;
+  send('DeleteDownload', {id});
+  send('OpenInNewTab', {url: d.url});
+}
 function dlControlBtns(d) {
   const id = escAttr(d.id);
+  if (d.status === 'review') {
+    const name = escAttr(d.filename);
+    return `<button class="dl-pi-btn danger" data-del-dl-id="${id}" title="Delete this file" aria-label="Discard ${name}">Discard</button><button class="dl-pi-btn keep" data-dl-keep="${id}" title="This type of file can harm your PC. Keep it only if you trust where it came from." aria-label="Keep ${name}">Keep</button>`;
+  }
+  if ((d.status === 'failed' || d.status === 'cancelled') && /^https?:/i.test(d.url || ''))
+    return `<button class="dl-pi-btn icon" data-dl-retry="${id}" title="Download again"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg></button>`;
   if (d.status === 'paused')
     return `<button class="dl-pi-btn icon" data-dl-resume="${id}" title="Resume">${DL_SVG_PLAY}</button><button class="dl-pi-btn icon danger" data-dl-cancel="${id}" title="Cancel">${DL_SVG_X}</button>`;
   if (dlIsActive(d))
@@ -15896,6 +15940,20 @@ function handleDelegatedListClick(e) {
     e.preventDefault();
     e.stopPropagation();
     send('ResumeDownload', {id: dlResume.dataset.dlResume});
+    return;
+  }
+  const dlKeep = e.target.closest('[data-dl-keep]');
+  if (dlKeep) {
+    e.preventDefault();
+    e.stopPropagation();
+    send('KeepDownload', {id: dlKeep.dataset.dlKeep});
+    return true;
+  }
+  const dlRetry = e.target.closest('[data-dl-retry]');
+  if (dlRetry) {
+    e.preventDefault();
+    e.stopPropagation();
+    retryDownload(dlRetry.dataset.dlRetry);
     return;
   }
   const dlCancel = e.target.closest('[data-dl-cancel]');

@@ -46,7 +46,7 @@ const $hasRegexes$ = true;
 const todo = new Set();
 
 if ( $hasHostnames$ ) {
-    const scriptletHostnames = /* 87 */ ["kgrt.net","sinema.*","halk54.com","turkanime.co","burdurweb.com","dizilla40.com","efullizle.com","flatscher.net","kanald.com.tr","diziyiizle.com","eksisozluk.com","gazeterize.com","haberlisin.com","macboxtv29.xyz","bugunkibris.com","cizgivedizi.com","bursahaberdar.com","hdfilmcehennemi.*","klasikfilmler.net","turkporoclub1.sbs","turkporoclub2.sbs","turkporoclub3.sbs","turkporoclub4.sbs","turkporoclub5.sbs","turkporoclub6.sbs","turkporoclub7.sbs","turkporoclub8.sbs","turkporoclub9.sbs","yabancidiziio.com","birsenaltuntas.com","eskisehirhaber.com","turkifsalife70.lat","turkporoclub10.sbs","turkporoclub11.sbs","turkporoclub12.sbs","turkporoclub13.sbs","turkporoclub14.sbs","turkporoclub15.sbs","turkporoclub16.sbs","turkporoclub17.sbs","turkporoclub18.sbs","turkporoclub19.sbs","turkporoclub20.sbs","turkporoclub21.sbs","turkporoclub22.sbs","turkporoclub23.sbs","turkporoclub24.sbs","turkporoclub25.sbs","turkporoclub26.sbs","turkporoclub27.sbs","turkporoclub28.sbs","turkporoclub29.sbs","turkporoclub30.sbs","doedaturkifsa6.blog","doedaturkifsa7.blog","doedaturkifsa8.blog","doedaturkifsa9.blog","erotizmfilmleri1.cc","filmseyretizlet.com","sinefilmizlesem.com","doedaturkifsa10.blog","doedaturkifsa11.blog","doedaturkifsa12.blog","doedaturkifsa13.blog","doedaturkifsa14.blog","doedaturkifsa15.blog","doedaturkifsa16.blog","doedaturkifsa17.blog","doedaturkifsa18.blog","doedaturkifsa19.blog","doedaturkifsa20.blog","doedaturkifsa21.blog","doedaturkifsa22.blog","doedaturkifsa23.blog","doedaturkifsa24.blog","doedaturkifsa25.blog","doedaturkifsa26.blog","doedaturkifsa27.blog","doedaturkifsa28.blog","doedaturkifsa29.blog","doedaturkifsa30.blog","doedaturkifsa31.blog","doedaturkifsa32.blog","doedaturkifsa33.blog","doedaturkifsa34.blog","doedaturkifsa35.blog","mobile.donanimhaber.com"];
+    const scriptletHostnames = /* 87 */ ["kgrt.net","sinema.*","halk54.com","turkanime.co","burdurweb.com","dizilla40.com","efullizle.com","flatscher.net","kanald.com.tr","diziyiizle.com","eksisozluk.com","gazeterize.com","haberlisin.com","macboxtv29.xyz","bugunkibris.com","cizgivedizi.com","bursahaberdar.com","hdfilmcehennemi.*","klasikfilmler.net","turkporoclub1.sbs","turkporoclub2.sbs","turkporoclub3.sbs","turkporoclub4.sbs","turkporoclub5.sbs","turkporoclub6.sbs","turkporoclub7.sbs","turkporoclub8.sbs","turkporoclub9.sbs","yabancidiziio.com","birsenaltuntas.com","eskisehirhaber.com","turkifsalife73.lat","turkporoclub10.sbs","turkporoclub11.sbs","turkporoclub12.sbs","turkporoclub13.sbs","turkporoclub14.sbs","turkporoclub15.sbs","turkporoclub16.sbs","turkporoclub17.sbs","turkporoclub18.sbs","turkporoclub19.sbs","turkporoclub20.sbs","turkporoclub21.sbs","turkporoclub22.sbs","turkporoclub23.sbs","turkporoclub24.sbs","turkporoclub25.sbs","turkporoclub26.sbs","turkporoclub27.sbs","turkporoclub28.sbs","turkporoclub29.sbs","turkporoclub30.sbs","doedaturkifsa6.blog","doedaturkifsa7.blog","doedaturkifsa8.blog","doedaturkifsa9.blog","erotizmfilmleri1.cc","filmseyretizlet.com","sinefilmizlesem.com","doedaturkifsa10.blog","doedaturkifsa11.blog","doedaturkifsa12.blog","doedaturkifsa13.blog","doedaturkifsa14.blog","doedaturkifsa15.blog","doedaturkifsa16.blog","doedaturkifsa17.blog","doedaturkifsa18.blog","doedaturkifsa19.blog","doedaturkifsa20.blog","doedaturkifsa21.blog","doedaturkifsa22.blog","doedaturkifsa23.blog","doedaturkifsa24.blog","doedaturkifsa25.blog","doedaturkifsa26.blog","doedaturkifsa27.blog","doedaturkifsa28.blog","doedaturkifsa29.blog","doedaturkifsa30.blog","doedaturkifsa31.blog","doedaturkifsa32.blog","doedaturkifsa33.blog","doedaturkifsa34.blog","doedaturkifsa35.blog","mobile.donanimhaber.com"];
     const collectArglistRefIndices = (out, hn, r) => {
         let l = 0, i = 0, d = 0;
         let candidate = '';
@@ -101,18 +101,20 @@ if ( $hasHostnames$ ) {
 }
 
 if ( $hasRegexes$ ) {
-    const scriptletFromRegexes = /* 5 */ ["macboxtv","macboxtv\\d+\\.xyz$","20","doedatur","doedaturkifsa\\d+\\.blog$","21","turkporo","turkporoclub\\d+\\.sbs$","22","turkifsa","turkifsa(lar)?\\d*\\.(site|art)$","23","turkifsa","^turkifsalife\\d+\\.(blog|lat)$","24"];
-    const { hns } = scriptletGlobals.origins[0];
-    for ( let i = 0, n = scriptletFromRegexes.length; i < n; i += 3 ) {
-        const needle = scriptletFromRegexes[i+0];
-        let regex;
-        for ( const hn of hns ) {
-            if ( hn.includes(needle) === false ) { continue; }
-            if ( regex === undefined ) {
-                regex = new RegExp(scriptletFromRegexes[i+1]);
+    const scriptletFromRegexes = /* 5 */ [{"needle":"macboxtv","hn":"macboxtv\\d+\\.xyz$"},"20",{"needle":"doedaturkifsa","hn":"doedaturkifsa\\d+\\.blog$"},"21",{"needle":"turkporoclub","hn":"turkporoclub\\d+\\.sbs$"},"22",{"needle":"turkifsa","hn":"turkifsa(lar)?\\d*\\.(site|art)$"},"23",{"needle":"turkifsalife","hn":"^turkifsalife\\d+\\.(blog|lat)$"},"24"];
+    const { hns, path } = scriptletGlobals.origins[0];
+    for ( let i = 0, n = scriptletFromRegexes.length; i < n; i += 2 ) {
+        const { needle, hn, pn } = scriptletFromRegexes[i+0];
+        let rehn, repn;
+        for ( const target of hns ) {
+            if ( target.includes(needle) === false ) { continue; }
+            if ( rehn === undefined ) { rehn = new RegExp(hn); }
+            if ( rehn.test(target) === false ) { continue; }
+            if ( pn && path ) {
+                if ( repn === undefined ) { repn = new RegExp(pn); }
+                if ( repn.test(path) === false ) { continue; }
             }
-            if ( regex.test(hn) === false ) { continue; }
-            for ( const ref of JSON.parse(`[${scriptletFromRegexes[i+2]}]`) ) {
+            for ( const ref of JSON.parse(`[${scriptletFromRegexes[i+1]}]`) ) {
                 todo.add(ref);
             }
         }
@@ -137,6 +139,6 @@ if ( todo.size && todo.has(0) === false ) {
 /******************************************************************************/
 
 // End of local scope
-})("fb7f2f86-ef87-4c15-a912-62a035b1c974");
+})("28049053-2f06-4210-9323-9d4634fd8974");
 
 void 0;

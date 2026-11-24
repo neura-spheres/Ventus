@@ -374,7 +374,7 @@
                 if ok && data.starts_with("data:") {
                     rt.spawn(async move {
                         let success = decode_data_url(&data)
-                            .and_then(|b| write_image_to_clipboard(&b))
+                            .and_then(|b| write_image_to_clipboard(&b, clipboard_owner))
                             .is_ok();
                         let _ = proxy_cp.send_event(AppEvent::CopyImageResult { success });
                     });
@@ -386,7 +386,7 @@
                         .unwrap_or_default();
                     rt.spawn(async move {
                         let success = match fetch_image_bytes(&src, &referer).await {
-                            Ok(b) => write_image_to_clipboard(&b).is_ok(),
+                            Ok(b) => write_image_to_clipboard(&b, clipboard_owner).is_ok(),
                             Err(_) => false,
                         };
                         let _ = proxy_cp.send_event(AppEvent::CopyImageResult { success });
@@ -500,6 +500,8 @@
                 }
                 popups.clear();
                 close_chrome_controller(&chrome);
+                drop(normal_ubol.probe.take());
+                drop(incognito_ubol.probe.take());
                 shutdown_webview2(
                     crash_sentinel.as_deref(),
                     &[webview_data_dir.as_path(), incognito_data_dir.as_path()],
@@ -513,7 +515,7 @@
                 if new_window {
                     std::fs::remove_dir_all(&webview_data_dir).ok();
                 }
-                *control_flow = ControlFlow::Exit;
+                exit_now();
             }
 
             Event::UserEvent(AppEvent::CreatePopupWindow) => {
@@ -641,7 +643,13 @@
             }
 
             Event::UserEvent(AppEvent::PopupClose { id }) => {
-                popups.remove(&id);
+                if let Some(popup) = popups.remove(&id) {
+                    let owner = format!("popup:{id}");
+                    if view_has_download(&owner) {
+                        popup.window.set_visible(false);
+                        PARKED_VIEWS.with(|m| m.borrow_mut().push((owner, Box::new(popup))));
+                    }
+                }
             }
 
             Event::UserEvent(AppEvent::PopupDrag { id }) => {
@@ -773,14 +781,14 @@
                     }
                 }
                 if state.tab_manager.active_tab_id.as_deref() != Some(tab_id.as_str()) {
-                    content_views.remove(&tab_id);
+                    drop_content_view(&mut content_views, &tab_id);
                     content_hwnds.remove(&tab_id);
                     suspended_tabs.remove(&tab_id);
                     clear_load_watches(&mut load_watches, &tab_id);
                     state.load_progress.remove(&tab_id);
                     return;
                 }
-                content_views.remove(&tab_id);
+                drop_content_view(&mut content_views, &tab_id);
                 content_hwnds.remove(&tab_id);
                 suspended_tabs.remove(&tab_id);
                 clear_load_watches(&mut load_watches, &tab_id);
@@ -840,11 +848,12 @@
                             &layout_config,
                             &window,
                         );
-                        load_url_or_gate_incognito_ubol(
+                        load_url_or_gate_ubol(
                             &content_views,
                             &tab_id,
                             &url,
                             &state,
+                            &mut normal_ubol,
                             &mut incognito_ubol,
                             ubol_dir.as_deref(),
                             &window,
@@ -914,88 +923,24 @@
             }
 
             #[cfg(windows)]
-            Event::UserEvent(AppEvent::AccelProbe { id, url }) => {
-                let referer = state
-                    .tab_manager
-                    .active_tab()
-                    .map(|t| t.url.clone())
-                    .unwrap_or_default();
-                let ua = browser_user_agent();
-                let p = proxy_main.clone();
-                rt.spawn(async move {
-                    let res = browser::accel_download::probe(&url, &ua, &referer).await;
-                    let (accelerate, final_url, total) = match res {
-                        Some(pr) => (true, pr.final_url, pr.total),
-                        None => (false, url.clone(), 0),
-                    };
-                    let _ = p.send_event(AppEvent::AccelDecision {
-                        id,
-                        accelerate,
-                        url,
-                        final_url,
-                        total,
-                        referer,
-                    });
-                });
+            Event::UserEvent(AppEvent::DownloadRequested { id }) => {
+                let prefs = shared_dl_dir
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .clone();
+                prepare_download(id, prefs, &rt, &proxy_main);
             }
 
             #[cfg(windows)]
-            Event::UserEvent(AppEvent::AccelDecision {
+            Event::UserEvent(AppEvent::DownloadReady {
                 id,
-                accelerate,
-                url,
-                final_url,
-                total,
+                target,
+                overwrite,
+                accel,
                 referer,
             }) => {
-                use wv2win::Win32::Foundation::BOOL;
-                let entry = DOWNLOAD_DEFERRALS.with(|m| m.borrow_mut().remove(&id));
-                if let Some((deferral, args, default_name)) = entry {
-                    match resolve_download_target(&default_name, &shared_dl_dir) {
-                        None => unsafe {
-                            let _ = args.SetCancel(BOOL::from(true));
-                            let _ = deferral.Complete();
-                        },
-                        Some(target) if accelerate => {
-                            unsafe {
-                                let _ = args.SetCancel(BOOL::from(true));
-                                let _ = deferral.Complete();
-                            }
-                            let filename = target
-                                .file_name()
-                                .and_then(|n| n.to_str())
-                                .unwrap_or(&default_name)
-                                .to_string();
-                            let path_str = target.to_string_lossy().to_string();
-                            let ctl = browser::accel_download::AccelControl::new();
-                            ACCEL_DOWNLOADS.with(|m| m.borrow_mut().insert(id.clone(), ctl.clone()));
-                            let _ = proxy_main.send_event(AppEvent::DownloadStarted {
-                                id: Some(id.clone()),
-                                url,
-                                filename,
-                                path: path_str,
-                                total: Some(total),
-                            });
-                            tracing::info!(target: "ventus::dl", id = %id, total, "accelerated download started");
-                            rt.spawn(browser::accel_download::run(
-                                final_url,
-                                total,
-                                browser_user_agent(),
-                                referer,
-                                target,
-                                id,
-                                ctl,
-                                proxy_main.clone(),
-                            ));
-                        }
-                        Some(target) => {
-                            begin_native_download(&args, &target, url, &proxy_main);
-                            unsafe {
-                                let _ = deferral.Complete();
-                            }
-                        }
-                    }
-                }
+                start_download(id, target, overwrite, accel, referer, &rt, &proxy_main);
+                release_parked_views();
             }
 
             Event::UserEvent(AppEvent::WebNotification {
@@ -1112,41 +1057,54 @@
                 }
             }
             Event::UserEvent(app_event) => {
-                if let AppEvent::UbolSyncComplete { generation } = &app_event {
-                    if finish_incognito_ubol_sync(&mut incognito_ubol, *generation, false) {
-                        reload_incognito_ubol_pages(
-                            &mut incognito_ubol,
-                            &content_views,
-                            &state,
-                            &rt,
-                            &proxy_main,
-                            &mut load_watches,
-                            &mut load_watch_next,
-                        );
+                #[cfg(windows)]
+                if let AppEvent::DownloadDone { id, .. } = &app_event {
+                    ACCEL_DOWNLOADS.with(|m| m.borrow_mut().remove(id));
+                    release_parked_views();
+                }
+                if let AppEvent::DownloadNavigation { tab_id, source, .. } = &app_event {
+                    clear_load_watches(&mut load_watches, tab_id);
+                    if let Some(id) = tab_id.strip_prefix("popup:").and_then(|v| v.parse().ok()) {
+                        if !source.starts_with("http") {
+                            let _ = proxy_main.send_event(AppEvent::PopupClose { id });
+                        }
+                    }
+                }
+                if let AppEvent::UbolExtensionEnabled { generation, incognito, extension_id } = &app_event {
+                    let gate = if *incognito { &mut incognito_ubol } else { &mut normal_ubol };
+                    if !gate.running || gate.generation != *generation { return; }
+                    let context = if *incognito { incognito_web_context.as_mut() } else { content_web_context.as_mut() };
+                    let result = match (extension_id.as_deref(), context) {
+                        (Some(id), Some(context)) => build_ubol_probe(&window, context, id, &gate.sites, *incognito, *generation, &proxy_main),
+                        _ => Err(anyhow::anyhow!("ad blocker could not be enabled")),
+                    };
+                    match result {
+                        Ok(probe) => gate.probe = Some(probe),
+                        Err(error) => {
+                            tracing::warn!(target: "ventus::ubol", %error, "ubol: readiness probe failed");
+                            let _ = proxy_main.send_event(AppEvent::UbolSyncComplete { generation: *generation, incognito: *incognito, ready: false });
+                        }
                     }
                     return;
                 }
-                if let AppEvent::UbolSyncTimeout { generation } = &app_event {
-                    if finish_incognito_ubol_sync(&mut incognito_ubol, *generation, true) {
-                        incognito_ubol.enabled = Some(false);
-                        // Load any deferred pages even though the sync timed out — better to show
-                        // the page (possibly with ads) than leave it blank waiting forever.
-                        reload_incognito_ubol_pages(
-                            &mut incognito_ubol,
-                            &content_views,
-                            &state,
-                            &rt,
-                            &proxy_main,
-                            &mut load_watches,
-                            &mut load_watch_next,
-                        );
+                let ubol_result = match &app_event {
+                    AppEvent::UbolSyncComplete { generation, incognito, ready } => Some((*generation, *incognito, *ready)),
+                    AppEvent::UbolSyncTimeout { generation, incognito } => Some((*generation, *incognito, false)),
+                    _ => None,
+                };
+                if let Some((generation, incognito, ready)) = ubol_result {
+                    let gate = if incognito { &mut incognito_ubol } else { &mut normal_ubol };
+                    let retried = gate.failed;
+                    if finish_ubol_sync(gate, generation, !ready) {
+                        if !ready && !retried {
+                            let _ = chrome.evaluate_script("window.__neura&&window.__neura.showError('Ad blocker startup was incomplete. It will retry on the next page load.')");
+                        } else if ready && retried {
+                            let _ = chrome.evaluate_script("window.__neura&&window.__neura.showSuccess('Ad blocker is ready. Reload the page to apply it.')");
+                        }
+                        // Fail open on a bounded timeout, with an explicit warning instead of a blank page.
+                        load_ubol_pending_pages(gate, &content_views, &state, &rt, &proxy_main, &mut load_watches, &mut load_watch_next);
                     }
                     return;
-                }
-                if let AppEvent::UbolReady { tab_id, .. } = &app_event {
-                    if state.tab_manager.tab_is_incognito(tab_id) {
-                        incognito_ubol.enabled = Some(false);
-                    }
                 }
                 if matches!(
                     &app_event,
@@ -1418,15 +1376,6 @@
                         }
                         return;
                     }
-                    sync_active_ubol(
-                        &content_views,
-                        &state,
-                        ubol_dir.as_deref(),
-                        &mut ubol_done,
-                        &mut ubol_enabled,
-                        &mut ubol_tab,
-                        &mut incognito_ubol,
-                    );
                     if persist_session {
                         if defer_session {
                             queue_session_save(&rt, &proxy_main, &mut save_id);
@@ -1582,11 +1531,12 @@
                                             &layout_config,
                                             &window,
                                         );
-                                        load_url_or_gate_incognito_ubol(
+                                        load_url_or_gate_ubol(
                                             &content_views,
                                             &tab_id,
                                             &url,
                                             &state,
+                                            &mut normal_ubol,
                                             &mut incognito_ubol,
                                             ubol_dir.as_deref(),
                                             &window,
@@ -1604,7 +1554,7 @@
                             }
                         }
                         TabAction::Remove(id) => {
-                            content_views.remove(&id);
+                            drop_content_view(&mut content_views, &id);
                             content_hwnds.remove(&id);
                             suspended_tabs.remove(&id);
                             clear_load_watches(&mut load_watches, &id);
@@ -1619,7 +1569,7 @@
                         }
                         TabAction::RemoveMany(ids) => {
                             for id in ids {
-                                content_views.remove(&id);
+                                drop_content_view(&mut content_views, &id);
                                 content_hwnds.remove(&id);
                                 suspended_tabs.remove(&id);
                                 clear_load_watches(&mut load_watches, &id);
@@ -1634,7 +1584,7 @@
                             );
                         }
                         TabAction::DropContent { tab_id } => {
-                            content_views.remove(&tab_id);
+                            drop_content_view(&mut content_views, &tab_id);
                             content_hwnds.remove(&tab_id);
                             clear_load_watches(&mut load_watches, &tab_id);
                             apply_layout(
@@ -1713,11 +1663,12 @@
                                                     &layout_config,
                                                     &window,
                                                 );
-                                                load_url_or_gate_incognito_ubol(
+                                                load_url_or_gate_ubol(
                                                     &content_views,
                                                     &active_id,
                                                     &url,
                                                     &state,
+                                                    &mut normal_ubol,
                                                     &mut incognito_ubol,
                                                     ubol_dir.as_deref(),
                                                     &window,
@@ -1777,7 +1728,7 @@
                             }
                         }
                         TabAction::ShowErrorPage { tab_id } => {
-                            content_views.remove(&tab_id);
+                            drop_content_view(&mut content_views, &tab_id);
                             content_hwnds.remove(&tab_id);
                             suspended_tabs.remove(&tab_id);
                             clear_load_watches(&mut load_watches, &tab_id);
@@ -1816,7 +1767,7 @@
                             ));
                         }
                         TabAction::WriteClipboardText(text) => {
-                            let _ = write_clipboard_text(&text);
+                            let _ = write_clipboard_text(&text, clipboard_owner);
                         }
                         TabAction::FindInPage {
                             tab_id,
@@ -1884,7 +1835,7 @@
                             );
                             if let Some(id) = &state.tab_manager.active_tab_id {
                                 if url.starts_with("neura://") {
-                                    content_views.remove(id);
+                                    drop_content_view(&mut content_views, id);
                                     apply_layout(
                                         &chrome,
                                         chrome_hwnd,
@@ -1895,11 +1846,12 @@
                                     );
                                 } else if let Some(wv) = content_views.get(id) {
                                     wake_content_webview(wv);
-                                    load_url_or_gate_incognito_ubol(
+                                    load_url_or_gate_ubol(
                                         &content_views,
                                         id,
                                         &url,
                                         &state,
+                                        &mut normal_ubol,
                                         &mut incognito_ubol,
                                         ubol_dir.as_deref(),
                                         &window,
@@ -1961,11 +1913,12 @@
                                                 &layout_config,
                                                 &window,
                                             );
-                                            load_url_or_gate_incognito_ubol(
+                                            load_url_or_gate_ubol(
                                                 &content_views,
                                                 id,
                                                 &url,
                                                 &state,
+                                                &mut normal_ubol,
                                                 &mut incognito_ubol,
                                                 ubol_dir.as_deref(),
                                                 &window,
@@ -2041,6 +1994,13 @@
                                 );
                             }
                         }
+                        TabAction::RetryAbortedNav { tab_id, url } => {
+                            let proxy = proxy_main.clone();
+                            rt.spawn(async move {
+                                tokio::time::sleep(ABORT_RETRY_DELAY).await;
+                                let _ = proxy.send_event(AppEvent::AbortedNavRetry { tab_id, url });
+                            });
+                        }
                         TabAction::ReloadContent { tab_id, url } => {
                             if let Some(wv) = content_views.get(&tab_id) {
                                 state.native_nav_ids.insert(tab_id.clone(), 0);
@@ -2049,11 +2009,12 @@
                                     .pending_nav_urls
                                     .insert(tab_id.clone(), url.clone());
                                 wake_content_webview(wv);
-                                load_url_or_gate_incognito_ubol(
+                                load_url_or_gate_ubol(
                                     &content_views,
                                     &tab_id,
                                     &url,
                                     &state,
+                                    &mut normal_ubol,
                                     &mut incognito_ubol,
                                     ubol_dir.as_deref(),
                                     &window,
@@ -2123,11 +2084,12 @@
                                             &layout_config,
                                             &window,
                                         );
-                                        load_url_or_gate_incognito_ubol(
+                                        load_url_or_gate_ubol(
                                             &content_views,
                                             &tab_id,
                                             &url,
                                             &state,
+                                            &mut normal_ubol,
                                             &mut incognito_ubol,
                                             ubol_dir.as_deref(),
                                             &window,
@@ -2186,11 +2148,12 @@
                                     begin_native_load(&mut state, &chrome, &tab_id);
                                     state.push_state_to_chrome(&chrome);
                                     wake_content_webview(wv);
-                                    load_url_or_gate_incognito_ubol(
+                                    load_url_or_gate_ubol(
                                         &content_views,
                                         &tab_id,
                                         &url,
                                         &state,
+                                        &mut normal_ubol,
                                         &mut incognito_ubol,
                                         ubol_dir.as_deref(),
                                         &window,
@@ -2240,7 +2203,7 @@
                             state
                                 .pending_nav_urls
                                 .insert(tab_id.clone(), url.clone());
-                            content_views.remove(&tab_id);
+                            drop_content_view(&mut content_views, &tab_id);
                             content_hwnds.remove(&tab_id);
                             suspended_tabs.remove(&tab_id);
                             clear_load_watches(&mut load_watches, &tab_id);
@@ -2293,11 +2256,12 @@
                                         &layout_config,
                                         &window,
                                     );
-                                    load_url_or_gate_incognito_ubol(
+                                    load_url_or_gate_ubol(
                                         &content_views,
                                         &tab_id,
                                         &url,
                                         &state,
+                                        &mut normal_ubol,
                                         &mut incognito_ubol,
                                         ubol_dir.as_deref(),
                                         &window,
@@ -2311,90 +2275,6 @@
                                     );
                                 }
                                 Err(e) => tracing::error!("rebuild content view: {}", e),
-                            }
-                        }
-                        TabAction::PrepareBlockedProceed { tab_id, url } => {
-                            content_views.remove(&tab_id);
-                            content_hwnds.remove(&tab_id);
-                            suspended_tabs.remove(&tab_id);
-                            clear_load_watches(&mut load_watches, &tab_id);
-                            let is_incog = state.tab_manager.tab_is_incognito(&tab_id);
-                            let ctx = if is_incog {
-                                incognito_web_context.as_mut().unwrap()
-                            } else {
-                                content_web_context.as_mut().unwrap()
-                            };
-                            let ad_script = state.ad_block_engine.init_script().to_string();
-                            match build_content_webview(
-                                &window,
-                                &tab_id,
-                                &url,
-                                layout.content,
-                                proxy_main.clone(),
-                                ctx,
-                                is_incog,
-                                std::sync::Arc::clone(&shared_dl_dir),
-                                tab_zoom(&state, &tab_id),
-                                &browser_args,
-                                webview_theme(&state.settings.appearance.theme),
-                                ad_script,
-                                state.settings.privacy.fingerprint_protection,
-                                state.fingerprint_seed(is_incog).to_string(),
-                                state.x_login_compat(&tab_id, &url),
-                                state.settings.privacy.strict_permissions,
-                                state.settings.privacy.site_permissions.clone(),
-                                state.settings.privacy.default_permissions.clone(),
-                                state.settings.privacy.https_only,
-                                false,
-                            ) {
-                                Ok(wv) => {
-                                    #[cfg(windows)]
-                                    let hwnd = webview_hwnd(&wv);
-                                    restore_startup_cookies(
-                                        &wv,
-                                        is_incog,
-                                        &startup_cookies,
-                                        &mut cookies_restored,
-                                    );
-                                    content_views.insert(tab_id.clone(), wv);
-                                    #[cfg(windows)]
-                                    track_content_hwnd(hwnd, &tab_id, &mut content_hwnds);
-                                    apply_layout(
-                                        &chrome,
-                                        chrome_hwnd,
-                                        &content_views,
-                                        &state,
-                                        &layout_config,
-                                        &window,
-                                    );
-                                    if let Some(wv) = content_views.get(&tab_id) {
-                                        let ready_tab = tab_id.clone();
-                                        let ready_url = url.clone();
-                                        if let Some(dir) = ubol_dir.as_deref() {
-                                            let proxy = proxy_main.clone();
-                                            browser::extensions::sync_ubol_with_done(
-                                                wv,
-                                                dir,
-                                                false,
-                                                move || {
-                                                    let _ = proxy.send_event(AppEvent::UbolReady {
-                                                        tab_id: ready_tab,
-                                                        url: ready_url,
-                                                    });
-                                                },
-                                            );
-                                            ubol_done = true;
-                                            ubol_enabled = Some(false);
-                                            ubol_tab = Some(tab_id.clone());
-                                        } else {
-                                            let _ = proxy_main.send_event(AppEvent::UbolReady {
-                                                tab_id: ready_tab,
-                                                url: ready_url,
-                                            });
-                                        }
-                                    }
-                                }
-                                Err(e) => tracing::error!("prepare blocked page proceed: {}", e),
                             }
                         }
                         TabAction::ApplyWebSecurity => {
@@ -2422,6 +2302,8 @@
                                 // flush its cookie DB and exit, releasing the profile lock before
                                 // the relaunched instance claims it.
                                 close_chrome_controller(&chrome);
+                                drop(normal_ubol.probe.take());
+                                drop(incognito_ubol.probe.take());
                                 shutdown_webview2(
                                     crash_sentinel.as_deref(),
                                     &[webview_data_dir.as_path(), incognito_data_dir.as_path()],
@@ -2432,16 +2314,19 @@
                                     &mut incognito_web_context,
                                 );
                                 trash_incognito_dir(&incognito_data_dir);
-                                *control_flow = ControlFlow::Exit;
+                                exit_now();
                             }
                         }
                         TabAction::DownloadControl { id, action } => {
                             #[cfg(windows)]
-                            control_download(&id, action);
+                            control_download(&id, action, &proxy_main);
                             #[cfg(not(windows))]
                             {
                                 let _ = (&id, action);
                             }
+                        }
+                        TabAction::DownloadKeep { id, target, overwrite } => {
+                            keep_download(id, target, overwrite, &proxy_main);
                         }
                         TabAction::DownloadCancelAll => {
                             #[cfg(windows)]
@@ -2494,6 +2379,8 @@
                             }
                             popups.clear();
                             close_chrome_controller(&chrome);
+                            drop(normal_ubol.probe.take());
+                            drop(incognito_ubol.probe.take());
                             shutdown_webview2(
                                 crash_sentinel.as_deref(),
                                 &[webview_data_dir.as_path(), incognito_data_dir.as_path()],
@@ -2507,7 +2394,7 @@
                             if new_window {
                                 std::fs::remove_dir_all(&webview_data_dir).ok();
                             }
-                            *control_flow = ControlFlow::Exit;
+                            exit_now();
                         }
                         TabAction::SaveImageAs { url } => {
                             let filename = image_filename_from_url(&url);
@@ -2615,7 +2502,7 @@
                                 let proxy_cp = proxy_main.clone();
                                 rt.spawn(async move {
                                     let ok = decode_data_url(&url)
-                                        .and_then(|b| write_image_to_clipboard(&b))
+                                        .and_then(|b| write_image_to_clipboard(&b, clipboard_owner))
                                         .is_ok();
                                     let _ = proxy_cp
                                         .send_event(AppEvent::CopyImageResult { success: ok });
@@ -2636,7 +2523,7 @@
                                 let proxy_cp = proxy_main.clone();
                                 rt.spawn(async move {
                                     let ok = match fetch_image_bytes(&url, &referer).await {
-                                        Ok(b) => write_image_to_clipboard(&b).is_ok(),
+                                        Ok(b) => write_image_to_clipboard(&b, clipboard_owner).is_ok(),
                                         Err(_) => false,
                                     };
                                     let _ = proxy_cp
@@ -2812,10 +2699,10 @@
                     &content_views,
                     &state,
                     ubol_dir.as_deref(),
-                    &mut ubol_done,
-                    &mut ubol_enabled,
-                    &mut ubol_tab,
+                    &mut normal_ubol,
                     &mut incognito_ubol,
+                    &proxy_main,
+                    &rt,
                 );
             }
 
@@ -2856,6 +2743,7 @@
                             &shared_dl_dir,
                             &browser_args,
                             ubol_dir.as_deref(),
+                            &mut normal_ubol,
                             &mut incognito_ubol,
                             &startup_cookies,
                             &mut cookies_restored,
@@ -3229,6 +3117,8 @@
                 }
                 popups.clear();
                 close_chrome_controller(&chrome);
+                drop(normal_ubol.probe.take());
+                drop(incognito_ubol.probe.take());
                 shutdown_webview2(
                     crash_sentinel.as_deref(),
                     &[webview_data_dir.as_path(), incognito_data_dir.as_path()],
@@ -3242,7 +3132,7 @@
                 if new_window {
                     std::fs::remove_dir_all(&webview_data_dir).ok();
                 }
-                *control_flow = ControlFlow::Exit;
+                exit_now();
             }
 
             _ => {}

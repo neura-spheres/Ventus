@@ -317,7 +317,7 @@ async function onMessage(request, sender) {
             origin: 'USER',
             target: { tabId, frameIds: [ frameId ] },
         }).catch(reason => {
-            ubolErr(`insertCSS/${reason}`);
+            ubolLog(`insertCSS/${reason}`);
         });
 
     case 'removeCSS':
@@ -329,7 +329,7 @@ async function onMessage(request, sender) {
             origin: 'USER',
             target: { tabId, frameIds: [ frameId ] },
         }).catch(reason => {
-            ubolErr(`removeCSS/${reason}`);
+            ubolLog(`removeCSS/${reason}`);
         });
 
     case 'injectCSSProceduralAPI':
@@ -338,7 +338,7 @@ async function onMessage(request, sender) {
             target: { tabId, frameIds: [ frameId ] },
             injectImmediately: true,
         }).catch(reason => {
-            ubolErr(`executeScript/${reason}`);
+            ubolLog(`executeScript/${reason}`);
         });
 
     default:
@@ -371,6 +371,27 @@ async function onMessage(request, sender) {
     case 'injectCustomFilters':
         if ( frameId === false ) { return; }
         return injectCustomFilters(tabId, frameId, request.hostname);
+
+    case 'toolOverlayPairing': {
+        if ( frameId === false ) { return; }
+        const pairing = onMessage.toolOverlayPairing ?? {
+            password: self.crypto.randomUUID(),
+            tabId,
+            frameId,
+        };
+        if ( pairing.started !== true ) {
+            pairing.started = true;
+            onMessage.toolOverlayPairing = pairing;
+            return { password: pairing.password };
+        }
+        const response = { password: pairing.password };
+        browser.tabs.sendMessage(pairing.tabId,
+            { what: 'toolOverlayPairing' },
+            { frameId: pairing.frameId }
+        );
+        onMessage.toolOverlayPairing = undefined;
+        return response;
+    }
 
     default:
         break;

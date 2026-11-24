@@ -33,10 +33,14 @@ export const toolOverlay = {
     port: null,
 
     start(onmessage) {
+        const toolOverlayPairingPromise = this.sendMessage({ what: 'toolOverlayPairing' });
         this.onmessage = onmessage;
-        globalThis.addEventListener('message', ev => {
+        const onload = async ev => {
             const msg = ev.data || {};
             if ( msg.what !== 'startOverlay' ) { return; }
+            const toolOverlayPairing = await toolOverlayPairingPromise;
+            if ( Boolean(toolOverlayPairing?.password) === false ) { return; }
+            if ( msg.password !== toolOverlayPairing.password ) { return; }
             if ( Array.isArray(ev.ports) === false ) { return; }
             if ( ev.ports.length === 0 ) { return; }
             toolOverlay.port = ev.ports[0];
@@ -57,7 +61,11 @@ export const toolOverlay = {
                 height: msg.height,
             });
             dom.cl.remove(dom.body, 'loading');
-        }, { once: true });
+        };
+        globalThis.addEventListener('message',
+            ev => { onload(ev); },
+            { once: true }
+        );
     },
 
     stop() {

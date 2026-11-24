@@ -296,24 +296,19 @@ fn attach_permission_handler(
 
 #[cfg(windows)]
 thread_local! {
-    static DOWNLOAD_OPS: std::cell::RefCell<
-        HashMap<String, webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2DownloadOperation>,
-    > = std::cell::RefCell::new(HashMap::new());
+    static DOWNLOAD_OPS: std::cell::RefCell<HashMap<String, NativeDownload>> =
+        std::cell::RefCell::new(HashMap::new());
 
-    static DOWNLOAD_DEFERRALS: std::cell::RefCell<
-        HashMap<
-            String,
-            (
-                webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Deferral,
-                webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2DownloadStartingEventArgs,
-                String,
-            ),
-        >,
-    > = std::cell::RefCell::new(HashMap::new());
+    static PENDING_DOWNLOADS: std::cell::RefCell<HashMap<String, PendingDownload>> =
+        std::cell::RefCell::new(HashMap::new());
 
     static ACCEL_DOWNLOADS: std::cell::RefCell<
         HashMap<String, crate::browser::accel_download::AccelControl>,
     > = std::cell::RefCell::new(HashMap::new());
+
+    /// Closed tabs and popups kept alive because WebView2 ends a download with its WebView.
+    static PARKED_VIEWS: std::cell::RefCell<Vec<(String, Box<dyn std::any::Any>)>> =
+        const { std::cell::RefCell::new(Vec::new()) };
 
     static PERMISSION_DEFERRALS: std::cell::RefCell<
         HashMap<

@@ -910,6 +910,7 @@ fn download_status_to_str(status: &DownloadStatus) -> &'static str {
         DownloadStatus::Complete => "complete",
         DownloadStatus::Failed => "failed",
         DownloadStatus::Cancelled => "cancelled",
+        DownloadStatus::Review => "review",
     }
 }
 
@@ -920,6 +921,7 @@ fn download_status_from_str(status: &str) -> DownloadStatus {
         "complete" => DownloadStatus::Complete,
         "failed" => DownloadStatus::Failed,
         "cancelled" => DownloadStatus::Cancelled,
+        "review" => DownloadStatus::Review,
         _ => DownloadStatus::Pending,
     }
 }
@@ -990,6 +992,18 @@ pub fn clear_downloads(conn: &Connection) -> Result<()> {
 }
 
 pub fn fail_stale_downloads(conn: &Connection) -> Result<()> {
+    let mut stmt = conn.prepare(
+        "SELECT id, local_path FROM downloads WHERE status IN ('downloading','pending','paused') AND local_path IS NOT NULL",
+    )?;
+    let parts = stmt
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    for (id, path) in parts {
+        let path = std::path::Path::new(&path);
+        let _ = std::fs::remove_file(crate::browser::downloads::part_path(path, &id));
+    }
     let now = chrono::Utc::now().timestamp_millis();
     conn.execute(
         "UPDATE downloads SET status = 'failed', completed_at = ?1 WHERE status IN ('downloading','pending','paused')",

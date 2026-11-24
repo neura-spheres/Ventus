@@ -39,6 +39,15 @@ test('normal context actions dismiss the native menu before acting', () => {
   assert.deepEqual(m.messages.map(message => message.command), ['OpenDevtools']);
 });
 
+test('Copy image retains the captured image URL after dismissing the menu', () => {
+  const m = menu();
+  m.run('__ctxData.imageSrc = "blob:https://example.test/image"; ctxAction("copy_image")');
+  assert.equal(m.isOpen(), false);
+  assert.equal(m.messages.length, 1);
+  assert.equal(m.messages[0].command, 'CopyImage');
+  assert.equal(m.messages[0].data.url, 'blob:https://example.test/image');
+});
+
 test('dismissal closes the menu without sending page commands', () => {
   const m = menu();
   m.run('closeContextMenu(); closeContextMenu();');

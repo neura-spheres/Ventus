@@ -128,6 +128,8 @@ pub struct AppState {
     pub requested_permissions: HashMap<String, BTreeSet<String>>,
     /// Per-download speed sampling: (sample time ms, bytes at that sample, smoothed bytes/sec).
     /// Used to turn raw byte-count ticks into a smoothed bytes/sec figure for the UI.
+    /// Files awaiting Keep whose Save dialog already agreed to replace an old file.
+    pub review_overwrites: HashSet<String>,
     pub download_samples: HashMap<String, (i64, u64, u64)>,
     /// On-device learned ranker for address-bar suggestions. Updated each time the
     /// user picks a suggestion, persisted to the settings table.
@@ -248,6 +250,7 @@ impl AppState {
             }),
             pending_pwd_save: None,
             requested_permissions: HashMap::new(),
+            review_overwrites: HashSet::new(),
             download_samples: HashMap::new(),
             omnibox,
             trends: Vec::new(),
@@ -600,7 +603,7 @@ pub enum TabAction {
         tab_id: String,
         url: String,
     },
-    PrepareBlockedProceed {
+    RetryAbortedNav {
         tab_id: String,
         url: String,
     },
@@ -635,6 +638,11 @@ pub enum TabAction {
     DownloadControl {
         id: String,
         action: DownloadCtl,
+    },
+    DownloadKeep {
+        id: String,
+        target: std::path::PathBuf,
+        overwrite: bool,
     },
     DownloadCancelAll,
     SaveImageAs {
@@ -1350,8 +1358,8 @@ pub fn handle_chrome_command(
                     );
                 }
             }
-            if ad_blocker_toggled {
-                return None;
+            if ad_blocker_toggled && state.settings.privacy.ad_blocker_enabled {
+                return reload_current_tab(state, chrome);
             }
             None
         }
@@ -1928,6 +1936,9 @@ pub fn handle_chrome_command(
         ChromeCommand::ContextMenuSaveImage { url } => Some(TabAction::SaveImageAs { url }),
         ChromeCommand::CopyImage { url } => Some(TabAction::CopyImageToClipboard { url }),
         ChromeCommand::ClearDownloads => {
+            for dl in &state.downloads.downloads {
+                dl.drop_unkept();
+            }
             let _ = repositories::clear_downloads(&state.conn);
             state.downloads.downloads.clear();
             state.download_samples.clear();
@@ -1935,6 +1946,9 @@ pub fn handle_chrome_command(
             Some(TabAction::DownloadCancelAll)
         }
         ChromeCommand::DeleteDownload { id } => {
+            if let Some(dl) = state.downloads.find_mut(&id) {
+                dl.drop_unkept();
+            }
             let _ = repositories::delete_download(&state.conn, &id);
             state.downloads.downloads.retain(|d| d.id != id);
             state.download_samples.remove(&id);
@@ -1965,6 +1979,23 @@ pub fn handle_chrome_command(
             Some(TabAction::DownloadControl {
                 id,
                 action: DownloadCtl::Resume,
+            })
+        }
+        ChromeCommand::KeepDownload { id } => {
+            use crate::browser::downloads::DownloadStatus;
+            let dl = state.downloads.find_mut(&id)?;
+            let target = std::path::PathBuf::from(dl.local_path.clone()?);
+            if dl.status != DownloadStatus::Review {
+                return None;
+            }
+            // Not saved: after a crash here the file should still be waiting for review.
+            dl.status = DownloadStatus::Pending;
+            let overwrite = state.review_overwrites.contains(&id);
+            state.push_state_to_chrome(chrome);
+            Some(TabAction::DownloadKeep {
+                id,
+                target,
+                overwrite,
             })
         }
         ChromeCommand::CancelDownload { id } => Some(TabAction::DownloadControl {
@@ -2264,9 +2295,7 @@ fn proceed_blocked_site(url: String, state: &mut AppState, chrome: &WebView) -> 
     match action {
         TabAction::ContentNavigate(url)
         | TabAction::ReloadContent { url, .. }
-        | TabAction::RebuildContent { url, .. } => {
-            Some(TabAction::PrepareBlockedProceed { tab_id, url })
-        }
+        | TabAction::RebuildContent { url, .. } => Some(TabAction::RebuildContent { tab_id, url }),
         action => Some(action),
     }
 }
@@ -2972,12 +3001,61 @@ fn retry_fresh_aborted_nav(
         tab = %tab_id,
         url = %crate::utils::url::log_url(clean_url),
         attempt = count + 1,
-        "fresh-abort recovery: reloading a first navigation that aborted before committing"
+        "fresh-abort recovery: first navigation aborted before committing, retrying unless it was a download"
     );
-    Some(TabAction::ReloadContent {
+    state.native_nav_ids.remove(tab_id);
+    Some(TabAction::RetryAbortedNav {
         tab_id: tab_id.to_string(),
         url: clean_url.to_string(),
     })
+}
+
+/// Undoes a navigation that became a download: the page it started from stays, and a tab that
+/// was opened only for the download closes.
+fn finish_download_nav(
+    tab_id: String,
+    url: String,
+    source: String,
+    state: &mut AppState,
+    chrome: &WebView,
+) -> Option<TabAction> {
+    let tab = state.tab_manager.get_tab(&tab_id)?;
+    let clean_source = crate::utils::url::clean_tracking_url(&source);
+    let has_page = clean_source.starts_with("http") || clean_source.starts_with("file:");
+    let loading = tab.status == crate::browser::tab::TabStatus::Loading;
+    // A page can also start a download while it keeps showing or loading its own document.
+    let navigated =
+        loading && (!has_page || !same_nav(&tab.url, &clean_source) || same_nav(&tab.url, &url));
+    if !navigated {
+        return None;
+    }
+    let key = load_key(&tab_id, &tab.url.clone());
+    let first = tab.back_stack.last().cloned();
+    if has_page {
+        if let Some(tab) = state.tab_manager.get_tab_mut(&tab_id) {
+            if tab
+                .back_stack
+                .last()
+                .is_some_and(|u| same_nav(u, &clean_source))
+            {
+                tab.back_stack.pop();
+            }
+            tab.url = clean_source.clone();
+            tab.favicon = favicon_for_url(&clean_source, None);
+            tab.sync_nav_flags();
+        }
+        return stop_failed_load(state, chrome, &tab_id, &key);
+    }
+    if first.is_some_and(|u| u.starts_with("neura://")) {
+        let _ = stop_failed_load(state, chrome, &tab_id, &key);
+        let target = state.tab_manager.go_back(&tab_id)?;
+        return commit_stack_nav(&tab_id, &target, state, chrome);
+    }
+    let _ = stop_failed_load(state, chrome, &tab_id, &key);
+    let action = handle_chrome_command(ChromeCommand::CloseTab { id: tab_id }, state, chrome);
+    // Reopening a closed download tab would only download the file again.
+    state.tab_manager.closed_tab_urls.pop_front();
+    action
 }
 
 fn stop_failed_load(
@@ -4113,23 +4191,24 @@ pub fn handle_app_event_inner(
             state.native_nav_ids.remove(&tab_id);
             action
         }
+        AppEvent::AbortedNavRetry { tab_id, url } => {
+            let waiting = state.tab_manager.get_tab(&tab_id).is_some_and(|tab| {
+                tab.status == crate::browser::tab::TabStatus::Loading && same_nav(&tab.url, &url)
+            });
+            let committed = state.load_progress.get(&tab_id).copied().unwrap_or(0.0) > 0.0;
+            if !waiting || committed || state.native_nav_ids.contains_key(&tab_id) {
+                return None;
+            }
+            Some(TabAction::ReloadContent { tab_id, url })
+        }
+        AppEvent::DownloadNavigation {
+            tab_id,
+            url,
+            source,
+        } => finish_download_nav(tab_id, url, source, state, chrome),
         AppEvent::ContentStrictBlocked { tab_id, url } => {
             let clean_url = crate::utils::url::clean_tracking_url(&url);
             show_blocked_page(tab_id, clean_url, state, chrome)
-        }
-        AppEvent::UbolReady { tab_id, url } => {
-            if state.tab_manager.active_tab_id.as_deref() != Some(tab_id.as_str()) {
-                return None;
-            }
-            let same = state
-                .tab_manager
-                .get_tab(&tab_id)
-                .map(|tab| same_nav(&tab.url, &url))
-                .unwrap_or(false);
-            if !same || !state.ad_blocker_site_excepted(&url) {
-                return None;
-            }
-            Some(TabAction::ContentNavigate(url))
         }
         AppEvent::HttpsUpgradeFailed {
             tab_id,
@@ -4675,6 +4754,8 @@ pub fn handle_app_event_inner(
             id,
             success,
             canceled,
+            path,
+            review,
         } => {
             tracing::info!(
                 target: "ventus::dl",
@@ -4685,7 +4766,20 @@ pub fn handle_app_event_inner(
             );
             state.download_samples.remove(&id);
             if let Some(dl) = state.downloads.find_mut(&id) {
-                dl.status = if success {
+                dl.status = if let Some(overwrite) = review {
+                    if overwrite {
+                        state.review_overwrites.insert(id.clone());
+                    }
+                    if let Some(size) = dl.local_path.as_deref().and_then(|p| {
+                        let part =
+                            crate::browser::downloads::part_path(std::path::Path::new(p), &id);
+                        std::fs::metadata(part).ok().map(|m| m.len())
+                    }) {
+                        dl.received_bytes = size;
+                        dl.total_bytes = Some(size);
+                    }
+                    crate::browser::downloads::DownloadStatus::Review
+                } else if success {
                     crate::browser::downloads::DownloadStatus::Complete
                 } else if canceled {
                     crate::browser::downloads::DownloadStatus::Cancelled
@@ -4693,9 +4787,28 @@ pub fn handle_app_event_inner(
                     crate::browser::downloads::DownloadStatus::Failed
                 };
                 dl.completed_at = Some(chrono::Utc::now().timestamp_millis());
+                if let Some(path) = path {
+                    let file = std::path::Path::new(&path);
+                    if let Some(name) = file.file_name() {
+                        dl.filename = name.to_string_lossy().to_string();
+                    }
+                    if let Ok(meta) = std::fs::metadata(file) {
+                        dl.received_bytes = meta.len();
+                        dl.total_bytes = Some(meta.len());
+                    }
+                    dl.local_path = Some(path);
+                }
                 let _ = repositories::save_download(&state.conn, dl);
             }
+            if review.is_none() {
+                state.review_overwrites.remove(&id);
+            }
             state.push_state_to_chrome(chrome);
+            if review.is_some() {
+                let _ = chrome.evaluate_script(
+                    "window.__neura && window.__neura.flashDownloadReview && window.__neura.flashDownloadReview()",
+                );
+            }
             None
         }
         AppEvent::UpdateCheckResult {

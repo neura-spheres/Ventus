@@ -7,7 +7,7 @@ mod win {
     use super::*;
     use std::sync::{Arc, Mutex};
     use webview2_com::{
-        BrowserExtensionEnableCompletedHandler,
+        BrowserExtensionEnableCompletedHandler, BrowserExtensionRemoveCompletedHandler,
         Microsoft::Web::WebView2::Win32::{
             ICoreWebView2, ICoreWebView2BrowserExtension, ICoreWebView2BrowserExtensionList,
             ICoreWebView2Profile7, ICoreWebView2_13,
@@ -18,16 +18,16 @@ mod win {
     use wv2core::{Interface, PCWSTR, PWSTR};
     use wv2win::Win32::Foundation::BOOL as WV2BOOL;
 
-    type Done = Arc<Mutex<Option<Box<dyn FnOnce() + Send + 'static>>>>;
+    type Done = Arc<Mutex<Option<Box<dyn FnOnce(Option<String>) + Send + 'static>>>>;
 
-    fn done_box(done: Box<dyn FnOnce() + Send + 'static>) -> Done {
+    fn done_box(done: Box<dyn FnOnce(Option<String>) + Send + 'static>) -> Done {
         Arc::new(Mutex::new(Some(done)))
     }
 
-    fn finish(done: &Done) {
+    fn finish(done: &Done, id: Option<String>) {
         if let Ok(mut done) = done.lock() {
             if let Some(done) = done.take() {
-                done();
+                done(id);
             }
         }
     }
@@ -85,26 +85,32 @@ mod win {
     }
 
     fn set_enabled(ext: ICoreWebView2BrowserExtension, enabled: bool, done: Done) {
+        let mut raw_id = PWSTR::null();
+        let id = unsafe {
+            ext.Id(&mut raw_id).ok();
+            pwstr_to_string(raw_id)
+        };
         let mut current = WV2BOOL(0);
         if unsafe { ext.IsEnabled(&mut current) }.is_ok() && current.as_bool() == enabled {
             tracing::info!(target: "ventus::ubol", enabled, "ubol: extension already in requested state");
-            finish(&done);
+            finish(&done, Some(id));
             return;
         }
         let done_cb = done.clone();
         let handler = BrowserExtensionEnableCompletedHandler::create(Box::new(move |err| {
             if let Err(e) = err {
                 tracing::warn!("ubol: enable failed: {}", e);
+                finish(&done_cb, None);
             } else {
                 tracing::info!(target: "ventus::ubol", enabled, "ubol: enable completed");
+                finish(&done_cb, Some(id.clone()));
             }
-            finish(&done_cb);
             Ok(())
         }));
         unsafe {
             if let Err(e) = ext.Enable(enabled, &handler) {
                 tracing::warn!("ubol: enable request failed: {}", e);
-                finish(&done);
+                finish(&done, None);
             }
         }
     }
@@ -116,12 +122,12 @@ mod win {
             ProfileAddBrowserExtensionCompletedHandler::create(Box::new(move |err, ext| {
                 if let Err(e) = err {
                     tracing::warn!("ubol: install failed: {}", e);
-                    finish(&done_cb);
+                    finish(&done_cb, None);
                     return Ok(());
                 }
                 let Some(ext) = ext else {
                     tracing::warn!("ubol: install returned no extension");
-                    finish(&done_cb);
+                    finish(&done_cb, None);
                     return Ok(());
                 };
                 tracing::info!(target: "ventus::ubol", "ubol: install completed");
@@ -131,27 +137,48 @@ mod win {
         unsafe {
             if let Err(e) = profile.AddBrowserExtension(path, &handler) {
                 tracing::warn!("ubol: install request failed: {}", e);
-                finish(&done);
+                finish(&done, None);
             }
         }
     }
 
-    pub fn sync_ubol_with_done(
+    fn reinstall(
+        ext: ICoreWebView2BrowserExtension,
+        profile: ICoreWebView2Profile7,
+        dir: String,
+        done: Done,
+    ) {
+        let done_cb = done.clone();
+        let handler = BrowserExtensionRemoveCompletedHandler::create(Box::new(move |err| {
+            if let Err(e) = err {
+                tracing::warn!("ubol: remove failed: {}", e);
+            }
+            add(profile.clone(), dir.clone(), true, done_cb.clone());
+            Ok(())
+        }));
+        if let Err(e) = unsafe { ext.Remove(&handler) } {
+            tracing::warn!("ubol: remove request failed: {}", e);
+            finish(&done, None);
+        }
+    }
+
+    pub fn sync_ubol(
         wv: &WebView,
         dir: &Path,
         enabled: bool,
-        done: Box<dyn FnOnce() + Send + 'static>,
+        refresh: bool,
+        done: Box<dyn FnOnce(Option<String>) + Send + 'static>,
     ) {
         let done = done_box(done);
         if !dir.join("manifest.json").exists() {
             tracing::warn!("ubol: manifest not found at {}", dir.display());
-            finish(&done);
+            finish(&done, None);
             return;
         }
         tracing::info!(target: "ventus::ubol", path = %dir.display(), enabled, "ubol: sync requested");
         let Some(profile) = profile(wv) else {
             tracing::warn!("ubol: profile not available");
-            finish(&done);
+            finish(&done, None);
             return;
         };
         let add_profile = profile.clone();
@@ -161,12 +188,22 @@ mod win {
             move |err, list| {
                 if let Err(e) = err {
                     tracing::warn!("ubol: extension list failed: {}", e);
-                    finish(&done_cb);
+                    finish(&done_cb, None);
                     return Ok(());
                 }
                 if let Some(ext) = list.and_then(find_ubol) {
                     tracing::info!(target: "ventus::ubol", "ubol: existing extension found");
-                    set_enabled(ext, enabled, done_cb.clone());
+                    let mut on = WV2BOOL(0);
+                    let on = unsafe { ext.IsEnabled(&mut on) }.is_ok() && on.as_bool();
+                    if enabled && !on {
+                        // A re-enabled extension never finishes starting; a fresh install does.
+                        reinstall(ext, add_profile.clone(), dir.clone(), done_cb.clone());
+                    } else if refresh && enabled {
+                        // Re-adding the same path reloads the unpacked extension and its updated scripts.
+                        add(add_profile.clone(), dir.clone(), enabled, done_cb.clone());
+                    } else {
+                        set_enabled(ext, enabled, done_cb.clone());
+                    }
                     return Ok(());
                 }
                 tracing::info!(target: "ventus::ubol", "ubol: existing extension not found; installing");
@@ -177,24 +214,19 @@ mod win {
         unsafe {
             if let Err(e) = profile.GetBrowserExtensions(&handler) {
                 tracing::warn!("ubol: extension list request failed: {}", e);
-                finish(&done);
+                finish(&done, None);
             }
         }
     }
 }
 
 #[cfg_attr(not(windows), allow(unused_variables))]
-pub fn sync_ubol(wv: &WebView, dir: &Path, enabled: bool) {
-    sync_ubol_with_done(wv, dir, enabled, || {});
-}
-
-#[cfg_attr(not(windows), allow(unused_variables))]
-pub fn sync_ubol_with_done<F>(wv: &WebView, dir: &Path, enabled: bool, done: F)
+pub fn sync_ubol<F>(wv: &WebView, dir: &Path, enabled: bool, refresh: bool, done: F)
 where
-    F: FnOnce() + Send + 'static,
+    F: FnOnce(Option<String>) + Send + 'static,
 {
     #[cfg(windows)]
-    win::sync_ubol_with_done(wv, dir, enabled, Box::new(done));
+    win::sync_ubol(wv, dir, enabled, refresh, Box::new(done));
     #[cfg(not(windows))]
-    done();
+    done(None);
 }

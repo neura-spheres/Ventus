@@ -102,17 +102,19 @@ if ( $hasHostnames$ ) {
 
 if ( $hasRegexes$ ) {
     const scriptletFromRegexes = /* 0 */ [];
-    const { hns } = scriptletGlobals.origins[0];
-    for ( let i = 0, n = scriptletFromRegexes.length; i < n; i += 3 ) {
-        const needle = scriptletFromRegexes[i+0];
-        let regex;
-        for ( const hn of hns ) {
-            if ( hn.includes(needle) === false ) { continue; }
-            if ( regex === undefined ) {
-                regex = new RegExp(scriptletFromRegexes[i+1]);
+    const { hns, path } = scriptletGlobals.origins[0];
+    for ( let i = 0, n = scriptletFromRegexes.length; i < n; i += 2 ) {
+        const { needle, hn, pn } = scriptletFromRegexes[i+0];
+        let rehn, repn;
+        for ( const target of hns ) {
+            if ( target.includes(needle) === false ) { continue; }
+            if ( rehn === undefined ) { rehn = new RegExp(hn); }
+            if ( rehn.test(target) === false ) { continue; }
+            if ( pn && path ) {
+                if ( repn === undefined ) { repn = new RegExp(pn); }
+                if ( repn.test(path) === false ) { continue; }
             }
-            if ( regex.test(hn) === false ) { continue; }
-            for ( const ref of JSON.parse(`[${scriptletFromRegexes[i+2]}]`) ) {
+            for ( const ref of JSON.parse(`[${scriptletFromRegexes[i+1]}]`) ) {
                 todo.add(ref);
             }
         }
@@ -121,7 +123,7 @@ if ( $hasRegexes$ ) {
 
 // Execute scriptlets
 if ( todo.size && todo.has(0) === false ) {
-    const arglists = /* 55 */ ["","10","31,0","31,1","17,2,3,4","14,5,6","12,7,8","12,9,10","19,11","31,12","19,13","11,14,15","23,16,17","11,18,19","11,20,19","11,21,19","11,22,15","11,23,15","14,24,25","22,26,27","14,28","23,29,30","19,31","14,32,33","19,34","30","25,35,36,37,38,39","14,40,41","12,42,43","31,44","31,45","36,46","19,47","14,48","19,49","14,50","31,51","11,52,53","14,54","19,55","17,56,57,4","1,58,59,60","11,61,15","1","1,62,41,60","12,63","12,64,65","17,2,66","12,42,67","26","26,68","12,69,70","1,71","12,72","10,73"];
+    const arglists = /* 55 */ ["","10","32,0","32,1","18,2,3,4","14,5,6","12,7,8","12,9,10","17,11","32,12","17,13","11,14,15","23,16,17","11,18,19","11,20,19","11,21,19","11,22,15","11,23,15","14,24,25","22,26,27","14,28","23,29,30","17,31","14,32,33","17,34","31","27,35,36,37,38,39","14,40,41","12,42,43","32,44","32,45","37,46","17,47","14,48","17,49","14,50","32,51","11,52,53","14,54","17,55","18,56,57,4","1,58,59,60","11,61,15","1","1,62,41,60","12,63","12,64,65","18,2,66","12,42,67","26","26,68","12,69,70","1,71","12,72","10,73"];
     const args = /* 74 */ ["ads","ub_ct_load","style","#phContent_avastBadge","stay","PrebidDamOpen","800","decodeURIComponent","newAdblockBoardDisplayed","addEventListener","/faBar[\\s\\S]*?insertAdjacentElement/","WP.inline","iaqExt","__headpayload","WP.gaf.loadBunch","noopFunc","WP","r https","Object.prototype.rekids","undefined","Object.prototype.gafSlot","Object.prototype.advViewability","Object.prototype.loadBunch","Object.prototype.loadAndRunBunch","HubAPI","3000","message","t.origin===k","/getComputedStyle[\\s\\S]*?style\\.display=\"none\"[\\s\\S]*?styleBlocked[\\s\\S]*?detected/","WP.prebid","onLoad","Object.prototype.bodyCode","visibility","0","wp_consent_color","function neTick(){neTickCounter++;if(neTickCounter<=neTickCountLimit){neTickAjax=$.ajax({type:\"POST\"","url:adminAjaxUrl+\"?action=ne_tick\"","dataType:\"json\"","success:function(data){neTickResponseAction(data)}})}}","10000","function check(){console.log(\"checked\");if($(\".adform\").children().length>3){console.log(\"its more\");$(\".adform\").children(\".adform-banner\").show();clearTimeout(check)}}","1000","$","/loadData|halfpage|welcome|screening|placement|adtitle/","detectAB","_yhbog","RTCPeerConnection","launchOpenWindow","ubfix()","o6c6e","no-ads-info","yafaIt","displayed","false","bioEp.showPopup","uabpd3","scrolling","iframe#sg-iframe[scrolling=\"no\"]","#iwa_source=timeout","15000","0.02","loadElement","function","billboard750","jQuery","#sdWelcomeScreen","[href^=\"https://www.purepc.pl/red1r.php\"]","#AdPopup","redirectId","document.querySelectorAll","popMagic","TheLink","Math.random","_blank"];
     const { functionRefs } = scriptletGlobals;
     for ( const ref of todo ) {
@@ -137,6 +139,6 @@ if ( todo.size && todo.has(0) === false ) {
 /******************************************************************************/
 
 // End of local scope
-})("fb7f2f86-ef87-4c15-a912-62a035b1c974");
+})("28049053-2f06-4210-9323-9d4634fd8974");
 
 void 0;

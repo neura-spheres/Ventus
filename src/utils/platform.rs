@@ -16,6 +16,11 @@ pub fn is_linux() -> bool {
 
 pub fn data_dir() -> std::path::PathBuf {
     use directories::ProjectDirs;
+    // Debug-only: lets tests run on a throwaway profile instead of the real one.
+    #[cfg(debug_assertions)]
+    if let Some(dir) = std::env::var_os("VENTUS_DATA_DIR") {
+        return dir.into();
+    }
     ProjectDirs::from("com", "neura", "NeuraBrowser")
         .map(|p| p.data_dir().to_path_buf())
         .unwrap_or_else(|| std::path::PathBuf::from(".neura-data"))

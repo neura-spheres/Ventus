@@ -753,14 +753,18 @@ function safeSelf() {
         'Request_clone': self.Request.prototype.clone,
         'String': self.String,
         'String_fromCharCode': String.fromCharCode,
+        'String_includes': String.prototype.includes,
         'String_split': String.prototype.split,
         'XMLHttpRequest': self.XMLHttpRequest,
+        'XMLHttpRequest_open': Function.prototype.call.bind(self.XMLHttpRequest.prototype.open),
+        'XMLHttpRequest_send': Function.prototype.call.bind(self.XMLHttpRequest.prototype.send),
         'addEventListener': self.EventTarget.prototype.addEventListener,
         'removeEventListener': self.EventTarget.prototype.removeEventListener,
         'fetch': self.fetch,
         'JSON': self.JSON,
         'JSON_parse': Function.prototype.call.bind(self.JSON.parse, self.JSON),
         'JSON_stringify': Function.prototype.call.bind(self.JSON.stringify, self.JSON),
+        'structuredClone': Function.prototype.call.bind(self.structuredClone, self),
         'log': console.log.bind(console),
         // Properties
         logLevel: 0,
@@ -815,7 +819,7 @@ function safeSelf() {
             if ( details.re ) {
                 return this.RegExp_test(details.re, haystack) === details.expect;
             }
-            return haystack.includes(details.pattern) === details.expect;
+            return this.String_includes.call(`${haystack}`, details.pattern) === details.expect;
         },
         patternToRegex(pattern, flags = undefined, verbatim = false) {
             if ( pattern === '' ) { return /^/; }
@@ -1562,13 +1566,18 @@ function urlSkip(url, blocked, steps) {
 
 scriptletGlobals.origins = (( ) => {
     const docloc = document.location;
-    const origins = [ docloc.origin ];
-    if ( docloc.ancestorOrigins ) {
-        origins.push(...docloc.ancestorOrigins);
+    const origins = [{ origin: docloc.origin, path: docloc.pathname }];
+    if ( docloc.ancestorOrigins?.length ) {
+        const topOrigin = docloc.ancestorOrigins[docloc.ancestorOrigins.length-1];
+        if ( topOrigin !== 'null' ) {
+            origins.push({ origin: topOrigin });
+        } else if ( scriptletGlobals.topOrigin ) {
+            origins.push({ origin: scriptletGlobals.topOrigin });
+        }
     }
     const out = [];
     for ( let i = 0; i < origins.length; i++ ) {
-        const origin = origins[i];
+        const { origin, path } = origins[i];
         const beg = origin.indexOf('://') + 3;
         if ( beg === 2 ) { continue; }
         const end = origin.indexOf(':', beg);
@@ -1595,7 +1604,7 @@ scriptletGlobals.origins = (( ) => {
             if ( d !== 0 ) { return d; }
             return a > b ? -1 : 1;
         });
-        out.push({ hns, ens, i });
+        out.push({ hns, ens, path, i });
     }
     return out;
 })();
@@ -1605,6 +1614,6 @@ scriptletGlobals.functionRefs = /* 22 */ [replaceNodeText,removeNodeText,trusted
 /******************************************************************************/
 
 // End of local scope
-})("fb7f2f86-ef87-4c15-a912-62a035b1c974");
+})("28049053-2f06-4210-9323-9d4634fd8974");
 
 void 0;

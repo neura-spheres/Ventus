@@ -102,17 +102,19 @@ if ( $hasHostnames$ ) {
 
 if ( $hasRegexes$ ) {
     const scriptletFromRegexes = /* 0 */ [];
-    const { hns } = scriptletGlobals.origins[0];
-    for ( let i = 0, n = scriptletFromRegexes.length; i < n; i += 3 ) {
-        const needle = scriptletFromRegexes[i+0];
-        let regex;
-        for ( const hn of hns ) {
-            if ( hn.includes(needle) === false ) { continue; }
-            if ( regex === undefined ) {
-                regex = new RegExp(scriptletFromRegexes[i+1]);
+    const { hns, path } = scriptletGlobals.origins[0];
+    for ( let i = 0, n = scriptletFromRegexes.length; i < n; i += 2 ) {
+        const { needle, hn, pn } = scriptletFromRegexes[i+0];
+        let rehn, repn;
+        for ( const target of hns ) {
+            if ( target.includes(needle) === false ) { continue; }
+            if ( rehn === undefined ) { rehn = new RegExp(hn); }
+            if ( rehn.test(target) === false ) { continue; }
+            if ( pn && path ) {
+                if ( repn === undefined ) { repn = new RegExp(pn); }
+                if ( repn.test(path) === false ) { continue; }
             }
-            if ( regex.test(hn) === false ) { continue; }
-            for ( const ref of JSON.parse(`[${scriptletFromRegexes[i+2]}]`) ) {
+            for ( const ref of JSON.parse(`[${scriptletFromRegexes[i+1]}]`) ) {
                 todo.add(ref);
             }
         }
@@ -121,7 +123,7 @@ if ( $hasRegexes$ ) {
 
 // Execute scriptlets
 if ( todo.size && todo.has(0) === false ) {
-    const arglists = /* 56 */ ["","22,0,1","19,2","19,3","19,4","11,5,6","11,7,8","11,9,10","12,11,12","11,13,14","11,15,10","11,16,17","11,18,10","11,19,14","11,20,6","11,21,6","22,22,23","31,24","11,25,6","11,26,10","11,27,28","11,29,14","11,30,10","11,31,8","11,32,10","11,33,10","35,34","11,19,35","11,36,10","11,37,6","11,38,6","11,39,6","11,40,6","11,41,6","11,42,6","11,43,6","11,44,6","11,45,6","11,46,6","11,47,6","11,48,10","11,49,10","11,50,10","11,51,52","11,53,10","11,54,6","22,55,56","28,51,57","11,58,10","11,59,10","11,60,6","28,61,62","11,63,8","11,64,28","11,65,6","14,66"];
+    const arglists = /* 56 */ ["","22,0,1","17,2","17,3","17,4","11,5,6","11,7,8","11,9,10","12,11,12","11,13,14","11,15,10","11,16,17","11,18,10","11,19,14","11,20,6","11,21,6","22,22,23","32,24","11,25,6","11,26,10","11,27,28","11,29,14","11,30,10","11,31,8","11,32,10","11,33,10","36,34","11,19,35","11,36,10","11,37,6","11,38,6","11,39,6","11,40,6","11,41,6","11,42,6","11,43,6","11,44,6","11,45,6","11,46,6","11,47,6","11,48,10","11,49,10","11,50,10","11,51,52","11,53,10","11,54,6","22,55,56","29,51,57","11,58,10","11,59,10","11,60,6","29,61,62","11,63,8","11,64,28","11,65,6","14,66"];
     const args = /* 67 */ ["load","function(){if(s.readyState==XMLHttpRequest.DONE","__cmpGdprAppliesGlobally","all_delere_cookie","cookieconsent.Popup","cicc.cookie_cat_statistic","true","config.requireCookieConsent","false","cookie_alert_overlay","noopFunc","document.createElement","admiral","cookieManager","{}","cookieManager.initialize","cookieManager.needsConsentBanner","falseFunc","xv.disclaimer.displayNewCookiePopup","realCookieBanner","BrockmanAllowedCookies.functional","BrockmanAllowedCookies.targeting","/^(?:click|scroll|keydown|touchstart|mouseenter)$/","cookie.get","FrodoPV","settings.consent","HB.CookieSettings.init","WHT.ShowConsentForm","trueFunc","CookiePolicy","CookiePolicy.init","useGDPR","xv.disclaimer.displayCookiePopup","Didomi","catch","undefined","window.cmpmngr.setConsentViaBtn","tcfAllowUseCookies","cicc.cookie_cat_functional","cicc.cookie_cat_marketing","tweakersConfig.userConfiguredConsent.googlemaps.approved","tweakersConfig.userConfiguredConsent.knightlab.approved","tweakersConfig.userConfiguredConsent.omny.approved","tweakersConfig.userConfiguredConsent.pcnltelecom.approved","tweakersConfig.userConfiguredConsent.soundcloud.approved","tweakersConfig.userConfiguredConsent.streamable.approved","tweakersConfig.userConfiguredConsent.youtube.approved","yleConsentSdk._consentSdk._embedded_social_media","yleConsentSdk.show","cockieConsentManagement","window.scrollTo","dataLayer","[]","gtag","flagTcfLoaded","DOMContentLoaded","cookieConsent","{\"value\":[{\"signals\":[\"remixd\"]},{\"event\":\"remixd_gtm_fire\"}]}","_iub.cs.options.callback.onConsentRejected","_iub.cs.options.callback.onConsentFirstRejected","__tcfapi_user_acctepted","cmp_importvendors","{\"value\": [\"s23\",\"s2564\"]}","_gtm.consent.cm.strategy.options.cmpay.enabled","Object.prototype.hasConsent","cmp_autoreject","checkPURLayerMustBeShown"];
     const { functionRefs } = scriptletGlobals;
     for ( const ref of todo ) {
@@ -137,6 +139,6 @@ if ( todo.size && todo.has(0) === false ) {
 /******************************************************************************/
 
 // End of local scope
-})("fb7f2f86-ef87-4c15-a912-62a035b1c974");
+})("28049053-2f06-4210-9323-9d4634fd8974");
 
 void 0;
