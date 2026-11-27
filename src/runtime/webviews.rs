@@ -3,6 +3,39 @@ fn is_internal_error_url(url: &str) -> bool {
     u.starts_with("chrome-error:") || u.starts_with("chrome://") || u.starts_with("edge://")
 }
 
+fn apply_tab_mute(
+    state: &mut AppState,
+    views: &HashMap<String, WebView>,
+    tab_id: &str,
+    muted: bool,
+) -> anyhow::Result<()> {
+    if let Some(tab) = state.tab_manager.get_tab_mut(tab_id) {
+        if let Some(view) = views.get(tab_id) {
+            set_webview_muted(view, muted)?;
+        }
+        tab.is_muted = muted;
+    }
+    Ok(())
+}
+
+fn set_webview_muted(view: &WebView, muted: bool) -> anyhow::Result<()> {
+    #[cfg(windows)]
+    {
+        use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2_8;
+        use wv2core::Interface;
+        unsafe {
+            let core = view
+                .controller()
+                .CoreWebView2()?
+                .cast::<ICoreWebView2_8>()?;
+            core.SetIsMuted(wv2win::Win32::Foundation::BOOL::from(muted))?;
+        }
+    }
+    #[cfg(not(windows))]
+    let _ = (view, muted);
+    Ok(())
+}
+
 /// Create a content WebView, retrying briefly when WebView2 reports the user-data profile
 /// is locked / in use (HRESULT 0x800700AA, ERROR_BUSY).
 
@@ -15,17 +48,8 @@ fn build_content_webview(
     web_context: &mut wry::WebContext,
     incognito: bool,
     download_dir: std::sync::Arc<std::sync::Mutex<DownloadPrefs>>,
-    global_zoom: f64,
+    state: &AppState,
     browser_args: &str,
-    theme: WebViewTheme,
-    ad_block_script: String,
-    fingerprint: bool,
-    fingerprint_seed: String,
-    x_login_compat: bool,
-    strict: bool,
-    site_permissions: config::SitePermissionMap,
-    default_permissions: config::SitePermissions,
-    https_only: bool,
     load_now: bool,
 ) -> anyhow::Result<WebView> {
     const MAX_ATTEMPTS: u32 = 6;
@@ -41,21 +65,20 @@ fn build_content_webview(
             web_context,
             incognito,
             std::sync::Arc::clone(&download_dir),
-            global_zoom,
+            state,
             browser_args,
-            theme,
-            ad_block_script.clone(),
-            fingerprint,
-            fingerprint_seed.clone(),
-            x_login_compat,
-            strict,
-            site_permissions.clone(),
-            default_permissions.clone(),
-            https_only,
             load_now,
         );
         match result {
             Ok(wv) => {
+                // Tab views are built before their first navigation, including on wake/rebuild.
+                if state
+                    .tab_manager
+                    .get_tab(tab_id)
+                    .is_some_and(|tab| tab.is_muted)
+                {
+                    set_webview_muted(&wv, true)?;
+                }
                 if attempt > 1 {
                     tracing::info!(target: "ventus::nav", tab = %tab_id, attempt, "content WebView created after retrying a busy profile lock");
                 }
@@ -90,19 +113,13 @@ fn build_content_webview_once(
     web_context: &mut wry::WebContext,
     incognito: bool,
     download_dir: std::sync::Arc<std::sync::Mutex<DownloadPrefs>>,
-    global_zoom: f64,
+    state: &AppState,
     browser_args: &str,
-    theme: WebViewTheme,
-    ad_block_script: String,
-    fingerprint: bool,
-    fingerprint_seed: String,
-    x_login_compat: bool,
-    strict: bool,
-    site_permissions: config::SitePermissionMap,
-    default_permissions: config::SitePermissions,
-    https_only: bool,
     load_now: bool,
 ) -> anyhow::Result<WebView> {
+    let global_zoom = tab_zoom(state, tab_id);
+    let theme = webview_theme(&state.settings.appearance.theme);
+    let privacy = &state.settings.privacy;
     let is_neura = url.starts_with("neura://");
     let proxy_ipc = proxy.clone();
     #[cfg(not(windows))]
@@ -119,13 +136,13 @@ fn build_content_webview_once(
         .with_user_agent(&browser_user_agent())
         .with_initialization_script(&content_initialization_script(
             global_zoom,
-            &ad_block_script,
-            fingerprint,
-            &fingerprint_seed,
-            x_login_compat,
-            strict,
-            &site_permissions,
-            &default_permissions,
+            state.ad_block_engine.init_script(),
+            privacy.fingerprint_protection,
+            state.fingerprint_seed(incognito),
+            state.x_login_compat(tab_id, url),
+            privacy.strict_permissions,
+            &privacy.site_permissions,
+            &privacy.default_permissions,
         ));
     #[cfg(windows)]
     let builder = builder
@@ -495,6 +512,7 @@ fn build_content_webview_once(
             }
         })
         .with_navigation_handler({
+            let https_only = privacy.https_only;
             let proxy_nav = proxy.clone();
             #[cfg(not(windows))]
             let tab_id_nav = tab_id.to_string();
@@ -595,7 +613,7 @@ fn build_content_webview_once(
         }
         attach_title_handler(&wv, proxy.clone(), tab_id.to_string());
         attach_new_window_handler(&wv, proxy.clone(), incognito);
-        attach_permission_handler(&wv, proxy.clone(), site_permissions.clone());
+        attach_permission_handler(&wv, proxy.clone(), privacy.site_permissions.clone());
         attach_download_handler(&wv, proxy.clone(), tab_id.to_string());
         attach_audio_playing_handler(&wv, proxy.clone(), tab_id.to_string());
     }
@@ -1016,7 +1034,6 @@ fn build_woken_content_tab(
         state,
         layout_config,
     );
-    let ad_script = state.ad_block_engine.init_script().to_string();
     let ctx = if is_incog {
         incognito_web_context.as_mut().unwrap()
     } else {
@@ -1031,17 +1048,8 @@ fn build_woken_content_tab(
         ctx,
         is_incog,
         std::sync::Arc::clone(shared_dl_dir),
-        tab_zoom(state, tab_id),
+        state,
         browser_args,
-        webview_theme(&state.settings.appearance.theme),
-        ad_script,
-        state.settings.privacy.fingerprint_protection,
-        state.fingerprint_seed(is_incog).to_string(),
-        state.x_login_compat(tab_id, url),
-        state.settings.privacy.strict_permissions,
-        state.settings.privacy.site_permissions.clone(),
-        state.settings.privacy.default_permissions.clone(),
-        state.settings.privacy.https_only,
         false,
     ) {
         Ok(wv) => {
@@ -1486,4 +1494,102 @@ fn unique_download_path(download_dir: &std::path::Path, filename: &str) -> std::
         filename
     };
     browser::downloads::unique_path(download_dir.join(clean_name))
+}
+
+#[cfg(all(test, windows))]
+#[test]
+#[ignore = "requires a Windows desktop and the WebView2 runtime"]
+fn background_tab_mute_survives_navigation_and_webview_recreation() -> anyhow::Result<()> {
+    use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2_8;
+    use wv2core::Interface;
+
+    fn is_muted(view: &WebView) -> anyhow::Result<bool> {
+        unsafe {
+            let core = view
+                .controller()
+                .CoreWebView2()?
+                .cast::<ICoreWebView2_8>()?;
+            let mut muted = Default::default();
+            core.IsMuted(&mut muted)?;
+            Ok(muted.as_bool())
+        }
+    }
+
+    let root = std::env::temp_dir().join(format!("ventus-mute-{}", uuid::Uuid::new_v4()));
+    let conn = database::in_memory()?;
+    migrations::run(&conn)?;
+    let mut state = AppState::new(
+        conn,
+        Default::default(),
+        &root,
+        "test".into(),
+        "test".into(),
+    );
+    let target = state.tab_manager.active_tab_id.clone().unwrap();
+    let active = state.tab_manager.new_tab(None).id.clone();
+    let events = EventLoopBuilder::<AppEvent>::with_user_event()
+        .with_any_thread(true)
+        .build();
+    let window = WindowBuilder::new().with_visible(false).build(&events)?;
+    let mut ctx = wry::WebContext::new(Some(root.join("webview")));
+    let chrome = WebViewBuilder::new_as_child(&window)
+        .with_web_context(&mut ctx)
+        .with_additional_browser_args(String::new())
+        .build()?;
+    let mut build = |state: &AppState, id: &str| {
+        build_content_webview(
+            &window,
+            id,
+            "about:blank",
+            Rect::default(),
+            events.create_proxy(),
+            &mut ctx,
+            false,
+            Arc::new(Mutex::new(download_prefs_from_settings(&state.settings))),
+            state,
+            "",
+            false,
+        )
+    };
+    let mut views = HashMap::from([
+        (active.clone(), build(&state, &active)?),
+        (target.clone(), build(&state, &target)?),
+    ]);
+    let toggle = |state: &mut AppState, views: &HashMap<String, WebView>| {
+        let command = ChromeCommand::MuteTab {
+            tab_id: target.clone(),
+        };
+        let Some(TabAction::SetTabMuted { tab_id, muted }) =
+            app::handle_chrome_command(command, state, &chrome)
+        else {
+            panic!("expected a tab mute action");
+        };
+        apply_tab_mute(state, views, &tab_id, muted)
+    };
+    toggle(&mut state, &views)?;
+    assert!(is_muted(&views[&target])?);
+    assert!(!is_muted(&views[&active])?);
+
+    handle_app_event_inner(
+        AppEvent::ContentLoadStart {
+            tab_id: target.clone(),
+            url: "https://example.test/next".into(),
+            native: true,
+            nav_id: 1,
+        },
+        &mut state,
+        &chrome,
+    );
+    assert!(state.tab_manager.get_tab(&target).unwrap().is_muted);
+    views.remove(&target);
+    views.insert(target.clone(), build(&state, &target)?);
+    assert!(is_muted(&views[&target])?);
+    toggle(&mut state, &views)?;
+    assert!(!is_muted(&views[&target])?);
+    assert!(!is_muted(&views[&active])?);
+    drop(views);
+    drop(chrome);
+    drop(ctx);
+    let _ = std::fs::remove_dir_all(root);
+    Ok(())
 }

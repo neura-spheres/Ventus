@@ -709,9 +709,6 @@ fn content_initialization_script(
     ['play','playing','pause','ended','waiting','volumechange','ratechange','loadeddata','emptied','seeked']
       .forEach(function(ev){ document.addEventListener(ev, __checkAudio, true); });
     setInterval(__checkAudio, 3000);
-    window.__muteTab = function(muted) {
-      document.querySelectorAll('audio,video').forEach(function(m) { m.muted = muted; });
-    };
   }
 })();
 (() => {

@@ -869,7 +869,6 @@ pub fn run() {
         } else {
             content_web_context.as_mut().unwrap()
         };
-        let first_ad_script = state.ad_block_engine.init_script().to_string();
         match build_content_webview(
             &window,
             &first_tab_id,
@@ -879,17 +878,8 @@ pub fn run() {
             ctx,
             first_is_incognito,
             std::sync::Arc::clone(&shared_dl_dir),
-            tab_zoom(&state, &first_tab_id),
+            &state,
             &browser_args,
-            webview_theme(&state.settings.appearance.theme),
-            first_ad_script,
-            state.settings.privacy.fingerprint_protection,
-            state.fingerprint_seed(first_is_incognito).to_string(),
-            state.x_login_compat(&first_tab_id, &first_url),
-            state.settings.privacy.strict_permissions,
-            state.settings.privacy.site_permissions.clone(),
-            state.settings.privacy.default_permissions.clone(),
-            state.settings.privacy.https_only,
             false,
         ) {
             Ok(first_wv) => {

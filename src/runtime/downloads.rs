@@ -150,17 +150,7 @@ fn drop_content_view(views: &mut HashMap<String, WebView>, id: &str) {
     };
     #[cfg(windows)]
     if view_has_download(id) {
-        use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2_8;
-        use wv2core::Interface;
-        unsafe {
-            if let Ok(core) = wv
-                .controller()
-                .CoreWebView2()
-                .and_then(|core| core.cast::<ICoreWebView2_8>())
-            {
-                let _ = core.SetIsMuted(wv2win::Win32::Foundation::BOOL::from(true));
-            }
-        }
+        let _ = set_webview_muted(&wv, true);
         let _ = wv.set_visible(false);
         let _ = wv.load_url("about:blank");
         tracing::info!(target: "ventus::dl", tab = %id, "keeping closed tab alive for its download");

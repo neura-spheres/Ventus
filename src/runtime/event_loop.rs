@@ -569,7 +569,6 @@
                         } else {
                             content_web_context.as_mut().unwrap()
                         };
-                        let ad_script = state.ad_block_engine.init_script().to_string();
                         let built = build_content_webview(
                             &window,
                             &tab_id,
@@ -585,17 +584,8 @@
                             ctx,
                             is_incog,
                             std::sync::Arc::clone(&shared_dl_dir),
-                            tab_zoom(&state, &tab_id),
+                            &state,
                             &browser_args,
-                            webview_theme(&state.settings.appearance.theme),
-                            ad_script,
-                            state.settings.privacy.fingerprint_protection,
-                            state.fingerprint_seed(is_incog).to_string(),
-                            state.x_login_compat(&tab_id, &pending.url),
-                            state.settings.privacy.strict_permissions,
-                            state.settings.privacy.site_permissions.clone(),
-                            state.settings.privacy.default_permissions.clone(),
-                            state.settings.privacy.https_only,
                             false,
                         );
                         let wv = match built {
@@ -804,7 +794,6 @@
                 } else {
                     content_web_context.as_mut().unwrap()
                 };
-                let ad_script = state.ad_block_engine.init_script().to_string();
                 match build_content_webview(
                     &window,
                     &tab_id,
@@ -814,17 +803,8 @@
                     ctx,
                     is_incog,
                     std::sync::Arc::clone(&shared_dl_dir),
-                    tab_zoom(&state, &tab_id),
+                    &state,
                     &browser_args,
-                    webview_theme(&state.settings.appearance.theme),
-                    ad_script,
-                    state.settings.privacy.fingerprint_protection,
-                    state.fingerprint_seed(is_incog).to_string(),
-                    state.x_login_compat(&tab_id, &url),
-                    state.settings.privacy.strict_permissions,
-                    state.settings.privacy.site_permissions.clone(),
-                    state.settings.privacy.default_permissions.clone(),
-                    state.settings.privacy.https_only,
                     false,
                 ) {
                     Ok(wv) => {
@@ -1488,7 +1468,6 @@
                                 } else {
                                     content_web_context.as_mut().unwrap()
                                 };
-                                let ad_script = state.ad_block_engine.init_script().to_string();
                                 match build_content_webview(
                                     &window,
                                     &tab_id,
@@ -1498,17 +1477,8 @@
                                     ctx,
                                     is_incog,
                                     std::sync::Arc::clone(&shared_dl_dir),
-                                    tab_zoom(&state, &tab_id),
+                                    &state,
                                     &browser_args,
-                                    webview_theme(&state.settings.appearance.theme),
-                                    ad_script,
-                                    state.settings.privacy.fingerprint_protection,
-                                    state.fingerprint_seed(is_incog).to_string(),
-                                    state.x_login_compat(&tab_id, &url),
-                                    state.settings.privacy.strict_permissions,
-                                    state.settings.privacy.site_permissions.clone(),
-                                    state.settings.privacy.default_permissions.clone(),
-                                    state.settings.privacy.https_only,
                                     false,
                                 ) {
                                     Ok(wv) => {
@@ -1616,8 +1586,6 @@
                                             } else {
                                                 content_web_context.as_mut().unwrap()
                                             };
-                                            let ad_script =
-                                                state.ad_block_engine.init_script().to_string();
                                             if let Ok(wv) = build_content_webview(
                                                 &window,
                                                 &active_id,
@@ -1627,17 +1595,8 @@
                                                 ctx,
                                                 is_incog,
                                                 std::sync::Arc::clone(&shared_dl_dir),
-                                                tab_zoom(&state, &active_id),
+                                                &state,
                                                 &browser_args,
-                                                webview_theme(&state.settings.appearance.theme),
-                                                ad_script,
-                                                state.settings.privacy.fingerprint_protection,
-                                                state.fingerprint_seed(is_incog).to_string(),
-                                                state.x_login_compat(&active_id, &url),
-                                                state.settings.privacy.strict_permissions,
-                                                state.settings.privacy.site_permissions.clone(),
-                                                state.settings.privacy.default_permissions.clone(),
-                                                state.settings.privacy.https_only,
                                                 false,
                                             ) {
                                                 #[cfg(windows)]
@@ -1726,6 +1685,14 @@
                             if let Some(wv) = content_views.get(&tab_id) {
                                 let _ = wv.evaluate_script(&js);
                             }
+                        }
+                        TabAction::SetTabMuted { tab_id, muted } => {
+                            if let Err(error) =
+                                apply_tab_mute(&mut state, &content_views, &tab_id, muted)
+                            {
+                                tracing::warn!(target: "ventus::media", tab = %tab_id, %error, "could not change tab mute");
+                            }
+                            state.push_state_to_chrome(&chrome);
                         }
                         TabAction::ShowErrorPage { tab_id } => {
                             drop_content_view(&mut content_views, &tab_id);
@@ -1870,7 +1837,6 @@
                                     } else {
                                         content_web_context.as_mut().unwrap()
                                     };
-                                    let ad_script = state.ad_block_engine.init_script().to_string();
                                     match build_content_webview(
                                         &window,
                                         id,
@@ -1880,17 +1846,8 @@
                                         ctx,
                                         is_incog,
                                         std::sync::Arc::clone(&shared_dl_dir),
-                                        tab_zoom(&state, id),
+                                        &state,
                                         &browser_args,
-                                        webview_theme(&state.settings.appearance.theme),
-                                        ad_script,
-                                        state.settings.privacy.fingerprint_protection,
-                                        state.fingerprint_seed(is_incog).to_string(),
-                                        state.x_login_compat(id, &url),
-                                        state.settings.privacy.strict_permissions,
-                                        state.settings.privacy.site_permissions.clone(),
-                                        state.settings.privacy.default_permissions.clone(),
-                                        state.settings.privacy.https_only,
                                         false,
                                     ) {
                                         Ok(wv) => {
@@ -2041,7 +1998,6 @@
                                 } else {
                                     content_web_context.as_mut().unwrap()
                                 };
-                                let ad_script = state.ad_block_engine.init_script().to_string();
                                 match build_content_webview(
                                     &window,
                                     &tab_id,
@@ -2051,17 +2007,8 @@
                                     ctx,
                                     is_incog,
                                     std::sync::Arc::clone(&shared_dl_dir),
-                                    tab_zoom(&state, &tab_id),
+                                    &state,
                                     &browser_args,
-                                    webview_theme(&state.settings.appearance.theme),
-                                    ad_script,
-                                    state.settings.privacy.fingerprint_protection,
-                                    state.fingerprint_seed(is_incog).to_string(),
-                                    state.x_login_compat(&tab_id, &url),
-                                    state.settings.privacy.strict_permissions,
-                                    state.settings.privacy.site_permissions.clone(),
-                                    state.settings.privacy.default_permissions.clone(),
-                                    state.settings.privacy.https_only,
                                     false,
                                 ) {
                                     Ok(wv) => {
@@ -2213,7 +2160,6 @@
                             } else {
                                 content_web_context.as_mut().unwrap()
                             };
-                            let ad_script = state.ad_block_engine.init_script().to_string();
                             match build_content_webview(
                                 &window,
                                 &tab_id,
@@ -2223,17 +2169,8 @@
                                 ctx,
                                 is_incog,
                                 std::sync::Arc::clone(&shared_dl_dir),
-                                tab_zoom(&state, &tab_id),
+                                &state,
                                 &browser_args,
-                                webview_theme(&state.settings.appearance.theme),
-                                ad_script,
-                                state.settings.privacy.fingerprint_protection,
-                                state.fingerprint_seed(is_incog).to_string(),
-                                state.x_login_compat(&tab_id, &url),
-                                state.settings.privacy.strict_permissions,
-                                state.settings.privacy.site_permissions.clone(),
-                                state.settings.privacy.default_permissions.clone(),
-                                state.settings.privacy.https_only,
                                 false,
                             ) {
                                 Ok(wv) => {
@@ -2577,7 +2514,6 @@
                                 let panel_id = app_panel_id(&url);
                                 let rect = layout.app_panel_body.unwrap_or(layout.content);
                                 let ctx = content_web_context.as_mut().unwrap();
-                                let ad_script = state.ad_block_engine.init_script().to_string();
                                 match build_content_webview(
                                     &window,
                                     &panel_id,
@@ -2587,17 +2523,8 @@
                                     ctx,
                                     false,
                                     std::sync::Arc::clone(&shared_dl_dir),
-                                    state.settings.appearance.zoom_level,
+                                    &state,
                                     &browser_args,
-                                    webview_theme(&state.settings.appearance.theme),
-                                    ad_script,
-                                    state.settings.privacy.fingerprint_protection,
-                                    state.fingerprint_seed(false).to_string(),
-                                    false,
-                                    state.settings.privacy.strict_permissions,
-                                    state.settings.privacy.site_permissions.clone(),
-                                    state.settings.privacy.default_permissions.clone(),
-                                    state.settings.privacy.https_only,
                                     true,
                                 ) {
                                     Ok(wv) => {

@@ -587,6 +587,10 @@ pub enum TabAction {
     SyncClipOnly,
     SyncSidebarClip,
     ContentScript(String),
+    SetTabMuted {
+        tab_id: String,
+        muted: bool,
+    },
     SetZoom(f64),
     SetZoomFor {
         tab_id: String,
@@ -1412,19 +1416,8 @@ pub fn handle_chrome_command(
             None
         }
         ChromeCommand::MuteTab { tab_id } => {
-            let muted =
-                if let Some(tab) = state.tab_manager.tabs.iter_mut().find(|t| t.id == tab_id) {
-                    tab.is_muted = !tab.is_muted;
-                    tab.is_muted
-                } else {
-                    return None;
-                };
-            state.push_state_to_chrome(chrome);
-            let js = format!(
-                "document.querySelectorAll('audio,video').forEach(function(m){{m.muted={}}});",
-                if muted { "true" } else { "false" }
-            );
-            Some(TabAction::ContentScriptOnTab { tab_id, js })
+            let muted = !state.tab_manager.get_tab(&tab_id)?.is_muted;
+            Some(TabAction::SetTabMuted { tab_id, muted })
         }
         ChromeCommand::AdBlockToggleSite => {
             let url = state
@@ -3817,7 +3810,6 @@ pub fn handle_app_event_inner(
                 tab.is_media_active = false;
                 tab.native_audio = false;
                 tab.played_media = false;
-                tab.is_muted = false;
             }
             if new_url {
                 state
